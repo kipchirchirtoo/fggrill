@@ -596,26 +596,30 @@ export const confirmDelivery = async (
             const originalItem = dispatch.items.find((i: any) => i.id === receivedItem.item_id);
 
             if (originalItem) {
-                const damaged = receivedItem.damaged_quantity || 0;
-                const missing = originalItem.dispatched_quantity - receivedItem.received_quantity - damaged;
+                // Support both field naming conventions from frontend
+                const receivedQty = Number(receivedItem.received_quantity ?? receivedItem.quantity ?? originalItem.dispatched_quantity ?? 0);
+                const damaged = Number(receivedItem.damaged_quantity ?? receivedItem.damaged ?? 0);
+                const missing = (originalItem.dispatched_quantity || 0) - receivedQty - damaged;
 
                 await supabase
                     .from('dispatch_items')
                     .update({
-                        received_quantity: receivedItem.received_quantity,
+                        received_quantity: receivedQty,
                         damaged_quantity: damaged,
                         missing_quantity: missing > 0 ? missing : 0,
                         status: missing > 0 ? 'PARTIAL' : 'RECEIVED',
-                        discrepancy_reason: receivedItem.discrepancy_reason
+                        discrepancy_reason: receivedItem.discrepancy_reason || receivedItem.note
                     })
                     .eq('id', receivedItem.item_id);
 
                 // Add to receiving branch stock
-                await supabase.rpc('update_branch_stock', {
-                    p_branch_id: dispatch.to_branch_id,
-                    p_item_sku: originalItem.item_sku,
-                    p_quantity_change: receivedItem.received_quantity
-                });
+                if (receivedQty > 0) {
+                    await supabase.rpc('update_branch_stock', {
+                        p_branch_id: dispatch.to_branch_id,
+                        p_item_sku: originalItem.item_sku,
+                        p_quantity_change: receivedQty
+                    });
+                }
 
                 // Log stock movement
                 await supabase
@@ -624,7 +628,7 @@ export const confirmDelivery = async (
                         branch_id: dispatch.to_branch_id,
                         item_sku: originalItem.item_sku,
                         movement_type: 'DISPATCH_RECEIVE',
-                        quantity: receivedItem.received_quantity,
+                        quantity: receivedQty,
                         reference_type: 'DISPATCH',
                         reference_id: id,
                         reference_number: dispatch.dispatch_number,
