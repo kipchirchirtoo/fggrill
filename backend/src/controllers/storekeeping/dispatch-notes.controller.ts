@@ -597,8 +597,10 @@ export const confirmDelivery = async (
 
             if (originalItem) {
                 // Support both field naming conventions from frontend
-                const receivedQty = Number(receivedItem.received_quantity ?? receivedItem.quantity ?? originalItem.dispatched_quantity ?? 0);
-                const damaged = Number(receivedItem.damaged_quantity ?? receivedItem.damaged ?? 0);
+                const rawQty = receivedItem.received_quantity ?? receivedItem.quantity ?? originalItem.dispatched_quantity ?? 0;
+                const receivedQty = isFinite(Number(rawQty)) ? Math.max(0, Math.round(Number(rawQty))) : 0;
+                const rawDamaged = receivedItem.damaged_quantity ?? receivedItem.damaged ?? 0;
+                const damaged = isFinite(Number(rawDamaged)) ? Math.max(0, Math.round(Number(rawDamaged))) : 0;
                 const missing = (originalItem.dispatched_quantity || 0) - receivedQty - damaged;
 
                 await supabase
@@ -614,11 +616,31 @@ export const confirmDelivery = async (
 
                 // Add to receiving branch stock
                 if (receivedQty > 0) {
-                    await supabase.rpc('update_branch_stock', {
+                    const { error: rpcError } = await supabase.rpc('update_branch_stock', {
                         p_branch_id: dispatch.to_branch_id,
                         p_item_sku: originalItem.item_sku,
                         p_quantity_change: receivedQty
                     });
+
+                    // Fallback: direct upsert if RPC fails or doesn't exist
+                    if (rpcError) {
+                        logger.warn('update_branch_stock RPC failed, using direct upsert:', rpcError.message);
+                        const { data: existing } = await supabase
+                            .from('branch_stock')
+                            .select('quantity')
+                            .eq('branch_id', dispatch.to_branch_id)
+                            .eq('item_sku', originalItem.item_sku)
+                            .single();
+
+                        await supabase
+                            .from('branch_stock')
+                            .upsert({
+                                branch_id: dispatch.to_branch_id,
+                                item_sku: originalItem.item_sku,
+                                quantity: (existing?.quantity || 0) + receivedQty,
+                                updated_at: new Date().toISOString()
+                            }, { onConflict: 'branch_id,item_sku' });
+                    }
                 }
 
                 // Log stock movement
