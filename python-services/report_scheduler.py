@@ -166,12 +166,12 @@ class ReportScheduler:
             
             # Send email if recipients configured
             if recipients:
-                subject = f"Kyogong - {schedule_data.get('name', report_type.replace('_', ' ').title())}"
+                subject = f"FamousGate Hotels - {schedule_data.get('name', report_type.replace('_', ' ').title())}"
                 body = f"""
                 <html>
                 <body style="font-family: Arial, sans-serif; color: #333;">
                     <div style="background: #3C3C43; padding: 20px; text-align: center;">
-                        <h1 style="color: white; margin: 0;">Kyogong & Lounge</h1>
+                        <h1 style="color: white; margin: 0;">FamousGate Hotels</h1>
                     </div>
                     <div style="padding: 20px;">
                         <h2>{schedule_data.get('name', 'Scheduled Report')}</h2>
@@ -181,8 +181,8 @@ class ReportScheduler:
                         <p><strong>Generated:</strong> {today.strftime('%B %d, %Y at %I:%M %p')}</p>
                         <hr>
                         <p style="color: #888; font-size: 12px;">
-                            This is an automated report from Kyogong Management System.
-                            <br>For questions, contact management@kyogong.co.ke
+                            This is an automated report from FamousGate Hotels Management System.
+                            <br>For questions, contact info@famousgatehotels.com
                         </p>
                     </div>
                 </body>

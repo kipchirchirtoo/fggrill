@@ -1,5 +1,5 @@
 """
-Kyogong - Professional Branded PDF Report Generator
+FamousGate Hotels - Professional Branded PDF Report Generator
 Matches the UI/UX designs from provided templates
 """
 
@@ -144,10 +144,10 @@ class BrandedPDFGenerator:
         
         # Company info
         company_info = [
-            Paragraph("<b>KyogongS</b>", self.styles['Normal']),
+            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
             Paragraph("Bomet, Kenya", self.styles['SmallText']),
             Paragraph("Main Headquarters", self.styles['SmallText']),
-            Paragraph("Tel: 0706 782 828 | Email: kyogongsbmt@gmail.com", self.styles['SmallText']),
+            Paragraph("Tel: +254 706 782 828 | Email: info@famousgatehotels.com", self.styles['SmallText']),
         ]
         
         # Date info
@@ -204,7 +204,7 @@ class BrandedPDFGenerator:
         canvas.setFillColor(FG_GRAY)
         
         # Footer text
-        footer_text = f"Kyogongs | Confidential | Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        footer_text = f"FamousGate Hotels | Confidential | Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         canvas.drawCentredString(A4[0]/2, 0.4*inch, footer_text)
         
         # Page number
@@ -518,8 +518,8 @@ class BrandedPDFGenerator:
         
         # 1. Cleaner Header Layout to prevent overlay
         logo = self._get_logo(width=0.8*inch)
-        company_name = data.get('company', 'KyogongS')
-        company_email = data.get('company_email', 'kyogongsbmt@gmail.com')
+        company_name = data.get('company', 'FamousGate Hotels')
+        company_email = data.get('company_email', 'info@famousgatehotels.com')
         company_address = data.get('company_address', 'Bomet, Kenya')
         
         header_content = [
@@ -652,7 +652,7 @@ class BrandedPDFGenerator:
         
         # 6. Footer message
         elements.append(Spacer(1, 0.6*inch))
-        elements.append(Paragraph("If you need further assistance, please feel free to contact HR at kyogongsbmt@gmail.com.", self.styles['SmallText']))
+        elements.append(Paragraph("If you need further assistance, please feel free to contact HR at info@famousgatehotels.com.", self.styles['SmallText']))
         
         return self._create_pdf(elements)
 
@@ -695,13 +695,13 @@ class BrandedPDFGenerator:
         if branch == 'All Branches' and filters.get('branch_id'):
             # Map branch ID to actual branch name
             branch_names = {
-                1: 'Kyogongs (HQ)',
-                2: 'Kyogongs Bomet Town', 
-                3: 'Kyogongs Kericho',
-                4: 'Kyogongs Kapsoit',
-                5: 'Kyogongs Mogogosiek',
-                6: 'Kyogongs Litein',
-                7: 'Kyogongs Grill'
+                1: 'FamousGate Hotels (HQ)',
+                2: 'FamousGate Bomet Town', 
+                3: 'FamousGate Kericho',
+                4: 'FamousGate Kapsoit',
+                5: 'FamousGate Mogogosiek',
+                6: 'FamousGate Litein',
+                7: 'FamousGate Grill'
             }
             branch_id = int(filters.get('branch_id', 0))
             branch = branch_names.get(branch_id, f'Branch {branch_id}')
@@ -1260,13 +1260,13 @@ class BrandedPDFGenerator:
         if branch == 'All Branches' and filters.get('branch_id'):
             # Map branch ID to actual branch name
             branch_names = {
-                1: 'Kyogong Bomet (Central)',
-                2: 'Kyogong Bomet Town', 
-                3: 'Kyogong Kericho',
-                4: 'Kyogong Kapsoit',
-                5: 'Kyogong Mogogosiek',
-                6: 'Kyogong Litein',
-                7: 'Kyogong Grill'
+                1: 'FamousGate Hotels (Central)',
+                2: 'FamousGate Bomet Town', 
+                3: 'FamousGate Kericho',
+                4: 'FamousGate Kapsoit',
+                5: 'FamousGate Mogogosiek',
+                6: 'FamousGate Litein',
+                7: 'FamousGate Grill'
             }
             branch_id = int(filters.get('branch_id', 0))
             branch = branch_names.get(branch_id, f'Branch {branch_id}')
@@ -1758,7 +1758,9 @@ class BrandedPDFGenerator:
         """Generate Stock Movement Report"""
         elements = []
         
-        date_range = f"{filters.get('start_date', 'N/A')} to {filters.get('end_date', 'N/A')}"
+        start_date = filters.get('start_date', filters.get('startDate', 'N/A'))
+        end_date = filters.get('end_date', filters.get('endDate', 'N/A'))
+        date_range = f"{start_date} to {end_date}"
         elements.extend(self._create_header("STOCK MOVEMENT REPORT", date_range))
         
         headers = ['Date', 'Item Code', 'Item Name', 'Type', 'Qty', 'From', 'To', 'Reference']
@@ -3821,9 +3823,9 @@ class BrandedPDFGenerator:
         
         # Company Info (Sender)
         sender_info = [
-            Paragraph("<b>KyogongS</b>", self.styles['Normal']),
+            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
             Paragraph("Bomet, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: 0706 782 828 | Email: kyogongsbmt@gmail.com", self.styles['SmallText']),
+            Paragraph("Tel: +254 706 782 828 | Email: info@famousgatehotels.com", self.styles['SmallText']),
         ]
         
         # Invoice Title Block
@@ -3933,7 +3935,7 @@ class BrandedPDFGenerator:
         payment_info = [
             "M-Pesa: Paybill 123456, Account: Invoice Number",
             "Bank Transfer: Equity Bank, Acc: 1234567890",
-            "Cheque: Payable to Kyogongs"
+            "Cheque: Payable to FamousGate Hotels"
         ]
         
         for method in payment_info:

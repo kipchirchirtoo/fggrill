@@ -150,9 +150,15 @@ export default function BranchStockOutPage() {
   const handleExport = async () => {
     try {
       toast.loading("Generating stock out ledger...");
+      const today = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      const formatDate = (d: Date) => d.toISOString().split('T')[0];
       await auditorReportsAPI.exportBrandedPdf('stock_movement', {
         branch_id: branchId,
-        movement_type: 'STOCK_OUT'
+        movement_type: 'STOCK_OUT',
+        start_date: formatDate(thirtyDaysAgo),
+        end_date: formatDate(today),
       });
       toast.dismiss();
       toast.success("Ledger generated successfully");

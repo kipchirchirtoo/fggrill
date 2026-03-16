@@ -77,7 +77,7 @@ class BarcodeGeneratorService:
             
             # Header section
             draw.rectangle([0, 0, width, 80], fill=primary_color)
-            draw.text((20, 20), "Kyogong", fill='white', font=title_font)
+            draw.text((20, 20), "FamousGate Hotels", fill='white', font=title_font)
             draw.text((20, 50), "BOOKING CONFIRMATION", fill='white', font=header_font)
             
             # Booking ID prominently displayed

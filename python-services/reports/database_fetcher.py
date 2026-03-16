@@ -1449,6 +1449,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         """Fetch stock movement data"""
         start_date, end_date = self._parse_dates(filters)
         branch_id = filters.get('branch_id')
+        movement_type = filters.get('movement_type')  # e.g. 'STOCK_OUT'
         
         data = {'movements': []}
         
@@ -1458,10 +1459,13 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         try:
             if not branch_id or str(branch_id) == '1':
                 # Central Store movements from stock_history
-                movements = self.client.table('stock_history').select('*, item:simple_items(item_name)')\
+                query = self.client.table('stock_history').select('*, item:simple_items(item_name)')\
                     .gte('created_at', f'{start_date}T00:00:00')\
                     .lte('created_at', f'{end_date}T23:59:59')\
-                    .order('created_at', desc=True).execute()
+                    .order('created_at', desc=True)
+                if movement_type:
+                    query = query.eq('change_type', movement_type)
+                movements = query.execute()
                 
                 for m in (movements.data or []):
                     item = m.get('item', {}) or {}
@@ -1474,17 +1478,19 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                         'from': 'Central Store' if m.get('change_type') == 'OUT' else 'Supplier/Adj',
                         'to': 'Branch/Adj' if m.get('change_type') == 'OUT' else 'Central Store',
                         'reference': m.get('reference', m.get('reason', '')),
-                        # Excel compatibility
                         'itemCode': m.get('item_sku', ''),
                         'itemName': item.get('item_name', m.get('item_sku', ''))
                     })
             else:
                 # Branch movements from branch_stock_movements
-                movements = self.client.table('branch_stock_movements').select('*, item:simple_items(item_name)')\
+                query = self.client.table('branch_stock_movements').select('*, item:simple_items(item_name)')\
                     .eq('branch_id', branch_id)\
                     .gte('created_at', f'{start_date}T00:00:00')\
                     .lte('created_at', f'{end_date}T23:59:59')\
-                    .order('created_at', desc=True).execute()
+                    .order('created_at', desc=True)
+                if movement_type:
+                    query = query.eq('movement_type', movement_type)
+                movements = query.execute()
                 
                 for m in (movements.data or []):
                     item = m.get('item', {}) or {}
@@ -1497,7 +1503,6 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                         'from': 'Global' if m.get('movement_type') == 'DISPATCH_RECEIVE' else 'Branch',
                         'to': 'Branch',
                         'reference': m.get('reference_number', m.get('reference_type', '')),
-                        # Excel compatibility
                         'itemCode': m.get('item_sku', ''),
                         'itemName': item.get('item_name', m.get('item_sku', ''))
                     })

@@ -20,14 +20,14 @@ import base64
 
 
 class ReceiptGenerator:
-    """Generates thermal-style receipts (Kyogongs style)"""
+    """Generates thermal-style receipts (FamousGate Hotels style)"""
     
     def __init__(self, logo_path: str = None):
         self.logo_path = logo_path or os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.company_name = "Kyogongs"
+        self.company_name = "FamousGate Hotels"
         self.company_address = "Bomet, Kenya"
-        self.company_phone = "0706 782 828"
-        self.company_email = "kyogongsbmt@gmail.com"
+        self.company_phone = "+254 706 782 828"
+        self.company_email = "info@famousgatehotels.com"
         
     def generate_receipt(self, receipt_data: Dict[str, Any], vat_inclusive: bool = True) -> bytes:
         """Generate a thermal-style receipt PDF"""

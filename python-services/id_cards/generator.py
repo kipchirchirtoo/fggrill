@@ -144,7 +144,7 @@ class IDCardGenerator:
         # Hotel Name
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(32*mm, self.height - 7*mm, "KyogongS")
+        c.drawString(32*mm, self.height - 7*mm, "FamousGate Hotels")
         
         c.setFont("Helvetica", 6)
         c.drawString(32*mm, self.height - 10*mm, "Quality Hospitality Services")
@@ -234,7 +234,7 @@ class IDCardGenerator:
         
         # Terms Text
         terms_y = self.height - 14*mm
-        c.drawString(5*mm, terms_y, "1. This card is the property of Kyogongs.")
+        c.drawString(5*mm, terms_y, "1. This card is the property of FamousGate Hotels.")
         c.drawString(5*mm, terms_y - 4*mm, "2. Must be visible at all times while on duty.")
         c.drawString(5*mm, terms_y - 8*mm, "3. Report loss/theft immediately to HR/Security.")
         

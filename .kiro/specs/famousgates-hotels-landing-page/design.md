@@ -730,4 +730,758 @@ const handleImageError = () => {
 )}
 ```
 
-### 
+**Network Error Handling:**
+```typescript
+const [networkError, setNetworkError] = useState(false);
+
+// Retry mechanism for failed image loads
+const retryImageLoad = async (index: number, retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await preloadImage(images[index]);
+      setNetworkError(false);
+      return true;
+    } catch (error) {
+      if (i === retries - 1) {
+        setNetworkError(true);
+        console.error(`Failed to load image after ${retries} attempts`);
+      }
+      // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+    }
+  }
+  return false;
+};
+```
+
+**Error Recovery UI:**
+- Display user-friendly error messages
+- Provide retry button for failed loads
+- Show placeholder image on persistent failures
+- Log errors for monitoring and debugging
+
+### Other Core Components
+Other Core Components
+
+#### HotelCard Component
+Displays hotel property summary with image, name, location, and description.
+
+#### HotelList Component
+Grid layout of HotelCard components with filtering and sorting capabilities.
+
+#### BookingForm Component
+Multi-step form for collecting guest information and booking details.
+
+#### SearchBar Component
+Search input with autocomplete and filter options.
+
+## Data Models
+
+### Hotel Property Model
+
+```typescript
+interface HotelProperty {
+  id: string;
+  name: string;
+  location: {
+    address: string;
+    city: string;
+    country: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+  };
+  description: string;
+  shortDescription: string;
+  images: {
+    primary: string;
+    gallery: string[];
+  };
+  amenities: string[];
+  contactInfo: {
+    phone: string;
+    email: string;
+    businessHours: {
+      open: string;
+      close: string;
+      days: string[];
+    };
+  };
+  socialMedia: {
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+  };
+  rating: number;
+  reviewCount: number;
+}
+```
+
+### Room Listing Model
+
+```typescript
+interface RoomListing {
+  id: string;
+  hotelId: string;
+  type: string;
+  capacity: {
+    adults: number;
+    children: number;
+  };
+  pricePerNight: number;
+  currency: string;
+  amenities: string[];
+  images: string[];
+  description: string;
+  availability: {
+    available: boolean;
+    nextAvailableDate?: string;
+  };
+  size: {
+    value: number;
+    unit: 'sqm' | 'sqft';
+  };
+  bedConfiguration: {
+    type: string;
+    count: number;
+  }[];
+}
+```
+
+### Booking Model
+
+```typescript
+interface Booking {
+  id: string;
+  referenceNumber: string;
+  hotelId: string;
+  roomId: string;
+  guest: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+  };
+  dates: {
+    checkIn: string;  // ISO 8601 format
+    checkOut: string; // ISO 8601 format
+    nights: number;
+  };
+  pricing: {
+    roomRate: number;
+    taxes: number;
+    fees: number;
+    total: number;
+    currency: string;
+  };
+  status: 'pending' | 'confirmed' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### Gallery Image Model
+
+```typescript
+interface GalleryImage {
+  src: string;           // Image path
+  alt: string;           // Alt text for accessibility
+  width?: number;        // Original width
+  height?: number;       // Original height
+  thumbnail?: string;    // Thumbnail path (optional)
+  caption?: string;      // Image caption (optional)
+  category?: string;     // Image category (room, amenity, dining, etc.)
+}
+
+// Gallery configuration
+interface GalleryConfig {
+  images: GalleryImage[];
+  preloadCount: number;  // Number of images to preload
+  thumbnailSize: number; // Thumbnail dimensions
+  transitionDuration: number; // Animation duration in ms
+  enableKeyboard: boolean;
+  enableTouch: boolean;
+  enableThumbnails: boolean;
+}
+```
+
+## Correctness Properties
+
+*A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+
+### Property 1: Gallery Image Navigation Bounds
+
+*For any* image index in the gallery, navigating forward or backward should always result in a valid index within the bounds [0, imageCount-1], wrapping around at the edges.
+
+**Validates: Requirements 4.1.4**
+
+### Property 2: Gallery Keyboard Navigation Consistency
+
+*For any* keyboard event (ArrowLeft, ArrowRight, Escape, Home, End), the gallery should respond with the corresponding navigation action and maintain consistent state.
+
+**Validates: Requirements 4.1.6**
+
+### Property 3: Gallery Modal State Synchronization
+
+*For any* gallery open/close action, the modal visibility state and body scroll lock should be synchronized (modal open = body scroll locked, modal closed = body scroll unlocked).
+
+**Validates: Requirements 4.1.7**
+
+### Property 4: Image Preloading Adjacency
+
+*For any* currently displayed image at index N, the gallery should have preloaded or be preloading images at indices N-1 and N+1 (with wraparound).
+
+**Validates: Requirements 4.1.9**
+
+### Property 5: Thumbnail Selection Consistency
+
+*For any* thumbnail clicked at index N, the main gallery view should display the image at index N and the thumbnail strip should scroll to center that thumbnail.
+
+**Validates: Requirements 4.1.10**
+
+### Property 6: Hotel Data Freshness
+
+*For any* hotel property data fetched from the API, if the data is older than 5 minutes, the landing page should refetch the data from the main system.
+
+**Validates: Requirements 1.2, 2.3**
+
+### Property 7: Booking Data Integrity
+
+*For any* booking submission, all required fields (guest info, dates, room selection) must be present and valid before transmission to the main system.
+
+**Validates: Requirements 5.2**
+
+### Property 8: Search Filter Consistency
+
+*For any* combination of active filters, the displayed results should include only items that match ALL active filter criteria.
+
+**Validates: Requirements 8.4**
+
+### Property 9: Error Retry Exponential Backoff
+
+*For any* failed API request, the system should retry up to 3 times with exponentially increasing delays (1s, 2s, 4s) before showing an error to the user.
+
+**Validates: Requirements 9.2**
+
+### Property 10: Responsive Image Sizing
+
+*For any* viewport width, gallery images should be sized to fit 
+within the viewport without horizontal scrolling while maintaining aspect ratio.
+
+**Validates: Requirements 4.1.5, 7.2**
+
+## Error Handling
+
+### API Error Handling Strategy
+
+**Error Categories:**
+1. **Network Errors**: Connection failures, timeouts
+2. **Server Errors**: 5xx responses from main system
+3. **Client Errors**: 4xx responses (validation, not found)
+4. **Data Errors**: Invalid or malformed response data
+
+**Handling Approach:**
+
+```typescript
+// Centralized error handler
+class APIErrorHandler {
+  handle(error: APIError): ErrorResponse {
+    if (error.isNetworkError()) {
+      return this.handleNetworkError(error);
+    } else if (error.isServerError()) {
+      return this.handleServerError(error);
+    } else if (error.isClientError()) {
+      return this.handleClientError(error);
+    } else {
+      return this.handleUnknownError(error);
+    }
+  }
+  
+  private handleNetworkError(error: APIError): ErrorResponse {
+    // Retry with exponential backoff
+    // Show cached data if available
+    // Display user-friendly message
+    return {
+      message: 'Connection issue. Retrying...',
+      retry: true,
+      useCached: true,
+    };
+  }
+  
+  private handleServerError(error: APIError): ErrorResponse {
+    // Log to monitoring service
+    // Show generic error message
+    // Provide contact information
+    return {
+      message: 'Service temporarily unavailable. Please try again later.',
+      retry: true,
+      showSupport: true,
+    };
+  }
+  
+  private handleClientError(error: APIError): ErrorResponse {
+    // Show specific validation errors
+    // Guide user to correct input
+    return {
+      message: error.message,
+      retry: false,
+      showValidation: true,
+    };
+  }
+}
+```
+
+### Gallery-Specific Error Handling
+
+**Image Load Failures:**
+- Retry failed image loads up to 3 times
+- Show placeholder image on persistent failure
+- Log errors for monitoring
+- Allow user to manually retry
+
+**Navigation Errors:**
+- Validate index bounds before navigation
+- Handle edge cases (empty gallery, single image)
+- Prevent rapid navigation that could cause issues
+
+**Modal Errors:**
+- Ensure modal can always be closed
+- Handle portal rendering failures gracefully
+- Prevent body scroll lock from persisting
+
+### Offline Behavior
+
+**Cached Data Strategy:**
+```typescript
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  expiresAt: number;
+}
+
+class DataCache {
+  private cache = new Map<string, CacheEntry<any>>();
+  
+  set<T>(key: string, data: T, ttl: number = 300000): void {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      expiresAt: Date.now() + ttl,
+    });
+  }
+  
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return entry.data as T;
+  }
+  
+  isStale(key: string): boolean {
+    const entry = this.cache.get(key);
+    return entry ? Date.now() > entry.expiresAt : true;
+  }
+}
+```
+
+**Offline Detection:**
+```typescript
+const useOnlineStatus = () => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  return isOnline;
+};
+```
+
+**Offline UI Indicators:**
+- Banner notification when offline
+- Disable booking functionality
+- Show cached data with timestamp
+- Provide retry button when back online
+
+## Testing Strategy
+
+### Unit Testing
+
+**Component Testing:**
+- Test individual components in isolation
+- Mock API calls and external dependencies
+- Verify prop handling and state management
+- Test error states and edge cases
+
+**Example Unit Tests:**
+```typescript
+describe('ImageGallery', () => {
+  it('should display the initial image', () => {
+    const images = ['img1.jpg', 'img2.jpg'];
+    render(<ImageGallery images={images} initialIndex={0} isOpen={true} onClose={jest.fn()} />);
+    expect(screen.getByAlt(/image 1/i)).toBeInTheDocument();
+  });
+  
+  it('should navigate to next image on arrow click', () => {
+    const images = ['img1.jpg', 'img2.jpg'];
+    render(<ImageGallery images={images} initialIndex={0} isOpen={true} onClose={jest.fn()} />);
+    fireEvent.click(screen.getByLabelText(/next image/i));
+    expect(screen.getByAlt(/image 2/i)).toBeInTheDocument();
+  });
+  
+  it('should close on escape key', () => {
+    const onClose = jest.fn();
+    render(<ImageGallery images={['img1.jpg']} isOpen={true} onClose={onClose} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+  
+  it('should handle empty image array', () => {
+    render(<ImageGallery images={[]} isOpen={true} onClose={jest.fn()} />);
+    expect(screen.getByText(/no images available/i)).toBeInTheDocument();
+  });
+});
+```
+
+### Property-Based Testing
+
+**Gallery Navigation Properties:**
+```typescript
+// Using fast-check for property-based testing
+import fc from 'fast-check';
+
+describe('ImageGallery Properties', () => {
+  it('Property 1: Navigation bounds - Feature: famousgates-hotels-landing-page, Property 1', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 100 }), // image count
+        fc.integer({ min: 0, max: 100 }), // current index
+        (imageCount, currentIndex) => {
+          if (imageCount === 0) return true;
+          
+          const validIndex = currentIndex % imageCount;
+          const nextIndex = (validIndex + 1) % imageCount;
+          const prevIndex = (validIndex - 1 + imageCount) % imageCount;
+          
+          // Verify indices are always within bounds
+          expect(nextIndex).toBeGreaterThanOrEqual(0);
+          expect(nextIndex).toBeLessThan(imageCount);
+          expect(prevIndex).toBeGreaterThanOrEqual(0);
+          expect(prevIndex).toBeLessThan(imageCount);
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+  
+  it('Property 4: Image preloading adjacency - Feature: famousgates-hotels-landing-page, Property 4', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.string(), { minLength: 3, maxLength: 100 }), // images
+        fc.integer({ min: 0, max: 99 }), // current index
+        async (images, rawIndex) => {
+          const currentIndex = rawIndex % images.length;
+          const prevIndex = (currentIndex - 1 + images.length) % images.length;
+          const nextIndex = (currentIndex + 1) % images.length;
+          
+          const { result } = renderHook(() => useImagePreloader(images, currentIndex));
+          
+          await waitFor(() => {
+            expect(result.current.loadedImages.has(prevIndex)).toBe(true);
+            expect(result.current.loadedImages.has(nextIndex)).toBe(true);
+          });
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+```
+
+**API Integration Properties:**
+```typescript
+describe('API Integration Properties', () => {
+  it('Property 6: Hotel data freshness - Feature: famousgates-hotels-landing-page, Property 6', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 600000 }), // age in ms
+        (dataAge) => {
+          const cacheEntry = {
+            data: { id: '1', name: 'Test Hotel' },
+            timestamp: Date.now() - dataAge,
+            expiresAt: Date.now() - dataAge + 300000, // 5 min TTL
+          };
+          
+          const shouldRefetch = Date.now() > cacheEntry.expiresAt;
+          const isStale = dataAge > 300000;
+          
+          expect(shouldRefetch).toBe(isStale);
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+  
+  it('Property 9: Error retry exponential backoff - Feature: famousgates-hotels-landing-page, Property 9', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 2 }), // retry attempt (0-2)
+        (attempt) => {
+          const expectedDelay = Math.pow(2, attempt) * 1000;
+          const actualDelay = calculateRetryDelay(attempt);
+          
+          expect(actualDelay).toBe(expectedDelay);
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+```
+
+### Integration Testing
+
+**End-to-End Gallery Flow:**
+```typescript
+describe('Gallery Integration', () => {
+  it('should complete full gallery interaction flow', async () => {
+    render(<RoomCard room={mockRoom} />);
+    
+    // Open gallery
+    fireEvent.click(screen.getByText(/view room/i));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    
+    // Navigate through images
+    fireEvent.click(screen.getByLabelText(/next image/i));
+    await waitFor(() => {
+      expect(screen.getByAlt(/image 2/i)).toBeInTheDocument();
+    });
+    
+    // Use keyboard navigation
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    await waitFor(() => {
+      expect(screen.getByAlt(/image 1/i)).toBeInTheDocument();
+    });
+    
+    // Click thumbnail
+    fireEvent.click(screen.getAllByRole('button', { name: /go to image/i })[2]);
+    await waitFor(() => {
+      expect(screen.getByAlt(/image 3/i)).toBeInTheDocument();
+    });
+    
+    // Close gallery
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+});
+```
+
+### Performance Testing
+
+**Image Loading Performance:**
+- Measure time to first image display
+- Track preloading efficiency
+- Monitor memory usage with large galleries
+- Test on various network conditions (3G, 4G, WiFi)
+
+**Rendering Performance:**
+- Measure component render times
+- Track re-render frequency
+- Monitor frame rate during animations
+- Test with various device capabilities
+
+### Accessibility Testing
+
+**Automated Accessibility:**
+```typescript
+import { axe, toHaveNoViolations } from 'jest-axe';
+
+expect.extend(toHaveNoViolations);
+
+describe('Gallery Accessibility', () => {
+  it('should have no accessibility violations', async () => {
+    const { container } = render(
+      <ImageGallery images={mockImages} isOpen={true} onClose={jest.fn()} />
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+});
+```
+
+**Manual Accessibility Testing:**
+- Keyboard-only navigation
+- Screen reader compatibility (NVDA, JAWS, VoiceOver)
+- Color contrast verification
+- Focus management validation
+
+### Test Configuration
+
+**Property-Based Test Settings:**
+- Minimum 100 iterations per property test
+- Each test tagged with feature name and property number
+- Shrinking enabled for counterexample minimization
+- Timeout: 10 seconds per property
+
+**Coverage Requirements:**
+- Unit test coverage: >80%
+- Integration test coverage: >70%
+- Property tests: All correctness properties implemented
+- E2E tests: Critical user paths covered
+
+## Deployment and Operations
+
+### Build Configuration
+
+**Next.js Build Optimization:**
+```javascript
+// next.config.js
+module.exports = {
+  images: {
+    domains: ['api.famousgateshotels.com'],
+    formats: ['image/webp', 'image/avif'],
+  },
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
+  webpack: (config) => {
+    config.optimization.splitChunks = {
+      chunks: 'all',
+      cacheGroups: {
+        gallery: {
+          test: /[\\/]components[\\/]gallery[\\/]/,
+          name: 'gallery',
+          priority: 10,
+        },
+      },
+    };
+    return config;
+  },
+};
+```
+
+### Environment Configuration
+
+**Environment Variables:**
+```bash
+# .env.production
+NEXT_PUBLIC_API_URL=https://api.famousgateshotels.com
+NEXT_PUBLIC_CACHE_TTL=300000
+NEXT_PUBLIC_ENABLE_ANALYTICS=true
+NEXT_PUBLIC_SENTRY_DSN=https://...
+```
+
+### Monitoring and Logging
+
+**Error Tracking:**
+- Sentry integration for error monitoring
+- Custom error boundaries for graceful degradation
+- Performance monitoring with Web Vitals
+
+**Analytics:**
+- Track gallery usage metrics
+- Monitor image load performance
+- Measure user engagement
+- Track booking conversion rates
+
+### Performance Monitoring
+
+**Key Metrics:**
+- Time to First Byte (TTFB)
+- First Contentful Paint (FCP)
+- Largest Contentful Paint (LCP)
+- Cumulative Layout Shift (CLS)
+- First Input Delay (FID)
+- Gallery open time
+- Image load time
+
+**Targets:**
+- LCP < 2.5s
+- FID < 100ms
+- CLS < 0.1
+- Gallery open < 500ms
+- Image load < 1s
+
+## Security Considerations
+
+### API Security
+
+**Authentication:**
+- Public endpoints require no authentication
+- Rate limiting on all endpoints
+- CORS configuration for landing page domain
+
+**Data Validation:**
+- Validate all user inputs
+- Sanitize data before display
+- Prevent XSS attacks
+- Validate image URLs
+
+### Content Security Policy
+
+```html
+<meta http-equiv="Content-Security-Policy" 
+      content="default-src 'self'; 
+               img-src 'self' https://api.famousgateshotels.com; 
+               script-src 'self' 'unsafe-inline' 'unsafe-eval'; 
+               style-src 'self' 'unsafe-inline';">
+```
+
+### Image Security
+
+**Image Validation:**
+- Verify image file types
+- Check image dimensions
+- Scan for malicious content
+- Implement image CDN with security headers
+
+## Future Enhancements
+
+### Gallery Enhancements
+
+1. **Zoom Functionality**: Pinch-to-zoom on mobile, mouse wheel zoom on desktop
+2. **Image Captions**: Display descriptive captions for each image
+3. **Fullscreen Mode**: Native fullscreen API support
+4. **Share Functionality**: Share specific images on social media
+5. **Download Option**: Allow users to download images
+6. **360° Views**: Support for panoramic room views
+7. **Video Support**: Integrate video tours alongside images
+
+### Performance Enhancements
+
+1. **Progressive Web App**: Add service worker for offline support
+2. **Image CDN**: Implement CDN for faster image delivery
+3. **WebP/AVIF**: Serve next-gen image formats
+4. **Lazy Hydration**: Defer JavaScript hydration for below-fold content
+
+### Feature Enhancements
+
+1. **Virtual Tours**: 3D room tours integration
+2. **AR Preview**: Augmented reality room preview
+3. **Comparison Tool**: Compare multiple rooms side-by-side
+4. **Favorites**: Save favorite rooms for later
+5. **Price Alerts**: Notify users of price drops
+

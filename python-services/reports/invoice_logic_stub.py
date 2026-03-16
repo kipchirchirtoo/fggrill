@@ -13,12 +13,12 @@
         
         # Company Info (Sender)
         sender_info = [
-            Paragraph("<b>KyogongS</b>", self.styles['Normal']),
-            Paragraph("Kyogongs Bomet Town", self.styles['SmallText']),
+            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
+            Paragraph("Bomet Town, Kenya", self.styles['SmallText']),
             Paragraph("P.O. Box 701 - 20400", self.styles['SmallText']),
             Paragraph("Bomet, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: 0706 782 828", self.styles['SmallText']),
-            Paragraph("Email: kyogongsbmt@gmail.com", self.styles['SmallText']),
+            Paragraph("Tel: +254 706 782 828", self.styles['SmallText']),
+            Paragraph("Email: info@famousgatehotels.com", self.styles['SmallText']),
         ]
         
         # Invoice Title Block
@@ -130,7 +130,7 @@
         payment_info = [
             "M-Pesa: Paybill 123456, Account: Invoice Number",
             "Bank Transfer: Equity Bank, Acc: 1234567890",
-            "Cheque: Payable to Kyogongs"
+            "Cheque: Payable to FamousGate Hotels"
         ]
         
         for method in payment_info:

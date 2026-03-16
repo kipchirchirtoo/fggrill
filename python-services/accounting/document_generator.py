@@ -52,7 +52,7 @@ class AccountingDocumentGenerator:
         """Add header to each page"""
         canvas_obj.saveState()
         canvas_obj.setFont('Helvetica-Bold', 16)
-        canvas_obj.drawString(inch, 10.5*inch, "Kyogongs")
+        canvas_obj.drawString(inch, 10.5*inch, "FamousGate Hotels")
         canvas_obj.setFont('Helvetica', 10)
         canvas_obj.drawString(inch, 10.3*inch, "Accounting & Finance Department")
         canvas_obj.line(inch, 10.2*inch, 7.5*inch, 10.2*inch)
@@ -516,10 +516,10 @@ class AccountingDocumentGenerator:
         # 2. Supplier and Ship To
         supplier = data.get('supplier', {})
         org_details = [
-            "<b>Kyogongs</b>",
+            "<b>FamousGate Hotels</b>",
             "Bomet, Kenya",
             "Main Headquarters",
-            "Tel: 0706 782 828 | Email: kyogongsbmt@gmail.com"
+            "Tel: +254 706 782 828 | Email: info@famousgatehotels.com"
         ]
         
         address_data = [
@@ -529,7 +529,7 @@ class AccountingDocumentGenerator:
             ],
             [
                 Paragraph(f"{escape(str(supplier.get('name') or 'N/A'))}<br/>{escape(str(supplier.get('address') or 'N/A'))}<br/>Email: {escape(str(supplier.get('email') or 'N/A'))}<br/>PIN: {escape(str(supplier.get('supplier_pin') or 'N/A'))}", self.styles['Normal']),
-                Paragraph("<b>Central Stores</b><br/>Kyogongs<br/>Bomet, Kenya (HQ)<br/>Tel: 0706 782 828", self.styles['Normal'])
+                Paragraph("<b>Central Stores</b><br/>FamousGate Hotels<br/>Bomet, Kenya (HQ)<br/>Tel: +254 706 782 828", self.styles['Normal'])
             ]
         ]
         
@@ -608,7 +608,7 @@ class AccountingDocumentGenerator:
             story.append(Paragraph(f"<b>Special Instructions:</b><br/>{escape(instructions or '')}", self.styles['Normal']))
             story.append(Spacer(1, 0.2*inch))
             
-        story.append(Paragraph("This Purchase Order is an official document of Kyogongs. Authorization is required for validity.", self.styles['Italic']))
+        story.append(Paragraph("This Purchase Order is an official document of FamousGate Hotels. Authorization is required for validity.", self.styles['Italic']))
         story.append(Spacer(1, 0.5*inch))
         
         # Signature block

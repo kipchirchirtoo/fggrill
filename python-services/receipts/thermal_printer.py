@@ -60,9 +60,9 @@ class ThermalPrinter:
         }
         
         # Company info
-        self.company_name = "Kyogong"
-        self.company_address = "Kericho, Kenya"
-        self.company_phone = "+254 700 000 000"
+        self.company_name = "FamousGate Hotels"
+        self.company_address = "Bomet, Kenya"
+        self.company_phone = "+254 706 782 828"
         
     def connect(self) -> bool:
         """Establish connection to the printer"""
