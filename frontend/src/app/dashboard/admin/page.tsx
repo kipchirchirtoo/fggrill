@@ -77,7 +77,8 @@ export default function AdminDashboard() {
     { href: '/dashboard/admin/users', icon: UserCog, label: 'Accounts', desc: 'User roles & access' },
     { href: '/dashboard/admin/staff', icon: Users, label: 'HR/Staff', desc: 'Team & payroll' },
     { href: '/dashboard/admin/storekeeping', icon: Package, label: 'Inventory', desc: 'Master stock control' },
-    { href: '/dashboard/central-store/reports', icon: FileText, label: 'Analytics', desc: 'System-wide reports' }
+    { href: '/dashboard/central-store/reports', icon: FileText, label: 'Analytics', desc: 'System-wide reports' },
+    { href: '/dashboard/admin/docs', icon: FileText, label: 'Systems Docs', desc: 'Module Guides' }
   ];
 
   return (

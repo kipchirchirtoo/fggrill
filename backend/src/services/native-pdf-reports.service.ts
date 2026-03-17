@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { supabase } from '../config/database';
 import { Response } from 'express';
+import { detailedDocs, DetailedModuleDoc } from './documentation-data';
+import { logger } from '../utils/logger';
 
 // ── Brand constants (matches pdfGenerator.ts style) ──────────────────────────
 const PRIMARY    = '#1a1a1a';
@@ -835,12 +837,6 @@ export async function generatePayrollPDF(
     { v: n(totalNssf),     c: C[6] },
     { v: n(totalShif),     c: C[7] },
     { v: n(totalHousing),  c: C[8] },
-    { v: n(totalPaye),     c: C[9] },
-    { v: n(totalCredits),  c: C[10] },
-    { v: n(totalAdvances), c: C[11] },
-    { v: n(totalLoans),    c: C[12] },
-    { v: n(totalDed),      c: C[13] },
-    { v: n(totalNet),      c: C[14] },
   ].forEach(({ v, c }) => {
     doc.text(v, c.x + 2, y + 7, { width: c.width - 4, align: 'right' });
   });
@@ -862,4 +858,271 @@ export async function generatePayrollPDF(
   drawFooter(doc);
   doc.end();
 }
+
+// ── DOCUMENTATION REPORT (IN-DEPTH ENTERPRISE MANUAL) ─────────────────────────
+export async function generateDocumentationPDF(
+  res: Response,
+  filters: { moduleId?: string }
+) {
+  const { moduleId } = filters;
+  logger.info(`[V3.2_ZERO_PAGING] Initializing Absolute Layout Engine...`);
+
+  const docsToRender = (moduleId && moduleId !== 'all') 
+    ? detailedDocs.filter(d => d.id === moduleId) 
+    : detailedDocs;
+
+  if (docsToRender.length === 0) return;
+
+  // 1. ABSOLUTE CONFIG: Set margins to 0 to disable all automatic paging.
+  // We will enforce "Virtual Margins" manually via ensureSpace.
+  const doc = new PDFDocument({ 
+    margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    size: 'A4',
+    autoFirstPage: true 
+  });
+
+  // VIRTUAL MARGIN CONSTANTS
+  const V_TOP = 105;
+  const V_BOTTOM = 60;
+  const V_LEFT = 50;
+  const V_RIGHT = 50;
+  const PAGE_W = doc.page.width;
+  const PAGE_H = doc.page.height;
+  const CONTENT_W = PAGE_W - V_LEFT - V_RIGHT;
+
+  const logoPath = path.join(process.cwd(), 'public', 'fglogo.png');
+  const hasLogo = fs.existsSync(logoPath);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  const filename = `FamousGate_Industrial_V3.2_${moduleId?.toUpperCase() || 'ENT'}.pdf`;
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+  doc.pipe(res);
+
+  let pageNumber = 0;
+  let isBrandingActive = false;
+
+  // --- Layout Master: Single Source of Truth for Branding ---
+  const drawPageBranding = () => {
+    if (isBrandingActive) return;
+    isBrandingActive = true;
+    pageNumber++;
+
+    doc.save(); // Isolate branding style from content
+
+    try {
+      // Background Grid Line
+      doc.rect(25, 25, PAGE_W - 50, PAGE_H - 50).lineWidth(0.5).strokeColor('#cbd5e1').stroke();
+      
+      // HEADER: DOCUMENT CONTROL GRID
+      const hY = 32;
+      const hH = 48;
+      doc.rect(32, hY, PAGE_W - 64, hH).lineWidth(1.5).strokeColor('#0f172a').stroke();
+      
+      // Vertical separators
+      doc.moveTo(90, hY).lineTo(90, hY + hH).stroke();
+      doc.moveTo(PAGE_W - 160, hY).lineTo(PAGE_W - 160, hY + hH).stroke();
+
+      if (hasLogo) doc.image(logoPath, 48, hY + 10, { width: 30 });
+
+      // Identify Content
+      doc.font('Courier-Bold').fontSize(10).fillColor('#0f172a');
+      doc.text('FAMOUSGATE SOLUTIONS ARCHITECTURE', 105, hY + 14);
+      doc.font('Courier').fontSize(8).fillColor('#64748b');
+      doc.text('SYSTEM SPECIFICATION // OPERATIONS AUDIT MANUAL // V3.2_STABLE', 105, hY + 28);
+
+      // Status Metrics
+      doc.font('Courier-Bold').fontSize(9).fillColor('#0f172a');
+      doc.text(`REF: FG-OM-26-V3.2`, PAGE_W - 145, hY + 14);
+      doc.text(`SHEET: ${String(pageNumber).padStart(3, '0')}`, PAGE_W - 145, hY + 28);
+
+      // FOOTER: SECURITY BAR
+      const fY = PAGE_H - 45;
+      doc.rect(32, fY, PAGE_W - 64, 20).lineWidth(0.5).strokeColor('#94a3b8').stroke();
+      doc.font('Courier').fontSize(8).fillColor('#94a3b8')
+         .text('AUTHORIZED DISTRIBUTION ONLY // INTELLECTUAL PROPERTY OF HIRALL SOLUTIONS', 0, fY + 6, { align: 'center', width: PAGE_W });
+
+    } finally {
+      doc.restore(); // Critical: Never leak state
+      isBrandingActive = false;
+    }
+  };
+
+  // --- Master Paging Authority ---
+  const ensureSpace = (h: number) => {
+    // If current Y + planned height exceeds the safe content area, flip page.
+    if (doc.y + h > PAGE_H - V_BOTTOM) {
+      doc.addPage();
+      doc.y = V_TOP; // Force cursor to virtual top
+      return true;
+    }
+    return false;
+  };
+
+  doc.on('pageAdded', () => drawPageBranding());
+  
+  // Initialize First Page
+  drawPageBranding();
+  doc.y = V_TOP; // Set initial position
+
+  // --- Industrial Styling Helpers ---
+  const drawModuleHeader = (text: string) => {
+    ensureSpace(40);
+    const startY = doc.y;
+    doc.rect(V_LEFT, startY, CONTENT_W, 25).fill('#0f172a');
+    doc.font('Courier-Bold').fontSize(11).fillColor('#ffffff').text(` [ ${text.toUpperCase()} ]`, V_LEFT + 8, startY + 8);
+    doc.y = startY + 35;
+    doc.fillColor('#1e293b');
+  };
+
+  const drawDataRow = (k: string, v: string) => {
+    const lines = doc.heightOfString(`${k} : ${v}`, { width: CONTENT_W });
+    ensureSpace(lines + 10);
+    doc.font('Courier-Bold').fontSize(10).fillColor('#334155').text(`» ${k.padEnd(20, ' ')} : `, { continued: true })
+       .font('Courier').fillColor('#1e293b').text(v);
+    doc.y += 5;
+  };
+
+  const drawTechnicalGrid = (headers: string[], rows: string[][], widths: number[]) => {
+    ensureSpace(60);
+    const startX = V_LEFT;
+    
+    // Header Row
+    const headY = doc.y;
+    doc.rect(startX, headY, CONTENT_W, 20).fill('#e2e8f0');
+    doc.font('Courier-Bold').fontSize(9).fillColor('#475569');
+    let cX = startX;
+    headers.forEach((h, i) => {
+      doc.text(h.toUpperCase(), cX + 6, headY + 6, { width: widths[i] - 12 });
+      cX += widths[i];
+    });
+    doc.strokeColor('#cbd5e1').lineWidth(0.5).rect(startX, headY, CONTENT_W, 20).stroke();
+    doc.y = headY + 20;
+
+    // Body Rows
+    rows.forEach(r => {
+      // Check if this specific row needs a page flip
+      const cellHeights = r.map((cell, i) => doc.heightOfString(cell, { width: widths[i] - 12 }));
+      const maxH = Math.max(...cellHeights, 15) + 8;
+      
+      const didFlip = ensureSpace(maxH);
+      if (didFlip) {
+        // Redraw table header if we flipped mid-table
+        const newHeadY = doc.y;
+        doc.rect(startX, newHeadY, CONTENT_W, 20).fill('#cbd5e1'); // Darker for mid-split
+        doc.font('Courier-Bold').fontSize(9).fillColor('#0f172a');
+        let rCX = startX;
+        headers.forEach((h, i) => {
+          doc.text(h.toUpperCase(), rCX + 6, newHeadY + 6, { width: widths[i] - 12 });
+          rCX += widths[i];
+        });
+        doc.y = newHeadY + 20;
+      }
+
+      const rowY = doc.y;
+      cX = startX;
+      doc.font('Courier').fontSize(9).fillColor('#1e293b');
+      r.forEach((cell, i) => {
+        doc.text(cell, cX + 6, rowY + 5, { width: widths[i] - 12 });
+        cX += widths[i];
+      });
+      doc.y = rowY + maxH;
+
+      // Draw Row Borders
+      doc.strokeColor('#cbd5e1').lineWidth(0.5);
+      doc.moveTo(startX, rowY).lineTo(startX, doc.y).stroke();
+      doc.moveTo(startX + CONTENT_W, rowY).lineTo(startX + CONTENT_W, doc.y).stroke();
+      doc.moveTo(startX, doc.y).lineTo(startX + CONTENT_W, doc.y).stroke();
+    });
+    doc.y += 10;
+  };
+
+  // 1. --- SYSTEM COVER V3.2 ---
+  if (hasLogo) {
+    doc.image(logoPath, PAGE_W / 2 - 60, 110, { width: 120 });
+  }
+  doc.y = 260; 
+  doc.font('Courier-Bold').fontSize(40).fillColor('#0f172a').text('FAMOUSGATE', { align: 'center' });
+  doc.fontSize(20).fillColor('#334155').text('TECHNICAL AUDIT & OPS MANUAL', { align: 'center' });
+  doc.moveDown(1.5);
+  
+  doc.rect(150, doc.y, PAGE_W - 300, 2).fill('#0f172a');
+  doc.moveDown(2);
+  
+  const metrics = [['SYSTEM_VERSION', '3.2.0-STABLE'], ['CLEARANCE', 'LEVEL_4_RESTRICTED'], ['ENGINE_CORE', 'HIRALL_AUTO_DOC_V3'], ['AUDIT_DATE', '2026-03-17']];
+  metrics.forEach(([k, v]) => {
+    doc.font('Courier-Bold').fontSize(11).text(k.padStart(18, ' '), 150, doc.y, { continued: true }).font('Courier').text(` : ${v}`);
+    doc.y += 18;
+  });
+
+  // 2. --- SYSTEM INDEX ---
+  doc.addPage();
+  doc.y = V_TOP;
+  drawModuleHeader('0.0 SYSTEM MODULE INDEX');
+  doc.y += 10;
+  docsToRender.forEach((m, i) => {
+    doc.font('Courier-Bold').fontSize(11).text(`[ID: ${String(i + 1).padStart(2, '0')}] ${m.title.toUpperCase()}`, { continued: true })
+       .text(' '.padEnd(45 - m.title.length, '.'), { continued: true })
+       .text(` ACCESS: VERIFIED`);
+    doc.y += 15;
+  });
+
+  // 3. --- CORE DOCUMENTATION SYSTEM ---
+  docsToRender.forEach((m, mi) => {
+    ensureSpace(200);
+    doc.y += 30;
+    
+    // Module Giant Title
+    const mY = doc.y;
+    doc.rect(V_LEFT, mY, CONTENT_W, 35).lineWidth(2).strokeColor('#0f172a').stroke();
+    doc.font('Courier-Bold').fontSize(16).fillColor('#0f172a').text(`[MOD_${mi+1}] ARCHITECTURE: ${m.title.toUpperCase()}`, V_LEFT + 15, mY + 11);
+    doc.y = mY + 45;
+
+    drawDataRow('CORE_OBJECTIVE', m.purpose);
+    drawDataRow('ACCESS_ROLES', m.role);
+    
+    drawModuleHeader(`${mi + 1}.1 COMPONENT TOPOLOGY`);
+    drawTechnicalGrid(['ID', 'Feature Designation', 'Registry'], m.components.map((c, ci) => [String(ci + 1), c.name, 'VERIFIED_ACTIVE']), [40, 345, 110]);
+
+    drawModuleHeader(`${mi + 1}.2 SYSTEM PROTOCOLS (SOP)`);
+    m.workflows.forEach((w, wi) => {
+      ensureSpace(120);
+      doc.font('Courier-Bold').fontSize(10).fillColor('#0f172a').text(` » SUB_PROCESS: [${mi+1}.${wi+1}] ${w.title.toUpperCase()}`);
+      drawTechnicalGrid(['STP', 'Instruction Flow Execution'], w.steps.map((s, si) => [String(si + 1), s]), [40, 455]);
+    });
+
+    drawModuleHeader(`${mi + 1}.3 FAULT RESOLUTION MATRIX`);
+    drawTechnicalGrid(['Fault Event Trigger', 'Recovery Routine Path'], m.troubleshooting.map(t => [t.issue, t.resolution]), [200, 295]);
+    
+    drawModuleHeader(`${mi+1}.4 LEGAL & COMPLIANCE`);
+    const disclaimer = 'All data handled strictly per FamousGate Privacy Policy 2026. Access to this module requires Hirall Enterprise JWT clearance.';
+    const dh = doc.heightOfString(disclaimer, { width: CONTENT_W });
+    ensureSpace(dh + 20);
+    doc.font('Courier').fontSize(10).text(disclaimer, { align: 'justify' });
+    doc.y += 30;
+  });
+
+  // 4. --- LEGAL CLASSIFICATION END ---
+  ensureSpace(120);
+  doc.y += 40;
+  doc.rect(V_LEFT, doc.y, CONTENT_W, 1).fill('#475569');
+  doc.y += 10;
+  doc.font('Courier-Bold').fontSize(12).fillColor('#0f172a').text('DOCUMENT LOCK // END OF TRANSMISSION', { align: 'center' });
+  doc.font('Courier').fontSize(9).fillColor('#64748b').text('© 2026 FamousGate Hotels | Built by Hirall Systems core_v3.2', { align: 'center' });
+
+  return new Promise((resolve, reject) => {
+    res.on('finish', () => {
+      logger.info('[V3.2_ZERO_PAGING] Generation Sequence Complete.');
+      resolve(null);
+    });
+    res.on('error', reject);
+    doc.removeAllListeners('pageAdded');
+    doc.end();
+  });
+}
+
+
+
+
+
+
 

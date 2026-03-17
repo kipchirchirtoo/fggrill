@@ -319,6 +319,12 @@ export function ConsolidatedNav() {
         label="Bookings"
         active={pathname.includes('/dashboard/branch-accounting/bookings')}
       />
+      <NavItem
+        href="/dashboard/admin/docs"
+        icon={BookOpen}
+        label="Employee Docs"
+        active={pathname === '/dashboard/admin/docs'}
+      />
     </>
   );
 

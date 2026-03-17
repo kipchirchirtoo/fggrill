@@ -13,6 +13,7 @@ import {
   generateProcurementIntelligencePDF,
   generateHRPerformancePDF,
   generatePayrollPDF,
+  generateDocumentationPDF,
 } from '../services/native-pdf-reports.service';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
@@ -711,6 +712,22 @@ export const exportReport = async (
   try {
     const { reportType, format, filters, data } = req.body;
     logger.info(`Exporting report: ${reportType} (${format})`);
+
+    // ── Pre-emptive Documentation Check ──
+    if (reportType === 'documentation' && format === 'pdf') {
+      logger.info('Handling documentation PDF request...');
+      try {
+        await generateDocumentationPDF(res, filters ?? {});
+        logger.info('Documentation PDF generated successfully');
+        return;
+      } catch (pdfErr: any) {
+        logger.error(`Documentation PDF error: ${pdfErr.message}`, pdfErr);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
+        }
+        return;
+      }
+    }
 
     // ── Native Node.js PDF generation (no Python dependency) ──
     if (format === 'pdf') {
