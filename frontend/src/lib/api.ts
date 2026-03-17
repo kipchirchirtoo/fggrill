@@ -391,7 +391,7 @@ export const storeAPI = {
   fulfillKitchenRequisition: (id: string | number, items: any[]) =>
     fetchAPI<any>(`/kitchen/requisitions/${id}/fulfill`, {
       method: 'POST',
-      body: JSON.stringify({ items })
+      body: JSON.stringify({ issued_quantities: items })
     }),
   rejectKitchenRequisition: (id: string | number, reason: string) =>
     fetchAPI<any>(`/kitchen/requisitions/${id}/reject`, {
@@ -1102,8 +1102,8 @@ export const roomsAPI = {
           currentGuest: room.current_guest,
           checkIn: room.check_in,
           checkOut: room.check_out,
-          basePrice: room.base_price,
-          currentPrice: room.current_price || room.base_price,
+          basePrice: room.base_price || room.type?.base_price || room.price_override || 0,
+          currentPrice: room.current_price || room.price_override || room.base_price || room.type?.base_price || 0,
           description: room.description,
           amenities: room.amenities || [],
           photos: room.photos || [],
@@ -1420,6 +1420,8 @@ export const bookingsAPI = {
             booking_number: booking.booking_number || booking.confirmation_number,
             guest_id: booking.guest_id,
             guest_name: booking.guest_name || `${guestInfo.first_name || ''} ${guestInfo.last_name || ''}`.trim(),
+            phone: booking.phone || booking.guest_phone || guestInfo.phone || null,
+            email: booking.email || booking.guest_email || guestInfo.email || null,
             guest_phone: booking.guest_phone || guestInfo.phone,
             guest_email: booking.guest_email || guestInfo.email,
             room_id: booking.room_id,
@@ -3923,8 +3925,17 @@ export const idCardsAPI = {
       body: formData
     });
 
-    if (!response.ok) throw new Error('ID generation failed');
-    return response.blob();
+    if (!response.ok) {
+      let errMsg = `ID generation failed (${response.status})`;
+      try { const j = await response.json(); errMsg = j.error || j.message || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
+    const blob = await response.blob();
+    if (!blob.type.includes('pdf') && !blob.type.includes('octet')) {
+      const text = await blob.text();
+      throw new Error(`Unexpected response: ${text.substring(0, 100)}`);
+    }
+    return blob;
   },
   preview: async (data: any, photo?: File) => {
     // Same implementation as generate for now

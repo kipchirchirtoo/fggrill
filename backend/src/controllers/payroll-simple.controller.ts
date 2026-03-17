@@ -24,7 +24,7 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
         // 1. Fetch Staff Profiles (Active only)
         let staffQuery = supabase
             .from('staff_profiles')
-            .select('id, basic_salary, nssf_enabled, shif_enabled, housing_fund_enabled, kra_pin')
+            .select('id, basic_salary, nssf_enabled, shif_enabled, housing_fund_enabled, kra_pin, branch_id')
             .eq('status', 'active');
 
         if (staff_id) {
@@ -70,10 +70,9 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                 const [advancesRes, loansRes, creditBillsRes, unpaidBillsRes] = await Promise.all([
                     supabase.from('staff_advances').select('id, amount').eq('staff_id', staff.id).eq('status', 'approved').is('payroll_id', null),
                     supabase.from('staff_loans').select('id, monthly_installment').eq('staff_id', staff.id).eq('status', 'active'),
-                    supabase.from('staff_credit_bills').select('id, amount, balance').eq('staff_id', staff.id).eq('is_paid', false).is('payroll_id', null),
+                    supabase.from('staff_credit_bills').select('id, amount, balance, payroll_id').eq('staff_id', staff.id).eq('is_paid', false),
                     supabase.from('unpaid_bills').select('id, total_amount, balance_amount').eq('waiter_id', staff.id).eq('status', 'unpaid')
                 ]);
-
                 let totalCreditBills = 0;
                 let totalAdvances = 0;
                 let totalLoanDeductions = 0;
@@ -124,6 +123,8 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                 // Process Direct Credit Bills
                 if (creditBillsRes.data) {
                     for (const bill of creditBillsRes.data) {
+                        // Skip if already linked to a payroll run
+                        if (bill.payroll_id) continue;
                         totalCreditBills += Number(bill.balance || bill.amount || 0);
                         creditBillUpdates.push(bill.id);
                     }
@@ -138,7 +139,8 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                 }
 
 
-                // E. Kenyan Statutory Deductions (Manual entry by branch accountants)
+                // E. Kenyan Statutory Deductions
+                // First check for manual entry by branch accountant, otherwise auto-calculate
                 let nssf = 0;
                 let shif = 0;
                 const nhif = 0; // Deprecated
@@ -159,6 +161,26 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                     shif = Number(manualStatutory.shif_amount || 0);
                     housingLevy = Number(manualStatutory.housing_fund_amount || 0);
                     statutoryDeductionId = manualStatutory.id;
+                } else {
+                    // Auto-calculate standard Kenyan statutory deductions
+                    const grossForStatutory = basicSalary + totalAllowances + totalBonuses;
+
+                    // NSSF: 6% of gross, capped at KES 2,160 (Tier I: 6% up to 18,000 = 1,080; Tier II: 6% of next 18,001-36,000 = 1,080; total max 2,160)
+                    if (nssfEnabled) {
+                        const tier1 = Math.min(grossForStatutory, 18000) * 0.06;
+                        const tier2 = Math.min(Math.max(grossForStatutory - 18000, 0), 18000) * 0.06;
+                        nssf = Math.round(tier1 + tier2);
+                    }
+
+                    // SHIF (formerly NHIF): 2.75% of gross salary
+                    if (shifEnabled) {
+                        shif = Math.round(grossForStatutory * 0.0275);
+                    }
+
+                    // Housing Levy: 1.5% of gross salary
+                    if (housingEnabled) {
+                        housingLevy = Math.round(grossForStatutory * 0.015);
+                    }
                 }
 
                 // --- PAYE (Pay As You Earn - Income Tax) ---
@@ -181,7 +203,8 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                 };
 
                 const grossSalary = basicSalary + totalAllowances + totalBonuses;
-                const paye = calculatePAYE(grossSalary - nssf);
+                // PAYE only applies if staff has a KRA PIN registered
+                const paye = staff.kra_pin ? calculatePAYE(grossSalary - nssf) : 0;
 
                 // F. Calculate Net Pay
                 const statutoryDeductions = nssf + shif + paye + housingLevy;
@@ -296,41 +319,67 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
 
         let query = supabase
             .from('staff_payroll')
-            .select(`
-                *,
-                staff:staff_profiles!inner(
-                    *,
-                    user:users!user_id(*),
-                    branch:branches(id, name)
-                )
-            `)
+            .select('*')
             .order('generated_at', { ascending: false });
 
         if (month) query = query.eq('month', String(month));
         if (year) query = query.eq('year', Number(year));
         if (staff_id) query = query.eq('staff_id', staff_id);
-        if (branch_id) query = query.eq('staff.branch_id', branch_id);
 
         const { data, error } = await query;
         if (error) throw error;
 
-        // Transform data for frontend if needed (e.g. flatten staff details)
-        const transformed = data.map(item => ({
-            ...item,
-            staff_name: item.staff?.user
-                ? `${item.staff.user.first_name || ''} ${item.staff.user.last_name || ''}`.trim()
-                : `${item.staff?.first_name || ''} ${item.staff?.last_name || ''}`.trim(),
-            staff_role: item.staff?.role,
-            staff_department: item.staff?.department,
-            branch_name: item.staff?.branch?.name || 'Main Branch',
-            staff: item.staff ? {
-                ...item.staff,
-                first_name: item.staff.user?.first_name || item.staff.first_name || '',
-                last_name: item.staff.user?.last_name || item.staff.last_name || '',
-                phone_number: item.staff.user?.phone_number || item.staff.phone || '',
-                email: item.staff.user?.email || item.staff.email || ''
-            } : null
-        }));
+        if (!data || data.length === 0) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // Fetch staff profiles separately to avoid schema cache FK issues
+        const staffIds = [...new Set(data.map(r => r.staff_id))];
+        const { data: staffProfiles } = await supabase
+            .from('staff_profiles')
+            .select('id, role, department, branch_id, first_name, last_name, user_id')
+            .in('id', staffIds);
+
+        // Fetch users for names
+        const userIds = staffProfiles?.map(s => s.user_id).filter(Boolean) || [];
+        const { data: users } = userIds.length > 0
+            ? await supabase.from('users').select('id, first_name, last_name, email, phone_number').in('id', userIds)
+            : { data: [] };
+
+        // Fetch branches
+        const branchIds = [...new Set((staffProfiles || []).map(s => s.branch_id).filter(Boolean))];
+        const { data: branches } = branchIds.length > 0
+            ? await supabase.from('branches').select('id, name').in('id', branchIds)
+            : { data: [] };
+
+        const staffMap = new Map((staffProfiles || []).map(s => [s.id, s]));
+        const userMap = new Map((users || []).map(u => [u.id, u]));
+        const branchMap = new Map((branches || []).map(b => [b.id, b]));
+
+        // Filter by branch if requested
+        const transformed = data
+            .map(item => {
+                const sp = staffMap.get(item.staff_id);
+                const user = sp ? userMap.get(sp.user_id) : null;
+                const branch = sp ? branchMap.get(sp.branch_id) : null;
+                const firstName = user?.first_name || sp?.first_name || '';
+                const lastName = user?.last_name || sp?.last_name || '';
+                return {
+                    ...item,
+                    staff_name: `${firstName} ${lastName}`.trim(),
+                    staff_role: sp?.role,
+                    staff_department: sp?.department,
+                    branch_name: branch?.name || 'Main Branch',
+                    staff: sp ? {
+                        ...sp,
+                        first_name: firstName,
+                        last_name: lastName,
+                        email: user?.email || '',
+                        phone_number: user?.phone_number || ''
+                    } : null
+                };
+            })
+            .filter(item => !branch_id || item.staff?.branch_id === Number(branch_id));
 
         res.status(200).json({
             success: true,

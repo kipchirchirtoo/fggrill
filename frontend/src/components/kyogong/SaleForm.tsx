@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Plus, X as XIcon, ShoppingCart, CheckCircle, Printer } from 'lucide-react';
+import { Loader2, X as XIcon, ShoppingCart, CheckCircle, Printer, Banknote, Smartphone, CreditCard } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { API_URL } from '@/lib/config';
@@ -44,6 +44,7 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
     const [showCashPayment, setShowCashPayment] = useState(false);
     const [cashAmount, setCashAmount] = useState(0);
     const [changeAmount, setChangeAmount] = useState(0);
+    const [showPaymentPicker, setShowPaymentPicker] = useState(false);
     const { user } = useAuth();
     const { activeBranch } = useBranch();
 
@@ -469,95 +470,17 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                             </div>
                         </div>
 
-                        {/* Payment Method Selection - Redirects to Cashier Station */}
-                        <div className="space-y-2">
-                            <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1.5 ml-1">
-                                Select Payment Method
-                            </label>
-                            <p className="text-[10px] text-stone-500 font-bold mb-3 ml-1">
-                                All payments are processed at the Main Cashier Station
-                            </p>
-                            <div className="grid grid-cols-4 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        // Store cart data in sessionStorage for cashier station
-                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
-                                            cart,
-                                            customerName,
-                                            customerPhone,
-                                            serviceType,
-                                            shiftId: shift.id,
-                                            subtotal,
-                                            tax,
-                                            total
-                                        }));
-                                        // Redirect to cashier station with CASH payment method
-                                        window.location.href = '/dashboard/cashier?payment=CASH&source=kyogong';
-                                    }}
-                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-200 active:scale-95"
-                                >
-                                    Cash
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
-                                            cart,
-                                            customerName,
-                                            customerPhone,
-                                            serviceType,
-                                            shiftId: shift.id,
-                                            subtotal,
-                                            tax,
-                                            total
-                                        }));
-                                        window.location.href = '/dashboard/cashier?payment=MPESA&source=kyogong';
-                                    }}
-                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-200 active:scale-95"
-                                >
-                                    M-Pesa
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
-                                            cart,
-                                            customerName,
-                                            customerPhone,
-                                            serviceType,
-                                            shiftId: shift.id,
-                                            subtotal,
-                                            tax,
-                                            total
-                                        }));
-                                        window.location.href = '/dashboard/cashier?payment=CARD&source=kyogong';
-                                    }}
-                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95"
-                                >
-                                    Card
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        sessionStorage.setItem('kyogong_pending_sale', JSON.stringify({
-                                            cart,
-                                            customerName,
-                                            customerPhone,
-                                            serviceType,
-                                            shiftId: shift.id,
-                                            subtotal,
-                                            tax,
-                                            total
-                                        }));
-                                        window.location.href = '/dashboard/cashier?payment=BILL&source=kyogong';
-                                    }}
-                                    className="px-3 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-200 active:scale-95"
-                                >
-                                    Bill
-                                </button>
-                            </div>
-                        </div>
+                        {/* Single Bill Button */}
+                        <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => setShowPaymentPicker(true)}
+                            className="w-full px-4 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all duration-200 bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-200 active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2"
+                        >
+                            {isSubmitting
+                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating Bill...</>
+                                : 'Generate Bill'}
+                        </button>
                     </form>
                 )}
 
@@ -574,6 +497,76 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                         handleSubmit();
                     }}
                 />
+
+                {/* Payment Method Picker Modal */}
+                {showPaymentPicker && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowPaymentPicker(false)}>
+                        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-black text-stone-900 mb-1 text-center">Select Payment Method</h3>
+                            <p className="text-xs text-stone-400 font-bold text-center mb-6 uppercase tracking-widest">Bill will be sent to cashier station</p>
+                            <div className="space-y-3">
+                                {[
+                                    { label: 'Cash', method: 'cash', icon: Banknote, color: 'bg-stone-900 hover:bg-black text-white shadow-stone-200' },
+                                    { label: 'M-Pesa', method: 'mpesa', icon: Smartphone, color: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200' },
+                                    { label: 'Card', method: 'card', icon: CreditCard, color: 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200' },
+                                ].map(({ label, method, icon: Icon, color }) => (
+                                    <button
+                                        key={method}
+                                        disabled={isSubmitting}
+                                        onClick={async () => {
+                                            if (cart.length === 0) { toast.error('Add at least one service'); return; }
+                                            setIsSubmitting(true);
+                                            try {
+                                                const token = localStorage.getItem('token');
+                                                const res = await fetch(`${API_URL}/api/kyogong/shifts/${shift.id}/transactions`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                    body: JSON.stringify({
+                                                        service_category: serviceType || 'general',
+                                                        items: cart.map(i => ({
+                                                            item_type: i.item_type,
+                                                            item_id: i.item_id.toString(),
+                                                            item_name: i.item_name,
+                                                            quantity: i.quantity,
+                                                            unit_price: i.unit_price,
+                                                        })),
+                                                        customer_name: customerName || undefined,
+                                                        customer_phone: customerPhone || undefined,
+                                                        payment_method: 'BILL',
+                                                        cash_amount: 0,
+                                                        mpesa_amount: 0,
+                                                        card_amount: 0
+                                                    })
+                                                });
+                                                const data = await res.json();
+                                                if (data.success) {
+                                                    toast.success('Bill created! Redirecting to cashier...');
+                                                    onTransactionCreated(data.data);
+                                                    const billNumber = data.data.transaction_number || data.data.id;
+                                                    window.location.href = `/dashboard/cashier?billId=${billNumber}&method=${method}&source=kyogong`;
+                                                } else {
+                                                    toast.error(data.error || 'Failed to create bill');
+                                                }
+                                            } catch {
+                                                toast.error('Failed to create bill');
+                                            } finally {
+                                                setIsSubmitting(false);
+                                                setShowPaymentPicker(false);
+                                            }
+                                        }}
+                                        className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-60 ${color}`}
+                                    >
+                                        <Icon className="w-5 h-5" />
+                                        {isSubmitting ? 'Creating...' : label}
+                                    </button>
+                                ))}
+                            </div>
+                            <button onClick={() => setShowPaymentPicker(false)} className="w-full mt-4 text-xs text-stone-400 hover:text-stone-700 font-bold uppercase tracking-widest py-2">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

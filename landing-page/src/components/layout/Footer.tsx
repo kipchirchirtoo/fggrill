@@ -1,9 +1,15 @@
+import { useState, useEffect } from 'react';
+
 interface FooterProps {
   className?: string;
 }
 
 export default function Footer({ className = '' }: FooterProps) {
-  const currentYear = new Date().getFullYear();
+  const [currentYear, setCurrentYear] = useState(2024);
+
+  useEffect(() => {
+    setCurrentYear(new Date().getFullYear());
+  }, []);
 
   return (
     <footer className={`lp-footer ${className}`}>

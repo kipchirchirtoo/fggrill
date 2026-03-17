@@ -16,7 +16,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-interface Booking { id: string; guest_name: string; room_number: string; check_in: string; check_out: string; status: string; total: number; nights: number; }
+interface Booking { id: string; guest_name: string; room_number: string; check_in: string; check_out: string; status: string; total: number; nights: number; phone?: string; email?: string; room_type?: string; special_requests?: string; guests?: number; }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   confirmed: { label: 'Confirmed', color: 'text-green-700', bg: 'bg-green-100' },
@@ -269,11 +269,11 @@ export default function BranchReservationsPage() {
                         <div className="space-y-3 px-1">
                           <div className="flex items-center gap-3 text-stone-600">
                             <Phone className="h-4 w-4" />
-                            <span className="text-sm">+254 700 000 000</span>
+                            <span className="text-sm">{(selectedBooking as any).phone || 'Not provided'}</span>
                           </div>
                           <div className="flex items-center gap-3 text-stone-600">
                             <Mail className="h-4 w-4" />
-                            <span className="text-sm">guest@example.com</span>
+                            <span className="text-sm">{(selectedBooking as any).email || 'Not provided'}</span>
                           </div>
                         </div>
                       </div>

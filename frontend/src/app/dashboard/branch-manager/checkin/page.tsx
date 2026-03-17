@@ -239,7 +239,7 @@ export default function BranchCheckinPage() {
                       <option value="">Choose a room from the inventory...</option>
                       {availableRooms.map((room) => (
                         <option key={room.id} value={room.id}>
-                          {room.room_number} — {room.room_type} (KES {room.rate}/night)
+                          {room.roomNumber || room.room_number} — {room.typeName || room.room_type || 'Standard'} (KES {(room.currentPrice || room.basePrice || room.price_override || 0).toLocaleString()}/night)
                         </option>
                       ))}
                     </select>

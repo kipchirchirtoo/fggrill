@@ -152,7 +152,7 @@ export default function InvoicesPage() {
                                                 <p className="text-[10px] text-stone-400 font-mono italic">{inv.supplier_pin || 'NO PIN'}</p>
                                             </td>
                                             <td className="px-4 py-3 font-mono text-[10px] text-stone-400">{inv.grn_number || 'N/A'}</td>
-                                            <td className="px-4 py-3 text-right font-medium">KES {inv.total_amount.toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-right font-medium">KES {(inv.total_amount ?? 0).toLocaleString()}</td>
                                             <td className="px-4 py-3">
                                                 <IOSBadge variant="light" color={getStatusColor(inv.status)} className="capitalize text-[10px] py-0 px-2 min-w-[80px] text-center border-none">
                                                     {inv.status.replace('_', ' ')}
@@ -203,13 +203,13 @@ export default function InvoicesPage() {
                                 <div className="grid grid-cols-2 gap-8 text-sm border-stone-100 border-b pb-4">
                                     <div className="space-y-2">
                                         <div><p className="text-[10px] uppercase font-bold text-stone-400">Supplier Details</p><p className="font-black text-stone-800">{viewInvoice.supplier_name}</p><p className="font-mono text-[11px] text-[#007AFF]">{viewInvoice.supplier_pin}</p></div>
-                                        <div><p className="text-[10px] uppercase font-bold text-stone-400">Billing Timeline</p><p className="text-stone-600 font-medium">Inv: {new Date(viewInvoice.invoice_date).toLocaleDateString()}</p><p className="text-stone-500 italic">Due: {new Date(viewInvoice.due_date).toLocaleDateString()}</p></div>
+                                        <div><p className="text-[10px] uppercase font-bold text-stone-400">Billing Timeline</p><p className="text-stone-600 font-medium">Inv: {viewInvoice.invoice_date ? new Date(viewInvoice.invoice_date).toLocaleDateString() : 'N/A'}</p><p className="text-stone-500 italic">Due: {viewInvoice.due_date ? new Date(viewInvoice.due_date).toLocaleDateString() : 'N/A'}</p></div>
                                     </div>
                                     <div className="bg-stone-50 p-4 rounded-ios-xl space-y-2">
-                                        <div className="flex justify-between text-xs"><span className="text-stone-400">Subtotal</span><span className="font-mono">{viewInvoice.sub_total.toLocaleString()}</span></div>
-                                        <div className="flex justify-between text-xs"><span className="text-stone-400">Total VAT (16%)</span><span className="font-mono text-emerald-600">+{viewInvoice.vat_amount.toLocaleString()}</span></div>
-                                        <div className="flex justify-between text-xs pb-2 border-b border-stone-200"><span className="text-stone-400">Withholding VAT</span><span className="font-mono text-red-500">-{viewInvoice.wht_amount.toLocaleString()}</span></div>
-                                        <div className="flex justify-between font-bold text-base pt-1"><span className="text-stone-800">Net Payable</span><span className="text-[#007AFF]">KES {viewInvoice.total_amount.toLocaleString()}</span></div>
+                                        <div className="flex justify-between text-xs"><span className="text-stone-400">Subtotal</span><span className="font-mono">{(viewInvoice.sub_total ?? 0).toLocaleString()}</span></div>
+                                        <div className="flex justify-between text-xs"><span className="text-stone-400">Total VAT (16%)</span><span className="font-mono text-emerald-600">+{(viewInvoice.vat_amount ?? 0).toLocaleString()}</span></div>
+                                        <div className="flex justify-between text-xs pb-2 border-b border-stone-200"><span className="text-stone-400">Withholding VAT</span><span className="font-mono text-red-500">-{(viewInvoice.wht_amount ?? 0).toLocaleString()}</span></div>
+                                        <div className="flex justify-between font-bold text-base pt-1"><span className="text-stone-800">Net Payable</span><span className="text-[#007AFF]">KES {(viewInvoice.total_amount ?? 0).toLocaleString()}</span></div>
                                     </div>
                                 </div>
 
@@ -232,9 +232,9 @@ export default function InvoicesPage() {
                                                             <p className="font-bold text-stone-700">{item.item_name}</p>
                                                             <p className="text-[10px] text-stone-400 italic">Qty: {item.quantity}</p>
                                                         </td>
-                                                        <td className="px-3 py-2 text-right font-mono">{item.unit_price.toLocaleString()}</td>
-                                                        <td className="px-3 py-2 text-right text-emerald-600 font-medium">{item.vat_amount.toLocaleString()} ({item.vat_rate}%)</td>
-                                                        <td className="px-3 py-2 text-right font-black text-stone-800">{item.total_price.toLocaleString()}</td>
+                                                        <td className="px-3 py-2 text-right font-mono">{(item.unit_price ?? 0).toLocaleString()}</td>
+                                                        <td className="px-3 py-2 text-right text-emerald-600 font-medium">{(item.vat_amount ?? 0).toLocaleString()} ({item.vat_rate ?? 0}%)</td>
+                                                        <td className="px-3 py-2 text-right font-black text-stone-800">{(item.total_price ?? 0).toLocaleString()}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

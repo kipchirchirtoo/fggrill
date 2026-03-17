@@ -186,10 +186,10 @@ export default function InventoryPage() {
                   ) : filteredItems.length === 0 ? (
                     <tr><td colSpan={5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
                   ) : (
-                    filteredItems.map((item) => {
+                    filteredItems.map((item, idx) => {
                       const isLow = item.quantity <= item.reorder_level;
                       return (
-                        <tr key={item.id} className="hover:bg-stone-50/50 transition-colors">
+                        <tr key={item.id ?? item.sku ?? idx} className="hover:bg-stone-50/50 transition-colors">
                           <td className="p-4">
                             <p className="font-medium text-stone-900">{item.item_name}</p>
                             <p className="text-[11px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{item.sku}</p>

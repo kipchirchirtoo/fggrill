@@ -300,7 +300,7 @@ export default function AnomalyDetailPage() {
                                                                     {Number(item.price || item.unit_price || 0).toLocaleString()}
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right text-sm font-bold text-stone-900">
-                                                                    {Number((item.price || item.unit_price || 0) * item.quantity).toLocaleString()}
+                                                                    {Number(item.total_price || item.total || (item.price || item.unit_price || 0) * item.quantity).toLocaleString()}
                                                                 </td>
                                                             </tr>
                                                         ))}

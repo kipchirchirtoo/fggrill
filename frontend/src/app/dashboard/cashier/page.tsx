@@ -1,6 +1,9 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect, useRef, Suspense } from 'react';
+import dynamic_import from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import {
     User, DollarSign, CreditCard, Scan, Printer, Loader2,
@@ -119,6 +122,26 @@ function CashierPageContent() {
             window.removeEventListener('offline', handleOffline);
         };
     }, [isOffline]);
+
+    // Pre-select payment method when redirected from Kyogong POS
+    useEffect(() => {
+        const paymentParam = searchParams.get('payment');
+        const source = searchParams.get('source');
+        if (paymentParam && source === 'kyogong') {
+            const method = paymentParam.toLowerCase();
+            if (method === 'mpesa') {
+                setPaymentMethod('mpesa');
+                setPaymentFlowChoice('mpesa');
+            } else if (method === 'card') {
+                setPaymentMethod('card');
+                setPaymentFlowChoice('card');
+            } else if (method === 'cash') {
+                setPaymentMethod('cash');
+                setPaymentFlowChoice('cash');
+            }
+            // 'bill' — leave paymentFlowChoice null so cashier can choose method manually
+        }
+    }, [searchParams]);
 
     // Handle auto-loading of bills from query parameters (integration with CheckOutModal)
     useEffect(() => {
@@ -1789,10 +1812,11 @@ function CashierPageContent() {
     );
 }
 
-export default function CashierPage() {
-    return (
-        <Suspense fallback={<div className="p-8 text-center text-stone-400">Loading Station...</div>}>
-            <CashierPageContent />
-        </Suspense>
-    );
+
+const CashierPageNoSSR = dynamic_import(() => Promise.resolve(CashierPageContent), { ssr: false });
+
+function CashierPage() {
+    return <CashierPageNoSSR />;
 }
+
+export default CashierPage;

@@ -20,6 +20,9 @@ export const getRooms = async (
     if (branchId) {
       query = query.eq('branch_id', branchId);
     }
+    if (req.query.status) {
+      query = query.eq('status', req.query.status as string);
+    }
 
     const { data: rooms, error } = await query;
 

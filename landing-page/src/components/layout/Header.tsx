@@ -29,7 +29,9 @@ export default function Header({ className = '' }: HeaderProps) {
   ];
 
   return (
-    <header className={`lp-nav${scrolled ? ' lp-nav--scrolled' : ''} ${className}`}>
+    // suppressHydrationWarning: scroll-driven class differs between SSR (always false) and
+    // client on mid-scroll page refresh — safe to suppress, scroll listener corrects it after mount
+    <header suppressHydrationWarning className={`lp-nav${scrolled ? ' lp-nav--scrolled' : ''} ${className}`}>
       <div className="lp-nav__inner">
         {/* Brand */}
         <Link href="/" className="lp-nav__brand">

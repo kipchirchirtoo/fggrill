@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI } from '@/lib/api';
-import { Utensils, RefreshCw, Plus, Calendar, AlertCircle, ChefHat, Eye, Package } from 'lucide-react';
+import { Utensils, RefreshCw, Plus, Calendar, AlertCircle, ChefHat, Eye, Package, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -36,6 +37,7 @@ interface TrackableItem {
 }
 
 export default function BranchKitchenUsagePage() {
+  const router = useRouter();
   const [records, setRecords] = useState<KitchenUsage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -97,6 +99,8 @@ export default function BranchKitchenUsagePage() {
     setFormData(prev => ({ ...prev, item_sku: sku, received_quantity: 1 }));
   };
 
+  const isOutOfStock = selectedItem !== null && selectedItem.quantity <= 0;
+
   const handleRecordUsage = async () => {
     if (!formData.item_sku || !formData.received_quantity) { 
       toast.error('Please select an item and enter quantity'); 
@@ -105,6 +109,12 @@ export default function BranchKitchenUsagePage() {
 
     if (formData.received_quantity <= 0) {
       toast.error('Quantity must be greater than 0');
+      return;
+    }
+
+    if (selectedItem && selectedItem.quantity <= 0) {
+      toast.error(`${selectedItem.item_name} is out of stock. Request more stock first.`);
+      router.push('/dashboard/branch-store/requests');
       return;
     }
 
@@ -323,9 +333,9 @@ export default function BranchKitchenUsagePage() {
                     items.map((item) => {
                       console.log('[Dropdown] Rendering item:', { sku: item.item_sku, name: item.item_name, qty: item.quantity, unit: item.unit });
                       return (
-                        <option key={item.item_sku} value={item.item_sku}>
-                          {item.item_name} - {item.quantity} {item.unit || 'units'} available
-                          {item.category && ` (${item.category})`}
+                        <option key={item.item_sku} value={item.item_sku} disabled={item.quantity <= 0}>
+                          {item.quantity <= 0 ? `⚠ Out of stock — ${item.item_name}` : `${item.item_name} - ${item.quantity} ${item.unit || 'units'} available`}
+                          {item.category && item.quantity > 0 ? ` (${item.category})` : ''}
                         </option>
                       );
                     })
@@ -333,7 +343,7 @@ export default function BranchKitchenUsagePage() {
                 </select>
               </div>
 
-              {selectedItem && (
+              {selectedItem && !isOutOfStock && (
                 <div className="p-3 bg-blue-50 rounded-ios-lg border border-blue-100">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -345,6 +355,24 @@ export default function BranchKitchenUsagePage() {
                       {selectedItem.category && (
                         <p className="text-blue-600 text-xs mt-1">Category: {selectedItem.category}</p>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isOutOfStock && (
+                <div className="p-3 bg-red-50 rounded-ios-lg border border-red-200">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium text-red-900">{selectedItem!.item_name} is out of stock</p>
+                      <p className="text-red-700 mt-1">No stock available to issue to kitchen.</p>
+                      <a
+                        href="/dashboard/branch-store/requests"
+                        className="inline-flex items-center gap-1 mt-2 text-red-700 font-semibold underline text-xs"
+                      >
+                        <ShoppingCart className="h-3 w-3" /> Request stock
+                      </a>
                     </div>
                   </div>
                 </div>
@@ -432,7 +460,7 @@ export default function BranchKitchenUsagePage() {
                 <IOSButton 
                   onClick={handleRecordUsage} 
                   className="flex-1"
-                  disabled={!formData.item_sku || formData.received_quantity <= 0 || (selectedItem ? formData.received_quantity > selectedItem.quantity : false)}
+                  disabled={!formData.item_sku || formData.received_quantity <= 0 || isOutOfStock || (selectedItem ? formData.received_quantity > selectedItem.quantity : false)}
                 >
                   Issue to Kitchen
                 </IOSButton>
@@ -442,63 +470,84 @@ export default function BranchKitchenUsagePage() {
         </Dialog>
 
         <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Usage Record Details</DialogTitle>
+          <DialogContent className="w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogHeader className="flex-shrink-0">
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                <Utensils className="h-5 w-5 text-orange-600" />
+                Usage Record Details
+              </DialogTitle>
             </DialogHeader>
             {selectedRecord && (
-              <div className="space-y-4 mt-4">
-                <div className="p-4 bg-gray-50 rounded-ios-lg">
+              <div className="overflow-y-auto flex-1 pr-1 space-y-4 mt-2">
+                {/* Item header */}
+                <div className="p-4 bg-gray-50 rounded-ios-lg border border-gray-100">
                   <p className="font-bold text-lg text-gray-900">{selectedRecord.item_name}</p>
                   <p className="text-sm text-gray-500 mt-1">SKU: {selectedRecord.item_sku}</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-blue-50 rounded-ios-lg">
-                    <p className="text-xs text-blue-600 uppercase font-medium">Received</p>
-                    <p className="text-2xl font-bold text-blue-900">{selectedRecord.received_quantity}</p>
-                  </div>
-                  <div className="p-3 bg-orange-50 rounded-ios-lg">
-                    <p className="text-xs text-orange-600 uppercase font-medium">Remaining</p>
-                    <p className="text-2xl font-bold text-orange-900">{selectedRecord.remaining_quantity}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Consumed</span>
-                    <span className="font-medium text-green-600">{selectedRecord.consumed_quantity || 0}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Spoilt</span>
-                    <span className="font-medium text-red-600">{selectedRecord.spoilt_quantity || 0}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Lost</span>
-                    <span className="font-medium text-orange-600">{selectedRecord.lost_quantity || 0}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Damaged</span>
-                    <span className="font-medium text-yellow-600">{selectedRecord.damaged_quantity || 0}</span>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">Status</span>
-                    <span className={`font-semibold px-2 py-0.5 rounded-full text-xs uppercase ${getStatusColor(selectedRecord.status)}`}>
+                  <div className="mt-2">
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full uppercase ${getStatusColor(selectedRecord.status)}`}>
                       {selectedRecord.status}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Issue Date</span>
-                    <span className="font-medium">{new Date(selectedRecord.usage_date).toLocaleDateString()}</span>
+                </div>
+
+                {/* Quantity summary cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 bg-blue-50 rounded-ios-lg text-center">
+                    <p className="text-xs text-blue-600 uppercase font-medium mb-1">Received</p>
+                    <p className="text-2xl font-bold text-blue-900">{selectedRecord.received_quantity}</p>
+                  </div>
+                  <div className="p-3 bg-orange-50 rounded-ios-lg text-center">
+                    <p className="text-xs text-orange-600 uppercase font-medium mb-1">Remaining</p>
+                    <p className="text-2xl font-bold text-orange-900">{selectedRecord.remaining_quantity}</p>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-ios-lg text-center">
+                    <p className="text-xs text-green-600 uppercase font-medium mb-1">Consumed</p>
+                    <p className="text-2xl font-bold text-green-900">{selectedRecord.consumed_quantity || 0}</p>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-ios-lg text-center">
+                    <p className="text-xs text-red-600 uppercase font-medium mb-1">Spoilt</p>
+                    <p className="text-2xl font-bold text-red-900">{selectedRecord.spoilt_quantity || 0}</p>
                   </div>
                 </div>
 
-                <IOSButton 
-                  variant="secondary" 
-                  onClick={() => setDetailsModalOpen(false)} 
+                {/* Progress bar */}
+                <div>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Usage progress</span>
+                    <span>{selectedRecord.received_quantity > 0 ? Math.round(((selectedRecord.received_quantity - selectedRecord.remaining_quantity) / selectedRecord.received_quantity) * 100) : 0}% used</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-orange-500 transition-all"
+                      style={{ width: `${selectedRecord.received_quantity > 0 ? ((selectedRecord.received_quantity - selectedRecord.remaining_quantity) / selectedRecord.received_quantity) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Breakdown table */}
+                <div className="rounded-ios-lg border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Breakdown</p>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    <div className="flex justify-between items-center px-4 py-3">
+                      <span className="text-sm text-gray-600">Lost</span>
+                      <span className="font-medium text-orange-600">{selectedRecord.lost_quantity || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-3">
+                      <span className="text-sm text-gray-600">Damaged</span>
+                      <span className="font-medium text-yellow-600">{selectedRecord.damaged_quantity || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-3">
+                      <span className="text-sm text-gray-600">Issue Date</span>
+                      <span className="font-medium text-gray-800">{new Date(selectedRecord.usage_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <IOSButton
+                  variant="secondary"
+                  onClick={() => setDetailsModalOpen(false)}
                   className="w-full"
                 >
                   Close

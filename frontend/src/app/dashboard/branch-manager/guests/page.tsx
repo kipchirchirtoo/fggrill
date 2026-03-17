@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
@@ -29,6 +30,7 @@ interface Guest {
 
 export default function BranchGuestsPage() {
   const { user } = useAuth();
+  const { activeBranchId } = useBranch();
   const [guests, setGuests] = useState<Guest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,10 +41,13 @@ export default function BranchGuestsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ first_name: '', last_name: '', email: '', phone: '' });
 
+  const currentBranchId = activeBranchId || user?.branch_id;
+
   const fetchGuests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await guestAPI.getGuests(searchQuery);
+      // Only show currently checked-in guests for this branch
+      const response = await guestAPI.getGuests(searchQuery || undefined, currentBranchId || undefined, true);
       if (response.success && Array.isArray(response.data)) {
         setGuests(response.data);
       } else {
@@ -54,7 +59,7 @@ export default function BranchGuestsPage() {
       setGuests([]);
     }
     finally { setIsLoading(false); }
-  }, [searchQuery]);
+  }, [searchQuery, currentBranchId]);
 
   useEffect(() => { fetchGuests(); }, [fetchGuests]);
 
@@ -137,7 +142,7 @@ export default function BranchGuestsPage() {
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div><h1 className="text-2xl font-bold text-gray-900">Guests</h1><p className="text-gray-500">Current and past guests</p></div>
+            <div><h1 className="text-2xl font-bold text-gray-900">Guests</h1><p className="text-gray-500">Currently checked-in guests</p></div>
             <div className="flex gap-2">
               <IOSButton variant="secondary" onClick={fetchGuests} leftIcon={<RefreshCw />}>Refresh</IOSButton>
               <IOSButton onClick={() => setAddModalOpen(true)} leftIcon={<Plus />}>Add Guest</IOSButton>
@@ -154,7 +159,7 @@ export default function BranchGuestsPage() {
           {isLoading ? (
             <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
           ) : filteredGuests.length === 0 ? (
-            <IOSCard className="p-12 text-center"><Users className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No guests found</p></IOSCard>
+            <IOSCard className="p-12 text-center"><Users className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No checked-in guests</p></IOSCard>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredGuests.map((guest) => (

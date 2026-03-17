@@ -39,40 +39,41 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
 
         let query = supabase
             .from('staff_advances')
-            .select(`
-                *,
-                staff:staff_profiles(
-                    id, 
-                    role,
-                    first_name,
-                    last_name,
-                    user:users!user_id(id, first_name, last_name)
-                )
-            `)
+            .select('*')
             .order('created_at', { ascending: false });
 
         if (staff_id) query = query.eq('staff_id', staff_id);
         if (status) query = query.eq('status', status);
 
         const { data, error } = await query;
-
         if (error) throw error;
 
-        // Transform to flatten nested user data for frontend compatibility
-        const transformed = data.map(advance => ({
-            ...advance,
-            staff: advance.staff ? {
-                id: advance.staff.id,
-                role: advance.staff.role,
-                first_name: advance.staff.first_name || advance.staff.user?.first_name || '',
-                last_name: advance.staff.last_name || advance.staff.user?.last_name || ''
-            } : null
-        }));
+        const staffIds = [...new Set((data || []).map((a: any) => a.staff_id).filter(Boolean))];
+        const { data: staffProfiles } = staffIds.length > 0
+            ? await supabase.from('staff_profiles').select('id, role, first_name, last_name, user_id').in('id', staffIds)
+            : { data: [] };
+        const userIds = (staffProfiles || []).map((s: any) => s.user_id).filter(Boolean);
+        const { data: users } = userIds.length > 0
+            ? await supabase.from('users').select('id, first_name, last_name').in('id', userIds)
+            : { data: [] };
 
-        res.status(200).json({
-            success: true,
-            data: transformed
+        const staffMap = new Map((staffProfiles || []).map((s: any) => [s.id, s]));
+        const userMap = new Map((users || []).map((u: any) => [u.id, u]));
+
+        const transformed = (data || []).map((advance: any) => {
+            const sp = staffMap.get(advance.staff_id);
+            const user = sp ? userMap.get(sp.user_id) : null;
+            return {
+                ...advance,
+                staff: sp ? {
+                    id: sp.id, role: sp.role,
+                    first_name: user?.first_name || sp.first_name || '',
+                    last_name: user?.last_name || sp.last_name || ''
+                } : null
+            };
         });
+
+        res.status(200).json({ success: true, data: transformed });
     } catch (error) {
         next(error);
     }

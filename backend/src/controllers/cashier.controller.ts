@@ -2633,25 +2633,19 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                                 .from('staff_credit_bills')
                                 .select('id')
                                 .eq('staff_id', bill.staff_id)
-                                .eq('bill_date', today)
+                                .eq('date', today)
                                 .eq('amount', bill.amount)
-                                .like('description', `%Logbook%`) // Simple check
+                                .eq('is_paid', false)
                                 .maybeSingle();
 
                             if (!existing) {
-                                // Generate credit number
-                                const { data: creditNum } = await supabase.rpc('generate_credit_number');
-                                const credit_number = creditNum || `CR${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
                                 await supabase.from('staff_credit_bills').insert({
-                                    credit_number,
-                                    branch_id,
                                     staff_id: bill.staff_id,
                                     amount: bill.amount,
-                                    bill_date: today,
-                                    description: `Cashier Logbook Credit (${type}): ${bill.customer_name} - ${bill.reference || 'No Ref'}`,
-                                    status: 'pending', // Needs approval from Manager/Accountant
-                                    created_by: cashier_id
+                                    balance: bill.amount,
+                                    date: today,
+                                    description: `Cashier Logbook Credit (${type}): ${bill.customer_name || 'Staff'} - ${bill.reference || 'No Ref'}`,
+                                    is_paid: false
                                 });
                             }
                         } catch (err) {

@@ -1,11 +1,12 @@
 import Head from 'next/head';
 import { SEO } from '@/components/SEO';
 import { useState, useEffect, useRef } from 'react';
-import { hotelsService } from '@/services/hotels.service';
+import { hotelsService, FALLBACK_BRANCHES } from '@/services/hotels.service';
 import { bookingService } from '@/services/booking.service';
 import { emailService } from '@/services/email.service';
 import { Branch } from '@/types';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
+import { Toaster } from 'react-hot-toast';
 import { Header, Footer } from '@/components/layout';
 import { ImageGallery } from '@/components/gallery/ImageGallery';
 import { GALLERY_IMAGES } from '@/config/galleryImages';
@@ -49,10 +50,12 @@ function Reveal({ children, delay = 0, className = '', style = {} }: { children:
 // Types removed as they are now imported from @/types
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const [heroLoaded, setHeroLoaded] = useState(false);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branches, setBranches] = useState<Branch[]>(FALLBACK_BRANCHES);
   const [selectedBranchId, setSelectedBranchId] = useState<number | string>('');
-  const [loadingBranches, setLoadingBranches] = useState(true);
+  // todayStr is computed client-side only (after mount) to avoid SSR/client date mismatch
+  const [todayStr, setTodayStr] = useState('');
 
   // --- Booking States ---
   const [checkIn, setCheckIn] = useState('');
@@ -74,17 +77,18 @@ export default function Home() {
   });
 
   useEffect(() => {
+    setMounted(true);
     setHeroLoaded(true);
+    setTodayStr(new Date().toISOString().split('T')[0]);
 
-    // Fetch branches
+    // Fetch branches — fallback already shown, this refreshes with live data
     const loadBranches = async () => {
       try {
         const data = await hotelsService.fetchBranches();
         setBranches(data.filter((b: Branch) => b.status === 'active' || (b as any).status === true));
       } catch (err) {
+        // Fallback branches already in state — silently ignore
         console.error('Failed to fetch branches:', err);
-      } finally {
-        setLoadingBranches(false);
       }
     };
     loadBranches();
@@ -217,31 +221,35 @@ export default function Home() {
 
   return (
     <>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#1a1a1a',
-            color: '#fff',
-            border: '1px solid #d4af37',
-            padding: '16px',
-            fontSize: '14px',
-          },
-          success: {
-            iconTheme: {
-              primary: '#d4af37',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
-        }}
-      />
+      <div suppressHydrationWarning>
+        {mounted && (
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#1a1a1a',
+                color: '#fff',
+                border: '1px solid #d4af37',
+                padding: '16px',
+                fontSize: '14px',
+              },
+              success: {
+                iconTheme: {
+                  primary: '#d4af37',
+                  secondary: '#fff',
+                },
+              },
+              error: {
+                iconTheme: {
+                  primary: '#ef4444',
+                  secondary: '#fff',
+                },
+              },
+            }}
+          />
+        )}
+      </div>
       <SEO
         title="FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi, Kenya"
         description="Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Nairobi, Kenya. Book your luxury stay today."
@@ -361,7 +369,9 @@ export default function Home() {
       <section id="top" className="lp-hero">
         <div className="lp-hero__bg" style={{ backgroundImage: "url('/hero-bg.jpg')" }} />
         <div className="lp-hero__overlay" />
-        <div className={`lp-hero__content${heroLoaded ? ' loaded' : ''}`}>
+        {/* suppressHydrationWarning: heroLoaded class is applied via useEffect, so SSR renders
+            without 'loaded' but client adds it immediately — safe to suppress */}
+        <div suppressHydrationWarning className={`lp-hero__content${heroLoaded ? ' loaded' : ''}`}>
           <p className="lp-hero__eyebrow">Luxury Stay · Fine Dining</p>
           <h1 className="lp-hero__title">
             Where Luxury Meets<br />
@@ -576,9 +586,7 @@ export default function Home() {
           </Reveal>
 
           <div className="lp-branches__grid">
-            {loadingBranches ? (
-              <div className="lp-loading">Loading our locations...</div>
-            ) : branches.length > 0 ? (
+            {branches.length > 0 ? (
               branches.map((branch, i) => (
                 <Reveal key={branch.id} delay={i * 100} className="lp-branch-card">
                   <div className="lp-branch-card__body">
@@ -667,7 +675,7 @@ export default function Home() {
                   className="lp-field__input"
                   value={checkIn}
                   onChange={(e) => setCheckIn(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={todayStr || undefined}
                 />
               </div>
               <div className="lp-field">
@@ -677,7 +685,7 @@ export default function Home() {
                   className="lp-field__input"
                   value={checkOut}
                   onChange={(e) => setCheckOut(e.target.value)}
-                  min={checkIn || new Date().toISOString().split('T')[0]}
+                  min={checkIn || todayStr || undefined}
                 />
               </div>
               <div className="lp-field">

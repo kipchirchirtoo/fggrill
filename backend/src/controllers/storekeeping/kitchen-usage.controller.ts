@@ -721,7 +721,7 @@ export const getTrackableItems = async (
     if (skus.length > 0) {
       const { data: items } = await supabase
         .from('simple_items')
-        .select('sku, item_name, category, cost_price, retail_price')
+        .select('sku, item_name, description, category, cost_price, retail_price')
         .in('sku', skus);
 
       itemsMap = (items || []).reduce((acc, item) => {
@@ -732,7 +732,7 @@ export const getTrackableItems = async (
 
     const enrichedData = (branchStock || []).map(stock => ({
       item_sku: stock.item_sku,
-      item_name: itemsMap[stock.item_sku]?.item_name || stock.item_sku,
+      item_name: itemsMap[stock.item_sku]?.item_name || itemsMap[stock.item_sku]?.description || stock.item_sku,
       quantity: stock.quantity,
       category: itemsMap[stock.item_sku]?.category || 'General',
       unit: stock.unit || 'units',

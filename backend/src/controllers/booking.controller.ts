@@ -55,14 +55,29 @@ export const getBookings = async (
 
     if (error) throw error;
 
-    const formattedBookings = bookings.map((b: any) => ({
-      ...b,
-      amount_paid: b.deposit_amount || 0,
-      guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Unknown',
-      guest_phone: b.guest ? b.guest.phone : '-',
-      room_number: b.room ? b.room.room_number : '-',
-      room_type: b.room ? b.room.room_type : '-'
-    }));
+    const formattedBookings = bookings.map((b: any) => {
+      const checkIn = b.check_in_date || b.check_in;
+      const checkOut = b.check_out_date || b.check_out;
+      const nights = checkIn && checkOut
+        ? Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+      return {
+        ...b,
+        check_in: checkIn,
+        check_out: checkOut,
+        nights,
+        amount_paid: b.deposit_amount || 0,
+        total: b.total_amount || b.total || 0,
+        guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Unknown',
+        phone: b.guest ? b.guest.phone : null,
+        email: b.guest ? b.guest.email : null,
+        guest_phone: b.guest ? b.guest.phone : '-',
+        room_number: b.room ? b.room.room_number : '-',
+        room_type: b.room ? b.room.room_type : '-',
+        guests: (b.adults || 1) + (b.children || 0),
+        special_requests: b.special_requests || null,
+      };
+    });
 
     res.status(200).json({
       success: true,

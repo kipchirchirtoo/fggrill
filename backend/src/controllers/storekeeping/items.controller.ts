@@ -264,7 +264,7 @@ export const createItem = async (
           .from('simple_items')
           .update({
             description: description || existingItem.description,
-            retail_price: retail_price || existingItem.retail_price,
+            retail_price: retail_price ?? cost_price ?? existingItem.retail_price ?? 0,
             quantity: quantity !== undefined ? quantity : existingItem.quantity,
             barcode: barcode || existingItem.barcode,
             item_name: item_name || existingItem.item_name,
@@ -325,7 +325,7 @@ export const createItem = async (
       .insert([{
         sku,
         description: description || item_name,
-        retail_price,
+        retail_price: retail_price ?? cost_price ?? 0,
         quantity: quantity || 0,
         barcode,
         item_name: item_name || description,

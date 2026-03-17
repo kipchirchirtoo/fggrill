@@ -53,7 +53,7 @@ export default function BranchHousekeepingPage() {
 
   const handleUpdateStatus = async (id: string, status: string) => {
     try {
-      await housekeepingAPI.updateTaskStatus(id, status);
+      await housekeepingAPI.updateTaskStatus(id, { status });
       toast.success('Task updated');
       fetchTasks();
     } catch (error: any) { toast.error(error.message || 'Failed'); }

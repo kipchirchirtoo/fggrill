@@ -196,11 +196,11 @@ export default function BranchDeparturesPage() {
                     <div className="space-y-3">
                       <div className="flex items-center gap-3 text-stone-600">
                         <Phone className="h-4 w-4" />
-                        <span>{selectedDeparture.phone || '+254 700 000 000'}</span>
+                        <span>{selectedDeparture.phone || 'Not provided'}</span>
                       </div>
                       <div className="flex items-center gap-3 text-stone-600">
                         <Mail className="h-4 w-4" />
-                        <span>{selectedDeparture.email || 'guest@example.com'}</span>
+                        <span>{selectedDeparture.email || 'Not provided'}</span>
                       </div>
                     </div>
                   </div>

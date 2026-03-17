@@ -821,23 +821,33 @@ export async function confirmDelivery(
     const dispatchItem = dispatch.items.find((i: any) => i.id === itemId);
     if (!dispatchItem) continue;
 
+    // Normalize quantity - support both field naming conventions from frontend
+    const receivedQty = Math.max(0, Math.round(
+      Number((receivedItem as any).received_quantity ?? (receivedItem as any).quantity ?? 0)
+    ));
+    if (isNaN(receivedQty)) {
+      logger.warn(`Invalid quantity for item ${itemId}, skipping stock update`);
+      continue;
+    }
+    const damagedQty = Math.max(0, Number((receivedItem as any).damaged_quantity ?? (receivedItem as any).damaged ?? 0)) || 0;
+    const missingQty = Math.max(0, Number((receivedItem as any).missing_quantity ?? (receivedItem as any).missing ?? 0)) || 0;
+
     // Update dispatch item
     await supabase
       .from('dispatch_items')
       .update({
-        received_quantity: receivedItem.received_quantity,
-        damaged_quantity: receivedItem.damaged_quantity || 0,
-        missing_quantity: receivedItem.missing_quantity || 0,
-        discrepancy_reason: receivedItem.discrepancy_reason,
-        status: receivedItem.received_quantity === dispatchItem.dispatched_quantity ? 'RECEIVED' : 'PARTIAL'
+        received_quantity: receivedQty,
+        damaged_quantity: damagedQty,
+        missing_quantity: missingQty,
+        discrepancy_reason: (receivedItem as any).discrepancy_reason || (receivedItem as any).note,
+        status: receivedQty === dispatchItem.dispatched_quantity ? 'RECEIVED' : 'PARTIAL'
       })
       .eq('id', itemId);
 
-    // Add to branch stock
     await updateBranchStock(
       dispatch.to_branch_id,
       dispatchItem.item_sku,
-      receivedItem.received_quantity,
+      receivedQty,
       'DISPATCH_RECEIVE',
       receiverId,
       'DISPATCH',
@@ -965,9 +975,13 @@ export async function getIncomingDispatches(branchId: number) {
     ...dispatch,
     from_branch: branches?.find(b => b.id === dispatch.from_branch_id),
     vehicle: vehicles?.find(v => v.id === dispatch.vehicle_id),
-    vehicle_registration: vehicles?.find(v => v.id === dispatch.vehicle_id)?.registration_number,
+    vehicle_registration: vehicles?.find(v => v.id === dispatch.vehicle_id)?.registration_number
+      || (dispatch as any).vehicle_number
+      || null,
     driver: drivers?.find(d => d.id === dispatch.driver_id),
-    driver_name: drivers?.find(d => d.id === dispatch.driver_id)?.name,
+    driver_name: drivers?.find(d => d.id === dispatch.driver_id)?.name
+      || (dispatch as any).driver_name
+      || null,
     items: (items || [])
       .filter(i => i.dispatch_id === dispatch.id)
       .map(item => {

@@ -41,43 +41,44 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
 
         let query = supabase
             .from('staff_credit_bills')
-            .select(`
-                *,
-                staff:staff_profiles(
-                    id, 
-                    role,
-                    first_name,
-                    last_name,
-                    user:users!user_id(id, first_name, last_name)
-                )
-            `)
+            .select('*')
             .order('date', { ascending: false });
 
         if (staff_id) query = query.eq('staff_id', staff_id);
-
-        // Map 'pending'/'paid' status query to is_paid boolean
         if (status === 'pending') query = query.eq('is_paid', false);
         if (status === 'paid' || status === 'deducted') query = query.eq('is_paid', true);
 
         const { data, error } = await query;
-
         if (error) throw error;
 
-        // Transform to flatten nested user data for frontend compatibility
-        const transformed = data.map(bill => ({
-            ...bill,
-            staff: bill.staff ? {
-                id: bill.staff.id,
-                role: bill.staff.role,
-                first_name: bill.staff.first_name || bill.staff.user?.first_name || '',
-                last_name: bill.staff.last_name || bill.staff.user?.last_name || ''
-            } : null
-        }));
+        // Fetch staff names separately to avoid schema cache FK issues
+        const staffIds = [...new Set((data || []).map((b: any) => b.staff_id).filter(Boolean))];
+        const { data: staffProfiles } = staffIds.length > 0
+            ? await supabase.from('staff_profiles').select('id, role, first_name, last_name, user_id').in('id', staffIds)
+            : { data: [] };
+        const userIds = (staffProfiles || []).map((s: any) => s.user_id).filter(Boolean);
+        const { data: users } = userIds.length > 0
+            ? await supabase.from('users').select('id, first_name, last_name').in('id', userIds)
+            : { data: [] };
 
-        res.status(200).json({
-            success: true,
-            data: transformed
+        const staffMap = new Map((staffProfiles || []).map((s: any) => [s.id, s]));
+        const userMap = new Map((users || []).map((u: any) => [u.id, u]));
+
+        const transformed = (data || []).map((bill: any) => {
+            const sp = staffMap.get(bill.staff_id);
+            const user = sp ? userMap.get(sp.user_id) : null;
+            return {
+                ...bill,
+                staff: sp ? {
+                    id: sp.id,
+                    role: sp.role,
+                    first_name: user?.first_name || sp.first_name || '',
+                    last_name: user?.last_name || sp.last_name || ''
+                } : null
+            };
         });
+
+        res.status(200).json({ success: true, data: transformed });
     } catch (error) {
         next(error);
     }

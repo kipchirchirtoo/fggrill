@@ -1,14 +1,16 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditAPI, auditorReportsAPI } from '@/lib/api';
-import { TrendingDown, RefreshCw, Plus, Package, Calendar, User, Clock, FileText, Tag, ChevronRight, X, FileDown, Activity, AlertTriangle, Check } from 'lucide-react';
+import { TrendingDown, RefreshCw, Plus, Package, Calendar, User, Clock, FileText, Tag, ChevronRight, X, FileDown, Activity, AlertTriangle, Check, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -59,6 +61,7 @@ function formatTime(dateStr?: string): string {
 
 export default function BranchStockOutPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const branchId = useMemo(() => {
     try {
@@ -130,7 +133,34 @@ export default function BranchStockOutPage() {
   useEffect(() => { fetchRecords(); fetchItems(); }, [fetchRecords, fetchItems]);
 
   const handleStockOut = async () => {
-    if (!formData.item_sku || !formData.quantity) { toast.error('Fill required fields'); return; }
+    if (!formData.item_sku) { toast.error('Please select an item'); return; }
+
+    const selectedItem = items.find(i => i.sku === formData.item_sku);
+    const availableQty = selectedItem?.quantity ?? 0;
+
+    // Block negative quantities
+    if (formData.quantity <= 0) {
+      toast.error('Quantity must be greater than 0');
+      return;
+    }
+
+    // Block if stock is 0
+    if (availableQty <= 0) {
+      toast.error(`"${selectedItem?.name || formData.item_sku}" is out of stock. Request more from central store.`, { duration: 5000 });
+      setAddModalOpen(false);
+      router.push('/dashboard/branch-store/requests');
+      return;
+    }
+
+    // Block if issuing more than available
+    if (formData.quantity > availableQty) {
+      toast.error(
+        `Only ${availableQty} unit${availableQty !== 1 ? 's' : ''} available for "${selectedItem?.name || formData.item_sku}". Cannot issue ${formData.quantity}.`,
+        { duration: 5000 }
+      );
+      return;
+    }
+
     try {
       await storeAPI.recordStockOut({
         item_sku: formData.item_sku,
@@ -144,6 +174,7 @@ export default function BranchStockOutPage() {
       setAddModalOpen(false);
       setFormData({ item_sku: '', quantity: 1, department: 'kitchen', notes: '' });
       fetchRecords();
+      fetchItems();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 
@@ -456,12 +487,51 @@ export default function BranchStockOutPage() {
             <DialogHeader><DialogTitle>Issue Stock</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               <div><label className="text-sm font-medium">Item *</label>
-                <select value={formData.item_sku} onChange={(e) => setFormData({ ...formData, item_sku: e.target.value })} className="w-full p-2 border rounded-ios-lg">
+                <select value={formData.item_sku} onChange={(e) => setFormData({ ...formData, item_sku: e.target.value, quantity: 1 })} className="w-full p-2 border rounded-ios-lg">
                   <option value="">Select item</option>
-                  {items.map((item) => <option key={item.sku} value={item.sku}>{item.name} ({item.quantity} available)</option>)}
+                  {items.map((item) => (
+                    <option key={item.sku} value={item.sku} disabled={item.quantity <= 0}>
+                      {item.name} — {item.quantity <= 0 ? '⚠ Out of stock' : `${item.quantity} available`}
+                    </option>
+                  ))}
                 </select>
+                {formData.item_sku && (() => {
+                  const sel = items.find(i => i.sku === formData.item_sku);
+                  if (sel && sel.quantity <= 0) return (
+                    <div className="mt-2 flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      <p className="text-xs text-red-600 font-medium">This item is out of stock.</p>
+                      <button
+                        type="button"
+                        onClick={() => { setAddModalOpen(false); router.push('/dashboard/branch-store/requests'); }}
+                        className="text-xs font-bold text-red-700 underline flex items-center gap-1"
+                      >
+                        <ShoppingCart className="h-3 w-3" /> Request stock
+                      </button>
+                    </div>
+                  );
+                  return null;
+                })()}
               </div>
-              <div><label className="text-sm font-medium">Quantity *</label><Input type="number" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })} /></div>
+              <div>
+                <label className="text-sm font-medium">Quantity *</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={items.find(i => i.sku === formData.item_sku)?.quantity || undefined}
+                  value={formData.quantity}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setFormData({ ...formData, quantity: val < 0 ? 0 : val });
+                  }}
+                />
+                {formData.item_sku && (() => {
+                  const sel = items.find(i => i.sku === formData.item_sku);
+                  if (sel && formData.quantity > sel.quantity && sel.quantity > 0) return (
+                    <p className="text-xs text-red-500 mt-1">Only {sel.quantity} unit{sel.quantity !== 1 ? 's' : ''} available</p>
+                  );
+                  return null;
+                })()}
+              </div>
               <div><label className="text-sm font-medium">Department</label>
                 <select value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full p-2 border rounded-ios-lg">
                   <option value="kitchen">Kitchen</option>
@@ -474,7 +544,16 @@ export default function BranchStockOutPage() {
               <div><label className="text-sm font-medium">Notes</label><Input value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} /></div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
-                <IOSButton onClick={handleStockOut} className="flex-1">Issue</IOSButton>
+                <IOSButton
+                  onClick={handleStockOut}
+                  className="flex-1"
+                  disabled={(() => {
+                    const sel = items.find(i => i.sku === formData.item_sku);
+                    return !formData.item_sku || formData.quantity <= 0 || (sel ? sel.quantity <= 0 : false);
+                  })()}
+                >
+                  Issue
+                </IOSButton>
               </div>
             </div>
           </DialogContent>

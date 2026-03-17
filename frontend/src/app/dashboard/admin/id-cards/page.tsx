@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { idCardsAPI, staffAPI } from '@/lib/api';
 import { toast } from 'sonner';
+import JSZip from 'jszip';
 import {
     User as UserIcon, Loader2, Download, Eye,
     Upload, Search, Filter, Printer, RefreshCw,
@@ -52,7 +53,71 @@ export default function IDCardsManagementPage() {
         phone_number: '',
         national_id: ''
     });
+    const [isBatchPrinting, setIsBatchPrinting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+
+    const handleBatchPrint = async () => {
+        const targets = filteredEmployees;
+        if (targets.length === 0) { toast.error('No employees to print'); return; }
+        setIsBatchPrinting(true);
+        const loadingToast = toast.loading(`Generating ${targets.length} ID cards...`);
+        const zip = new JSZip();
+        let success = 0;
+        let failed = 0;
+        const errors: string[] = [];
+        for (const emp of targets) {
+            try {
+                const data = {
+                    name: `${emp.first_name} ${emp.last_name}`,
+                    role: emp.role?.replace('_', ' ').toUpperCase() || 'EMPLOYEE',
+                    id_no: emp.id_number || emp.employee_id || emp.id.substring(0, 8).toUpperCase(),
+                    national_id: emp.national_id || 'N/A',
+                    email: emp.email,
+                    phone: emp.phone_number || 'N/A',
+                    join_date: emp.start_date ? new Date(emp.start_date).toLocaleDateString() : 'N/A',
+                    expire_date: '31/12/2026',
+                    photo_url: emp.profile_photo
+                        ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile/${emp.profile_photo}`
+                        : null
+                };
+                const blob = await idCardsAPI.generate(data);
+                const arrayBuffer = await blob.arrayBuffer();
+                zip.file(`ID_${emp.first_name}_${emp.last_name}.pdf`, arrayBuffer);
+                success++;
+                toast.loading(`Generated ${success}/${targets.length}...`, { id: loadingToast });
+            } catch (err: any) {
+                failed++;
+                errors.push(`${emp.first_name} ${emp.last_name}: ${err?.message || 'unknown error'}`);
+            }
+        }
+        if (success === 0) {
+            toast.error(`All ${failed} cards failed. Check if the ID card service is running.`, { id: loadingToast });
+            if (errors.length > 0) console.error('Batch print errors:', errors);
+            setIsBatchPrinting(false);
+            return;
+        }
+        try {
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(zipBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ID_Cards_Batch_${new Date().toISOString().split('T')[0]}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            if (failed === 0) {
+                toast.success(`${success} ID cards downloaded as ZIP`, { id: loadingToast });
+            } else {
+                toast.warning(`${success} downloaded, ${failed} failed. Check console for details.`, { id: loadingToast });
+                console.error('Failed cards:', errors);
+            }
+        } catch (err: any) {
+            toast.error(`Failed to create ZIP: ${err?.message || 'unknown error'}`, { id: loadingToast });
+        } finally {
+            setIsBatchPrinting(false);
+        }
+    };
 
     useEffect(() => {
         fetchEmployees();
@@ -233,9 +298,9 @@ export default function IDCardsManagementPage() {
                         >
                             <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
                         </button>
-                        <IOSButton variant="primary" className="gap-2">
-                            <Printer className="w-4 h-4" />
-                            Batch Print
+                        <IOSButton variant="primary" className="gap-2" onClick={handleBatchPrint} disabled={isBatchPrinting}>
+                            {isBatchPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                            {isBatchPrinting ? `Printing...` : 'Batch Print'}
                         </IOSButton>
                     </div>
                 </div>

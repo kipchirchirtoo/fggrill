@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -17,7 +19,8 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { UnifiedPOS } from '@/components/pos/UnifiedPOS';
 import {
   UtensilsCrossed, ShoppingCart, DollarSign, Clock, TrendingUp,
-  RefreshCw, ArrowRight, Building2, FileText, X, ChefHat, Wine
+  RefreshCw, ArrowRight, Building2, FileText, X, ChefHat, Wine,
+  Play, Bell, Timer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -118,6 +121,28 @@ export default function POSKitchenDashboard() {
   ].includes(user?.role as UserRole);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Active orders state (kitchen display)
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [activeOrdersLoading, setActiveOrdersLoading] = useState(false);
+
+  const fetchActiveOrders = useCallback(async () => {
+    setActiveOrdersLoading(true);
+    try {
+      const currentBranchId = activeBranchId || user?.branch_id;
+      const result = await restaurantAPI.getKitchenOrders(currentBranchId || undefined);
+      if (result.success && result.data) {
+        setActiveOrders(result.data.map((o: Order) => ({
+          ...o,
+          elapsed_minutes: Math.floor((Date.now() - new Date(o.created_at).getTime()) / 60000),
+        })));
+      }
+    } catch (e) {
+      console.error('Failed to fetch active orders:', e);
+    } finally {
+      setActiveOrdersLoading(false);
+    }
+  }, [activeBranchId, user?.branch_id]);
+
   // Get active tab from URL params with fallback for legacy 'pos' tab
   const tabParam = searchParams.get('tab');
   const activeTab = tabParam === 'pos' ? 'restaurant' : (tabParam || 'overview');
@@ -214,6 +239,14 @@ export default function POSKitchenDashboard() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  // Poll active orders when on that tab
+  useEffect(() => {
+    if (activeTab !== 'active') return;
+    fetchActiveOrders();
+    const interval = setInterval(fetchActiveOrders, 8000);
+    return () => clearInterval(interval);
+  }, [activeTab, fetchActiveOrders]);
 
   const handleUpdateStatus = async (orderId: string, status: string) => {
     try {
@@ -317,6 +350,139 @@ export default function POSKitchenDashboard() {
     }
   };
 
+  const renderActiveOrders = () => {
+    const pending = activeOrders.filter(o => o.status === 'pending' || o.status === 'confirmed');
+    const preparing = activeOrders.filter(o => o.status === 'preparing');
+    const ready = activeOrders.filter(o => o.status === 'ready');
+
+    const handleStart = async (orderId: string) => {
+      setActiveOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'preparing' } : o));
+      try {
+        await restaurantAPI.updateOrderStatus(orderId, 'preparing');
+        toast.success('Order started');
+      } catch { fetchActiveOrders(); }
+    };
+
+    const handleReady = async (orderId: string) => {
+      setActiveOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'ready' } : o));
+      try {
+        await restaurantAPI.updateOrderStatus(orderId, 'ready');
+        toast.success('Order ready!');
+        new Audio('/notification.mp3').play().catch(() => {});
+      } catch { fetchActiveOrders(); }
+    };
+
+    const OrderCard = ({ order }: { order: Order }) => {
+      const isUrgent = (order.elapsed_minutes || 0) > 15;
+      const statusStyle = (order.status === 'pending' || order.status === 'confirmed')
+        ? 'border-yellow-200 bg-yellow-50/50'
+        : order.status === 'preparing' ? 'border-blue-200 bg-blue-50/50'
+        : 'border-green-200 bg-green-50/50';
+
+      return (
+        <div className={`border rounded-2xl p-4 shadow-sm transition-all ${statusStyle} ${isUrgent ? 'ring-2 ring-red-500 ring-offset-2' : ''}`}>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-stone-900">#{order.order_number}</p>
+                {isUrgent && <span className="flex h-2 w-2 rounded-full bg-red-600 animate-ping" />}
+              </div>
+              <p className="text-xs font-bold text-stone-400 mt-0.5 uppercase tracking-wide">
+                {order.table_number ? `Table ${order.table_number}` : order.order_type}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className={`flex items-center gap-1 text-xs font-bold ${isUrgent ? 'text-red-600' : 'text-stone-500'}`}>
+                <Clock className="h-3 w-3" /><span>{order.elapsed_minutes}m</span>
+              </div>
+              <span className={`mt-1 inline-block px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
+                (order.status === 'pending' || order.status === 'confirmed') ? 'bg-yellow-200 text-yellow-800' :
+                order.status === 'preparing' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'
+              }`}>{order.status}</span>
+            </div>
+          </div>
+          <div className="space-y-1.5 mb-3 border-t border-stone-100 pt-2">
+            {(order.items || []).map((item, i) => (
+              <div key={i} className="flex items-start gap-2 text-[13px]">
+                <span className="font-bold text-stone-900 shrink-0">{item.quantity}x</span>
+                <span className="text-stone-700">{item.name}</span>
+              </div>
+            ))}
+            {(!order.items || order.items.length === 0) && (
+              <p className="text-xs text-stone-400">{order.items_count} item(s)</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {(order.status === 'pending' || order.status === 'confirmed') && (
+              <button onClick={() => handleStart(order.id)}
+                className="flex-1 h-10 bg-stone-900 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-1.5">
+                <Play className="h-3.5 w-3.5" fill="currentColor" /> Start
+              </button>
+            )}
+            {order.status === 'preparing' && (
+              <button onClick={() => handleReady(order.id)}
+                className="flex-1 h-10 bg-green-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-1.5">
+                <Bell className="h-3.5 w-3.5" /> Ready
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-5">
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white border border-stone-200 rounded-xl p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-yellow-50 flex items-center justify-center shrink-0">
+              <Clock className="h-4 w-4 text-yellow-600" />
+            </div>
+            <div><p className="text-[10px] font-bold text-stone-400 uppercase">Pending</p>
+              <p className="text-lg font-bold text-stone-900">{pending.length}</p></div>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-xl p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+              <ChefHat className="h-4 w-4 text-blue-600" />
+            </div>
+            <div><p className="text-[10px] font-bold text-stone-400 uppercase">Preparing</p>
+              <p className="text-lg font-bold text-stone-900">{preparing.length}</p></div>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-xl p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
+              <Bell className="h-4 w-4 text-green-600" />
+            </div>
+            <div><p className="text-[10px] font-bold text-stone-400 uppercase">Ready</p>
+              <p className="text-lg font-bold text-stone-900">{ready.length}</p></div>
+          </div>
+        </div>
+
+        {/* Refresh */}
+        <div className="flex justify-end">
+          <button onClick={fetchActiveOrders} disabled={activeOrdersLoading}
+            className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-900 px-3 py-1.5 border border-stone-200 rounded-lg">
+            <RefreshCw className={`h-3.5 w-3.5 ${activeOrdersLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+
+        {activeOrdersLoading && activeOrders.length === 0 ? (
+          <div className="flex justify-center py-12"><RefreshCw className="h-6 w-6 animate-spin text-stone-400" /></div>
+        ) : activeOrders.length === 0 ? (
+          <div className="bg-white border border-stone-200 rounded-xl p-10 text-center">
+            <ChefHat className="h-12 w-12 mx-auto mb-2 text-stone-300" />
+            <p className="text-stone-500">No active orders</p>
+            <p className="text-sm text-stone-400 mt-1">New orders will appear here automatically</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {activeOrders.map(order => <OrderCard key={order.id} order={order} />)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Stats */}
@@ -399,12 +565,13 @@ export default function POSKitchenDashboard() {
             <p className="text-sm font-medium text-gray-900">New Bar Order</p>
             <p className="text-xs text-gray-500 mt-1">Take new drink orders</p>
           </button>
-          <Link href="/dashboard/branch-manager/menu">
-            <div className="bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg p-3 text-left transition-colors cursor-pointer">
-              <p className="text-sm font-medium text-gray-900">Menu Management</p>
-              <p className="text-xs text-gray-500 mt-1">Manager access</p>
-            </div>
-          </Link>
+          <button
+            className="bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg p-3 text-left transition-colors"
+            onClick={() => handleTabChange('active')}
+          >
+            <p className="text-sm font-medium text-gray-900">Active Orders</p>
+            <p className="text-xs text-gray-500 mt-1">View orders in progress</p>
+          </button>
         </div>
       </div>
     </div>
@@ -681,6 +848,7 @@ export default function POSKitchenDashboard() {
                   { id: 'overview', label: 'Overview', icon: UtensilsCrossed, color: 'text-amber-600' },
                   { id: 'restaurant', label: 'Restaurant POS', icon: ChefHat, color: 'text-orange-600' },
                   { id: 'bar', label: 'Bar POS', icon: Wine, color: 'text-indigo-600' },
+                  { id: 'active', label: 'Active Orders', icon: Timer, color: 'text-blue-600' },
                   { id: 'recent', label: 'Activity', icon: Clock, color: 'text-emerald-600' },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
@@ -736,6 +904,7 @@ export default function POSKitchenDashboard() {
             {activeTab === 'overview' && <div className="max-w-[1200px] mx-auto">{renderOverview()}</div>}
             {activeTab === 'restaurant' && <UnifiedPOS mode="restaurant" onOrderCreated={fetchData} />}
             {activeTab === 'bar' && <UnifiedPOS mode="bar" onOrderCreated={fetchData} />}
+            {activeTab === 'active' && <div className="max-w-[1200px] mx-auto">{renderActiveOrders()}</div>}
             {activeTab === 'recent' && <div className="max-w-[1200px] mx-auto">{renderRecentOrders()}</div>}
           </div>
         </div>

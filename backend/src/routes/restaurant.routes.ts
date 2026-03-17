@@ -136,59 +136,66 @@ router.get('/reports/daily-sales',
   getDailySales
 );
 
-// Kitchen Display - Get orders for kitchen
+// Kitchen Display - Get active orders (no join, avoids FK issues)
 router.get('/kitchen/orders',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN]),
   async (req, res) => {
     try {
       const branchId = req.query.branch_id;
 
-      let query = supabase
+      let ordersQuery = supabase
         .from('restaurant_orders')
-        .select(`
-          *,
-          items:restaurant_order_items(
-            id,
-            menu_item_id,
-            quantity,
-            unit_price,
-            total_price,
-            special_instructions,
-            menu_item:restaurant_menu_items(id, name, category_id)
-          )
-        `)
+        .select('*')
         .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
-        .eq('department', 'restaurant') // Only show restaurant orders, not bar orders
         .order('created_at', { ascending: true });
 
       if (branchId) {
-        query = query.eq('branch_id', branchId);
+        ordersQuery = ordersQuery.eq('branch_id', branchId);
       }
 
-      const { data: orders, error } = await query;
+      const { data: orders, error: ordersError } = await ordersQuery;
+      if (ordersError) throw ordersError;
 
-      if (error) throw error;
+      if (!orders || orders.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
 
-      // Transform orders to include item names and elapsed time
-      const ordersWithTime = orders?.map((order: any) => ({
-        ...order,
-        elapsed_minutes: Math.floor((new Date().getTime() - new Date(order.created_at).getTime()) / (1000 * 60)),
-        items_count: order.items?.length || 0,
-        total: order.total_amount,
-        items: order.items?.map((item: any) => ({
-          id: item.id,
-          name: item.menu_item?.name || 'Unknown Item',
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          notes: item.special_instructions,
-          status: 'pending'
-        })) || []
-      })) || [];
+      // Fetch order items separately to avoid FK join issues
+      const orderIds = orders.map((o: any) => o.id);
+      const { data: allItems, error: itemsError } = await supabase
+        .from('restaurant_order_items')
+        .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name')
+        .in('order_id', orderIds);
 
-      res.json({
-        success: true,
-        data: ordersWithTime
+      if (itemsError) {
+        console.warn('Failed to fetch order items:', itemsError.message);
+      }
+
+      const itemsByOrder: Record<string, any[]> = {};
+      for (const item of (allItems || [])) {
+        if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
+        itemsByOrder[item.order_id].push(item);
+      }
+
+      const ordersWithTime = orders.map((order: any) => {
+        const items = itemsByOrder[order.id] || [];
+        return {
+          ...order,
+          elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
+          items_count: items.length,
+          total: order.total_amount,
+          items: items.map((item: any) => ({
+            id: item.id,
+            name: item.item_name || `Item #${item.menu_item_id}`,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            notes: item.special_instructions,
+            status: 'pending'
+          }))
+        };
       });
+
+      res.json({ success: true, data: ordersWithTime });
     } catch (error) {
       console.error('Kitchen orders error:', error);
       res.status(500).json({ success: false, error: 'Failed to fetch kitchen orders' });

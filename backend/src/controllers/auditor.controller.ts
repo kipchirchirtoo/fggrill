@@ -638,7 +638,7 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     const { data: branches } = await supabase.from('branches').select('id, name');
 
     // 2. Fetch orders, payments, and POS transactions
-    let restQuery = supabase.from('restaurant_orders').select('*, items:restaurant_order_items(*, menu_item:menu_items(name))'); // Fetch items for details
+    let restQuery = supabase.from('restaurant_orders').select('*'); // items fetched separately to avoid schema cache FK issues
     let barQuery = supabase.from('bar_orders').select('*, items:bar_order_items(*)'); // Fetch items for details (no inventory join)
     let poolQuery = supabase.from('restaurant_pool_token_sales').select('*');
     let paymentsQuery = supabase.from('payments').select('*');
@@ -1609,7 +1609,7 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
     const stockIds = rawStock.data?.map(o => o.id) || [];
 
     const [restItemsRes, barItemsRes, stockItemsRes] = await Promise.all([
-      supabase.from('restaurant_order_items').select('*, menu_item:menu_items(name)').in('order_id', restIds),
+      supabase.from('restaurant_order_items').select('*').in('order_id', restIds),
       supabase.from('bar_order_items').select('*').in('order_id', barIds), // No inventory join - bar_order_items only has drink_id and drink_name
       supabase.from('stock_request_items').select('*').in('request_id', stockIds)
     ]);
@@ -1859,14 +1859,34 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
 
     switch (type) {
       case 'restaurant_order':
-        // Fetch restaurant order with items
+        // Fetch restaurant order without embedded items to avoid schema cache FK issues
         const { data: restOrder, error: restError } = await supabase
           .from('restaurant_orders')
-          .select('*, items:restaurant_order_items(*, menu_item:menu_items(name)), branch:branches(name), waiter:users!created_by(first_name, last_name), auditor:users!auditor_id(first_name, last_name)')
+          .select('*, branch:branches(name), waiter:users!created_by(first_name, last_name), auditor:users!auditor_id(first_name, last_name)')
           .eq('id', id)
           .single();
-        data = restOrder;
-        error = restError;
+        if (restError) { data = null; error = restError; break; }
+        // Fetch items separately
+        const { data: restItems } = await supabase
+          .from('restaurant_order_items')
+          .select('*')
+          .eq('order_id', id);
+        // Fetch menu item names for the items
+        const menuItemIds = (restItems || []).map((i: any) => i.menu_item_id).filter(Boolean);
+        let menuItemMap: Record<string, string> = {};
+        if (menuItemIds.length > 0) {
+          const { data: menuItems } = await supabase
+            .from('restaurant_menu_items')
+            .select('id, name')
+            .in('id', menuItemIds);
+          (menuItems || []).forEach((m: any) => { menuItemMap[m.id] = m.name; });
+        }
+        const enrichedItems = (restItems || []).map((i: any) => ({
+          ...i,
+          item_name: menuItemMap[i.menu_item_id] || i.item_name || 'Unknown Item'
+        }));
+        data = { ...restOrder, items: enrichedItems };
+        error = null;
         break;
 
       case 'bar_order':

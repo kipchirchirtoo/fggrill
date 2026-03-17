@@ -86,10 +86,7 @@ export const getRequisitions = async (req: Request, res: Response) => {
             .from('kitchen_requisitions')
             .select(`
         *,
-        items:kitchen_requisition_items(*),
-        requester:requested_by(first_name, last_name),
-        approver:approved_by(first_name, last_name),
-        branch:branches!branch_id(name)
+        items:kitchen_requisition_items(*)
       `)
             .order('requested_at', { ascending: false });
 
@@ -124,9 +121,7 @@ export const getRequisition = async (req: Request, res: Response) => {
             .from('kitchen_requisitions')
             .select(`
         *,
-        items:kitchen_requisition_items(*),
-        requester:requested_by(first_name, last_name),
-        approver:approved_by(first_name, last_name)
+        items:kitchen_requisition_items(*)
       `)
             .eq('id', id)
             .single();

@@ -7,6 +7,13 @@ import { MaintenanceTask } from '../models/MaintenanceTask';
 import { InventoryItem } from '../models/Inventory';
 import { logger } from '../utils/logger';
 import axios from 'axios';
+import {
+  generateSupplierStatementPDF,
+  generateVATReportPDF,
+  generateProcurementIntelligencePDF,
+  generateHRPerformancePDF,
+  generatePayrollPDF,
+} from '../services/native-pdf-reports.service';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
 
@@ -603,6 +610,96 @@ export const generateReport = async (
   }
 };
 
+// ── Helper: fetch payroll data from Supabase and build Python-ready payload ──
+const buildPayrollPayload = async (filters: any): Promise<any> => {
+  const month      = Number(filters.month)     || new Date().getMonth() + 1;
+  const year       = Number(filters.year)      || new Date().getFullYear();
+  const branchId   = filters.branch_id ? Number(filters.branch_id) : null;
+  const branchName = filters.branch_name || 'All Branches';
+
+  // Fetch payroll rows — month stored as string, year as number (matches payroll-simple controller)
+  let query = supabase.from('staff_payroll').select('*')
+    .eq('month', String(month))
+    .eq('year', year);
+  const { data: payrollRows, error: payrollErr } = await query;
+  if (payrollErr) logger.error(`buildPayrollPayload payroll fetch error: ${payrollErr.message}`);
+  const rows = payrollRows || [];
+  logger.info(`buildPayrollPayload: fetched ${rows.length} payroll rows for ${month}/${year}`);
+
+  // Fetch staff profiles
+  const staffIds = [...new Set(rows.map((r: any) => r.staff_id).filter(Boolean))];
+  let staffMap: Record<string, any> = {};
+  let userMap:  Record<string, any> = {};
+  let branchMap: Record<string, string> = {};
+
+  if (staffIds.length) {
+    const { data: spRows } = await supabase
+      .from('staff_profiles')
+      .select('id,role,branch_id,first_name,last_name,user_id,employee_id,phone')
+      .in('id', staffIds as string[]);
+    (spRows || []).forEach((s: any) => { staffMap[s.id] = s; });
+
+    const userIds = (spRows || []).map((s: any) => s.user_id).filter(Boolean);
+    if (userIds.length) {
+      const { data: uRows } = await supabase
+        .from('users').select('id,first_name,last_name').in('id', userIds);
+      (uRows || []).forEach((u: any) => { userMap[u.id] = u; });
+    }
+
+    const bIds = [...new Set((spRows || []).map((s: any) => s.branch_id).filter(Boolean))];
+    if (bIds.length) {
+      const { data: bRows } = await supabase
+        .from('branches').select('id,name').in('id', bIds as number[]);
+      (bRows || []).forEach((b: any) => { branchMap[b.id] = b.name; });
+    }
+  }
+
+  const employees: any[] = [];
+  rows.forEach((r: any) => {
+    const sp   = staffMap[r.staff_id] || {};
+    const user = userMap[sp.user_id]  || {};
+    // branch filter — compare as numbers to avoid string/number mismatch
+    if (branchId && Number(sp.branch_id) !== branchId) return;
+    const first = user.first_name || sp.first_name || '';
+    const last  = user.last_name  || sp.last_name  || '';
+    employees.push({
+      no:           employees.length + 1,
+      emp_id:       sp.employee_id || '—',
+      name:         `${first} ${last}`.trim() || 'Unknown',
+      phone:        sp.phone || '',
+      role:         sp.role  || '—',
+      branch:       branchMap[sp.branch_id] || '—',
+      basic_salary: parseFloat(r.basic_salary  || 0),
+      nssf:         parseFloat(r.nssf_deduction || r.nssf || 0),
+      shif:         parseFloat(r.shif_deduction || 0),
+      housing_levy: parseFloat(r.housing_levy_deduction || r.housing_levy || 0),
+      paye:         parseFloat(r.paye || 0),
+      credit_bills: parseFloat(r.total_credit_bills || 0),
+      advances:     parseFloat(r.total_advances || 0),
+      loans:        parseFloat(r.loan_deduction  || 0),
+    });
+  });
+
+  logger.info(`buildPayrollPayload: built ${employees.length} employee records`);
+
+  const monthName = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const resolvedBranch = branchId && employees.length
+    ? (employees[0].branch !== '—' ? employees[0].branch : branchName)
+    : 'All Branches';
+
+  return {
+    company_name:    'FAMOUSGATE HOTELS',
+    company_address: 'Bomet, Kenya',
+    company_email:   'famousgateshotelsbmt@gmail.com',
+    company_phone:   '0706 782 828',
+    period:          monthName,
+    branch:          resolvedBranch,
+    generated:       new Date().toLocaleString('en-KE'),
+    status:          'DRAFT',
+    employees,
+  };
+};
+
 // @desc    Export report directly
 // @route   POST /api/reports/export
 // @access  Private
@@ -615,6 +712,125 @@ export const exportReport = async (
     const { reportType, format, filters, data } = req.body;
     logger.info(`Exporting report: ${reportType} (${format})`);
 
+    // ── Native Node.js PDF generation (no Python dependency) ──
+    if (format === 'pdf') {
+      if (reportType === 'supplier_statement') {
+        try {
+          await generateSupplierStatementPDF(res, filters ?? {});
+        } catch (pdfErr: any) {
+          logger.error(`Supplier statement PDF error: ${pdfErr.message}`, pdfErr);
+          if (!res.headersSent) {
+            res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
+          }
+        }
+        return;
+      }
+      if (reportType === 'vat_report') {
+        try {
+          await generateVATReportPDF(res, filters ?? {});
+        } catch (pdfErr: any) {
+          logger.error(`VAT report PDF error: ${pdfErr.message}`, pdfErr);
+          if (!res.headersSent) {
+            res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
+          }
+        }
+        return;
+      }
+      if (reportType === 'procurement_intelligence') {
+        try {
+          await generateProcurementIntelligencePDF(res, filters ?? {});
+        } catch (pdfErr: any) {
+          logger.error(`Procurement intelligence PDF error: ${pdfErr.message}`, pdfErr);
+          if (!res.headersSent) {
+            res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
+          }
+        }
+        return;
+      }
+      if (reportType === 'hr_performance') {
+        try {
+          await generateHRPerformancePDF(res, filters ?? {});
+        } catch (pdfErr: any) {
+          logger.error(`HR performance PDF error: ${pdfErr.message}`, pdfErr);
+          if (!res.headersSent) {
+            res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
+          }
+        }
+        return;
+      }
+      if (reportType === 'payroll') {
+        try {
+          // If frontend already sent employees array, use it directly; otherwise fetch from DB
+          let payload: any;
+          if (req.body.employees && Array.isArray(req.body.employees)) {
+            payload = {
+              employees:       req.body.employees,
+              period:          req.body.period          || '',
+              branch:          req.body.branch          || 'All Branches',
+              generated:       req.body.generated       || new Date().toLocaleString('en-KE'),
+              status:          req.body.status          || 'DRAFT',
+              company_name:    req.body.company_name    || 'FAMOUSGATE HOTELS',
+              company_address: req.body.company_address || 'Bomet, Kenya',
+              company_email:   req.body.company_email   || 'famousgateshotelsbmt@gmail.com',
+              company_phone:   req.body.company_phone   || '0706 782 828',
+            };
+            logger.info(`Payroll PDF: using ${payload.employees.length} pre-built employee records from frontend`);
+          } else {
+            payload = await buildPayrollPayload(filters ?? {});
+          }
+          const response = await axios.post(`${PYTHON_SERVICE_URL}/api/payroll/generate-pdf`, payload, { responseType: 'arraybuffer' });
+          res.setHeader('Content-Type', 'application/pdf');
+          const branch = (payload.branch || 'All').replace(/\s+/g,'_');
+          const period = (payload.period || '').replace(/\s+/g,'_');
+          res.setHeader('Content-Disposition', `attachment; filename=FG_Payroll_${branch}_${period}.pdf`);
+          res.send(Buffer.from(response.data));
+        } catch (pdfErr: any) {
+          logger.error(`Payroll PDF (Python) error: ${pdfErr.message}`, pdfErr);
+          try {
+            await generatePayrollPDF(res, filters ?? {});
+          } catch (fallbackErr: any) {
+            if (!res.headersSent) res.status(500).json({ success: false, message: `PDF generation failed: ${fallbackErr.message}` });
+          }
+        }
+        return;
+      }
+    }
+
+    // ── XLSX export via Python ──
+    if (format === 'xlsx' && reportType === 'payroll') {
+      try {
+        // If frontend already sent employees array, use it directly; otherwise fetch from DB
+        let payload: any;
+        if (req.body.employees && Array.isArray(req.body.employees)) {
+          payload = {
+            employees:       req.body.employees,
+            period:          req.body.period          || '',
+            branch:          req.body.branch          || 'All Branches',
+            generated:       req.body.generated       || new Date().toLocaleString('en-KE'),
+            status:          req.body.status          || 'DRAFT',
+            company_name:    req.body.company_name    || 'FAMOUSGATE HOTELS',
+            company_address: req.body.company_address || 'Bomet, Kenya',
+            company_email:   req.body.company_email   || 'famousgateshotelsbmt@gmail.com',
+            company_phone:   req.body.company_phone   || '0706 782 828',
+          };
+          logger.info(`Payroll XLSX: using ${payload.employees.length} pre-built employee records from frontend`);
+        } else {
+          payload = await buildPayrollPayload(filters ?? {});
+        }
+        const response = await axios.post(`${PYTHON_SERVICE_URL}/api/payroll/generate-xlsx`, payload, { responseType: 'arraybuffer' });
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        const branch = (payload.branch || 'All').replace(/\s+/g,'_');
+        const period = (payload.period || '').replace(/\s+/g,'_');
+        res.setHeader('Content-Disposition', `attachment; filename=FG_Payroll_${branch}_${period}.xlsx`);
+        res.send(Buffer.from(response.data));
+      } catch (xlsxErr: any) {
+        logger.error(`Payroll XLSX error: ${xlsxErr.message}`, xlsxErr);
+        if (!res.headersSent) res.status(500).json({ success: false, message: `XLSX generation failed: ${xlsxErr.message}` });
+      }
+      return;
+    }
+
+    // ── Fallback: proxy to Python service ──
     const endpoint = format === 'pdf'
       ? '/api/reports/generate/branded-pdf'
       : '/api/reports/generate/excel';

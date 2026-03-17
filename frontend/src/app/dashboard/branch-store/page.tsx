@@ -39,6 +39,7 @@ export default function BranchStoreDashboard() {
     { href: '/dashboard/branch-store/stock-takes', icon: ClipboardList, label: 'Stock Take', desc: 'Inventory audit' },
     { href: '/dashboard/branch-store/kitchen-usage', icon: Utensils, label: 'Kitchen', desc: 'Kitchen usage' },
     { href: '/dashboard/branch-store/stock-out', icon: TrendingDown, label: 'Stock Out', desc: 'Issue items' },
+    { href: '/dashboard/branch-store/kitchen-requisitions', icon: FileText, label: 'Requisitions', desc: 'Dept requests' },
   ];
 
   const statCards = [
@@ -80,7 +81,7 @@ export default function BranchStoreDashboard() {
             <div className="section-header mb-4">
               <h2 className="section-title">Quick Access</h2>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {quickLinks.map((link) => (
                 <Link key={link.href} href={link.href}>
                   <div className="action-card group">

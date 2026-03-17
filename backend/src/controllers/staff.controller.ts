@@ -1090,25 +1090,31 @@ export const getAttendance = async (
   try {
     const { staff_id, branch_id, date, startDate, endDate, status } = req.query;
 
+    // If filtering by branch_id, first get staff_ids for that branch
+    let staffIds: string[] | null = null;
+    if (branch_id) {
+      const { data: branchStaff } = await supabase
+        .from('staff_profiles')
+        .select('id')
+        .eq('branch_id', branch_id);
+      staffIds = (branchStaff || []).map((s: any) => s.id);
+      if (staffIds.length === 0) {
+        res.status(200).json({ success: true, count: 0, data: [] });
+        return;
+      }
+    }
+
     let query = supabase
       .from('staff_attendance')
-      .select(`
-      *,
-      staff: staff_profiles!inner(
-        id,
-        branch_id,
-        id_number,
-        user: users!user_id(id, first_name, last_name, email)
-      )
-      `)
+      .select('*')
       .order('attendance_date', { ascending: false });
 
     if (staff_id) {
       query = query.eq('staff_id', staff_id);
     }
 
-    if (branch_id) {
-      query = query.eq('staff.branch_id', branch_id);
+    if (staffIds) {
+      query = query.in('staff_id', staffIds);
     }
 
     if (status) {

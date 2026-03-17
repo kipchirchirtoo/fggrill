@@ -3668,7 +3668,7 @@ class BrandedPDFGenerator:
                 inv.get('invoice_number', ''),
                 inv.get('invoice_date', ''),
                 supplier.get('name', ''),
-                f"{supplier.get('tax_id', '')}/{supplier.get('vat_number', '')}",
+                f"{supplier.get('supplier_pin', '')}/{supplier.get('vat_registration_number', '')}",
                 f"{float(inv.get('subtotal') or 0):,.2f}",
                 f"{float(inv.get('vat_amount') or 0):,.2f}"
             ])

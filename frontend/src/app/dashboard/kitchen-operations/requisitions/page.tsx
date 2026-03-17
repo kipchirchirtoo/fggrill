@@ -33,10 +33,21 @@ export default function RequisitionsPage() {
     const [priority, setPriority] = useState('NORMAL');
     const [reason, setReason] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('ALL');
+    const [availableItems, setAvailableItems] = useState<any[]>([]);
 
     useEffect(() => {
         fetchRequisitions();
     }, [activeBranchId]);
+
+    const fetchAvailableItems = async () => {
+        try {
+            const response = await api.store.getItems({ limit: 500 }) as any;
+            const items = response?.data || [];
+            setAvailableItems(items);
+        } catch (error) {
+            console.error('Error fetching items:', error);
+        }
+    };
 
     const fetchRequisitions = async () => {
         setIsLoading(true);
@@ -143,7 +154,7 @@ export default function RequisitionsPage() {
                                 <span>Refresh</span>
                             </button>
                             <button
-                                onClick={() => setIsModalOpen(true)}
+                                onClick={() => { setIsModalOpen(true); fetchAvailableItems(); }}
                                 className="btn-primary"
                             >
                                 <Plus className="h-4 w-4" />
@@ -215,9 +226,16 @@ export default function RequisitionsPage() {
                                                 </td>
                                                 <td className="px-5 py-3 text-right">
                                                     <button
-                                                        onClick={() => {
+                                                        onClick={async () => {
                                                             setSelectedRequisition(req);
                                                             setIsDetailsModalOpen(true);
+                                                            try {
+                                                                const res = await api.kitchen.getRequisition(req.id) as any;
+                                                                const full = res?.data || res;
+                                                                if (full?.id) setSelectedRequisition(full);
+                                                            } catch (e) {
+                                                                console.error('Failed to fetch requisition details', e);
+                                                            }
                                                         }}
                                                         className="text-[13px] font-medium text-blue-600 hover:text-blue-700"
                                                     >
@@ -234,7 +252,7 @@ export default function RequisitionsPage() {
 
                     {/* Create Requisition Modal */}
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden">
+                        <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
                             <DialogHeader className="px-6 py-5 border-b border-stone-100 bg-stone-50/50">
                                 <DialogTitle className="flex items-center gap-2 text-[17px] font-semibold text-stone-900">
                                     <ShoppingCart className="h-5 w-5 text-stone-500" />
@@ -282,50 +300,59 @@ export default function RequisitionsPage() {
 
                                     <div className="space-y-3">
                                         {selectedItems.map((item, index) => (
-                                            <div key={index} className="grid grid-cols-12 gap-3 items-end bg-stone-50 p-3 rounded-lg border border-stone-100">
-                                                <div className="col-span-3 space-y-1">
-                                                    <label className="input-label">SKU</label>
-                                                    <input
-                                                        value={item.item_sku}
-                                                        onChange={(e) => updateItem(index, 'item_sku', e.target.value)}
-                                                        placeholder="SKU"
-                                                        className="input-field py-1.5 text-xs h-8"
-                                                    />
-                                                </div>
-                                                <div className="col-span-5 space-y-1">
-                                                    <label className="input-label">Item Name</label>
-                                                    <input
-                                                        value={item.item_name}
-                                                        onChange={(e) => updateItem(index, 'item_name', e.target.value)}
-                                                        placeholder="Item Name"
-                                                        className="input-field py-1.5 text-xs h-8"
-                                                    />
-                                                </div>
-                                                <div className="col-span-2 space-y-1">
-                                                    <label className="input-label">Qty</label>
-                                                    <input
-                                                        type="number"
-                                                        value={item.requested_quantity}
-                                                        onChange={(e) => updateItem(index, 'requested_quantity', Number(e.target.value))}
-                                                        className="input-field py-1.5 text-xs h-8"
-                                                    />
-                                                </div>
-                                                <div className="col-span-2 space-y-1">
-                                                    <label className="input-label">Unit</label>
-                                                    <div className="flex items-center gap-2">
+                                            <div key={index} className="flex flex-col gap-2 bg-stone-50 p-3 rounded-lg border border-stone-100">
+                                                <div className="flex gap-3 items-end">
+                                                    <div className="flex-1 space-y-1 min-w-0">
+                                                        <label className="input-label">Item</label>
+                                                        <select
+                                                            value={item.item_sku}
+                                                            onChange={(e) => {
+                                                                const selected = availableItems.find(i => i.sku === e.target.value);
+                                                                if (selected) {
+                                                                    const updated = [...selectedItems];
+                                                                    updated[index] = {
+                                                                        ...updated[index],
+                                                                        item_sku: selected.sku || '',
+                                                                        item_name: selected.item_name || selected.description || '',
+                                                                        unit_of_measure: selected.unit_of_measure || 'kg'
+                                                                    };
+                                                                    setSelectedItems(updated);
+                                                                }
+                                                            }}
+                                                            className="input-field py-1.5 text-sm h-9 w-full"
+                                                        >
+                                                            <option value="">Select item...</option>
+                                                            {availableItems.map((i) => (
+                                                                <option key={i.id || i.sku} value={i.sku}>
+                                                                    {i.item_name || i.description} {i.sku ? `(${i.sku})` : ''}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="w-24 shrink-0 space-y-1">
+                                                        <label className="input-label">Qty</label>
+                                                        <input
+                                                            type="number"
+                                                            value={item.requested_quantity}
+                                                            onChange={(e) => updateItem(index, 'requested_quantity', Number(e.target.value))}
+                                                            className="input-field py-1.5 text-sm h-9"
+                                                        />
+                                                    </div>
+                                                    <div className="w-24 shrink-0 space-y-1">
+                                                        <label className="input-label">Unit</label>
                                                         <input
                                                             value={item.unit_of_measure}
                                                             onChange={(e) => updateItem(index, 'unit_of_measure', e.target.value)}
                                                             placeholder="kg"
-                                                            className="input-field py-1.5 text-xs h-8"
+                                                            className="input-field py-1.5 text-sm h-9"
                                                         />
-                                                        <button
-                                                            onClick={() => removeItem(index)}
-                                                            className="text-stone-400 hover:text-red-500 transition-colors"
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                        </button>
                                                     </div>
+                                                    <button
+                                                        onClick={() => removeItem(index)}
+                                                        className="text-stone-400 hover:text-red-500 transition-colors shrink-0 mb-1"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}

@@ -5,7 +5,7 @@
  */
 
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
-import { hotelsService } from '@/services/hotels.service';
+import { hotelsService, FALLBACK_BRANCHES } from '@/services/hotels.service';
 import { config } from '@/config/environment';
 
 /**
@@ -19,16 +19,16 @@ export const hotelKeys = {
 };
 
 /**
- * Hook to fetch all branches
- * Caches data for 5 minutes as per requirement 7.4
+ * Hook to fetch all branches — shows fallback instantly, replaces with live data
  */
 export const useBranches = (): UseQueryResult<any[], Error> => {
   return useQuery({
     queryKey: hotelKeys.branches(),
     queryFn: hotelsService.fetchBranches,
-    staleTime: config.cache.staleTime, // 5 minutes
-    gcTime: config.cache.cacheTime, // 10 minutes (2x staleTime)
-    retry: 2,
+    staleTime: config.cache.staleTime,
+    gcTime: config.cache.cacheTime,
+    retry: 1,
+    placeholderData: FALLBACK_BRANCHES,
   });
 };
 

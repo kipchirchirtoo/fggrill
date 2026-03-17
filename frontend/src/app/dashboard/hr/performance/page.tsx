@@ -11,7 +11,8 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { Trophy, TrendingUp, Users, Calendar, Award, Plus, Filter, Search, DollarSign, Star, RefreshCw, User } from 'lucide-react';
+import { Trophy, TrendingUp, Users, Calendar, Award, Plus, Filter, Search, DollarSign, Star, RefreshCw, User, Download } from 'lucide-react';
+import { reportsAPI } from '@/lib/api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
@@ -49,6 +50,23 @@ export default function PerformanceReviewPage() {
         description: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleExportPDF = async () => {
+        try {
+            await reportsAPI.exportReport({
+                reportType: 'hr_performance',
+                format: 'pdf',
+                filters: {
+                    month,
+                    year,
+                    branch_id: selectedBranch === 'all' ? undefined : Number(selectedBranch)
+                }
+            });
+            toast.success('PDF downloaded');
+        } catch (error: any) {
+            toast.error('Failed to export PDF');
+        }
+    };
 
     useEffect(() => {
         fetchBranches();
@@ -136,7 +154,7 @@ export default function PerformanceReviewPage() {
                 <div className="space-y-6">
                     {/* Filters */}
                     <IOSCard className="p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                             <div>
                                 <Label>Branch</Label>
                                 <select
@@ -189,6 +207,14 @@ export default function PerformanceReviewPage() {
                             </div>
                             <IOSButton onClick={fetchPerformance} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>
                                 Refresh
+                            </IOSButton>
+                            <IOSButton
+                                variant="secondary"
+                                onClick={handleExportPDF}
+                                leftIcon={<Download className="h-4 w-4" />}
+                                disabled={isLoading || filteredPerformance.length === 0}
+                            >
+                                Export PDF
                             </IOSButton>
                         </div>
                     </IOSCard>

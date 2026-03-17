@@ -398,9 +398,9 @@ export default function BranchRequestsPage() {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-stone-50 p-4 rounded-xl border border-stone-100">
                                     <div>
                                         <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Status</label>
-                                        <p className="font-medium text-sm mt-1">
+                                        <div className="font-medium text-sm mt-1">
                                             <IOSBadge variant="light" color={getStatusColor(selectedRequest.status) as any}>{selectedRequest.status}</IOSBadge>
-                                        </p>
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Date</label>

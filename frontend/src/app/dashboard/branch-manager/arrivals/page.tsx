@@ -197,11 +197,11 @@ export default function BranchArrivalsPage() {
                     <div className="space-y-3">
                       <div className="flex items-center gap-3 text-stone-600">
                         <Phone className="h-4 w-4" />
-                        <span>{selectedArrival.phone || '+254 700 000 000'}</span>
+                        <span>{selectedArrival.phone || 'Not provided'}</span>
                       </div>
                       <div className="flex items-center gap-3 text-stone-600">
                         <Mail className="h-4 w-4" />
-                        <span>{selectedArrival.email || 'guest@example.com'}</span>
+                        <span>{selectedArrival.email || 'Not provided'}</span>
                       </div>
                     </div>
                   </div>

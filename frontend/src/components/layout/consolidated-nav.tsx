@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { cn } from '@/lib/utils';
@@ -82,8 +82,6 @@ export function ConsolidatedNav() {
   const { user } = useAuth();
   const { activeBranchId, activeBranch } = useBranch();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-
 
 
   if (!user) return null;
@@ -758,7 +756,7 @@ export function ConsolidatedNav() {
         href="/dashboard/branch-accounting/purchases?tab=invoices"
         icon={Receipt}
         label="Supplier Invoices"
-        active={pathname === '/dashboard/branch-accounting/purchases' && searchParams.get('tab') === 'invoices'}
+        active={pathname === '/dashboard/branch-accounting/purchases'}
       />
 
       <NavItem
@@ -1471,17 +1469,12 @@ export function ConsolidatedNav() {
     }
     if (user.role === UserRole.KITCHEN) {
       return (
-        <>
-          <NavItem
-            href="/dashboard/kitchen"
-            icon={ChefHat}
-            label="KDS / Active Orders"
-            active={pathname === '/dashboard/kitchen'}
-          />
-          <hr className="my-4 border-stone-100" />
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
-          {kitchenOperationsNav}
-        </>
+        <NavItem
+          href="/dashboard/kitchen"
+          icon={ChefHat}
+          label="KDS / Active Orders"
+          active={pathname === '/dashboard/kitchen'}
+        />
       );
     }
     if (user.role === UserRole.KITCHEN_OPERATIONS) {

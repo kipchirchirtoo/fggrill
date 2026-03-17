@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+export const dynamic = 'force-dynamic';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
     CheckCircle, XCircle, Search, AlertCircle, Receipt, Clock,
@@ -895,10 +897,11 @@ function BarCashierContent() {
     );
 }
 
-export default function BarCashierPage() {
-    return (
-        <Suspense fallback={<div className="p-8 text-center text-stone-400">Loading Bar Station...</div>}>
-            <BarCashierContent />
-        </Suspense>
-    );
+function BarCashierPage() {
+    const [mounted, setMounted] = React.useState(false);
+    React.useEffect(() => setMounted(true), []);
+    if (!mounted) return <div className="p-8 text-center text-stone-400">Loading Bar Station...</div>;
+    return <BarCashierContent />;
 }
+
+export default BarCashierPage;

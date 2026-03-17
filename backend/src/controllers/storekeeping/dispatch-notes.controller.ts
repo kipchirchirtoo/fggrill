@@ -616,30 +616,30 @@ export const confirmDelivery = async (
 
                 // Add to receiving branch stock
                 if (receivedQty > 0) {
-                    const { error: rpcError } = await supabase.rpc('update_branch_stock', {
-                        p_branch_id: dispatch.to_branch_id,
-                        p_item_sku: originalItem.item_sku,
-                        p_quantity_change: receivedQty
-                    });
+                    // Always use direct upsert for reliability
+                    const { data: existing, error: selectError } = await supabase
+                        .from('branch_stock')
+                        .select('quantity')
+                        .eq('branch_id', dispatch.to_branch_id)
+                        .eq('item_sku', originalItem.item_sku)
+                        .maybeSingle();
 
-                    // Fallback: direct upsert if RPC fails or doesn't exist
-                    if (rpcError) {
-                        logger.warn('update_branch_stock RPC failed, using direct upsert:', rpcError.message);
-                        const { data: existing } = await supabase
-                            .from('branch_stock')
-                            .select('quantity')
-                            .eq('branch_id', dispatch.to_branch_id)
-                            .eq('item_sku', originalItem.item_sku)
-                            .single();
+                    const currentQty = (existing && typeof existing.quantity === 'number') ? existing.quantity : 0;
+                    const newQty = currentQty + receivedQty;
 
-                        await supabase
-                            .from('branch_stock')
-                            .upsert({
-                                branch_id: dispatch.to_branch_id,
-                                item_sku: originalItem.item_sku,
-                                quantity: (existing?.quantity || 0) + receivedQty,
-                                updated_at: new Date().toISOString()
-                            }, { onConflict: 'branch_id,item_sku' });
+                    const { error: upsertError } = await supabase
+                        .from('branch_stock')
+                        .upsert({
+                            branch_id: dispatch.to_branch_id,
+                            item_sku: originalItem.item_sku,
+                            quantity: newQty,
+                            last_stock_in: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'branch_id,item_sku' });
+
+                    if (upsertError) {
+                        logger.error('branch_stock upsert failed:', upsertError.message);
+                        throw new AppError(`Failed to update branch stock: ${upsertError.message}`, 500);
                     }
                 }
 

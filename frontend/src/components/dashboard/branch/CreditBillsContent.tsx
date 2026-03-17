@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { financeAPI, api } from '@/lib/api';
 import {
     CreditCard, Wallet, Calendar, User, Search,
@@ -18,8 +18,7 @@ interface CreditBillsContentProps {
 
 export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsContentProps) {
     const router = useRouter();
-    const searchParams = useSearchParams();
-    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'staff_credit');
+    const [activeTab, setActiveTab] = useState('staff_credit');
 
     // Modal State
     const [showModal, setShowModal] = useState(false);

@@ -102,9 +102,9 @@ export const generateDispatchPDF = async (dispatch: DispatchData) => {
 
     // Robust field mapping
     const raw = dispatch as any;
-    const vehicle = raw.vehicle_number || raw.vehicle_registration || raw.registration_number || (raw.vehicle?.registration_number) || 'N/A';
-    const driver = raw.driver_name || raw.driver || (raw.driver?.name) || 'N/A';
-    const phone = raw.driver_phone || raw.phone || raw.driver_contact || (raw.driver?.phone) || 'N/A';
+    const vehicle = raw.vehicle_number || raw.vehicle_registration || raw.registration_number || (raw.vehicle?.registration_number) || '_______________';
+    const driver = raw.driver_name || raw.driver || (raw.driver?.name) || '_______________';
+    const phone = raw.driver_phone || raw.phone || raw.driver_contact || (raw.driver?.phone) || '_______________';
 
     // Left: Dispatch Routes
     doc.text(`Dispatch #: ${dispatch.dispatch_number}`, margin, cursorY);
@@ -182,15 +182,63 @@ export const generateDispatchPDF = async (dispatch: DispatchData) => {
         cursorY += 15;
     }
 
-    // Signatures Area
-    doc.setDrawColor(200);
-    const sigLine = 50;
+    // Signatures Area — 4 blocks
+    doc.setDrawColor(150);
+    doc.setFontSize(9);
+    doc.setTextColor(44, 62, 80);
 
-    doc.line(margin, cursorY + 15, margin + sigLine, cursorY + 15);
-    doc.text('Prepared By', margin, cursorY + 20);
+    // Check if we need a new page for signatures
+    if (cursorY > 230) {
+        doc.addPage();
+        cursorY = 20;
+    }
 
-    doc.line(140, cursorY + 15, 140 + sigLine, cursorY + 15);
-    doc.text('Received By', 140, cursorY + 20);
+    const sigW = 75; // width of each signature block
+    const col1 = margin;
+    const col2 = margin + sigW + 10;
+
+    // Row 1: Prepared By | Dispatched By / Driver
+    doc.setFont('helvetica', 'bold');
+    doc.text('Prepared By (Central Store):', col1, cursorY);
+    doc.text('Dispatched By / Driver:', col2, cursorY);
+    cursorY += 8;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('Name: ___________________________', col1, cursorY);
+    doc.text('Name: ___________________________', col2, cursorY);
+    cursorY += 8;
+    doc.text('Sign: ___________________________', col1, cursorY);
+    doc.text('Sign: ___________________________', col2, cursorY);
+    cursorY += 8;
+    doc.text('Date: ___________________________', col1, cursorY);
+    doc.text('Date: ___________________________', col2, cursorY);
+    cursorY += 16;
+
+    // Row 2: Branch Storekeeper Received
+    doc.setFont('helvetica', 'bold');
+    doc.text('Branch Storekeeper (Received By):', col1, cursorY);
+    cursorY += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Name: ___________________________', col1, cursorY);
+    doc.text('Condition of Goods: ______________', col2, cursorY);
+    cursorY += 8;
+    doc.text('Sign: ___________________________', col1, cursorY);
+    doc.text('Date: ___________________________', col2, cursorY);
+    cursorY += 14;
+
+    // Return note
+    doc.setDrawColor(44, 62, 80);
+    doc.setLineWidth(0.5);
+    doc.rect(col1, cursorY, 170, 10);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(44, 62, 80);
+    doc.text(
+        'This delivery note must be signed and returned to Central Store after delivery.',
+        105, cursorY + 6.5,
+        { align: 'center' }
+    );
+    doc.setLineWidth(0.2);
 
     // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();

@@ -2574,7 +2574,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         
         try:
             query = self.client.table('store_supplier_invoices')\
-                .select('*, supplier:store_suppliers(id, name, tax_id, vat_number)')\
+                .select('*, supplier:store_suppliers(id, name, supplier_pin, vat_registration_number)')\
                 .eq('status', 'approved')\
                 .gte('invoice_date', start_date)\
                 .lte('invoice_date', end_date)
