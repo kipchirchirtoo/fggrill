@@ -2,11 +2,13 @@ import nextDynamic from 'next/dynamic';
 
 const PageContent = nextDynamic(() => import('./PageContent'), { ssr: false });
 
-// This page uses dynamic routing and should not be statically generated
+// FIX: Added for static export
 export async function generateStaticParams() {
-    return [];
+    return [{ id: 'static_export' }];
 }
 
-export default function Page() {
-    return <PageContent />;
+// FIX: We specifically destructure params and DO NOT accept or pass searchParams
+// accessing searchParams causes a bail out of static generation.
+export default function Page({ params }: { params: any }) {
+    return <PageContent params={params} />;
 }
