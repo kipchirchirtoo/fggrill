@@ -39,7 +39,7 @@ console.log('[Main] Lock acquired.');
 // 2. Schemes Registration (Must be before app ready)
 // ──────────────────────────────────────────
 protocol.registerSchemesAsPrivileged([
-    { scheme: 'pos', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+    { scheme: 'pos', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, allowServiceWorkers: true } }
 ]);
 
 // ──────────────────────────────────────────
@@ -1072,39 +1072,45 @@ function createWindow() {
         '*://api.hirall.com/*'
     ];
 
-    mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
-        { urls: corsUrls },
-        (details, callback) => {
-            if (isDev) {
-                // For Private Network Access (PNA) preflights
-                details.requestHeaders['Access-Control-Request-Private-Network'] = 'true';
+    const setupSessionCORS = (ses) => {
+        ses.webRequest.onBeforeSendHeaders(
+            { urls: corsUrls },
+            (details, callback) => {
+                if (isDev) {
+                    // For Private Network Access (PNA) preflights
+                    details.requestHeaders['Access-Control-Request-Private-Network'] = 'true';
+                }
+                callback({ requestHeaders: details.requestHeaders });
             }
-            callback({ requestHeaders: details.requestHeaders });
-        }
-    );
+        );
 
-    mainWindow.webContents.session.webRequest.onHeadersReceived(
-        { urls: corsUrls },
-        (details, callback) => {
-            if (details.responseHeaders) {
-                const requestHeaders = details.requestHeaders || {};
-                const origin = requestHeaders['Origin'] || requestHeaders['origin'];
-                
-                // Allow CORS for our custom protocol and in dev mode
-                if (isDev || (origin && origin.startsWith('pos://'))) {
-                    details.responseHeaders['Access-Control-Allow-Origin'] = [origin || '*'];
-                    details.responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
-                    details.responseHeaders['Access-Control-Allow-Headers'] = ['*'];
-                    details.responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
+        ses.webRequest.onHeadersReceived(
+            { urls: corsUrls },
+            (details, callback) => {
+                if (details.responseHeaders) {
+                    const requestHeaders = details.requestHeaders || {};
+                    const origin = requestHeaders['Origin'] || requestHeaders['origin'];
                     
-                    if (isDev) {
-                        details.responseHeaders['Access-Control-Allow-Private-Network'] = ['true'];
+                    // Allow CORS for our custom protocol and in dev mode
+                    if (isDev || (origin && origin.startsWith('pos://'))) {
+                        details.responseHeaders['Access-Control-Allow-Origin'] = [origin || '*'];
+                        details.responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
+                        details.responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+                        details.responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
+                        
+                        if (isDev) {
+                            details.responseHeaders['Access-Control-Allow-Private-Network'] = ['true'];
+                        }
                     }
                 }
+                callback({ responseHeaders: details.responseHeaders });
             }
-            callback({ responseHeaders: details.responseHeaders });
-        }
-    );
+        );
+    };
+
+    // Apply to both default session and our partition session
+    setupSessionCORS(session.defaultSession);
+    setupSessionCORS(mainWindow.webContents.session);
 
     mainWindow.webContents.session.webRequest.onCompleted(
         { urls: ['*://*/*'] },

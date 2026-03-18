@@ -37,13 +37,18 @@ async function fetchAPI<T>(endpoint: string, options?: FetchOptions): Promise<T>
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token === 'offline-bridge-token') {
-      // console.log('[API] Offline mode detected, skipping API call:', endpoint);
-      // Return empty success response for offline mode
-      return {
-        success: true,
-        data: null,
-        message: 'Offline mode - no API call made'
-      } as T;
+      // Allow auth calls to proceed even if we're in offline mode
+      // this allows the user to log in and get a fresh token if they're back online
+      const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/pos-login');
+      
+      if (!isAuthEndpoint) {
+        // console.log('[API] Offline mode detected, skipping API call:', endpoint);
+        return {
+          success: true,
+          data: null,
+          message: 'Offline mode - no API call made'
+        } as T;
+      }
     }
   }
 
