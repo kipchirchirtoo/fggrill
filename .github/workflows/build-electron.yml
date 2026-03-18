@@ -36,7 +36,7 @@ jobs:
         run: |
           cd frontend
           npm install
-          npm run build
+          npm run build:electron
           cd ..
 
       - name: Build and Publish Electron (Windows)
@@ -80,7 +80,7 @@ jobs:
         run: |
           cd frontend
           npm install
-          npm run build
+          npm run build:electron
           cd ..
 
       - name: Build and Publish Electron (Linux)
