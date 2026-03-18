@@ -1065,9 +1065,15 @@ function createWindow() {
         }
     });
 
-    // --- CORS & Security Fixes for Development ---
+    // --- CORS & Security Fixes ---
+    const corsUrls = [
+        '*://127.0.0.1/*',
+        '*://localhost/*',
+        '*://api.hirall.com/*'
+    ];
+
     mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
-        { urls: ['*://127.0.0.1/*', '*://localhost/*'] },
+        { urls: corsUrls },
         (details, callback) => {
             if (isDev) {
                 // For Private Network Access (PNA) preflights
@@ -1078,13 +1084,22 @@ function createWindow() {
     );
 
     mainWindow.webContents.session.webRequest.onHeadersReceived(
-        { urls: ['*://127.0.0.1/*', '*://localhost/*'] },
+        { urls: corsUrls },
         (details, callback) => {
-            if (isDev && details.responseHeaders) {
-                details.responseHeaders['Access-Control-Allow-Private-Network'] = ['true'];
-                details.responseHeaders['Access-Control-Allow-Origin'] = ['*'];
-                details.responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
-                details.responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+            if (details.responseHeaders) {
+                const origin = details.requestHeaders['Origin'] || details.requestHeaders['origin'];
+                
+                // Allow CORS for our custom protocol and in dev mode
+                if (isDev || (origin && origin.startsWith('pos://'))) {
+                    details.responseHeaders['Access-Control-Allow-Origin'] = [origin || '*'];
+                    details.responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
+                    details.responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+                    details.responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
+                    
+                    if (isDev) {
+                        details.responseHeaders['Access-Control-Allow-Private-Network'] = ['true'];
+                    }
+                }
             }
             callback({ responseHeaders: details.responseHeaders });
         }
