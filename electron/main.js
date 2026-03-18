@@ -1087,7 +1087,8 @@ function createWindow() {
         { urls: corsUrls },
         (details, callback) => {
             if (details.responseHeaders) {
-                const origin = details.requestHeaders['Origin'] || details.requestHeaders['origin'];
+                const requestHeaders = details.requestHeaders || {};
+                const origin = requestHeaders['Origin'] || requestHeaders['origin'];
                 
                 // Allow CORS for our custom protocol and in dev mode
                 if (isDev || (origin && origin.startsWith('pos://'))) {
