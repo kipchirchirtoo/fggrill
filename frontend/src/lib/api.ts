@@ -3618,6 +3618,25 @@ export const auditAPI = {
   verifyBarStockTake: (id: string, data: { notes?: string }) =>
     fetchAPI<any>(`/auditor/verify/bar-stock/${id}/verify`, { method: 'POST', body: JSON.stringify(data) }),
 
+  exportStockLedger: async (params?: { branch_id?: number | null }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/api/auditor/verify/stock-levels/export?${query}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error(`Export failed: ${response.status}`);
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stock_ledger_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
   // Daily Logs Audit
   getDailyLogsStatus: (params?: { branch_id?: number; status?: string }) => {
     const query = new URLSearchParams();

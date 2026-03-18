@@ -58,7 +58,6 @@ export default function AdminDocsPage() {
   const handleDownloadPDF = async (guide?: ModuleGuide) => {
     toast.info('Connecting to generation service...');
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       const token = localStorage.getItem('token');
       
       const payload = {

@@ -13,7 +13,6 @@ import {
     Search, Boxes, Thermometer, TrendingDown, FileDown, DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { auditorReportsAPI } from '@/lib/api';
 
 const StockItemDetailsModal = ({ item, isOpen, onClose }: { item: any, isOpen: boolean, onClose: () => void }) => {
     if (!isOpen || !item) return null;
@@ -119,13 +118,11 @@ export default function StockAuditPage() {
     const handleExport = async () => {
         try {
             toast.loading("Generating stock ledger...");
-            // Use the comprehensive audit report which contains theorertical vs actual analysis
-            await auditorReportsAPI.exportComprehensiveStockAudit({
-                branch_id: activeBranchId || undefined,
-                branch_name: activeBranch?.name
+            await auditAPI.exportStockLedger({
+                branch_id: activeBranchId || undefined
             });
             toast.dismiss();
-            toast.success("Stock ledger generated successfully");
+            toast.success("Stock ledger downloaded");
         } catch (error) {
             console.error(error);
             toast.dismiss();

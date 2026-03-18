@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/config';
 
 interface BatchTrackingProps {
   itemId: string;
@@ -42,7 +43,7 @@ export function BatchTracking({ itemId, branch, onBatchAdded }: BatchTrackingPro
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/inventory/batches`, {
+      const response = await fetch(`${API_URL}/api/inventory/batches`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

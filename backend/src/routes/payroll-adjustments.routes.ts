@@ -11,8 +11,8 @@ router.use(protect);
 // Only HR Manager, Super Admin, and Auditor can view adjustments
 router.get('/', authorize([UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]), adjustmentsController.getAdjustments);
 
-// Only HR Manager and Super Admin can create/void adjustments
-router.post('/', authorize([UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]), adjustmentsController.createAdjustment);
-router.patch('/:id/void', authorize([UserRole.HR_MANAGER, UserRole.SUPER_ADMIN]), adjustmentsController.voidAdjustment);
+// Only HR Manager, Super Admin, and Auditor can create/void adjustments
+router.post('/', authorize([UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]), adjustmentsController.createAdjustment);
+router.patch('/:id/void', authorize([UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]), adjustmentsController.voidAdjustment);
 
 export default router;

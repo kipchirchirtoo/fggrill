@@ -15,6 +15,7 @@ import {
   getRevenueOversight,
   getExpenditureVerification,
   getStockLevelsVerification,
+  exportStockLedger,
   getBranchOrdersVerification,
   getSoldItemsAnalysis,
   getBarStockAudits,
@@ -147,6 +148,7 @@ router.get('/verify/finances', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN
 router.get('/verify/revenue', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getRevenueOversight);
 router.get('/verify/expenditure', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getExpenditureVerification);
 router.get('/verify/stock-levels', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStockLevelsVerification);
+router.get('/verify/stock-levels/export', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), exportStockLedger);
 router.get('/verify/branch-orders', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchOrdersVerification);
 router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getSoldItemsAnalysis);
 router.get('/verify/bar-stock', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);

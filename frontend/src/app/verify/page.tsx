@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import { ShieldCheck, Phone, AlertTriangle, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { API_URL } from '@/lib/config';
 
 function VerificationContent() {
     const searchParams = useSearchParams();
@@ -19,7 +20,7 @@ function VerificationContent() {
         // Call the backend API to verify the ID
         const verifyId = async () => {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/verify/${id}`);
+                const response = await fetch(`${API_URL}/api/verify/${id}`);
                 const data = await response.json();
 
                 if (data.success && data.valid) {

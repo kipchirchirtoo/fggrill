@@ -24,7 +24,6 @@ interface ViewItemModalProps {
   isManager?: boolean;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManager = false }: ViewItemModalProps) {
   const [stockHistory, setStockHistory] = useState<any[]>([]);

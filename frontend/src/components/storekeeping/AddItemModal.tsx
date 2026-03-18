@@ -27,8 +27,6 @@ interface AddItemModalProps {
 // Flow states: SCAN -> (FOUND | CREATE)
 type EntryState = 'SCAN' | 'SEARCHING' | 'FOUND' | 'CREATE';
 
-// API URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 // Category codes for SKU generation
 const CATEGORY_OPTIONS = [

@@ -354,20 +354,15 @@ function CashierPageContent() {
         }
     };
 
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!scanInput.trim()) return;
-
+    const lookupBillById = async (bookingId: string) => {
         setIsLoading(true);
         try {
-            const bookingId = scanInput.trim();
             const response = await fetchAPI(`/cashier/bill/${bookingId}`) as any;
             if (response.success) {
                 setBillData(response.data);
                 setPaymentAmount(response.data.financials.balance.toString());
                 toast.success('Bill retrieved successfully');
 
-                // If in M-Pesa flow, automatically search for payments matching this amount
                 if (paymentFlowChoice === 'mpesa') {
                     handleAutoMpesaSearch(response.data.financials.balance);
                 }
@@ -382,6 +377,12 @@ function CashierPageContent() {
             setIsLoading(false);
             setScanInput('');
         }
+    };
+
+    const handleScan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!scanInput.trim()) return;
+        await lookupBillById(scanInput.trim());
     };
 
     const handleAutoMpesaSearch = async (amount: number) => {
@@ -1196,11 +1197,7 @@ function CashierPageContent() {
                                                                 key={`${bill.id}-${bill.bill_number}`}
                                                                 onClick={() => {
                                                                     setScanInput(bill.bill_number);
-                                                                    // Use setTimeout to ensure state updates before form submission simulation
-                                                                    setTimeout(() => {
-                                                                        const event = { preventDefault: () => { } } as any;
-                                                                        handleScan(event);
-                                                                    }, 0);
+                                                                    lookupBillById(bill.bill_number);
                                                                 }}
                                                                 className="flex-shrink-0 w-48 bg-stone-50 p-3 rounded-2xl border border-stone-100 hover:border-orange-500 hover:bg-orange-50/30 transition-all text-left group"
                                                             >

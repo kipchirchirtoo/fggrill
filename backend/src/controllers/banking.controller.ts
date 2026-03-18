@@ -191,9 +191,9 @@ export const getBankingTransactions = async (
             .from('banking_transactions')
             .select(`
                 *,
-                recorded_by_user:users!recorded_by(id, full_name),
-                approved_by_user:users!approved_by(id, full_name),
-                reconciled_by_user:users!reconciled_by(id, full_name)
+                recorded_by_user:users!recorded_by(id, first_name, last_name),
+                approved_by_user:users!approved_by(id, first_name, last_name),
+                reconciled_by_user:users!reconciled_by(id, first_name, last_name)
             `)
             .order('transaction_date', { ascending: false });
 
@@ -225,9 +225,31 @@ export const getBankingTransactions = async (
 
         if (error) throw error;
 
+        // Transform data for frontend compatibility (full_name, firstName, lastName)
+        const transformedTransactions = (transactions || []).map((txn: any) => {
+            const transformUser = (user: any) => {
+                if (!user) return null;
+                const firstName = user.first_name || '';
+                const lastName = user.last_name || '';
+                return {
+                    ...user,
+                    firstName,
+                    lastName,
+                    full_name: `${firstName} ${lastName}`.trim()
+                };
+            };
+
+            return {
+                ...txn,
+                recorded_by_user: transformUser(txn.recorded_by_user),
+                approved_by_user: transformUser(txn.approved_by_user),
+                reconciled_by_user: transformUser(txn.reconciled_by_user)
+            };
+        });
+
         res.status(200).json({
             success: true,
-            data: transactions || []
+            data: transformedTransactions
         });
     } catch (error) {
         next(error);
@@ -442,8 +464,8 @@ export const getBankReconciliations = async (
             .select(`
                 *,
                 bank_account:bank_accounts(*),
-                reconciled_by_user:users!reconciled_by(id, full_name),
-                approved_by_user:users!approved_by(id, full_name)
+                reconciled_by_user:users!reconciled_by(id, first_name, last_name),
+                approved_by_user:users!approved_by(id, first_name, last_name)
             `)
             .order('reconciliation_date', { ascending: false });
 
@@ -467,9 +489,30 @@ export const getBankReconciliations = async (
 
         if (error) throw error;
 
+        // Transform data for frontend compatibility
+        const transformedReconciliations = (reconciliations || []).map((rec: any) => {
+            const transformUser = (user: any) => {
+                if (!user) return null;
+                const firstName = user.first_name || '';
+                const lastName = user.last_name || '';
+                return {
+                    ...user,
+                    firstName,
+                    lastName,
+                    full_name: `${firstName} ${lastName}`.trim()
+                };
+            };
+
+            return {
+                ...rec,
+                reconciled_by_user: transformUser(rec.reconciled_by_user),
+                approved_by_user: transformUser(rec.approved_by_user)
+            };
+        });
+
         res.status(200).json({
             success: true,
-            data: reconciliations || []
+            data: transformedReconciliations
         });
     } catch (error) {
         next(error);

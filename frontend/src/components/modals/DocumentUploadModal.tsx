@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { API_URL } from '@/lib/config';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Upload, FileText, Image, Trash2, Download, Eye, AlertCircle, CheckCircle } from 'lucide-react';
 import { documentsAPI } from '@/lib/api';
@@ -174,8 +175,6 @@ export default function DocumentUploadModal({
     const docType = DOCUMENT_TYPES.find(t => t.value === type);
     return docType?.label || type;
   };
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
   if (!isOpen) return null;
 

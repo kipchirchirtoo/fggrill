@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { API_URL } from '@/lib/config';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -223,7 +224,6 @@ export default function HRPayrollPage() {
         if (filteredRecords.length === 0) { toast.error('No records to export'); return; }
         toast.info('Generating PDF...');
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
             const token = localStorage.getItem('token');
             const monthName = new Date(Number(selectedYear), Number(selectedMonth) - 1, 1)
                 .toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -264,7 +264,6 @@ export default function HRPayrollPage() {
         if (filteredRecords.length === 0) { toast.error('No records to export'); return; }
         toast.info('Generating Excel file...');
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
             const token = localStorage.getItem('token');
             const monthName = new Date(Number(selectedYear), Number(selectedMonth) - 1, 1)
                 .toLocaleString('en-US', { month: 'long', year: 'numeric' });

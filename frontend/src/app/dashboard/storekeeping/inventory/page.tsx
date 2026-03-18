@@ -23,7 +23,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 // SKU Category codes mapping - matches backend sku.service.ts
 const CATEGORY_CODES: Record<string, string> = {

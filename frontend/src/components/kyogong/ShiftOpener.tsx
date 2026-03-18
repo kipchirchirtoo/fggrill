@@ -35,9 +35,11 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
     const fetchSalesPoints = async () => {
         setIsLoadingPoints(true);
         try {
-            // We need to add this endpoint to api.ts or use fetchAPI directly
-            // Using fetchAPI for now as it might not be in api.ts yet
             const token = localStorage.getItem('token');
+            if (!token || token === 'offline-bridge-token') {
+                setIsLoadingPoints(false);
+                return;
+            }
             const res = await fetch(`${API_URL}/api/kyogong/sales-points?is_active=true`, {
                 headers: { Authorization: `Bearer ${token}` }
             });

@@ -51,6 +51,11 @@ export function KyogongPOSLayout({
         setShiftLoading(true);
         try {
             const token = localStorage.getItem('token');
+            if (!token || token === 'offline-bridge-token') {
+                setActiveShift(null);
+                setShiftLoading(false);
+                return;
+            }
             const res = await fetch(`${API_URL}/api/kyogong/shifts/current`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -71,6 +76,7 @@ export function KyogongPOSLayout({
     const fetchTransactions = async (shiftId: string) => {
         try {
             const token = localStorage.getItem('token');
+            if (!token || token === 'offline-bridge-token') return;
             const res = await fetch(`${API_URL}/api/kyogong/shifts/${shiftId}/transactions`, {
                 headers: { Authorization: `Bearer ${token}` }
             });

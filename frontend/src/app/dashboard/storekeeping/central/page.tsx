@@ -31,7 +31,6 @@ import { storeAPI } from '@/lib/api';
 import { printDispatchPDF, downloadDispatchPDF } from '@/lib/dispatch-pdf';
 import { Download, Printer, User, Navigation, Calendar } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface StockRequest {
   id: string;

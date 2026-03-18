@@ -110,6 +110,14 @@ export default function HRDashboard() {
             bgColor: 'bg-emerald-50'
         },
         {
+            href: '/dashboard/hr/adjustments',
+            icon: RefreshCw,
+            label: 'Adjustments',
+            desc: 'Deductions & Additions',
+            color: 'text-orange-600',
+            bgColor: 'bg-orange-50'
+        },
+        {
             href: '/dashboard/hr/employees/add',
             icon: UserPlus,
             label: 'New Hire',
@@ -120,7 +128,7 @@ export default function HRDashboard() {
     ];
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
+        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
             <DashboardLayout>
                 <div className="space-y-8 animate-ios-fade-in">
                     {/* Header */}

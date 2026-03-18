@@ -17,7 +17,6 @@ import {
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date-utils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface BankingTransaction {
     id: string;

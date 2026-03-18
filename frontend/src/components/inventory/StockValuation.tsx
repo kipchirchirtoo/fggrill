@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import type { Branch } from '@/types/inventory';
+import { API_URL } from '@/lib/config';
 
 interface StockItem {
   id: string;
@@ -57,7 +58,7 @@ export function StockValuation({ branch, onBranchChange }: StockValuationProps) 
   const fetchStockValuation = async () => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/inventory/valuation?branch=${branch}`,
+        `${API_URL}/api/inventory/valuation?branch=${branch}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`

@@ -18,8 +18,8 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { downloadPurchaseOrderPDF, printPurchaseOrderPDF } from '@/lib/purchase-order-pdf';
+import { API_URL } from '@/lib/config';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface PurchaseOrder {
     id: string;

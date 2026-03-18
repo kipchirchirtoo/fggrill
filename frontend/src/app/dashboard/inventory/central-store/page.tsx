@@ -17,8 +17,6 @@ import {
 import { toast } from 'sonner';
 import type { StockItem, BranchStock, StockTransfer, StockRequest } from '@/types/inventory.types';
 
-// API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function CentralStorePage() {
   const { user } = useAuth();

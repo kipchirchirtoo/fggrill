@@ -18,7 +18,6 @@ import {
   RefreshCw, Plus, Truck, Edit, Trash2, Save 
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface Driver {
   id: string;

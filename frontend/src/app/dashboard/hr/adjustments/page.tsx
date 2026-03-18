@@ -29,9 +29,11 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
+import { AddAdjustmentDialog } from '@/components/hr/add-adjustment-dialog';
 
 export default function PayrollAdjustmentsPage() {
     const { user } = useAuth();
+    const canManage = [UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR].includes(user?.role as UserRole);
     const [isLoading, setIsLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [adjustments, setAdjustments] = useState<any[]>([]);
@@ -158,12 +160,16 @@ export default function PayrollAdjustmentsPage() {
         absent_day: 'Absent Day',
         contribution: 'Contribution',
         extra_day: 'Extra Day Payment',
-        bonus: 'Bonus',
+        bonus: 'Performance Bonus',
+        overtime: 'Overtime Payment',
+        allowance: 'Travel/Fuel Allowance',
+        unpaid_leave: 'Unpaid Leave',
+        penalty: 'Disciplinary Fine',
         other: 'Other'
     };
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR]}>
+        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
             <DashboardLayout>
                 <div className="space-y-6 animate-ios-fade-in p-2">
                     {/* Header */}
@@ -196,13 +202,15 @@ export default function PayrollAdjustmentsPage() {
                                 </SelectContent>
                             </Select>
 
-                            <button
-                                onClick={() => setIsAddDialogOpen(true)}
-                                className="px-5 py-2 rounded-full bg-stone-900 text-white text-sm font-bold hover:bg-black transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-stone-200"
-                            >
-                                <Plus className="h-4 w-4" />
-                                <span>Add Adjustment</span>
-                            </button>
+                            {canManage && (
+                                <button
+                                    onClick={() => setIsAddDialogOpen(true)}
+                                    className="px-5 py-2 rounded-full bg-stone-900 text-white text-sm font-bold hover:bg-black transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-stone-200"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    <span>Add Adjustment</span>
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -335,7 +343,7 @@ export default function PayrollAdjustmentsPage() {
                                                     {new Date(adj.created_at).toLocaleDateString()}
                                                 </td>
                                                 <td className="px-4 py-4 text-right">
-                                                    {adj.status === 'pending' && (
+                                                    {adj.status === 'pending' && canManage && (
                                                         <button
                                                             onClick={() => handleVoidAdjustment(adj.id)}
                                                             className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
@@ -355,156 +363,11 @@ export default function PayrollAdjustmentsPage() {
                 </div>
 
                 {/* Add Adjustment Dialog */}
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                    <DialogContent className="sm:max-w-[450px] p-0 border-none rounded-3xl overflow-hidden shadow-2xl animate-ios-slide-in text-left">
-                        <DialogHeader className="p-6 bg-stone-900 text-white">
-                            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                                <Plus className="h-5 w-5" />
-                                New Adjustment
-                            </DialogTitle>
-                        </DialogHeader>
-
-                        <div className="p-6 space-y-5 bg-white">
-                            <div className="space-y-2">
-                                <Label className="text-stone-500 font-bold uppercase text-[10px] tracking-widest pl-1">Employee</Label>
-                                <Select
-                                    value={newAdjustment.staff_id}
-                                    onValueChange={(val) => setNewAdjustment(prev => ({ ...prev, staff_id: val }))}
-                                >
-                                    <SelectTrigger className="rounded-xl border-stone-100 h-11 bg-stone-50/50">
-                                        <SelectValue placeholder="Select staff member" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-[250px]">
-                                        {staffList.map((staff) => (
-                                            <SelectItem key={staff.id} value={staff.id}>
-                                                {staff.first_name} {staff.last_name} ({staff.role})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-stone-500 font-bold uppercase text-[10px] tracking-widest pl-1">Type</Label>
-                                    <Select
-                                        value={newAdjustment.type}
-                                        onValueChange={(val: any) => setNewAdjustment(prev => ({ ...prev, type: val }))}
-                                    >
-                                        <SelectTrigger className="rounded-xl border-stone-100 h-11 bg-stone-50/50">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="deduction">Deduction</SelectItem>
-                                            <SelectItem value="addition">Addition</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-stone-500 font-bold uppercase text-[10px] tracking-widest pl-1">Category</Label>
-                                    <Select
-                                        value={newAdjustment.category}
-                                        onValueChange={(val) => setNewAdjustment(prev => ({ ...prev, category: val }))}
-                                    >
-                                        <SelectTrigger className="rounded-xl border-stone-100 h-11 bg-stone-50/50">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {newAdjustment.type === 'deduction' ? (
-                                                <>
-                                                    <SelectItem value="credit_bill">Credit Bill</SelectItem>
-                                                    <SelectItem value="advance">Salary Advance</SelectItem>
-                                                    <SelectItem value="loan_installment">Loan Installment</SelectItem>
-                                                    <SelectItem value="uniform">Uniform</SelectItem>
-                                                    <SelectItem value="absent_day">Absent Day</SelectItem>
-                                                    <SelectItem value="contribution">Contribution</SelectItem>
-                                                    <SelectItem value="other">Other Deduction</SelectItem>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <SelectItem value="extra_day">Extra Day Payment</SelectItem>
-                                                    <SelectItem value="bonus">Bonus</SelectItem>
-                                                    <SelectItem value="other">Other Addition</SelectItem>
-                                                </>
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-stone-500 font-bold uppercase text-[10px] tracking-widest pl-1">Amount (KES)</Label>
-                                    <Input
-                                        type="number"
-                                        placeholder="0.00"
-                                        className="rounded-xl border-stone-100 h-11 bg-stone-50/50 font-bold"
-                                        value={newAdjustment.amount}
-                                        onChange={(e) => setNewAdjustment(prev => ({ ...prev, amount: e.target.value }))}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-stone-500 font-bold uppercase text-[10px] tracking-widest pl-1">Period (Month/Year)</Label>
-                                    <div className="flex gap-2">
-                                        <Select
-                                            value={newAdjustment.month}
-                                            onValueChange={(val) => setNewAdjustment(prev => ({ ...prev, month: val }))}
-                                        >
-                                            <SelectTrigger className="rounded-xl border-stone-100 h-11 bg-stone-50/50 flex-1">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                                                    <SelectItem key={m} value={String(m)}>{m}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Select
-                                            value={String(newAdjustment.year)}
-                                            onValueChange={(val) => setNewAdjustment(prev => ({ ...prev, year: Number(val) }))}
-                                        >
-                                            <SelectTrigger className="rounded-xl border-stone-100 h-11 bg-stone-50/50 flex-1">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {[2024, 2025, 2026, 2027].map(y => (
-                                                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label className="text-stone-500 font-bold uppercase text-[10px] tracking-widest pl-1">Description (Optional)</Label>
-                                <textarea
-                                    className="w-full p-4 rounded-xl border border-stone-100 bg-stone-50/50 text-sm focus:ring-2 focus:ring-stone-900/5 transition-all outline-none min-h-[80px]"
-                                    placeholder="Enter reason or notes..."
-                                    value={newAdjustment.description}
-                                    onChange={(e) => setNewAdjustment(prev => ({ ...prev, description: e.target.value }))}
-                                ></textarea>
-                            </div>
-                        </div>
-
-                        <DialogFooter className="p-6 bg-stone-50 mt-0">
-                            <button
-                                onClick={() => setIsAddDialogOpen(false)}
-                                className="px-6 py-2.5 rounded-full text-stone-500 font-bold text-sm hover:bg-stone-100 transition-all mr-2"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleCreateAdjustment}
-                                disabled={isSubmitting}
-                                className="px-8 py-2.5 rounded-full bg-stone-900 text-white font-bold text-sm hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50"
-                            >
-                                {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                Save Adjustment
-                            </button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                <AddAdjustmentDialog 
+                    open={isAddDialogOpen}
+                    onOpenChange={setIsAddDialogOpen}
+                    onSuccess={fetchData}
+                />
             </DashboardLayout>
         </ProtectedRoute>
     );

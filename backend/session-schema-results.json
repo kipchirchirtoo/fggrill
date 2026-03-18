@@ -1,0 +1,61 @@
+{
+  "audit_night_sessions_columns": [
+    {
+      "column_name": "id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "audit_date",
+      "data_type": "date"
+    },
+    {
+      "column_name": "started_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "completed_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "performed_by",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text"
+    },
+    {
+      "column_name": "total_revenue",
+      "data_type": "numeric"
+    },
+    {
+      "column_name": "total_payments",
+      "data_type": "numeric"
+    },
+    {
+      "column_name": "occupancy_percentage",
+      "data_type": "numeric"
+    },
+    {
+      "column_name": "adr",
+      "data_type": "numeric"
+    },
+    {
+      "column_name": "revpar",
+      "data_type": "numeric"
+    },
+    {
+      "column_name": "discrepancies_count",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "notes",
+      "data_type": "text"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    }
+  ],
+  "audit_night_sessions_fks": []
+}

@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { staffAPI, systemAPI, storeAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone, FileText, History, UserPlus, Archive, ArrowLeft, Download } from 'lucide-react';
+import { Users, RefreshCw, Plus, Search, User, Building2, Edit2, Trash2, Mail, Phone, FileText, History, UserPlus, Archive, ArrowLeft, Download, DollarSign } from 'lucide-react';
+import { AddAdjustmentDialog } from '@/components/hr/add-adjustment-dialog';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { downloadEmployeePDF } from '@/lib/employee-pdf';
@@ -43,6 +44,8 @@ export default function HREmployeesPage() {
     const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
     const [detailModalOpen, setDetailModalOpen] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState<any>(null);
+    const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
+    const [adjustmentStaffId, setAdjustmentStaffId] = useState<string | undefined>(undefined);
     const [history, setHistory] = useState<any[]>([]);
     const [documents, setDocuments] = useState<any[]>([]);
     const [branches, setBranches] = useState<any[]>([]);
@@ -554,6 +557,18 @@ export default function HREmployeesPage() {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR].includes(user?.role as UserRole) && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setAdjustmentStaffId(member.id);
+                                                                    setIsAdjustmentDialogOpen(true);
+                                                                }}
+                                                                className="p-2 hover:bg-emerald-50 rounded-lg text-emerald-400 hover:text-emerald-600 transition-colors"
+                                                                title="Add Payroll Adjustment"
+                                                            >
+                                                                <DollarSign className="h-4 w-4" />
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => handleViewDetails(member)}
                                                             className="p-2 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-[#007AFF] transition-colors"
@@ -959,12 +974,272 @@ export default function HREmployeesPage() {
                     </DialogContent>
                 </Dialog>
 
+                {/* Add/Edit Modal — redesigned */}
+                <Dialog open={addModalOpen || editModalOpen} onOpenChange={(open) => {
+                    if (!open) { setAddModalOpen(false); setEditModalOpen(false); resetForm(); }
+                }}>
+                    <DialogContent className="max-w-[580px] w-full p-0 border-none rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
+
+                        {/* ── Header ── */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 bg-white flex-shrink-0">
+                            <button
+                                onClick={() => { setAddModalOpen(false); setEditModalOpen(false); resetForm(); }}
+                                className="text-sm font-medium text-stone-500 hover:text-stone-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <div className="text-center">
+                                <DialogTitle className="text-base font-bold text-stone-900">
+                                    {addModalOpen ? 'Onboard Staff' : 'Edit Profile'}
+                                </DialogTitle>
+                                <p className="text-xs text-stone-400 mt-0.5">
+                                    {wizardStep === 1 && 'Personal Information'}
+                                    {wizardStep === 2 && 'Role & Compensation'}
+                                    {wizardStep === 3 && 'Contact & Emergency'}
+                                    {wizardStep === 4 && 'System Access'}
+                                </p>
+                            </div>
+                            <div className="w-14" />
+                        </div>
+
+                        {/* ── Step progress bar ── */}
+                        <div className="flex gap-1 px-6 pt-4 pb-2 flex-shrink-0">
+                            {[1, 2, 3, 4].map((step) => (
+                                <div key={step} className="flex-1 flex flex-col items-center gap-1">
+                                    <div className={`h-1.5 w-full rounded-full transition-all duration-300 ${step < wizardStep ? 'bg-[#34C759]' : step === wizardStep ? 'bg-[#007AFF]' : 'bg-stone-100'}`} />
+                                    <span className={`text-[9px] font-bold uppercase tracking-wider ${step === wizardStep ? 'text-[#007AFF]' : step < wizardStep ? 'text-[#34C759]' : 'text-stone-300'}`}>
+                                        {step === 1 ? 'Identity' : step === 2 ? 'Role' : step === 3 ? 'Contact' : 'Access'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* ── Scrollable body ── */}
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: '#d1d5db transparent' }}>
+                            <AnimatePresence mode="wait">
+
+                                {/* Step 1 — Identity */}
+                                {wizardStep === 1 && (
+                                    <motion.div key="step1" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className={`rounded-xl border p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all ${formErrors.first_name ? 'border-red-300 bg-red-50' : 'border-stone-200'}`}>
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">First Name *</label>
+                                                <input value={formData.first_name} onChange={(e) => setFormData({ ...formData, first_name: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="John" />
+                                                {formErrors.first_name && <p className="text-[10px] text-red-500 mt-1">Required</p>}
+                                            </div>
+                                            <div className={`rounded-xl border p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all ${formErrors.last_name ? 'border-red-300 bg-red-50' : 'border-stone-200'}`}>
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Last Name *</label>
+                                                <input value={formData.last_name} onChange={(e) => setFormData({ ...formData, last_name: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="Doe" />
+                                                {formErrors.last_name && <p className="text-[10px] text-red-500 mt-1">Required</p>}
+                                            </div>
+                                        </div>
+                                        <div className={`rounded-xl border p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all ${formErrors.email ? 'border-red-300 bg-red-50' : 'border-stone-200'}`}>
+                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Email Address *</label>
+                                            <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="john.doe@famousgate.com" />
+                                            {formErrors.email && <p className="text-[10px] text-red-500 mt-1">Required</p>}
+                                        </div>
+                                        <div className={`rounded-xl border p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all ${formErrors.national_id ? 'border-red-300 bg-red-50' : 'border-stone-200'}`}>
+                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">National ID *</label>
+                                            <input value={formData.national_id} onChange={(e) => setFormData({ ...formData, national_id: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="e.g. 12345678" />
+                                            <p className="text-[10px] text-stone-400 mt-1">Used for ID card generation</p>
+                                            {formErrors.national_id && <p className="text-[10px] text-red-500 mt-1">Required</p>}
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {/* Step 2 — Role & Compensation */}
+                                {wizardStep === 2 && (
+                                    <motion.div key="step2" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Position / Title</label>
+                                                <input value={formData.position} onChange={(e) => setFormData({ ...formData, position: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="e.g. Head Chef" />
+                                            </div>
+                                            <div className={`rounded-xl border p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all ${formErrors.basic_salary ? 'border-red-300 bg-red-50' : 'border-stone-200'}`}>
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Monthly Salary (KES) *</label>
+                                                <input type="number" value={formData.basic_salary || ''} onChange={(e) => setFormData({ ...formData, basic_salary: Number(e.target.value) })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="25000" />
+                                                {formErrors.basic_salary && <p className="text-[10px] text-red-500 mt-1">Required</p>}
+                                            </div>
+                                        </div>
+                                        <div className={`rounded-xl border p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all ${formErrors.department ? 'border-red-300 bg-red-50' : 'border-stone-200'}`}>
+                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Department *</label>
+                                            <select value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 outline-none appearance-none cursor-pointer">
+                                                <option value="">Select department...</option>
+                                                {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                            </select>
+                                            {formErrors.department && <p className="text-[10px] text-red-500 mt-1">Required</p>}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Branch</label>
+                                                <select value={formData.branch_id} onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 outline-none appearance-none cursor-pointer">
+                                                    <option value="">Select branch...</option>
+                                                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Status</label>
+                                                <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })} className="w-full bg-transparent text-sm font-semibold text-stone-900 outline-none appearance-none cursor-pointer">
+                                                    <option value="active">Active</option>
+                                                    <option value="inactive">Inactive</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Immediate Supervisor</label>
+                                            <select value={formData.supervisor_id} onChange={(e) => setFormData({ ...formData, supervisor_id: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 outline-none appearance-none cursor-pointer">
+                                                <option value="">No Supervisor (Top Level)</option>
+                                                {staff.filter(s => s.id !== formData.id).map((s) => <option key={s.id} value={s.id}>{s.first_name} {s.last_name} — {s.role}</option>)}
+                                            </select>
+                                        </div>
+                                        {/* Statutory deductions */}
+                                        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+                                            <div className="px-4 py-3 border-b border-stone-100 bg-stone-50">
+                                                <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Statutory Deductions</p>
+                                            </div>
+                                            {[
+                                                { key: 'nssf_enabled', label: 'NSSF', desc: 'Social security savings' },
+                                                { key: 'shif_enabled', label: 'SHIF', desc: 'Health insurance fund' },
+                                                { key: 'housing_fund_enabled', label: 'Housing Fund', desc: 'Affordable housing levy' },
+                                            ].map(({ key, label, desc }, i, arr) => (
+                                                <label key={key} className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-stone-50 transition-colors ${i < arr.length - 1 ? 'border-b border-stone-100' : ''}`}>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-stone-800">{label}</p>
+                                                        <p className="text-xs text-stone-400">{desc}</p>
+                                                    </div>
+                                                    <div className={`relative w-11 h-6 rounded-full transition-colors ${(formData as any)[key] ? 'bg-[#34C759]' : 'bg-stone-200'}`} onClick={() => setFormData({ ...formData, [key]: !(formData as any)[key] })}>
+                                                        <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${(formData as any)[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {/* Step 3 — Contact & Emergency */}
+                                {wizardStep === 3 && (
+                                    <motion.div key="step3" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Phone Number</label>
+                                                <input value={formData.phone_number} onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="0706 782 828" />
+                                            </div>
+                                            <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Residential Address</label>
+                                                <input value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="Bomet, Kenya" />
+                                            </div>
+                                        </div>
+                                        <div className="rounded-xl border border-red-100 bg-red-50/40 overflow-hidden">
+                                            <div className="px-4 py-3 border-b border-red-100 flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-red-400" />
+                                                <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Emergency Contact</p>
+                                            </div>
+                                            <div className="p-4 space-y-3">
+                                                <div className="rounded-xl border border-stone-200 p-3.5 bg-white focus-within:border-[#007AFF] transition-all">
+                                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Full Name</label>
+                                                    <input value={formData.ec_name} onChange={(e) => setFormData({ ...formData, ec_name: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="Contact Name" />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="rounded-xl border border-stone-200 p-3.5 bg-white focus-within:border-[#007AFF] transition-all">
+                                                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Relationship</label>
+                                                        <input value={formData.ec_relationship} onChange={(e) => setFormData({ ...formData, ec_relationship: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="Spouse" />
+                                                    </div>
+                                                    <div className="rounded-xl border border-stone-200 p-3.5 bg-white focus-within:border-[#007AFF] transition-all">
+                                                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Phone</label>
+                                                        <input value={formData.ec_phone} onChange={(e) => setFormData({ ...formData, ec_phone: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 placeholder:text-stone-300 outline-none" placeholder="0700 000 000" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {/* Step 4 — System Access */}
+                                {wizardStep === 4 && (
+                                    <motion.div key="step4" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} className="space-y-4">
+                                        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+                                            <div className="px-4 py-3 border-b border-stone-100 bg-stone-50">
+                                                <p className="text-[10px] font-bold text-[#007AFF] uppercase tracking-wider">System & POS Access</p>
+                                            </div>
+                                            <div className="p-4 space-y-4">
+                                                <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">POS PIN (4–6 chars)</label>
+                                                    <input value={formData.pos_pin} onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })} maxLength={6} className="w-full bg-transparent text-sm font-mono font-bold text-stone-900 placeholder:text-stone-300 outline-none tracking-widest" placeholder="RXXX / BXXX / CXXX" />
+                                                    <p className="text-[10px] text-stone-400 mt-1.5">Waiters: RXXX · Bar: BXXX · Cashier: CXXX</p>
+                                                </div>
+                                                <div className="rounded-xl border border-stone-200 p-3.5 bg-stone-50 focus-within:bg-white focus-within:border-[#007AFF] transition-all">
+                                                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">Assigned Shift</label>
+                                                    <select value={formData.shift} onChange={(e) => setFormData({ ...formData, shift: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-stone-900 outline-none appearance-none cursor-pointer">
+                                                        <option value="morning">Morning</option>
+                                                        <option value="afternoon">Afternoon</option>
+                                                        <option value="night">Night</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 flex gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                <UserPlus className="h-4 w-4 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-semibold text-blue-800">Ready to onboard</p>
+                                                <p className="text-xs text-blue-600 mt-0.5 leading-relaxed">This will create a system user account and a staff profile for ID card generation. A welcome email will be sent to the provided address.</p>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                            </AnimatePresence>
+                        </div>
+
+                        {/* ── Footer navigation ── */}
+                        <div className="flex gap-3 px-6 py-4 border-t border-stone-100 bg-white flex-shrink-0">
+                            {wizardStep > 1 ? (
+                                <button onClick={() => setWizardStep(p => p - 1)} className="flex-1 py-2.5 rounded-xl border border-stone-200 text-stone-700 text-sm font-semibold hover:bg-stone-50 transition-colors">
+                                    Back
+                                </button>
+                            ) : (
+                                <div className="flex-1" />
+                            )}
+                            {wizardStep < 4 ? (
+                                <button
+                                    onClick={() => {
+                                        if (wizardStep === 1) {
+                                            const errors: any = {};
+                                            if (!formData.first_name) errors.first_name = true;
+                                            if (!formData.last_name) errors.last_name = true;
+                                            if (!formData.email) errors.email = true;
+                                            if (!formData.national_id) errors.national_id = true;
+                                            if (Object.keys(errors).length > 0) { setFormErrors(errors); toast.error('Fill in all required fields'); return; }
+                                        }
+                                        setFormErrors({});
+                                        setWizardStep(p => p + 1);
+                                    }}
+                                    className="flex-1 py-2.5 rounded-xl bg-[#007AFF] text-white text-sm font-semibold hover:bg-[#0062CC] transition-colors shadow-sm"
+                                >
+                                    Continue
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={addModalOpen ? handleCreateStaff : handleUpdateStaff}
+                                    disabled={isSubmitting}
+                                    className="flex-1 py-2.5 rounded-xl bg-[#34C759] text-white text-sm font-semibold hover:bg-[#2EB150] transition-colors shadow-sm disabled:opacity-60"
+                                >
+                                    {isSubmitting ? 'Saving...' : (addModalOpen ? 'Complete Onboarding' : 'Save Changes')}
+                                </button>
+                            )}
+                        </div>
+
+                    </DialogContent>
+                </Dialog>
+
                 {/* Archive Confirmation */}
                 <Dialog open={confirmArchiveOpen} onOpenChange={setConfirmArchiveOpen}>
                     <DialogContent className="max-w-[400px] bg-white p-6 rounded-ios-2xl border-none shadow-2xl">
                         <div className="text-center">
                             <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <Archive className="h-6 w-6 text-amber-500" />
+
                             </div>
                             <h3 className="text-lg font-bold text-stone-900">Archive/Terminate Personnel</h3>
                             <p className="text-stone-500 text-sm mt-2 font-medium">This will mark the employee as terminated and log it in their history.</p>
@@ -1103,6 +1378,13 @@ export default function HREmployeesPage() {
                     </DialogContent>
                 </Dialog>
 
+                {/* Add Adjustment Dialog */}
+                <AddAdjustmentDialog
+                    open={isAdjustmentDialogOpen}
+                    onOpenChange={setIsAdjustmentDialogOpen}
+                    onSuccess={() => {}}
+                    initialStaffId={adjustmentStaffId}
+                />
             </DashboardLayout>
         </ProtectedRoute>
     );

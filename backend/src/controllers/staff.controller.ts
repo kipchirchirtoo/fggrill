@@ -348,18 +348,31 @@ export const createStaffMember = async (
       return;
     }
 
+    // Normalize department to lowercase to accept both "Housekeeping" and "housekeeping"
+    const normalizedDepartment = (department || '').toLowerCase().replace(/[\s\-]/g, '_');
+
     // Validate department against allowed values
     const validDepartments = [
       'housekeeping', 'restaurant', 'reception', 'maintenance',
-      'finance', 'management', 'security', 'bar_lounge', 'administration', 'general'
+      'finance', 'management', 'security', 'bar_lounge', 'administration', 'general',
+      'front_office', 'store', 'logistics', 'it', 'kitchen', 'food_beverage',
+      'food_&_beverage', 'laundry', 'procurement', 'operations', 'hr', 'accounts',
+      'service/f&b', 'service_f&b'
     ];
-    if (!validDepartments.includes(department)) {
+    // Accept any department value — the departments table is the source of truth.
+    // Only reject if the department is completely empty.
+    if (!normalizedDepartment) {
       res.status(400).json({
         success: false,
         message: `Invalid department. Must be one of: ${validDepartments.join(', ')}`
       });
       return;
     }
+    // Use the lowercase normalized value going forward
+    const finalDepartment = validDepartments.includes(normalizedDepartment)
+      ? normalizedDepartment
+      : department; // Keep original if it's a custom value from the DB
+
 
     // Branch Manager staff limit enforcement (max 10 staff per branch)
     const callerRole = (req as any).user?.role;
@@ -382,7 +395,7 @@ export const createStaffMember = async (
     }
 
     // Generate Staff ID
-    const idNumber = await generateStaffId(staffBranchId, department);
+    const idNumber = await generateStaffId(staffBranchId, finalDepartment);
 
     // Create staff profile (NO user account created)
     const staffData: any = {
@@ -391,9 +404,9 @@ export const createStaffMember = async (
       email: email || null,
       phone: phone || null,
       national_id: staffNationalId,
-      department,
-      position: position || department,
-      role: position || department, // legacy 'role' column stores position
+      department: finalDepartment,
+      position: position || finalDepartment,
+      role: position || finalDepartment, // legacy 'role' column stores position
       shift: shift || 'morning',
       basic_salary: basic_salary ? parseFloat(basic_salary) : 0,
       start_date: start_date || new Date().toISOString().split('T')[0],
@@ -1539,29 +1552,56 @@ export const getLeaveRequests = async (
   try {
     const { staff_id, status, branch_id } = req.query;
 
+    // Step 1: fetch leave records without cross-table joins (no FK in schema cache)
     let query = supabase
       .from('staff_leave')
-      .select(`
-      *,
-      staff: staff_profiles(
-        id, department, status,
-        user: users(id, first_name, last_name, email)
-      ),
-        approver: users!approved_by(first_name, last_name)
-          `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (staff_id) query = query.eq('staff_id', staff_id);
     if (status) query = query.eq('status', status);
 
-    const { data, error } = await query;
+    const { data: leaves, error } = await query;
     if (error) throw error;
+    if (!leaves || leaves.length === 0) {
+      return res.status(200).json({ success: true, count: 0, data: [] }) as any;
+    }
 
-    res.status(200).json({
-      success: true,
-      count: data?.length || 0,
-      data
+    // Step 2: collect IDs for manual joins
+    const staffIds = [...new Set(leaves.map((l: any) => l.staff_id).filter(Boolean))];
+    const approverIds = [...new Set(leaves.map((l: any) => l.approved_by).filter(Boolean))];
+
+    const [profilesRes, approversRes] = await Promise.all([
+      staffIds.length
+        ? supabase.from('staff_profiles').select('id, department, status, user_id').in('id', staffIds as string[])
+        : { data: [] },
+      approverIds.length
+        ? supabase.from('users').select('id, first_name, last_name').in('id', approverIds as string[])
+        : { data: [] },
+    ]);
+
+    const userIds = [...new Set((profilesRes.data || []).map((p: any) => p.user_id).filter(Boolean))];
+    const usersRes = userIds.length
+      ? await supabase.from('users').select('id, first_name, last_name, email').in('id', userIds as string[])
+      : { data: [] };
+
+    const profileMap: Record<string, any> = Object.fromEntries((profilesRes.data || []).map((p: any) => [p.id, p]));
+    const userMap: Record<string, any> = Object.fromEntries((usersRes.data || []).map((u: any) => [u.id, u]));
+    const approverMap: Record<string, any> = Object.fromEntries((approversRes.data || []).map((u: any) => [u.id, u]));
+
+    // Step 3: stitch together
+    const data = leaves.map((leave: any) => {
+      const profile = profileMap[leave.staff_id] || null;
+      const user = profile ? (userMap[profile.user_id] || null) : null;
+      const approver = leave.approved_by ? (approverMap[leave.approved_by] || null) : null;
+      return {
+        ...leave,
+        staff: profile ? { ...profile, user } : null,
+        approver,
+      };
     });
+
+    res.status(200).json({ success: true, count: data.length, data });
   } catch (error) {
     next(error);
   }
@@ -1761,26 +1801,48 @@ export const getAttendanceReports = async (
   try {
     const { startDate, endDate, branchId, staffId } = req.query;
 
-    const { data: records, error } = await supabase
+    // Step 1: fetch attendance records without cross-table FK joins
+    let attQuery = supabase
       .from('staff_attendance')
-      .select(`
-          *,
-          staff: staff_profiles(
-            id,
-            branch_id,
-            rest_day,
-            user: users(first_name, last_name, department)
-          )
-            `)
+      .select('*')
       .order('attendance_date', { ascending: false });
 
+    if (startDate) attQuery = attQuery.gte('attendance_date', startDate as string);
+    if (endDate) attQuery = attQuery.lte('attendance_date', endDate as string);
+    if (staffId) attQuery = attQuery.eq('staff_id', staffId as string);
+
+    const { data: records, error } = await attQuery;
     if (error) throw error;
 
     let filtered = records || [];
-    if (startDate) filtered = filtered.filter(r => r.attendance_date >= startDate);
-    if (endDate) filtered = filtered.filter(r => r.attendance_date <= endDate);
-    if (branchId) filtered = filtered.filter(r => r.staff?.branch_id === branchId);
-    if (staffId) filtered = filtered.filter(r => r.staff_id === staffId);
+
+    // Step 2: manual joins for staff profiles + users
+    const staffIds = [...new Set(filtered.map((r: any) => r.staff_id).filter(Boolean))];
+    const [profilesRes] = await Promise.all([
+      staffIds.length
+        ? supabase.from('staff_profiles').select('id, branch_id, rest_day, user_id').in('id', staffIds as string[])
+        : { data: [] },
+    ]);
+
+    const profileMap: Record<string, any> = Object.fromEntries((profilesRes.data || []).map((p: any) => [p.id, p]));
+
+    // Filter by branch after joining
+    if (branchId) {
+      filtered = filtered.filter((r: any) => profileMap[r.staff_id]?.branch_id === branchId);
+    }
+
+    const userIds = [...new Set(Object.values(profileMap).map((p: any) => p.user_id).filter(Boolean))];
+    const usersRes = userIds.length
+      ? await supabase.from('users').select('id, first_name, last_name, department').in('id', userIds as string[])
+      : { data: [] };
+
+    const userMap: Record<string, any> = Object.fromEntries((usersRes.data || []).map((u: any) => [u.id, u]));
+
+    filtered = filtered.map((r: any) => {
+      const profile = profileMap[r.staff_id] || null;
+      const user = profile ? (userMap[profile.user_id] || null) : null;
+      return { ...r, staff: profile ? { ...profile, user } : null };
+    });
 
     // Compliance & Summaries
     const reports = filtered.map(rec => {

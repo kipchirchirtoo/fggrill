@@ -1,0 +1,188 @@
+{
+  "stock_requests_columns": [
+    {
+      "column_name": "id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "request_number",
+      "data_type": "character varying"
+    },
+    {
+      "column_name": "requesting_branch_id",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "requested_by",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "request_type",
+      "data_type": "character varying"
+    },
+    {
+      "column_name": "priority",
+      "data_type": "character varying"
+    },
+    {
+      "column_name": "reason",
+      "data_type": "text"
+    },
+    {
+      "column_name": "needed_by_date",
+      "data_type": "date"
+    },
+    {
+      "column_name": "status",
+      "data_type": "character varying"
+    },
+    {
+      "column_name": "reviewed_by",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "reviewed_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "review_notes",
+      "data_type": "text"
+    },
+    {
+      "column_name": "approved_quantity_notes",
+      "data_type": "text"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "auditor_id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "audited_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "audit_notes",
+      "data_type": "text"
+    }
+  ],
+  "stock_requests_fks": [
+    {
+      "constraint_name": "stock_requests_auditor_id_fkey",
+      "column_name": "auditor_id",
+      "foreign_table_name": "users",
+      "foreign_column_name": "id"
+    },
+    {
+      "constraint_name": "stock_requests_requested_by_fkey",
+      "column_name": "requested_by",
+      "foreign_table_name": "users",
+      "foreign_column_name": "id"
+    },
+    {
+      "constraint_name": "stock_requests_requesting_branch_id_fkey",
+      "column_name": "requesting_branch_id",
+      "foreign_table_name": "branches",
+      "foreign_column_name": "id"
+    },
+    {
+      "constraint_name": "stock_requests_reviewed_by_fkey",
+      "column_name": "reviewed_by",
+      "foreign_table_name": "users",
+      "foreign_column_name": "id"
+    }
+  ],
+  "audit_exceptions_columns": [
+    {
+      "column_name": "id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "audit_session_id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "exception_type",
+      "data_type": "text"
+    },
+    {
+      "column_name": "severity",
+      "data_type": "text"
+    },
+    {
+      "column_name": "description",
+      "data_type": "text"
+    },
+    {
+      "column_name": "amount",
+      "data_type": "numeric"
+    },
+    {
+      "column_name": "reference_type",
+      "data_type": "text"
+    },
+    {
+      "column_name": "reference_id",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "detected_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "resolved_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "resolved_by",
+      "data_type": "uuid"
+    },
+    {
+      "column_name": "resolution_notes",
+      "data_type": "text"
+    },
+    {
+      "column_name": "status",
+      "data_type": "text"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "column_name": "branch_id",
+      "data_type": "integer"
+    },
+    {
+      "column_name": "raised_by",
+      "data_type": "uuid"
+    }
+  ],
+  "audit_exceptions_fks": [
+    {
+      "constraint_name": "audit_exceptions_audit_session_id_fkey",
+      "column_name": "audit_session_id",
+      "foreign_table_name": "audit_night_sessions",
+      "foreign_column_name": "id"
+    },
+    {
+      "constraint_name": "audit_exceptions_branch_id_fkey",
+      "column_name": "branch_id",
+      "foreign_table_name": "branches",
+      "foreign_column_name": "id"
+    },
+    {
+      "constraint_name": "audit_exceptions_raised_by_fkey",
+      "column_name": "raised_by",
+      "foreign_table_name": "users",
+      "foreign_column_name": "id"
+    }
+  ]
+}

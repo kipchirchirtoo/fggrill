@@ -35,7 +35,6 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { storeAPI } from '@/lib/api';
 import { format } from 'date-fns';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface BranchStock {
   id: string;

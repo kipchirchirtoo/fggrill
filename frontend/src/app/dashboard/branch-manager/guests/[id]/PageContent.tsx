@@ -7,6 +7,7 @@ import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { guestAPI } from '@/lib/api';
+import { API_URL } from '@/lib/config';
 import { ArrowLeft, User, Mail, Phone, MapPin, Calendar, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -64,7 +65,6 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
 
   // Helper function for API calls
   async function fetchAPI(endpoint: string, options?: RequestInit) {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
     const headers = {
       'Content-Type': 'application/json',
       ...(typeof window !== 'undefined' && localStorage.getItem('token')

@@ -1089,9 +1089,12 @@ function createWindow() {
                 const responseHeaders = details.responseHeaders || {};
 
                 if (origin.startsWith('pos://')) {
-                    Object.entries(CORS_HEADERS).forEach(([k, v]) => {
-                        responseHeaders[k] = [v];
-                    });
+                    // Dynamically allow the actual origin instead of hardcoding terminal.html
+                    responseHeaders['Access-Control-Allow-Origin'] = [origin];
+                    responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
+                    responseHeaders['Access-Control-Allow-Headers'] = ['Content-Type, Authorization, X-Requested-With, Accept, Origin, x-branch-id'];
+                    responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
+                    responseHeaders['Access-Control-Max-Age'] = ['86400'];
                 }
 
                 callback({ responseHeaders });
@@ -1225,90 +1228,64 @@ app.on('ready', () => {
     const ses = session.fromPartition('persist:pos-cache');
     ses.protocol.registerFileProtocol('pos', (request, callback) => {
         try {
-            console.log(`[Protocol] Request: ${request.url}`);
             const url = new URL(request.url);
             let pathname = url.pathname;
             const hostname = url.hostname;
 
-            // Handle pos://terminal.html/path/to/page format
-            // The hostname is "terminal.html" and pathname is the actual route
+            // 1. Skip interception for API calls (let them be handled by network)
+            if (pathname.startsWith('/api/')) {
+                return callback({ error: -3 }); // ERR_ABORTED - let it fall through
+            }
+
+            // 2. Resolve relative path
             let relativePath = pathname;
-            
-            // If hostname is terminal.html, treat pathname as the route
             if (hostname === 'terminal.html') {
-                // Remove leading slash
                 relativePath = pathname.startsWith('/') ? pathname.substring(1) : pathname;
             } else if (hostname && hostname !== 'localhost') {
-                // Legacy format: pos://path/to/page
                 relativePath = hostname + pathname;
             }
 
-            // Clean up path
+            // Clean up path (remove leading slash, etc.)
             if (relativePath.startsWith('/')) relativePath = relativePath.substring(1);
             if (!relativePath) relativePath = 'terminal.html';
 
             // Convert to filesystem path
             let finalPath = path.join(FRONTEND_OUT_PATH, relativePath.replace(/\//g, path.sep));
 
-            console.log(`[Protocol] Resolving: ${relativePath} -> ${finalPath}`);
+            // 3. Resolution logic:
+            // Check for exact file, then .html, then index.html
+            const tryResolve = (filePath) => {
+                if (fs.existsSync(filePath) && !fs.lstatSync(filePath).isDirectory()) return filePath;
+                if (!filePath.endsWith('.html') && fs.existsSync(filePath + '.html')) return filePath + '.html';
+                const indexPath = path.join(filePath, 'index.html');
+                if (fs.existsSync(indexPath)) return indexPath;
+                return null;
+            };
 
-            // Resolution logic:
-            // 1. Check if exact file exists
-            // 2. Try adding .html extension
-            // 3. Check for index.html in directory
-            // 4. For Next.js routes, try the HTML file in the route folder
-            // 5. Fallback to terminal.html for SPA routing
+            let resolvedPath = tryResolve(finalPath);
 
-            let resolved = false;
-
-            // Check if it's a directory
-            let isDir = false;
-            try {
-                if (fs.existsSync(finalPath) && fs.lstatSync(finalPath).isDirectory()) {
-                    isDir = true;
+            // 4. SPA Fallback logic:
+            // If not resolved, try falling back to parent directory's HTML (for Next.js dynamic routes)
+            if (!resolvedPath) {
+                const parts = relativePath.split('/');
+                if (parts[0] === 'dashboard' && parts.length > 1) {
+                    // Try dashboard.html or dashboard/index.html
+                    resolvedPath = tryResolve(path.join(FRONTEND_OUT_PATH, 'dashboard'));
                 }
-            } catch (e) { }
-
-            // Try exact match first
-            if (fs.existsSync(finalPath) && !isDir) {
-                resolved = true;
-                console.log(`[Protocol] ✓ Exact match: ${finalPath}`);
-            }
-            // Try with .html extension
-            else if (fs.existsSync(finalPath + '.html')) {
-                finalPath += '.html';
-                resolved = true;
-                console.log(`[Protocol] ✓ Found with .html: ${finalPath}`);
-            }
-            // Check for index.html in directory
-            else if (fs.existsSync(path.join(finalPath, 'index.html'))) {
-                finalPath = path.join(finalPath, 'index.html');
-                resolved = true;
-                console.log(`[Protocol] ✓ Found index.html: ${finalPath}`);
-            }
-            // For Next.js app router: dashboard/cashier -> dashboard/cashier.html
-            else if (!path.extname(finalPath)) {
-                // Try the route as a file with .html
-                const routeHtml = finalPath + '.html';
-                if (fs.existsSync(routeHtml)) {
-                    finalPath = routeHtml;
-                    resolved = true;
-                    console.log(`[Protocol] ✓ Found route HTML: ${finalPath}`);
-                } else {
-                    // Fallback to terminal.html for SPA routing
-                    console.warn(`[Protocol] ⚠ Path not found: ${finalPath}, falling back to terminal.html`);
-                    finalPath = path.join(FRONTEND_OUT_PATH, 'terminal.html');
-                    resolved = true;
+                
+                // If still not resolved, try the root index.html instead of terminal.html
+                if (!resolvedPath) {
+                    resolvedPath = tryResolve(path.join(FRONTEND_OUT_PATH, 'index.html'));
                 }
             }
 
-            if (!resolved) {
+            if (resolvedPath) {
+                console.log(`[Protocol] ✓ Resolved: ${request.url} -> ${resolvedPath}`);
+                callback({ path: resolvedPath });
+            } else {
                 console.error(`[Protocol] ✗ Could not resolve: ${request.url}`);
-                finalPath = path.join(FRONTEND_OUT_PATH, 'terminal.html');
+                callback({ error: -6 }); // ERR_FILE_NOT_FOUND
             }
-
-            console.log(`[Protocol] Final: ${request.url} -> ${finalPath}`);
-            callback({ path: finalPath });
         } catch (err) {
             console.error(`[Protocol] Error:`, err);
             callback({ error: -2 }); // ERR_FAILED

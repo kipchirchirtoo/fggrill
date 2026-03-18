@@ -16,8 +16,6 @@ interface ImportModalProps {
   onClose: () => void;
 }
 
-// API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const [isLoading, setIsLoading] = useState(false);

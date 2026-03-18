@@ -43,6 +43,8 @@ export interface IOSInputProps
   error?: string;
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
   rightElement?: React.ReactNode;
   hideLabel?: boolean;
   showLabelOnFocus?: boolean;
@@ -59,6 +61,8 @@ export const IOSInput = React.forwardRef<HTMLInputElement, IOSInputProps>(
     error,
     icon,
     iconPosition = 'left',
+    leftIcon,
+    rightIcon,
     rightElement,
     variant = error ? 'error' : 'default',
     size,
@@ -122,9 +126,9 @@ export const IOSInput = React.forwardRef<HTMLInputElement, IOSInputProps>(
             </label>
           )}
           
-          {icon && iconPosition === 'left' && (
+          {(leftIcon || (icon && iconPosition === 'left')) && (
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-ios-gray-1 dark:text-ios-gray-3">
-              {icon}
+              {leftIcon || icon}
             </div>
           )}
           
@@ -132,8 +136,8 @@ export const IOSInput = React.forwardRef<HTMLInputElement, IOSInputProps>(
             ref={ref}
             className={cn(
               inputVariants({ variant, size, rounded, filled }),
-              icon && iconPosition === 'left' && 'pl-9',
-              icon && iconPosition === 'right' && 'pr-10',
+              ( (icon && iconPosition === 'left') || leftIcon ) && 'pl-9',
+              ( (icon && iconPosition === 'right') || rightIcon ) && 'pr-10',
               rightElement && 'pr-12',
               floatingLabel && (isFocused || hasValue) && 'pt-6 pb-2',
               floatingLabel && !(isFocused || hasValue) && 'pt-4 pb-4',
@@ -145,9 +149,9 @@ export const IOSInput = React.forwardRef<HTMLInputElement, IOSInputProps>(
             {...props}
           />
           
-          {icon && iconPosition === 'right' && (
+          {(rightIcon || (icon && iconPosition === 'right')) && (
             <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-ios-gray-1 dark:text-ios-gray-3">
-              {icon}
+              {rightIcon || icon}
             </div>
           )}
           

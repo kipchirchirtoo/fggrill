@@ -1442,6 +1442,213 @@ export const getStockLevelsVerification = async (req: Request, res: Response, ne
     next(error);
   }
 };
+export const exportStockLedger = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const ExcelJS = require('exceljs');
+    const { branch_id } = req.query;
+
+    // Fetch branch name
+    let branchName = 'All Branches';
+    if (branch_id && branch_id !== '0') {
+      const { data: branch } = await supabase.from('branches').select('name').eq('id', branch_id).single();
+      if (branch) branchName = branch.name;
+    }
+
+    // Fetch stock
+    let stockQuery = supabase.from('branch_stock').select('*');
+    if (branch_id && branch_id !== '0') stockQuery = stockQuery.eq('branch_id', branch_id);
+    const { data: rawStock, error: stockError } = await stockQuery;
+    if (stockError) throw stockError;
+
+    // Fetch item details
+    const itemSkus = [...new Set(rawStock?.map((s: any) => s.item_sku).filter(Boolean))];
+    const { data: items } = await supabase
+      .from('simple_items')
+      .select('id, item_name, sku, unit_of_measure, category, cost_price')
+      .in('sku', itemSkus as string[]);
+
+    const itemMap: Record<string, any> = Object.fromEntries(
+      items?.map((i: any) => [i.sku, { name: i.item_name, unit: i.unit_of_measure, category: i.category, cost_price: i.cost_price }]) || []
+    );
+
+    // Fetch 30-day movements for variance
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    let movQuery = supabase.from('branch_stock_movements').select('*').gte('created_at', thirtyDaysAgo.toISOString());
+    if (branch_id && branch_id !== '0') movQuery = movQuery.eq('branch_id', branch_id);
+    const { data: movements } = await movQuery;
+
+    // Build workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'FamousGate Hotels';
+    workbook.created = new Date();
+
+    const ws = workbook.addWorksheet('Stock Ledger', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
+    });
+
+    // ── Title block ──────────────────────────────────────────────────────────
+    ws.mergeCells('A1:L1');
+    const titleCell = ws.getCell('A1');
+    titleCell.value = 'FAMOUSGATE HOTELS — STOCK LEDGER REPORT';
+    titleCell.font = { name: 'Calibri', bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(1).height = 36;
+
+    ws.mergeCells('A2:L2');
+    const subCell = ws.getCell('A2');
+    subCell.value = `Branch: ${branchName}   |   Generated: ${new Date().toLocaleString()}   |   Period: Last 30 Days`;
+    subCell.font = { name: 'Calibri', italic: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E6DA4' } };
+    subCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(2).height = 22;
+
+    ws.addRow([]); // spacer row 3
+
+    // ── Column definitions ───────────────────────────────────────────────────
+    ws.columns = [
+      { key: 'name',          width: 32 },
+      { key: 'sku',           width: 18 },
+      { key: 'category',      width: 18 },
+      { key: 'unit',          width: 12 },
+      { key: 'systemStock',   width: 16 },
+      { key: 'theoretical',   width: 18 },
+      { key: 'variance',      width: 14 },
+      { key: 'variancePct',   width: 14 },
+      { key: 'costPrice',     width: 14 },
+      { key: 'varianceValue', width: 18 },
+      { key: 'status',        width: 14 },
+      { key: 'lastMovement',  width: 18 },
+    ];
+
+    // ── Header row (row 4) ───────────────────────────────────────────────────
+    const headers = ['Item Name', 'SKU', 'Category', 'Unit', 'System Stock', 'Theoretical Stock',
+      'Variance', 'Variance %', 'Cost Price (KES)', 'Variance Value (KES)', 'Status', 'Last Movement'];
+
+    const headerRow = ws.getRow(4);
+    headers.forEach((h, i) => {
+      const cell = headerRow.getCell(i + 1);
+      cell.value = h;
+      cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF2E6DA4' } },
+        bottom: { style: 'medium', color: { argb: 'FFFFFFFF' } },
+        left: { style: 'thin', color: { argb: 'FF2E6DA4' } },
+        right: { style: 'thin', color: { argb: 'FF2E6DA4' } },
+      };
+    });
+    headerRow.height = 30;
+
+    // ── Data rows ────────────────────────────────────────────────────────────
+    let rowIndex = 5;
+    let flaggedCount = 0;
+    let totalVarianceValue = 0;
+
+    (rawStock || []).forEach((stock: any) => {
+      const item = itemMap[stock.item_sku] || {};
+      const itemMovements = (movements || []).filter((m: any) => m.item_sku === stock.item_sku && m.branch_id === stock.branch_id);
+
+      const wastage = itemMovements
+        .filter((m: any) => ['WASTAGE', 'DAMAGE', 'LOSS'].includes(m.movement_type?.toUpperCase()))
+        .reduce((sum: number, m: any) => sum + Number(m.quantity || 0), 0);
+
+      const currentQty = Number(stock.quantity || 0);
+      const theoreticalQty = currentQty + wastage;
+      const variance = wastage;
+      const variancePct = currentQty > 0 ? (variance / currentQty) * 100 : 0;
+      const costPrice = Number(item.cost_price || 0);
+      const varianceValue = Math.abs(variance) * costPrice;
+      const isFlagged = variance > 0;
+      const lastMov = itemMovements[0]?.created_at ? new Date(itemMovements[0].created_at).toLocaleDateString() : 'N/A';
+
+      if (isFlagged) { flaggedCount++; totalVarianceValue += varianceValue; }
+
+      const isEven = (rowIndex % 2 === 0);
+      const rowBg = isFlagged ? 'FFFFF3CD' : (isEven ? 'FFF5F9FF' : 'FFFFFFFF');
+
+      const row = ws.getRow(rowIndex);
+      const values = [
+        item.name || stock.item_sku || '',
+        stock.item_sku || '',
+        item.category || 'General',
+        item.unit || 'Unit',
+        currentQty,
+        parseFloat(theoreticalQty.toFixed(2)),
+        parseFloat(variance.toFixed(2)),
+        parseFloat(variancePct.toFixed(2)),
+        parseFloat(costPrice.toFixed(2)),
+        parseFloat(varianceValue.toFixed(2)),
+        isFlagged ? 'Flagged' : 'Balanced',
+        lastMov,
+      ];
+
+      values.forEach((val, i) => {
+        const cell = row.getCell(i + 1);
+        cell.value = val;
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+        cell.font = { name: 'Calibri', size: 10 };
+        cell.border = {
+          top: { style: 'hair', color: { argb: 'FFD0D7E0' } },
+          bottom: { style: 'hair', color: { argb: 'FFD0D7E0' } },
+          left: { style: 'hair', color: { argb: 'FFD0D7E0' } },
+          right: { style: 'hair', color: { argb: 'FFD0D7E0' } },
+        };
+
+        // Numeric formatting
+        if ([4, 5, 6].includes(i)) { cell.numFmt = '#,##0.00'; cell.alignment = { horizontal: 'right' }; }
+        if (i === 7) { cell.numFmt = '#,##0.00"%"'; cell.alignment = { horizontal: 'right' }; }
+        if ([8, 9].includes(i)) { cell.numFmt = '"KES "#,##0.00'; cell.alignment = { horizontal: 'right' }; }
+
+        // Status cell colour
+        if (i === 10) {
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: isFlagged ? 'FF9B1C1C' : 'FF166534' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isFlagged ? 'FFFEE2E2' : 'FFD1FAE5' } };
+          cell.alignment = { horizontal: 'center' };
+        }
+
+        // Item name left-align
+        if (i === 0) { cell.alignment = { horizontal: 'left', wrapText: true }; }
+      });
+
+      row.height = 20;
+      rowIndex++;
+    });
+
+    // ── Summary row ──────────────────────────────────────────────────────────
+    ws.addRow([]);
+    rowIndex++;
+    const summaryRow = ws.getRow(rowIndex);
+    ws.mergeCells(`A${rowIndex}:D${rowIndex}`);
+    const sumLabel = summaryRow.getCell(1);
+    sumLabel.value = `SUMMARY  |  Total Items: ${rawStock?.length || 0}   Flagged: ${flaggedCount}   Balanced: ${(rawStock?.length || 0) - flaggedCount}`;
+    sumLabel.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    sumLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
+    sumLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    const sumValCell = summaryRow.getCell(10);
+    sumValCell.value = parseFloat(totalVarianceValue.toFixed(2));
+    sumValCell.numFmt = '"KES "#,##0.00';
+    sumValCell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    sumValCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
+    sumValCell.alignment = { horizontal: 'right', vertical: 'middle' };
+    summaryRow.height = 26;
+
+    // ── Freeze header ────────────────────────────────────────────────────────
+    ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 4, activeCell: 'A5' }];
+
+    // ── Stream response ──────────────────────────────────────────────────────
+    const filename = `stock_ledger_${branchName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    next(error);
+  }
+}
 
 /**
  * F. Branch Orders Verification
@@ -1734,7 +1941,7 @@ export const getBarStockAudits = async (req: Request, res: Response, next: NextF
 
     let query = supabase
       .from('stock_counts')
-      .select('*, items:stock_count_items(*), branch:branches(name), user:users!fk_stock_counts_counted_by(first_name, last_name)')
+      .select('*, items:stock_count_items(*), branch:branches(name)')
       .order('created_at', { ascending: false });
 
     if (branch_id) query = query.eq('branch_id', branch_id);
@@ -1743,30 +1950,55 @@ export const getBarStockAudits = async (req: Request, res: Response, next: NextF
     const { data: audits, error } = await query;
     if (error) throw error;
 
-    // Since there is no formal relationship between stock_count_items and restaurant_bar_inventory in the schema,
-    // we fetch the drink names manually here.
-    const drinkIds = new Set<string>();
+    // Fetch user names separately (no reliable FK in schema cache)
+    const userIds = new Set<string>();
     audits?.forEach((audit: any) => {
-      audit.items?.forEach((item: any) => {
-        if (item.item_id) drinkIds.add(item.item_id);
-      });
+      if (audit.counted_by) userIds.add(audit.counted_by);
     });
 
-    if (drinkIds.size > 0) {
-      const { data: drinks } = await supabase
-        .from('restaurant_bar_inventory')
-        .select('id, name')
-        .in('id', Array.from(drinkIds));
+    if (userIds.size > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', Array.from(userIds));
 
-      const drinkMap = (drinks || []).reduce((acc: any, drink: any) => {
-        acc[drink.id] = drink.name;
+      const userMap = (users || []).reduce((acc: any, u: any) => {
+        acc[u.id] = { first_name: u.first_name, last_name: u.last_name };
         return acc;
       }, {});
 
       audits?.forEach((audit: any) => {
+        if (audit.counted_by && userMap[audit.counted_by]) {
+          audit.user = userMap[audit.counted_by];
+        }
+      });
+    }
+
+    // Fetch item names — item_id can reference either restaurant_bar_inventory or store_items
+    const itemIds = new Set<string>();
+    audits?.forEach((audit: any) => {
+      audit.items?.forEach((item: any) => {
+        if (item.item_id) itemIds.add(item.item_id);
+      });
+    });
+
+    if (itemIds.size > 0) {
+      const idArray = Array.from(itemIds);
+
+      // Try both tables in parallel
+      const [{ data: barItems }, { data: storeItems }] = await Promise.all([
+        supabase.from('restaurant_bar_inventory').select('id, name').in('id', idArray),
+        supabase.from('store_items').select('id, name').in('id', idArray),
+      ]);
+
+      const itemMap: Record<string, string> = {};
+      (barItems || []).forEach((d: any) => { itemMap[d.id] = d.name; });
+      (storeItems || []).forEach((d: any) => { itemMap[d.id] = d.name; });
+
+      audits?.forEach((audit: any) => {
         audit.items?.forEach((item: any) => {
-          if (item.item_id && drinkMap[item.item_id]) {
-            item.drink = { name: drinkMap[item.item_id] };
+          if (item.item_id && itemMap[item.item_id]) {
+            item.drink = { name: itemMap[item.item_id] };
           }
         });
       });

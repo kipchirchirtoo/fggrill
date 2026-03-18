@@ -19,7 +19,6 @@ import { formatDate } from '@/lib/date-utils';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface PurchaseOrder {
   id: string;
