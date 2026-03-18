@@ -78,9 +78,11 @@ initializeApp().then(({ app, httpServer }) => {
         'http://localhost:3001',
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001',
+        'https://famousgate.hirall.com',
         'https://kyogong.hirall.com',
         'https://api.hirall.com',
-        'https://services.hirall.com'
+        'https://services.hirall.com',
+        'pos://terminal.html' // Electron POS app
       ];
 
       // Add FRONTEND_URL from env if it exists
@@ -112,6 +114,11 @@ initializeApp().then(({ app, httpServer }) => {
 
       // Allow famousgatehotels.com and its subdomains
       if (origin.match(/^https:\/\/(www\.)?famousgatehotels\.com$/)) {
+        return callback(null, true);
+      }
+
+      // Allow Electron custom protocol origins (pos://, app://, etc.)
+      if (origin.match(/^(pos|app):\/\//)) {
         return callback(null, true);
       }
 

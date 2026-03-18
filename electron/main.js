@@ -52,7 +52,7 @@ if (isDev) {
     app.commandLine.appendSwitch('allow-insecure-localhost');
 }
 
-const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://kyogong.hirall.com';
+const DOMAIN_URL = isDev ? 'http://127.0.0.1:3001' : 'https://famousgate.hirall.com';
 const API_BASE_URL = isDev ? 'http://127.0.0.1:5000' : 'https://api.hirall.com';
 const TERMINAL_PATH = '/terminal';
 const CACHE_DIR = path.join(app.getPath('userData'), 'page-cache');
@@ -1072,38 +1072,45 @@ function createWindow() {
         '*://api.hirall.com/*'
     ];
 
+    const CORS_HEADERS = {
+        'Access-Control-Allow-Origin': 'pos://terminal.html',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, PATCH, DELETE',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400',
+    };
+
     const setupSessionCORS = (ses) => {
-        ses.webRequest.onBeforeSendHeaders(
-            { urls: corsUrls },
+        ses.webRequest.onHeadersReceived(
+            { urls: ['*://api.hirall.com/*'] },
             (details, callback) => {
-                if (isDev) {
-                    // For Private Network Access (PNA) preflights
-                    details.requestHeaders['Access-Control-Request-Private-Network'] = 'true';
+                const requestHeaders = details.requestHeaders || {};
+                const origin = requestHeaders['Origin'] || requestHeaders['origin'] || '';
+                const responseHeaders = details.responseHeaders || {};
+
+                if (origin.startsWith('pos://')) {
+                    Object.entries(CORS_HEADERS).forEach(([k, v]) => {
+                        responseHeaders[k] = [v];
+                    });
                 }
-                callback({ requestHeaders: details.requestHeaders });
+
+                callback({ responseHeaders });
             }
         );
+    };
 
-        ses.webRequest.onHeadersReceived(
-            { urls: corsUrls },
+    // Handle OPTIONS preflight by intercepting before the request is sent
+    // and returning a synthetic 200 response with CORS headers
+    const setupPreflightHandler = (ses) => {
+        ses.webRequest.onBeforeRequest(
+            { urls: ['*://api.hirall.com/*'] },
             (details, callback) => {
-                if (details.responseHeaders) {
-                    const requestHeaders = details.requestHeaders || {};
-                    const origin = requestHeaders['Origin'] || requestHeaders['origin'];
-                    
-                    // Allow CORS for our custom protocol and in dev mode
-                    if (isDev || (origin && origin.startsWith('pos://'))) {
-                        details.responseHeaders['Access-Control-Allow-Origin'] = [origin || '*'];
-                        details.responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
-                        details.responseHeaders['Access-Control-Allow-Headers'] = ['*'];
-                        details.responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
-                        
-                        if (isDev) {
-                            details.responseHeaders['Access-Control-Allow-Private-Network'] = ['true'];
-                        }
-                    }
+                if (details.method === 'OPTIONS') {
+                    // We can't return a synthetic response here directly,
+                    // but we can use net.f
                 }
-                callback({ responseHeaders: details.responseHeaders });
+
+                callback({ responseHeaders });
             }
         );
     };
