@@ -3,14 +3,14 @@ name: Build and Release Electron App
 on:
   push:
     branches:
-      - main  # Adjust this to your main branch name
-  workflow_dispatch: # Allow manual triggers
+      - main
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
     permissions:
-      contents: write  # Required to create releases
+      contents: write
 
     steps:
       - name: Checkout Code
@@ -39,9 +39,53 @@ jobs:
           npm run build
           cd ..
 
-      - name: Build and Publish Electron
+      - name: Build and Publish Electron (Windows)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_HTTP_REQUEST_RETRIES: 5
           ELECTRON_BUILDER_HTTP_REQUEST_RETRY_MILLISECONDS: 60000
         run: npx electron-builder build --win --publish always
+
+  build-linux:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm fakeroot dpkg
+
+      - name: Install Root Dependencies
+        run: npm install
+
+      - name: Build Backend
+        run: |
+          cd backend
+          npm install
+          npm run build
+          cd ..
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+
+      - name: Build and Publish Electron (Linux)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_BUILDER_HTTP_REQUEST_RETRIES: 5
+          ELECTRON_BUILDER_HTTP_REQUEST_RETRY_MILLISECONDS: 60000
+        run: npx electron-builder build --linux --publish always

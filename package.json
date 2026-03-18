@@ -70,6 +70,26 @@
       "icon": "frontend/public/fglogo.ico",
       "publisherName": "HIRALL"
     },
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "Utility",
+      "maintainer": "HIRALL <info@kyogong.com>"
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1"
+      ]
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
