@@ -1,0 +1,69 @@
+﻿python : Error 
+fetching revenue 
+reconciliation: 
+{'code': '42703', 
+'details': None, 
+'hint': None, 
+'message': 'column pos_
+transactions.amount 
+does not exist'}
+At line:1 char:1
++ python python-service
+s/test_revenue_reconcil
+iation.py > 
+python-servic ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Error fetchin   
+ g ...oes not exist    
+'}:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+ERROR:reports.database_
+fetcher:Error fetching 
+AI insights: 404 
+NOT_FOUND. {'error': 
+{'code': 404, 
+'message': 'models/gemi
+ni-2.0-flash-exp is 
+not found for API 
+version v1beta, or is 
+not supported for 
+generateContent. Call 
+ListModels to see the 
+list of available 
+models and their 
+supported methods.', 
+'status': 'NOT_FOUND'}}
+
+=== Testing Revenue Reconciliation Report ===
+Fetching data for 2025-11-17 to 2026-03-19...
+Total Revenue (Payments): 0
+Total Sales (Orders/Rooms): 637665.0
+Variance: 0
+Transactions Count: 0
+Cashier Summaries: 0
+Departments: {
+  "restaurant": 0,
+  "bar": 0,
+  "accommodation": 0,
+  "events": 0,
+  "pos": 0,
+  "pool": 0,
+  "other": 0
+}
+Payment Modes: {
+  "cash": 0,
+  "mpesa": 0,
+  "card": 0,
+  "other": 0
+}
+
+WARNING: No payment data found!

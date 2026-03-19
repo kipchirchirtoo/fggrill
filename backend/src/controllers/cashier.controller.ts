@@ -464,7 +464,8 @@ export const getBillDetails = async (
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bookingId);
 
         if (isUUID) {
-            let query = supabase
+            // 1. Check if it's a hotel reservation
+            let hotelQuery = supabase
                 .from('reservations')
                 .select(`
                     *,
@@ -473,12 +474,142 @@ export const getBillDetails = async (
                 .eq('id', bookingId);
 
             if (req.user?.branch_id) {
-                query = query.eq('room.branch_id', req.user.branch_id);
+                hotelQuery = hotelQuery.eq('room.branch_id', req.user.branch_id);
             }
 
-            const { data: booking, error: bookingError } = await query.single();
+            const { data: booking, error: bookingError } = await hotelQuery.maybeSingle(); // Changed to maybeSingle to avoid 404 throw early
             if (!bookingError && booking) {
                 await fetchHotelBillResponse(booking, res);
+                return;
+            }
+
+            // 2. Check shift_transactions (Kyogong)
+            let kyogongQuery = supabase
+                .from('shift_transactions')
+                .select('*, items:shift_transaction_items(*), branch:branches(name)')
+                .eq('id', bookingId);
+
+            if (req.user?.branch_id) kyogongQuery = kyogongQuery.eq('branch_id', req.user.branch_id);
+            const { data: tx } = await kyogongQuery.maybeSingle();
+            if (tx) {
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'kyogong',
+                        order: {
+                            id: tx.id,
+                            order_number: tx.transaction_number,
+                            guest_name: tx.customer_name || 'Walk-in',
+                            status: tx.status,
+                            service_category: tx.service_category,
+                            items: tx.items?.map((item: any) => ({
+                                name: item.item_name,
+                                quantity: item.quantity,
+                                price: item.unit_price,
+                                total: item.total_price
+                            }))
+                        },
+                        financials: {
+                            total_amount: tx.total_amount,
+                            amount_paid: tx.payment_method === 'BILL' ? 0 : tx.total_amount,
+                            balance: tx.payment_method === 'BILL' ? tx.total_amount : 0,
+                            currency: 'KES'
+                        },
+                        payment_status: tx.payment_method === 'BILL' ? 'unpaid' : 'paid'
+                    }
+                });
+                return;
+            }
+
+            // 3. Check unpaid_bills (Manual)
+            let billQuery = supabase.from('unpaid_bills').select('*').eq('id', bookingId);
+            if (req.user?.branch_id) billQuery = billQuery.eq('branch_id', req.user.branch_id);
+            const { data: bill } = await billQuery.maybeSingle();
+            if (bill) {
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'unpaid_bill',
+                        bill_type: bill.bill_type,
+                        revenue_type: bill.revenue_type || bill.bill_type,
+                        bill: {
+                            id: bill.id,
+                            bill_number: bill.bill_number,
+                            customer_name: bill.customer_name,
+                            room_number: bill.room_number,
+                            status: bill.status,
+                            due_date: bill.due_date,
+                            remarks: bill.remarks
+                        },
+                        financials: {
+                            total_amount: bill.total_amount,
+                            amount_paid: bill.paid_amount || 0,
+                            balance: bill.balance_amount || (bill.total_amount - (bill.paid_amount || 0)),
+                            currency: 'KES'
+                        }
+                    }
+                });
+                return;
+            }
+
+            // 4. Check accounting_ar_invoices
+            const { data: arInvoice } = await supabase.from('accounting_ar_invoices')
+                .select('*, customer:accounting_customers(id, customer_name, email, phone)')
+                .eq('id', bookingId).maybeSingle();
+            if (arInvoice) {
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'invoice',
+                        source: 'accounting',
+                        invoice: {
+                            id: arInvoice.id,
+                            invoice_number: arInvoice.invoice_number,
+                            customer_name: arInvoice.customer?.customer_name || 'Walk-in',
+                            status: arInvoice.status,
+                            items: (arInvoice.items || []).map((item: any) => ({
+                                name: item.description || item.item_name || 'Item',
+                                quantity: item.quantity || item.qty || 1,
+                                price: item.unit_price || item.unitPrice || 0,
+                                total: item.total_amount || item.totalAmount || 0
+                            }))
+                        },
+                        financials: {
+                            total_amount: arInvoice.total_amount,
+                            amount_paid: Number(arInvoice.total_amount) - Number(arInvoice.balance),
+                            balance: arInvoice.balance,
+                            currency: 'KES'
+                        },
+                        payment_status: arInvoice.status === 'paid' ? 'paid' : (arInvoice.balance < arInvoice.total_amount ? 'partial' : 'unpaid')
+                    }
+                });
+                return;
+            }
+
+            // 5. Check finance_invoices
+            const { data: finInvoice } = await supabase.from('finance_invoices').select('*').eq('id', bookingId).maybeSingle();
+            if (finInvoice) {
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'invoice',
+                        source: 'finance',
+                        invoice: {
+                            id: finInvoice.id,
+                            invoice_number: finInvoice.invoice_number,
+                            customer_name: finInvoice.customer_name || 'Walk-in',
+                            status: finInvoice.status,
+                            items: []
+                        },
+                        financials: {
+                            total_amount: finInvoice.total_amount,
+                            amount_paid: finInvoice.paid_amount || 0,
+                            balance: Number(finInvoice.total_amount) - Number(finInvoice.paid_amount || 0),
+                            currency: 'KES'
+                        },
+                        payment_status: finInvoice.status === 'paid' ? 'paid' : (finInvoice.paid_amount > 0 ? 'partial' : 'unpaid')
+                    }
+                });
                 return;
             }
         }

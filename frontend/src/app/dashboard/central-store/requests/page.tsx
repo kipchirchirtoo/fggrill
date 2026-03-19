@@ -6,10 +6,11 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
-import { ClipboardList, RefreshCw, Package, Clock, Building2, ChevronRight, CheckCircle2, AlertTriangle, Truck, Filter, X } from 'lucide-react';
+import { ClipboardList, RefreshCw, Package, Clock, Building2, ChevronRight, CheckCircle2, AlertTriangle, Truck, Filter, X, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
+import { exportRequestsHistoryPDF } from '@/lib/dispatch-pdf';
 
 interface RequestItem {
     id: string;
@@ -33,6 +34,7 @@ interface StockRequest {
 }
 
 export default function CentralRequestsPage() {
+    const { user } = useAuth();
     const [requests, setRequests] = useState<StockRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -40,6 +42,7 @@ export default function CentralRequestsPage() {
     const [reviewNotes, setReviewNotes] = useState('');
     const [approvedQuantities, setApprovedQuantities] = useState<Record<string, number>>({});
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const router = useRouter();
 
     const fetchRequests = useCallback(async () => {
@@ -81,6 +84,20 @@ export default function CentralRequestsPage() {
             setIsLoading(false);
         }
     }, [statusFilter]);
+
+    const handleExportHistory = async () => {
+        if (requests.length === 0) { toast.error('No history records to export'); return; }
+        setIsExporting(true);
+        try {
+            await exportRequestsHistoryPDF(requests);
+            toast.success('History report downloaded successfully');
+        } catch (e: any) {
+            toast.error('Failed to generate PDF');
+            console.error(e);
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     useEffect(() => {
         fetchRequests();
@@ -176,6 +193,16 @@ export default function CentralRequestsPage() {
                                     </button>
                                 ))}
                             </div>
+                            {statusFilter === 'HISTORY' && (
+                                <button
+                                    onClick={handleExportHistory}
+                                    disabled={isExporting || requests.length === 0}
+                                    className="h-10 px-4 flex items-center gap-2 bg-stone-900 text-white text-[11px] font-bold rounded-lg hover:bg-stone-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isExporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                                    {isExporting ? 'Exporting...' : `Export PDF (${requests.length})`}
+                                </button>
+                            )}
                             <button onClick={fetchRequests} disabled={isLoading} className="btn-secondary h-10 px-3">
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                             </button>

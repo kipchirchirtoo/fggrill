@@ -60,22 +60,67 @@ export const getGRN = async (
             .select(`
                 *,
                 supplier:store_suppliers(*),
-                purchase_order:store_purchase_orders(*),
-                items:store_grn_items(
-                    *,
-                    item:store_items(id, name, item_code, unit, category)
-                )
+                purchase_order:store_purchase_orders(*)
             `)
             .eq('id', id)
             .single();
 
-        if (error || !grn) {
+        if (error) {
+            logger.error('Supabase error fetching GRN header:', error);
+            throw new AppError(`Database error: ${error.message}`, 500);
+        }
+        
+        if (!grn) {
             throw new AppError('GRN not found', 404);
+        }
+
+        // Fetch GRN items separately
+        const { data: items, error: itemsError } = await supabase
+            .from('store_grn_items')
+            .select('*')
+            .eq('grn_id', id);
+
+        if (itemsError) {
+            logger.error('Supabase error fetching GRN items:', itemsError);
+            throw new AppError(`Database error fetching items: ${itemsError.message}`, 500);
+        }
+
+        // Fetch item details from simple_items using the item_id as SKU
+        const skus = items?.map(i => i.item_id) || [];
+        let enrichedItems = items || [];
+
+        if (skus.length > 0) {
+            const { data: itemDetails, error: detailsError } = await supabase
+                .from('simple_items')
+                .select('sku, description, unit_of_measure, category')
+                .in('sku', skus);
+
+            if (detailsError) {
+                logger.warn('Could not fetch simple_items for GRN:', detailsError.message);
+            }
+
+            // Map standard keys expected by the frontend
+            enrichedItems = (items || []).map(item => {
+                const detail = itemDetails?.find(d => d.sku === item.item_id);
+                return {
+                    ...item,
+                    item: detail ? {
+                        id: item.item_id,
+                        name: detail.description || item.item_id,
+                        item_code: detail.sku || item.item_id,
+                        unit: detail.unit_of_measure || 'units',
+                        category: detail.category || 'other'
+                    } : null
+                };
+            });
         }
 
         res.status(200).json({
             success: true,
-            data: grn
+            data: {
+                ...grn,
+                items: enrichedItems
+            }
         });
     } catch (error) {
         next(error);

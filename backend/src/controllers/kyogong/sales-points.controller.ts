@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import { logger } from '../../utils/logger';
+import { UserRole } from '../../models/User';
 
 /**
  * Get all sales points
@@ -80,14 +82,30 @@ export const getSalesPointDetails = async (req: Request, res: Response) => {
 export const getDynamicServices = async (req: Request, res: Response) => {
   try {
     const { service_type, is_active } = req.query;
-    const branch_id = req.user?.branch_id;
+    let branch_id = req.user?.branch_id;
+
+    // Sanitize branch_id - replace string "null" or "undefined" with literal null
+    if (branch_id === 'null' || branch_id === 'undefined') {
+      branch_id = null;
+    }
+
+    logger.info(`Getting dynamic services: service_type=${service_type}, is_active=${is_active}, branch_id=${branch_id}, user_role=${req.user?.role}`);
 
     let query = supabase
       .from('dynamic_services')
-      .select('*')
-      .eq('branch_id', branch_id)
-      .order('service_type')
-      .order('name');
+      .select('*');
+
+    // Filter by branch_id if it's set and the user is not a Super Admin
+    if (branch_id && branch_id !== 'null') {
+      query = query.eq('branch_id', branch_id);
+    } else if (req.user?.role !== UserRole.SUPER_ADMIN && req.user?.role !== UserRole.GENERAL_MANAGER) {
+      // For non-admins without a branch_id, they'll see nothing or we could default to branch 1
+      // For now, let's just use the provided branch_id which might be null
+      query = query.eq('branch_id', branch_id);
+    }
+    
+    // Order the results
+    query = query.order('service_type').order('name');
 
     if (service_type) {
       query = query.eq('service_type', service_type);
@@ -99,19 +117,27 @@ export const getDynamicServices = async (req: Request, res: Response) => {
 
     const { data: services, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      logger.error('Supabase error fetching dynamic services:', { error, branch_id, service_type });
+      throw error;
+    }
 
     res.json({
       success: true,
       data: services || []
     });
   } catch (error: any) {
-    console.error('Get dynamic services error:', error);
+    logger.error('Get dynamic services error:', { 
+      message: error.message, 
+      stack: error.stack,
+      details: error
+    });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get dynamic services'
     });
   }
+
 };
 
 /**

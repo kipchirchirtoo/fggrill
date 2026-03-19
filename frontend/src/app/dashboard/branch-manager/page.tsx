@@ -27,7 +27,6 @@ export default function BranchManagerDashboard() {
 
   // Modal states
   const [showAddItem, setShowAddItem] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
 
   // Use active branch from context, fallback to user's branch
   const currentBranchId = activeBranchId || user?.branch_id;
@@ -123,13 +122,6 @@ export default function BranchManagerDashboard() {
               >
                 <Plus className="h-4 w-4" />
                 <span>Add Item</span>
-              </button>
-              <button
-                onClick={() => setShowCamera(true)}
-                className="btn-secondary"
-              >
-                <Eye className="h-4 w-4" />
-                <span>Evidence</span>
               </button>
               <button
                 onClick={fetchData}
@@ -309,7 +301,6 @@ export default function BranchManagerDashboard() {
           </div>
         </div>
 
-        {/* Add Item Modal */}
         <AddItemModal
           isOpen={showAddItem}
           onClose={() => setShowAddItem(false)}
@@ -319,40 +310,6 @@ export default function BranchManagerDashboard() {
             fetchData();
           }}
         />
-
-        {/* Camera/Evidence Modal */}
-        <Dialog open={showCamera} onOpenChange={setShowCamera}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Camera className="h-5 w-5 text-indigo-600" />
-                Capture Evidence
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="aspect-video bg-black rounded-lg relative overflow-hidden ring-1 ring-stone-200">
-                {/* Mock camera view */}
-                <video autoPlay playsInline muted className="w-full h-full object-cover" />
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="text-white/50 text-sm">Camera Stream Active</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center gap-4">
-                <button
-                  onClick={() => {
-                    toast.success('Image captured and saved to incident report');
-                    setShowCamera(false);
-                  }}
-                  className="h-20 w-20 bg-white border-8 border-stone-100 rounded-full flex items-center justify-center hover:border-red-500/20 transition-all shadow-lg active:scale-95"
-                >
-                  <div className="h-12 w-12 bg-red-500 rounded-full shadow-inner" />
-                </button>
-                <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Tap to capture frame</p>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
 
       </DashboardLayout>
     </ProtectedRoute>

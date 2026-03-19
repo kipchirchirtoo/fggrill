@@ -438,7 +438,7 @@ export default function GuestsPage() {
   const fetchGuests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await guestAPI.getGuests(searchQuery || undefined, user?.branch_id || undefined);
+      const response = await guestAPI.getGuests(searchQuery || undefined, undefined);
       if (response.success) {
         setGuests(response.data || []);
       }

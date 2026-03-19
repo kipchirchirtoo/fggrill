@@ -1,0 +1,26 @@
+﻿
+--- Probing pos_transactions ---
+FAILED: pos_transactions.amount
+SUCCESS: pos_transactions.total_amount exists
+FAILED: pos_transactions.total
+
+--- Probing bar_orders ---
+FAILED: bar_orders.amount
+FAILED: bar_orders.total_amount
+SUCCESS: bar_orders.total exists
+
+--- Probing restaurant_orders ---
+FAILED: restaurant_orders.amount
+SUCCESS: restaurant_orders.total_amount exists
+FAILED: restaurant_orders.total
+
+--- Probing outside_catering_bookings ---
+FAILED: outside_catering_bookings.amount
+SUCCESS: outside_catering_bookings.total_amount exists
+FAILED: outside_catering_bookings.total
+
+--- Probing restaurant_pool_token_sales ---
+FAILED: restaurant_pool_token_sales.amount
+SUCCESS: restaurant_pool_token_sales.total_amount exists
+FAILED: restaurant_pool_token_sales.total
+SUCCESS: restaurant_pool_token_sales.amount_per_token exists

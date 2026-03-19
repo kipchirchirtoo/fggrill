@@ -103,7 +103,9 @@ export class Guest implements IGuest {
     }
 
     // 2. Filter by branchId if provided (via reservations)
-    if (branchId) {
+    // If there's a search query, we might want to search globally anyway to find existing guest profiles.
+    // We only restrict to branchId if there's no search query (e.g. initial load of "My Guests").
+    if (branchId && !query) {
       const { data: branchGuestIds, error: branchError } = await supabase
         .from('reservations')
         .select('guest_id')
@@ -111,13 +113,16 @@ export class Guest implements IGuest {
 
       if (branchError) {
         console.error('Error fetching branch guests:', branchError);
-      } else {
-        const ids = [...new Set(branchGuestIds?.map(r => r.guest_id).filter(id => id))] as string[];
+      } else if (branchGuestIds && branchGuestIds.length > 0) {
+        const ids = [...new Set(branchGuestIds.map(r => r.guest_id).filter(id => id))] as string[];
         if (ids.length > 0) {
           guestQuery = guestQuery.in('id', ids);
-        } else {
-          return []; // No guests for this branch
         }
+      } else {
+        // If no reservations for this branch, but we have a branchId filter, 
+        // it's possible the branch is new. Let's not return [] early if we want to allow 
+        // seeing guests who haven't stayed here yet (global list).
+        // For now, if branch has NO history, we'll show recently registered guests as a fallback.
       }
     }
 
@@ -126,7 +131,7 @@ export class Guest implements IGuest {
       const { data: activeReservations, error: reservationError } = await supabase
         .from('reservations')
         .select('guest_id')
-        .eq('status', 'checked_in');
+        .in('status', ['checked_in', 'checked-in']);
 
       if (reservationError) {
         console.error('Error fetching active reservations:', reservationError);
@@ -214,8 +219,8 @@ export class Guest implements IGuest {
       preferences: data.preferences,
       blacklistStatus: data.blacklist_status,
       blacklistReason: data.blacklist_reason,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at)
+      createdAt: data.created_at ? new Date(data.created_at) : new Date(),
+      updatedAt: data.updated_at ? new Date(data.updated_at) : new Date()
     });
   }
 }

@@ -45,6 +45,7 @@ export default function BranchInvoicesPage() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [createType, setCreateType] = useState<'conference' | 'guest' | 'general' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isExporting, setIsExporting] = useState<string | null>(null);
 
     const fetchInvoices = async () => {
         setLoading(true);
@@ -78,6 +79,34 @@ export default function BranchInvoicesPage() {
     const handleSuccess = () => {
         fetchInvoices();
         toast.success("Invoice created and sent to Auditor");
+    };
+
+    const handleDownload = async (inv: InvoiceData) => {
+        setIsExporting(inv.id);
+        const toastId = toast.loading(`Generating PDF for ${inv.invoice_number}...`);
+        try {
+            await downloadInvoicePDF(inv);
+            toast.success("Invoice downloaded", { id: toastId });
+        } catch (error: any) {
+            console.error('Download failed:', error);
+            toast.error(error.message || "Failed to download invoice", { id: toastId });
+        } finally {
+            setIsExporting(null);
+        }
+    };
+
+    const handlePrint = async (inv: InvoiceData) => {
+        setIsExporting(inv.id);
+        const toastId = toast.loading(`Preparing print for ${inv.invoice_number}...`);
+        try {
+            await printInvoicePDF(inv);
+            toast.success("Print dialog opened", { id: toastId });
+        } catch (error: any) {
+            console.error('Print failed:', error);
+            toast.error(error.message || "Failed to print invoice", { id: toastId });
+        } finally {
+            setIsExporting(null);
+        }
     };
 
     const filteredInvoices = invoices.filter(invoice => {
@@ -172,18 +201,20 @@ export default function BranchInvoicesPage() {
                                                 <td className="px-6 py-4 text-center">
                                                     <div className="flex justify-center gap-2">
                                                         <button
-                                                            onClick={() => downloadInvoicePDF(inv)}
-                                                            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                                            onClick={() => handleDownload(inv)}
+                                                            disabled={isExporting !== null}
+                                                            className={`p-1.5 rounded-md transition-colors ${isExporting === inv.id ? 'text-blue-400 bg-blue-50' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'}`}
                                                             title="Download PDF"
                                                         >
-                                                            <Download className="h-4 w-4" />
+                                                            <Download className={`h-4 w-4 ${isExporting === inv.id ? 'animate-pulse' : ''}`} />
                                                         </button>
                                                         <button
-                                                            onClick={() => printInvoicePDF(inv)}
-                                                            className="p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"
+                                                            onClick={() => handlePrint(inv)}
+                                                            disabled={isExporting !== null}
+                                                            className={`p-1.5 rounded-md transition-colors ${isExporting === inv.id ? 'text-amber-400 bg-amber-50' : 'text-gray-500 hover:text-amber-600 hover:bg-amber-50'}`}
                                                             title="Print"
                                                         >
-                                                            <Printer className="h-4 w-4" />
+                                                            <Printer className={`h-4 w-4 ${isExporting === inv.id ? 'animate-pulse' : ''}`} />
                                                         </button>
                                                     </div>
                                                 </td>

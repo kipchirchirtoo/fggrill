@@ -43,28 +43,35 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
     const margin = 20;
     let cursorY = 20;
 
-    // 1. Logo
+    // 1. Logo (with timeout)
     try {
         const logoUrl = '/fglogo.png';
         const img = new Image();
         img.src = logoUrl;
-        await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-        });
+        await Promise.race([
+            new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Logo timeout')), 3000))
+        ]);
         doc.addImage(img, 'PNG', margin, cursorY, 30, 30);
     } catch (e) {
-        console.error('Failed to load logo', e);
+        console.warn('Skipping logo:', e);
     }
 
     doc.setFontSize(22);
     doc.setTextColor(44, 62, 80);
     doc.text('INVOICE', 190, cursorY + 5, { align: 'right' });
 
-    // 2.1 Barcode
+    // 2.1 Barcode (with timeout)
     try {
         const barcodeUrl = `${PYTHON_SERVICE_URL}/api/barcode/barcode-image/${invoice.invoice_number}?format=code128&include_text=true`;
-        const response = await fetch(barcodeUrl);
+        const response = await Promise.race([
+            fetch(barcodeUrl),
+            new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('Barcode timeout')), 3000))
+        ]) as Response;
+
         if (response.ok) {
             const blob = await response.blob();
             const base64 = await new Promise<string>((resolve) => {
@@ -72,11 +79,10 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
                 reader.onloadend = () => resolve(reader.result as string);
                 reader.readAsDataURL(blob);
             });
-            // Position carefully in the header area
             doc.addImage(base64, 'PNG', 140, 30, 50, 15);
         }
     } catch (e) {
-        console.error('Failed to load barcode', e);
+        console.warn('Skipping barcode:', e);
     }
 
     doc.setFontSize(10);
@@ -165,7 +171,11 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
         margin: { left: margin, right: margin }
     });
 
-    cursorY = (doc as any).lastAutoTable.finalY + 15;
+    if ((doc as any).lastAutoTable) {
+        cursorY = (doc as any).lastAutoTable.finalY + 15;
+    } else {
+        cursorY += (tableData.length * 10) + 20;
+    }
 
     // 5. Totals
     const totalLabelX = 110;
@@ -239,12 +249,30 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
 };
 
 export const downloadInvoicePDF = async (invoice: InvoiceData) => {
-    const doc = await generateInvoicePDF(invoice);
-    doc.save(`Invoice_${invoice.invoice_number}.pdf`);
+    try {
+        const doc = await generateInvoicePDF(invoice);
+        // Sanitize filename: replace slashes and other non-filename chars
+        const safeId = (invoice.invoice_number || 'Invoice').replace(/[/\\?%*:|"<>]/g, '_');
+        doc.save(`Invoice_${safeId}.pdf`);
+        return true;
+    } catch (error) {
+        console.error('Download error:', error);
+        throw error;
+    }
 };
 
 export const printInvoicePDF = async (invoice: InvoiceData) => {
-    const doc = await generateInvoicePDF(invoice);
-    doc.autoPrint();
-    window.open(doc.output('bloburl'), '_blank');
+    try {
+        const doc = await generateInvoicePDF(invoice);
+        doc.autoPrint();
+        const blobUrl = doc.output('bloburl');
+        const printWindow = window.open(blobUrl, '_blank');
+        if (!printWindow) {
+            throw new Error('Popup blocked. Please allow popups for this site.');
+        }
+        return true;
+    } catch (error) {
+        console.error('Print error:', error);
+        throw error;
+    }
 };

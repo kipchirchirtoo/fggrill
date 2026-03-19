@@ -25,15 +25,17 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ): void => {
-  logger.error('Error:', {
-    message: err.message,
+  logger.error(`${err.name || 'Error'}: ${err.message || 'No message'}`, {
     stack: err.stack,
     path: req.path,
     method: req.method,
     body: req.body,
     query: req.query,
-    params: req.params
+    params: req.params,
+    // Include full error object but it will be safe-stringified by logger
+    details: err
   });
+
 
   // Default error status and message
   const statusCode = err.statusCode || 500;

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { UserRole } from '@/lib/auth-context';
+import { reportAPI } from '@/lib/api';
+import { API_URL } from '@/lib/config';
 import { 
   FileText, 
   Download, 
@@ -68,24 +70,7 @@ export default function AdminDocsPage() {
         }
       };
 
-      const res = await fetch(`${API_URL}/api/reports/export`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          ...(token ? { Authorization: `Bearer ${token}` } : {}) 
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `FamousGate_Doc_${guide?.id || 'Manual'}_${new Date().toISOString().split('T')[0]}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await reportAPI.exportReport(payload as any);
       
       toast.success('Documentation prepared by HIRALL SOLUTIONS');
     } catch (e: any) {

@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
-import { Truck, RefreshCw, Printer, User, Navigation, Package, CheckCircle2, ChevronRight, MapPin, Calendar, ArrowRight, Clipboard } from 'lucide-react';
+import { Truck, RefreshCw, Printer, User, Navigation, Package, CheckCircle2, ChevronRight, MapPin, Calendar, ArrowRight, Clipboard, Download, Filter, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { formatNumber } from '@/lib/utils';
-import { printDispatchPDF } from '@/lib/dispatch-pdf';
+import { printDispatchPDF, exportDeliveredReportPDF } from '@/lib/dispatch-pdf';
 
 interface DispatchItem { id: string; item_sku: string; item_name: string; quantity: number; unit: string; }
 interface Vehicle { id: string; registration_number: string; model: string; }
@@ -19,9 +18,14 @@ interface DispatchNote {
     dispatch_number: string;
     status: string;
     to_branch_name: string;
+    to_branch?: { name: string };
     created_at: string;
+    confirmed_at?: string;
+    delivered_at?: string;
+    dispatched_at?: string;
     items: DispatchItem[];
     vehicle_registration?: string;
+    vehicle_number?: string;
     driver_name?: string;
 }
 
@@ -36,17 +40,44 @@ export default function DispatchPage() {
     const [dispatchFormData, setDispatchFormData] = useState({ vehicle_id: '', driver_id: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPrinting, setIsPrinting] = useState<string | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
+
+    // DELIVERED tab filters
+    const [filterDate, setFilterDate] = useState('');
+    const [filterBranch, setFilterBranch] = useState('');
+
+    // Map our UI tab to actual DB status (DELIVERED tab shows CONFIRMED + DELIVERED + DISPUTED)
+    const getApiStatus = (tab: string) => {
+        if (tab === 'DELIVERED') return 'CONFIRMED';
+        return tab;
+    };
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
+            const apiStatus = getApiStatus(statusTab);
             const [readyRes, vehiclesRes, driversRes] = await Promise.all([
-                storeAPI.getDispatchHistory(statusTab),
+                storeAPI.getDispatchHistory(apiStatus),
                 storeAPI.getVehicles(),
                 storeAPI.getDrivers()
             ]);
 
-            if (readyRes.success) setDispatches(readyRes.data || []);
+            if (readyRes.success) {
+                let data = readyRes.data || [];
+                // For DELIVERED tab, also include DELIVERED and DISPUTED statuses
+                if (statusTab === 'DELIVERED') {
+                    const [deliveredRes, disputedRes] = await Promise.all([
+                        storeAPI.getDispatchHistory('DELIVERED'),
+                        storeAPI.getDispatchHistory('DISPUTED'),
+                    ]);
+                    if (deliveredRes.success) data = [...data, ...(deliveredRes.data || [])];
+                    if (disputedRes.success) data = [...data, ...(disputedRes.data || [])];
+                    // De-duplicate by id
+                    const seen = new Set<string>();
+                    data = data.filter((d: DispatchNote) => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
+                }
+                setDispatches(data);
+            }
             if (vehiclesRes.success) setVehicles(vehiclesRes.data || []);
             if (driversRes.success) setDrivers(driversRes.data || []);
         } catch (error) { console.error('Error:', error); }
@@ -54,6 +85,34 @@ export default function DispatchPage() {
     }, [statusTab]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    // Client-side filtering for DELIVERED tab
+    const filteredDispatches = useMemo(() => {
+        if (statusTab !== 'DELIVERED') return dispatches;
+        let result = [...dispatches];
+
+        if (filterDate) {
+            result = result.filter(d => {
+                const date = d.confirmed_at || d.delivered_at || d.dispatched_at || d.created_at;
+                return date?.startsWith(filterDate);
+            });
+        }
+
+        if (filterBranch) {
+            const term = filterBranch.toLowerCase();
+            result = result.filter(d => {
+                const name = (d.to_branch_name || d.to_branch?.name || '').toLowerCase();
+                return name.includes(term);
+            });
+        }
+
+        return result;
+    }, [dispatches, statusTab, filterDate, filterBranch]);
+
+    // Unique branch names for datalist
+    const branchNames = useMemo(() => {
+        return [...new Set(dispatches.map(d => d.to_branch_name || d.to_branch?.name || '').filter(Boolean))];
+    }, [dispatches]);
 
     const handleOpenDispatch = (dispatch: DispatchNote) => {
         setSelectedDispatch(dispatch);
@@ -94,6 +153,33 @@ export default function DispatchPage() {
         } finally {
             setIsPrinting(null);
         }
+    };
+
+    const handleExportDeliveredReport = async () => {
+        if (filteredDispatches.length === 0) {
+            toast.error('No dispatches to export');
+            return;
+        }
+        setIsExporting(true);
+        try {
+            await exportDeliveredReportPDF(filteredDispatches, {
+                from_date: filterDate || undefined,
+                branch_name: filterBranch || undefined,
+            });
+            toast.success('Delivered dispatches report downloaded');
+        } catch (error: any) {
+            toast.error('Failed to generate report');
+            console.error(error);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const getStatusBadgeClass = (status: string) => {
+        if (status === 'CONFIRMED') return 'bg-emerald-100 text-emerald-700';
+        if (status === 'DISPUTED') return 'bg-red-100 text-red-600';
+        if (status === 'IN_TRANSIT') return 'bg-stone-900 text-white';
+        return 'bg-stone-200 text-stone-600';
     };
 
     return (
@@ -137,36 +223,98 @@ export default function DispatchPage() {
                         </div>
                     </div>
 
+                    {/* DELIVERED tab filters */}
+                    {statusTab === 'DELIVERED' && (
+                        <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
+                            <div className="flex items-center gap-2 flex-1">
+                                <Calendar className="h-4 w-4 text-stone-300 shrink-0" />
+                                <input
+                                    type="date"
+                                    value={filterDate}
+                                    onChange={e => setFilterDate(e.target.value)}
+                                    className="w-full text-sm border-0 focus:outline-none text-stone-700 bg-transparent"
+                                    placeholder="Filter by date"
+                                />
+                                {filterDate && (
+                                    <button onClick={() => setFilterDate('')} className="text-stone-300 hover:text-stone-500 text-xs font-bold">✕</button>
+                                )}
+                            </div>
+                            <div className="h-px sm:h-auto sm:w-px bg-stone-100" />
+                            <div className="flex items-center gap-2 flex-1">
+                                <Search className="h-4 w-4 text-stone-300 shrink-0" />
+                                <input
+                                    type="text"
+                                    list="branches-list"
+                                    value={filterBranch}
+                                    onChange={e => setFilterBranch(e.target.value)}
+                                    placeholder="Filter by branch..."
+                                    className="w-full text-sm border-0 focus:outline-none text-stone-700 bg-transparent"
+                                />
+                                <datalist id="branches-list">
+                                    {branchNames.map(b => <option key={b} value={b} />)}
+                                </datalist>
+                                {filterBranch && (
+                                    <button onClick={() => setFilterBranch('')} className="text-stone-300 hover:text-stone-500 text-xs font-bold">✕</button>
+                                )}
+                            </div>
+                            <div className="h-px sm:h-auto sm:w-px bg-stone-100" />
+                            <button
+                                onClick={handleExportDeliveredReport}
+                                disabled={isExporting || filteredDispatches.length === 0}
+                                className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white text-[12px] font-bold rounded-lg hover:bg-stone-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                            >
+                                {isExporting ? (
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Download className="h-3.5 w-3.5" />
+                                )}
+                                {isExporting ? 'Exporting...' : `Export PDF (${filteredDispatches.length})`}
+                            </button>
+                        </div>
+                    )}
+
                     {/* Content */}
                     {isLoading ? (
                         <div className="py-20 text-center text-stone-300">Synchronizing fleet logs...</div>
-                    ) : dispatches.length === 0 ? (
+                    ) : filteredDispatches.length === 0 ? (
                         <div className="bg-white border border-stone-100 p-24 text-center flex flex-col items-center rounded-lg">
                             <Truck className="h-12 w-12 text-stone-100 mb-4" />
                             <h3 className="text-lg font-medium text-stone-400">Queue Clear</h3>
-                            <p className="text-stone-300 text-sm">No shipments currently in {statusTab.toLowerCase()} status.</p>
+                            <p className="text-stone-300 text-sm">
+                                {statusTab === 'DELIVERED'
+                                    ? 'No delivered shipments found for the selected filters.'
+                                    : `No shipments currently in ${statusTab.toLowerCase()} status.`}
+                            </p>
+                            {statusTab === 'DELIVERED' && (filterDate || filterBranch) && (
+                                <button
+                                    onClick={() => { setFilterDate(''); setFilterBranch(''); }}
+                                    className="mt-4 text-xs text-stone-400 underline"
+                                >
+                                    Clear filters
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {dispatches.map((dispatch) => (
+                            {filteredDispatches.map((dispatch) => (
                                 <div key={dispatch.id} className="bg-white border border-stone-100 rounded-lg shadow-sm overflow-hidden flex flex-col lg:flex-row transition-all hover:border-stone-200">
                                     <div className="p-6 lg:w-72 bg-stone-50/50 lg:border-r border-stone-100">
                                         <div className="flex items-center justify-between mb-4">
                                             <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">DN Ref: {dispatch.dispatch_number}</span>
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${statusTab === 'READY' ? 'bg-stone-200 text-stone-600' : statusTab === 'IN_TRANSIT' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-400'}`}>
-                                                {statusTab}
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${getStatusBadgeClass(dispatch.status)}`}>
+                                                {dispatch.status === 'CONFIRMED' ? 'DELIVERED' : dispatch.status}
                                             </span>
                                         </div>
-                                        <h3 className="text-xl font-bold text-stone-900 uppercase tracking-tight">{dispatch.to_branch_name}</h3>
+                                        <h3 className="text-xl font-bold text-stone-900 uppercase tracking-tight">{dispatch.to_branch_name || dispatch.to_branch?.name}</h3>
                                         <div className="mt-4 space-y-2.5">
                                             <div className="flex items-center gap-3 text-stone-500 text-[13px]">
                                                 <Calendar className="h-4 w-4 text-stone-300" />
-                                                <span>{new Date(dispatch.created_at).toLocaleDateString()}</span>
+                                                <span>{new Date(dispatch.confirmed_at || dispatch.created_at).toLocaleDateString()}</span>
                                             </div>
-                                            {dispatch.vehicle_registration && (
+                                            {(dispatch.vehicle_registration || dispatch.vehicle_number) && (
                                                 <div className="flex items-center gap-3 text-stone-500 text-[13px]">
                                                     <Truck className="h-4 w-4 text-stone-300" />
-                                                    <span className="font-medium text-stone-700">{dispatch.vehicle_registration}</span>
+                                                    <span className="font-medium text-stone-700">{dispatch.vehicle_registration || dispatch.vehicle_number}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -203,7 +351,7 @@ export default function DispatchPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2 text-[12px] text-stone-500 font-medium">
                                                     <Navigation className="h-3.5 w-3.5 text-stone-300" />
-                                                    <span className="truncate">{dispatch.vehicle_registration || 'Assigned Fleet'}</span>
+                                                    <span className="truncate">{dispatch.vehicle_registration || dispatch.vehicle_number || 'Assigned Fleet'}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -226,7 +374,7 @@ export default function DispatchPage() {
                     )}
                 </div>
 
-                {/* Dispatch Modal - Minimal Light UI */}
+                {/* Dispatch Modal */}
                 <Dialog open={dispatchModalOpen} onOpenChange={setDispatchModalOpen}>
                     <DialogContent className="max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden rounded-xl">
                         <div className="bg-stone-900 p-6 text-white">

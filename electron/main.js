@@ -1172,6 +1172,39 @@ function createWindow() {
     // Start loading AFTER setting up all listeners
     loadApp();
 
+    // ──────────────────────────────────────────
+    // Intercept Links & Force In-App Rendering
+    // ──────────────────────────────────────────
+    
+    // 1. Intercept target="_blank" or window.open calls
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        console.log(`[LinkHandler] Intercepted new window request for: ${url}`);
+        
+        // Convert production/dev domain links to local protocol
+        if (url.startsWith(DOMAIN_URL)) {
+            const relativePath = url.substring(DOMAIN_URL.length + 1);
+            mainWindow.loadURL(isDev ? `${DOMAIN_URL}/${relativePath}` : `pos://${relativePath}`);
+        } else {
+            // Force all other links to open in the SAME window instead of a popup
+            mainWindow.loadURL(url);
+        }
+        
+        // Prevent Electron from spawning a separate window
+        return { action: 'deny' };
+    });
+
+    // 2. Intercept direct navigation (e.g., standard href clicks)
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        console.log(`[LinkHandler] Intercepted navigation request for: ${url}`);
+        
+        // If it's a link to the main site, forcefully route it through the internal protocol
+        if (url.startsWith('https://famousgate.hirall.com') && !isDev) {
+            event.preventDefault();
+            const relativePath = url.replace('https://famousgate.hirall.com/', '');
+            mainWindow.loadURL(`pos://${relativePath}`);
+        }
+    });
+
     // Handle protocol navigation failures (e.g. missing file in local build)
     mainWindow.webContents.on('did-fail-provisional-load', (event, errorCode, errorDescription, validatedURL) => {
         if (validatedURL.startsWith('pos://')) {

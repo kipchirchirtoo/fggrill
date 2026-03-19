@@ -3,6 +3,18 @@ import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { autoDeductIngredients, deductIngredientsForItem } from './kitchen/recipes.controller';
 
+/**
+ * Helper to parse branch_id from query or body
+ * Returns a number if valid, otherwise undefined
+ */
+const parseBranchId = (id: any): number | undefined => {
+  if (id === undefined || id === null || id === '' || id === 'null' || id === 'undefined' || id === 'true' || id === 'false') {
+    return undefined;
+  }
+  const parsed = parseInt(id);
+  return isNaN(parsed) ? undefined : parsed;
+};
+
 // @desc    Get all menu categories
 // @route   GET /api/restaurant/menu/categories
 // @access  Public
@@ -17,9 +29,13 @@ export const getMenuCategories = async (
       .select('*')
       .eq('is_active', true);
 
-    const branchId = req.query.branch_id || req.user?.branch_id;
+    const branchId = parseBranchId(req.query.branch_id) || req.user?.branch_id;
     if (branchId) {
       query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+    } else {
+      // If no branch_id after parsing, we could optionaly filter by NULL only
+      // but usually public menu categories should be shown.
+      // query = query.is('branch_id', null);
     }
 
     const { data: categories, error } = await query
@@ -91,7 +107,7 @@ export const getMenuItems = async (
     if (req.query.category) {
       query = query.eq('category_id', req.query.category);
     }
-    const branchId = req.user?.branch_id || req.query.branch_id;
+    const branchId = req.user?.branch_id || parseBranchId(req.query.branch_id);
     if (branchId) {
       query = query.or(`branch_id.eq.${branchId}, branch_id.is.null`);
     }
@@ -758,7 +774,7 @@ export const getOrders = async (
     if (req.query.type) {
       query = query.eq('order_type', req.query.type);
     }
-    const branchId = req.user?.branch_id || req.query.branch_id;
+    const branchId = req.user?.branch_id || parseBranchId(req.query.branch_id);
     if (branchId) {
       query = query.eq('branch_id', branchId);
     }
@@ -1025,7 +1041,8 @@ export const getRoomServiceOrders = async (
     }
 
     if (req.query.branch_id) {
-      query = query.eq('branch_id', req.query.branch_id);
+      const bId = parseBranchId(req.query.branch_id);
+      if (bId) query = query.eq('branch_id', bId);
     }
 
     const { data: orders, error } = await query;
@@ -1211,7 +1228,7 @@ export const getDailySales = async (
 ): Promise<void> => {
   try {
     const date = req.query.date as string || new Date().toISOString().split('T')[0];
-    const branchId = req.query.branch_id;
+    const branchId = parseBranchId(req.query.branch_id);
 
     const startDate = `${date}T00:00:00`;
     const endDate = `${date}T23:59:59`;

@@ -3,6 +3,17 @@ import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 
+/**
+ * Helper to parse branch_id from query or body
+ */
+const parseBranchId = (id: any): number | undefined => {
+  if (id === undefined || id === null || id === '' || id === 'null' || id === 'undefined' || id === 'true' || id === 'false') {
+    return undefined;
+  }
+  const parsed = parseInt(id);
+  return isNaN(parsed) ? undefined : parsed;
+};
+
 // @desc    Create wastage record
 // @route   POST /api/wastage
 // @access  Private
@@ -76,7 +87,7 @@ export const getWastageRecords = async (
 ): Promise<void> => {
     try {
         const { startDate, endDate, reason, logged_by } = req.query;
-        const branchId = req.user?.branch_id || req.query.branch_id;
+        const branchId = req.user?.branch_id || parseBranchId(req.query.branch_id);
 
         logger.info('Fetching wastage records', { branchId, startDate, endDate, reason, logged_by });
 
@@ -144,7 +155,7 @@ export const getWastageSummary = async (
 ): Promise<void> => {
     try {
         const { period = '30d' } = req.query;
-        const branchId = req.user?.branch_id || req.query.branch_id;
+        const branchId = req.user?.branch_id || parseBranchId(req.query.branch_id);
 
         logger.info('Fetching wastage summary', { period, branchId });
 

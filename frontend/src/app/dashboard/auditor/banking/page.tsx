@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { API_URL } from '@/lib/config';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSButton } from '@/components/ui/ios-button';

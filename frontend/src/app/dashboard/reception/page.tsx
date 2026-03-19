@@ -11,7 +11,7 @@ import {
   ChevronRight, ArrowUpRight, ArrowDownRight, Timer, UserCheck,
   Home, Utensils, Car, Wifi, Sun, Moon, CloudSun, Zap, Heart,
   Shield, Award, TrendingUp, Eye, MessageSquare, Settings, Building2,
-  Wallet, Receipt, History, UserPlus, ShieldCheck, FileCheck
+  Wallet, Receipt, History, UserPlus, ShieldCheck, FileCheck, Download
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
@@ -40,6 +40,7 @@ import { subscribeToReceptionRealtime } from '@/lib/realtime';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { CashierModals } from '@/components/modals/CashierModals';
+import { downloadInvoicePDF } from '@/lib/invoice-pdf';
 
 // Types
 interface Room {
@@ -128,6 +129,8 @@ export default function ReceptionDashboard(): JSX.Element {
   const [conferenceBookings, setConferenceBookings] = useState<any[]>([]);
   const [conferenceHalls, setConferenceHalls] = useState<any[]>([]);
   const [cateringBookings, setCateringBookings] = useState<any[]>([]);
+  const [allBookings, setAllBookings] = useState<any[]>([]);
+  const [recentPayments, setRecentPayments] = useState<any[]>([]);
 
   const activeTab = useSearchParams().get('view') || 'overview';
 
@@ -144,13 +147,18 @@ export default function ReceptionDashboard(): JSX.Element {
     if (!branchId) return;
 
     try {
-      const [bookingsRes, roomsRes] = await Promise.allSettled([
+      const [bookingsRes, roomsRes, paymentsRes] = await Promise.allSettled([
         bookingsAPI.getBookings({ branch_id: (branchId as any), limit: 100 }),
-        roomsAPI.getRooms((branchId as any) ? { branch_id: (branchId as any) } : undefined)
+        roomsAPI.getRooms((branchId as any) ? { branch_id: (branchId as any) } : undefined),
+        cashierAPI.getPayments({ branch_id: branchId as any, limit: 50 })
       ]);
 
       const bookingsData = bookingsRes.status === 'fulfilled' ? bookingsRes.value?.data || [] : [];
       const roomsData = roomsRes.status === 'fulfilled' ? (roomsRes.value?.data || roomsRes.value?.rooms || []) : [];
+      const paymentsData = paymentsRes.status === 'fulfilled' ? paymentsRes.value?.data || [] : [];
+
+      setAllBookings(bookingsData);
+      setRecentPayments(paymentsData);
 
       // Process rooms
       const processedRooms: Room[] = roomsData.map((r: any) => ({
@@ -218,7 +226,6 @@ export default function ReceptionDashboard(): JSX.Element {
       if (cateringRes.success) {
         setCateringBookings(cateringRes.data || []);
       }
-
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast.error('Failed to load dashboard data');
@@ -226,6 +233,43 @@ export default function ReceptionDashboard(): JSX.Element {
       setIsLoading(false);
     }
   }, [activeBranchId]);
+
+  const handleDownloadCateringInvoice = async (b: any) => {
+    const toastId = toast.loading(`Generating invoice for ${b.customer_name}...`);
+    try {
+      // Map catering booking to InvoiceData format
+      const invoiceData = {
+        id: b.id,
+        invoice_number: b.booking_number || `CAT-${b.id.slice(0, 8).toUpperCase()}`,
+        invoice_date: b.created_at || new Date().toISOString(),
+        status: b.status || 'confirmed',
+        total_amount: b.total_amount,
+        subtotal: b.total_amount,
+        vat_amount: 0,
+        customer: {
+          name: b.customer_name,
+          customer_name: b.customer_name,
+          phone: b.customer_phone,
+        },
+        items: [
+          {
+            description: `Outside Catering - ${b.event_location} (${b.guest_count} guests)`,
+            quantity: 1,
+            unit_price: b.total_amount,
+            total_amount: b.total_amount,
+            vat_rate: 0
+          }
+        ],
+        notes: `Event Date: ${new Date(b.event_date).toLocaleDateString()} at ${new Date(b.event_date).toLocaleTimeString()}\nMenu: ${b.menu_details || 'Standard Menu'}\n${b.notes || ''}`
+      };
+
+      await downloadInvoicePDF(invoiceData as any);
+      toast.success("Invoice downloaded successfully", { id: toastId });
+    } catch (error) {
+      console.error("Catering invoice generation failed:", error);
+      toast.error("Failed to generate catering invoice", { id: toastId });
+    }
+  };
 
   const fetchCashierData = useCallback(async () => {
     const branchId = activeBranchId;
@@ -621,12 +665,13 @@ export default function ReceptionDashboard(): JSX.Element {
                         <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Details</th>
                         <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Status</th>
                         <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase">Amount</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-50">
                       {cateringBookings.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-stone-500 italic">No catering bookings found</td>
+                          <td colSpan={6} className="px-4 py-8 text-center text-stone-500 italic">No catering bookings found</td>
                         </tr>
                       ) : cateringBookings.map((b: any) => (
                         <tr key={b.id} className="hover:bg-stone-50 transition-colors">
@@ -650,6 +695,15 @@ export default function ReceptionDashboard(): JSX.Element {
                             </IOSBadge>
                           </td>
                           <td className="px-4 py-3 font-bold text-orange-600">KES {b.total_amount.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => handleDownloadCateringInvoice(b)}
+                              className="p-2 text-stone-400 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-all"
+                              title="Download Invoice"
+                            >
+                              <Download className="h-4 w-4" />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -808,11 +862,107 @@ export default function ReceptionDashboard(): JSX.Element {
                 </div>
               </div>
             </div>
+          ) : activeTab === 'history' ? (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
+                  <History className="h-6 w-6 text-blue-600" />
+                  Activity History & Logs
+                </h2>
+                <div className="flex gap-2">
+                  <IOSButton variant="secondary" size="sm" onClick={() => fetchDashboardData()}>
+                    <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+                  </IOSButton>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Bookings History */}
+                <div className="lg:col-span-2 space-y-4">
+                  <h3 className="text-sm font-bold text-stone-500 uppercase tracking-wider">Recent Bookings History</h3>
+                  <IOSCard className="overflow-hidden border-none shadow-sm bg-white">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left font-sans">
+                        <thead className="bg-stone-50 border-b border-stone-100">
+                          <tr>
+                            <th className="px-4 py-3 text-[11px] font-bold text-stone-400 uppercase">Ref #</th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-stone-400 uppercase">Guest</th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-stone-400 uppercase">Room</th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-stone-400 uppercase">Status</th>
+                            <th className="px-4 py-3 text-[11px] font-bold text-stone-400 uppercase text-right">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-50">
+                          {allBookings.length === 0 ? (
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-stone-400 italic">No bookings found</td></tr>
+                          ) : allBookings.slice(0, 50).map((b: any) => (
+                            <tr key={b.id} className="hover:bg-stone-50/50 transition-colors">
+                              <td className="px-4 py-3 text-xs font-mono font-bold text-blue-600">{b.booking_number?.slice(-8) || b.id.slice(0, 8)}</td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className="font-bold text-stone-900">{b.guest_name || 'Walk-in'}</span>
+                                <div className="text-[10px] text-stone-400">{b.guest_phone || '-'}</div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-stone-600 font-medium">Room {b.room_number || 'N/A'}</td>
+                              <td className="px-4 py-3">
+                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full
+                                  ${b.status === 'checked_in' ? 'bg-blue-50 text-blue-600' :
+                                    b.status === 'checked_out' ? 'bg-emerald-50 text-emerald-600' :
+                                      b.status === 'cancelled' ? 'bg-rose-50 text-rose-600' :
+                                        'bg-stone-100 text-stone-500'}`}>
+                                  {b.status.replace('_', ' ')}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-[11px] text-stone-500 text-right">
+                                {new Date(b.created_at).toLocaleDateString()}
+                                <div className="text-[9px] opacity-75">{new Date(b.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </IOSCard>
+                </div>
+
+                {/* Payments Log */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-stone-500 uppercase tracking-wider">Recent Payments</h3>
+                  <IOSCard className="p-0 border-none shadow-sm bg-white overflow-hidden">
+                    <div className="divide-y divide-stone-50">
+                      {recentPayments.length === 0 ? (
+                        <div className="p-8 text-center text-stone-400 italic">No payments found</div>
+                      ) : recentPayments.slice(0, 50).map((p: any) => (
+                        <div key={p.id} className="p-4 hover:bg-stone-50/50 transition-colors flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                              <DollarSign className="h-4 w-4 text-emerald-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-stone-900">{p.customer_name || 'Walk-in Guest'}</p>
+                              <p className="text-[10px] text-stone-400 font-medium uppercase tracking-tight">{p.payment_method} • {new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-emerald-600">+{p.amount?.toLocaleString()}</p>
+                            <p className="text-[10px] text-stone-400 italic">verified</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {recentPayments.length > 0 && (
+                      <div className="p-3 bg-stone-50 border-t border-stone-100 text-center">
+                        <span className="text-[11px] font-bold text-stone-400">Showing last {Math.min(recentPayments.length, 50)} transactions</span>
+                      </div>
+                    )}
+                  </IOSCard>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="p-12 text-center bg-white rounded-[32px] shadow-sm border border-stone-100">
               <History className="h-12 w-12 text-stone-300 mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-stone-900">History & Logs</h3>
-              <p className="text-stone-500">View transaction logs and historical data.</p>
+              <h3 className="text-lg font-bold text-stone-900 shadow-sm">Coming Soon</h3>
+              <p className="text-stone-500">Advanced analytics and historical reports are being implemented.</p>
             </div>
           )}
         </div>

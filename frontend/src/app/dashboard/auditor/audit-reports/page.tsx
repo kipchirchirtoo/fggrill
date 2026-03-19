@@ -10,8 +10,7 @@ import { UserRole } from '@/lib/auth-context';
 import { toast } from 'sonner';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { API_URL } from '@/lib/config';
 
 const reports = [
   { id: 'exception_summary',      name: 'Audit Exception Summary',    category: 'Compliance',  icon: AlertTriangle,  color: 'text-red-600',    bg: 'bg-red-50',    desc: 'All open & resolved audit exceptions with severity breakdown' },

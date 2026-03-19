@@ -290,7 +290,7 @@ Provide a brief executive summary (2-3 sentences maximum) that:
 Be concise, specific, and business-focused. Do not use bullet points or markdown formatting."""
 
             response = client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-1.5-flash',
                 contents=prompt
             )
             
@@ -321,6 +321,8 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 'bar': 0,
                 'accommodation': 0,
                 'events': 0,
+                'pos': 0,
+                'pool': 0,
                 'other': 0
             },
             'payment_modes': {
@@ -354,7 +356,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             rest_sales_query = self.client.table('restaurant_orders').select('total_amount, branch_id')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')\
-                .in_('payment_status', ['paid', 'partial'])
+                .in_('status', ['completed', 'paid', 'delivered'])
             if branch_ids:
                 if len(branch_ids) == 1: rest_sales_query = rest_sales_query.eq('branch_id', branch_ids[0])
                 else: rest_sales_query = rest_sales_query.in_('branch_id', branch_ids)
@@ -363,10 +365,10 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (rest_sales_res.data or []))
 
             # Bar Orders
-            bar_sales_query = self.client.table('bar_orders').select('total, total_amount, branch_id')\
+            bar_sales_query = self.client.table('bar_orders').select('total, branch_id')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')\
-                .in_('payment_status', ['paid', 'partial'])
+                .in_('status', ['completed', 'paid', 'closed'])
             if branch_ids:
                 if len(branch_ids) == 1: bar_sales_query = bar_sales_query.eq('branch_id', branch_ids[0])
                 else: bar_sales_query = bar_sales_query.in_('branch_id', branch_ids)
@@ -386,6 +388,42 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             res_sales_res = res_sales_query.execute()
             data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (res_sales_res.data or []))
 
+            # Catering & Events
+            event_sales_query = self.client.table('outside_catering_bookings').select('total_amount, branch_id')\
+                .gte('event_date', start_date)\
+                .lte('event_date', end_date)\
+                .in_('status', ['confirmed', 'completed'])
+            if branch_ids:
+                if len(branch_ids) == 1: event_sales_query = event_sales_query.eq('branch_id', branch_ids[0])
+                else: event_sales_query = event_sales_query.in_('branch_id', branch_ids)
+            
+            event_sales_res = event_sales_query.execute()
+            data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (event_sales_res.data or []))
+
+            # POS Transactions
+            pos_sales_query = self.client.table('pos_transactions').select('total_amount, branch_id')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_ids:
+                if len(branch_ids) == 1: pos_sales_query = pos_sales_query.eq('branch_id', branch_ids[0])
+                else: pos_sales_query = pos_sales_query.in_('branch_id', branch_ids)
+            
+            pos_sales_res = pos_sales_query.execute()
+            data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (pos_sales_res.data or []))
+
+            # Pool Token Sales
+            pool_sales_query = self.client.table('restaurant_pool_token_sales').select('total_amount, branch_id')\
+                .gte('created_at', f'{start_date}T00:00:00')\
+                .lte('created_at', f'{end_date}T23:59:59')
+            if branch_ids:
+                if len(branch_ids) == 1: pool_sales_query = pool_sales_query.eq('branch_id', branch_ids[0])
+                else: pool_sales_query = pool_sales_query.in_('branch_id', branch_ids)
+            
+            pool_sales_res = pool_sales_query.execute()
+            for sale in (pool_sales_res.data or []):
+                val = float(sale.get('total_amount', 0) or 0)
+                data['sales'] += val
+
             # 4. Aggregation and Filtering (In-Memory Branch Filtering logic similar to backend)
             # Since payments don't have branch_id, we infer from related tables or treat as global if missing
             
@@ -393,6 +431,8 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             booking_ids = list(set([p.get('booking_id') for p in all_payments if p.get('booking_id')]))
             order_ids = list(set([p.get('restaurant_order_id') for p in all_payments if p.get('restaurant_order_id')]))
             bar_ids = list(set([p.get('bar_order_id') for p in all_payments if p.get('bar_order_id')]))
+            event_ids = list(set([p.get('outside_catering_id') for p in all_payments if p.get('outside_catering_id')]))
+            pos_txn_ids = list(set([p.get('pos_transaction_id') for p in all_payments if p.get('pos_transaction_id')]))
             
             # Fetch mappings
             map_data = {}
@@ -413,6 +453,18 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 for item in (res.data or []): 
                     map_data[f"bar_{item['id']}"] = item.get('branch_id')
                     map_data[f"bar_user_{item['id']}"] = item.get('staff_id')
+
+            if event_ids:
+                res = self.client.table('outside_catering_bookings').select('id, branch_id, created_by').in_('id', event_ids).execute()
+                for item in (res.data or []):
+                    map_data[f"event_{item['id']}"] = item.get('branch_id')
+                    map_data[f"event_user_{item['id']}"] = item.get('created_by')
+
+            if pos_txn_ids:
+                res = self.client.table('pos_transactions').select('id, branch_id, created_by').in_('id', pos_txn_ids).execute()
+                for item in (res.data or []):
+                    map_data[f"pos_{item['id']}"] = item.get('branch_id')
+                    map_data[f"pos_user_{item['id']}"] = item.get('created_by')
                 
             # Filter and Aggregate
             active_user_ids = []
@@ -431,6 +483,12 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                     elif payment.get('bar_order_id'):
                         pid = map_data.get(f"bar_{payment.get('bar_order_id')}")
                         if not uid: uid = map_data.get(f"bar_user_{payment.get('bar_order_id')}")
+                    elif payment.get('outside_catering_id'):
+                        pid = map_data.get(f"event_{payment.get('outside_catering_id')}")
+                        if not uid: uid = map_data.get(f"event_user_{payment.get('outside_catering_id')}")
+                    elif payment.get('pos_transaction_id'):
+                        pid = map_data.get(f"pos_{payment.get('pos_transaction_id')}")
+                        if not uid: uid = map_data.get(f"pos_user_{payment.get('pos_transaction_id')}")
                 
                 # Apply Branch Filter
                 if branch_ids and (pid not in branch_ids):
@@ -452,6 +510,9 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 if payment.get('booking_id'): data['departments']['accommodation'] += amount
                 elif payment.get('restaurant_order_id'): data['departments']['restaurant'] += amount
                 elif payment.get('bar_order_id'): data['departments']['bar'] += amount
+                elif payment.get('outside_catering_id'): data['departments']['events'] += amount
+                elif payment.get('pos_transaction_id'): data['departments']['pos'] += amount
+                elif payment.get('restaurant_pool_token_sales_id'): data['departments']['pool'] += amount
                 else: data['departments']['other'] += amount
                 
                 # Cashier Summary
@@ -469,7 +530,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                         'reference': payment.get('reference'),
                         'amount': amount,
                         'method': method,
-                        'type': 'Booking' if payment.get('booking_id') else 'Order' if payment.get('restaurant_order_id') else 'Bar' if payment.get('bar_order_id') else 'Other'
+                        'type': 'Booking' if payment.get('booking_id') else 'Order' if payment.get('restaurant_order_id') else 'Bar' if payment.get('bar_order_id') else 'Catering' if payment.get('outside_catering_id') else 'POS' if payment.get('pos_transaction_id') else 'Other'
                     })
 
             # Fetch User Names for summaries
@@ -1195,7 +1256,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         try:
             # Search in simple_items for room-related categories
             items = self.client.table('simple_items').select('*')\
-                .or_('category.ilike.%room%,category.ilike.%amenity%,category.ilike.%linen%,category.ilike.%toiletry%,category.ilike.%housekeeping%')\
+                .or_('category.ilike.*room*,category.ilike.*amenit*,category.ilike.*linen*,category.ilike.*toiletry*,category.ilike.*housekeep*,category.ilike.*soap*,category.ilike.*clean*,category.ilike.*deterg*')\
                 .execute()
             
             for item in (items.data or []):
@@ -1458,28 +1519,33 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             
         try:
             if not branch_id or str(branch_id) == '1':
-                # Central Store movements from stock_history
-                query = self.client.table('stock_history').select('*, item:simple_items(item_name)')\
+                # Central Store movements from store_stock_movements
+                query = self.client.table('store_stock_movements').select('*, item:store_items(name, item_code)')\
                     .gte('created_at', f'{start_date}T00:00:00')\
                     .lte('created_at', f'{end_date}T23:59:59')\
                     .order('created_at', desc=True)
                 if movement_type:
-                    query = query.eq('change_type', movement_type)
+                    query = query.eq('movement_type', movement_type)
                 movements = query.execute()
                 
                 for m in (movements.data or []):
                     item = m.get('item', {}) or {}
+                    item_code = item.get('item_code', m.get('item_id', ''))
+                    item_name = item.get('name', item_code)
+                    m_type = m.get('movement_type', '')
+                    is_out = m_type in ['dispatch', 'transfer', 'STOCK_OUT', 'out', 'issue']
+
                     data['movements'].append({
                         'date': m.get('created_at', '')[:10],
-                        'item_code': m.get('item_sku', ''),
-                        'item_name': item.get('item_name', m.get('item_sku', '')),
-                        'type': m.get('change_type', ''),
-                        'quantity': m.get('quantity_change', 0),
-                        'from': 'Central Store' if m.get('change_type') == 'OUT' else 'Supplier/Adj',
-                        'to': 'Branch/Adj' if m.get('change_type') == 'OUT' else 'Central Store',
-                        'reference': m.get('reference', m.get('reason', '')),
-                        'itemCode': m.get('item_sku', ''),
-                        'itemName': item.get('item_name', m.get('item_sku', ''))
+                        'item_code': item_code,
+                        'item_name': item_name,
+                        'type': m_type,
+                        'quantity': m.get('quantity', 0),
+                        'from': 'Central Store' if is_out else 'Supplier/Adj',
+                        'to': 'Branch/Adj' if is_out else 'Central Store',
+                        'reference': m.get('reference_number', m.get('reference_type', '')),
+                        'itemCode': item_code,
+                        'itemName': item_name
                     })
             else:
                 # Branch movements from branch_stock_movements

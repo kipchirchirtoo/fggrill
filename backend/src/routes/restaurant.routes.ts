@@ -141,7 +141,8 @@ router.get('/kitchen/orders',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN]),
   async (req, res) => {
     try {
-      const branchId = req.query.branch_id;
+      const branchIdRaw = req.query.branch_id as string;
+      const branchId = branchIdRaw && !['true', 'false', 'null', 'undefined'].includes(branchIdRaw) ? branchIdRaw : undefined;
 
       let ordersQuery = supabase
         .from('restaurant_orders')
