@@ -77,6 +77,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = localStorage.getItem('token');
       const cachedUser = localStorage.getItem('user');
 
+      // Clear invalid token strings
+      if (token === 'undefined' || token === 'null') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
       if (token) {
         setIsLoading(true);
 
@@ -198,15 +207,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await api.auth.posLogin(pin);
       if (res.success && res.data) {
         const { user: apiUser, session } = res.data;
-        const token = session?.access_token || res.data.token;
+        const token = session?.access_token || (res.data as any).token;
+
+        if (!token) {
+          throw new Error('No access token received');
+        }
 
         const userData: User = {
           id: apiUser.id,
           email: apiUser.email || '',
-          firstName: apiUser.first_name,
-          lastName: apiUser.last_name,
+          firstName: apiUser.first_name || apiUser.firstName || '',
+          lastName: apiUser.last_name || apiUser.lastName || '',
           role: apiUser.role as UserRole,
-          branch_id: apiUser.branch_id,
+          branch_id: apiUser.branch_id ?? null,
           branch_name: apiUser.branch_name || (apiUser.branch_id ? 'Branch' : 'HQ'),
           is_central: apiUser.is_central || false,
           isPosLogin: true,
@@ -237,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error;
     } finally {
       setIsLoading(false);
+      setIsAuthenticating(false);
     }
   }, [router]);
 

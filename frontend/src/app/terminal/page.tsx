@@ -28,14 +28,14 @@ export default function MasterTerminalPage() {
     }, []);
 
     const handleNumberClick = (num: string) => {
-        if (pin.length < 5 && !isAuthenticating) {
-            setPin(prev => prev + num);
+        if ((pin || '').length < 5 && !isAuthenticating) {
+            setPin(prev => (prev || '') + num);
         }
     };
 
     const handleDelete = () => {
-        if (pin.length > 0 && !isAuthenticating) {
-            setPin(prev => prev.slice(0, -1));
+        if ((pin || '').length > 0 && !isAuthenticating) {
+            setPin(prev => (prev || '').slice(0, -1));
         }
     };
 
@@ -80,7 +80,7 @@ export default function MasterTerminalPage() {
         // console.log('[Terminal] isOnline:', isOnline);
         // console.log('[Terminal] PIN length:', pin.length);
 
-        if (pin.length !== 5) {
+        if ((pin || '').length !== 5) {
             toast.warning('PIN must be 5 characters (e.g. R0123)');
             return;
         }
@@ -183,7 +183,7 @@ export default function MasterTerminalPage() {
 
     // Auto-submit when PIN reaches 5 characters (letter + 4 digits)
     useEffect(() => {
-        if (pin.length === 5) {
+        if ((pin || '').length === 5) {
             handleLogin();
         }
     }, [pin]);
@@ -290,8 +290,8 @@ export default function MasterTerminalPage() {
                                 <motion.div
                                     key={i}
                                     animate={{
-                                        scale: pin.length > i ? [1, 1.3, 1] : 1,
-                                        backgroundColor: pin.length > i
+                                        scale: (pin || '').length > i ? [1, 1.3, 1] : 1,
+                                        backgroundColor: (pin || '').length > i
                                             ? 'rgba(255, 255, 255, 0.95)'
                                             : 'rgba(255, 255, 255, 0.15)',
                                     }}

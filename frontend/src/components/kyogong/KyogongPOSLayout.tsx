@@ -149,7 +149,7 @@ export function KyogongPOSLayout({
                 </div>
 
                 {!activeShift ? (
-                    <ShiftOpener onShiftOpened={handleShiftOpened} />
+                    <ShiftOpener onShiftOpened={handleShiftOpened} salesPointCode={salesPointCode} />
                 ) : (
                     <>
                         {/* Stats Row */}

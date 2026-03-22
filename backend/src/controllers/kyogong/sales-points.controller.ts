@@ -15,8 +15,12 @@ export const getSalesPoints = async (req: Request, res: Response) => {
     let query = supabase
       .from('sales_points')
       .select('*')
-      .eq('branch_id', branch_id)
       .order('name');
+
+    // Only filter by branch_id if it's a valid non-null value
+    if (branch_id !== null && branch_id !== undefined) {
+      query = query.eq('branch_id', branch_id);
+    }
 
     if (is_active !== undefined) {
       query = query.eq('is_active', is_active === 'true');

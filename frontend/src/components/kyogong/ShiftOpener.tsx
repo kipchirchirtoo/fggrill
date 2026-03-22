@@ -16,12 +16,14 @@ interface SalesPoint {
 
 interface ShiftOpenerProps {
     onShiftOpened: (shift: any) => void;
+    salesPointCode?: string;
 }
 
-export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
+export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps) {
     const { user } = useAuth();
     const [salesPoints, setSalesPoints] = useState<SalesPoint[]>([]);
     const [isLoadingPoints, setIsLoadingPoints] = useState(false);
+    const [loadError, setLoadError] = useState(false);
 
     const [selectedPointId, setSelectedPointId] = useState<string>('');
     const [openingFloat, setOpeningFloat] = useState('');
@@ -34,6 +36,7 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
 
     const fetchSalesPoints = async () => {
         setIsLoadingPoints(true);
+        setLoadError(false);
         try {
             const token = localStorage.getItem('token');
             if (!token || token === 'offline-bridge-token') {
@@ -47,13 +50,23 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
 
             if (data.success) {
                 setSalesPoints(data.data);
+
+                // Auto-select by salesPointCode prop first (most specific)
+                if (salesPointCode) {
+                    const point = data.data.find((p: any) => p.code === salesPointCode);
+                    if (point) {
+                        setSelectedPointId(point.id.toString());
+                        return;
+                    }
+                }
+
                 // Pre-select if only one
                 if (data.data.length === 1) {
                     setSelectedPointId(data.data[0].id.toString());
+                    return;
                 }
 
                 // Intelligent pre-selection based on Role
-                // This mimics the logic we want: roles mapped to specific points
                 if (user?.role?.includes('spa')) {
                     const point = data.data.find((p: any) => p.code === 'SPA');
                     if (point) setSelectedPointId(point.id.toString());
@@ -67,9 +80,13 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
                     const point = data.data.find((p: any) => p.code === 'RECEPTION');
                     if (point) setSelectedPointId(point.id.toString());
                 }
+            } else {
+                setLoadError(true);
+                toast.error('Could not load sales points');
             }
         } catch (error) {
             console.error('Failed to fetch sales points', error);
+            setLoadError(true);
             toast.error('Could not load sales points');
         } finally {
             setIsLoadingPoints(false);
@@ -132,19 +149,32 @@ export function ShiftOpener({ onShiftOpened }: ShiftOpenerProps) {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Sales Point
                         </label>
+                        {loadError ? (
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm text-red-500 flex-1">Failed to load sales points.</p>
+                                <button
+                                    type="button"
+                                    onClick={fetchSalesPoints}
+                                    className="text-sm text-blue-600 hover:underline font-medium"
+                                >
+                                    Retry
+                                </button>
+                            </div>
+                        ) : (
                         <select
                             value={selectedPointId}
                             onChange={(e) => setSelectedPointId(e.target.value)}
                             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors bg-white text-gray-900"
                             disabled={isLoadingPoints}
                         >
-                            <option value="">Select Sales Point...</option>
+                            <option value="">{isLoadingPoints ? 'Loading...' : 'Select Sales Point...'}</option>
                             {salesPoints.map(point => (
                                 <option key={point.id} value={point.id}>
                                     {point.name}
                                 </option>
                             ))}
                         </select>
+                        )}
                     </div>
 
                     <div>
