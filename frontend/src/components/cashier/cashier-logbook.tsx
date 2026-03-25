@@ -48,9 +48,11 @@ export function CashierLogbook({ type }: { type?: string }) {
                 setShifts(response.data || []);
                 const open = response.data?.find((s: ShiftLog) => s.status === 'open');
                 setCurrentShift(open || null);
+            } else if (response.message) {
+                toast.error(response.message);
             }
         } catch (error: any) {
-            console.error('Error fetching shifts:', error);
+            toast.error(error.message || 'Failed to load shifts');
         }
     };
 
@@ -77,6 +79,8 @@ export function CashierLogbook({ type }: { type?: string }) {
                 toast.success('Shift started successfully');
                 setOpeningFloat('');
                 fetchShifts();
+            } else {
+                toast.error(response.message || 'Failed to start shift');
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to start shift');
@@ -99,6 +103,8 @@ export function CashierLogbook({ type }: { type?: string }) {
                 toast.success('Shift closed successfully');
                 setCloseShiftModalOpen(false);
                 fetchShifts();
+            } else {
+                toast.error(response.message || 'Failed to close shift');
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to close shift');

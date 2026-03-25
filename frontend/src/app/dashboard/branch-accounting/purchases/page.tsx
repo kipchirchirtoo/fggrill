@@ -540,7 +540,7 @@ export default function BranchPurchasesPage() {
 
                 {/* Create Modal */}
                 <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-                    <DialogContent className="max-w-5xl">
+                    <DialogContent className="max-w-2xl">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
                                 <Plus className="h-5 w-5" />
@@ -557,7 +557,7 @@ export default function BranchPurchasesPage() {
                                             onChange={(e) => setFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
                                             className="w-full border rounded-ios-lg px-3 py-2 text-sm bg-white"
                                         >
-                                            <option key="select-supplier-placeholder" value="">Select Supplier</option>
+                                            <option value="">Select Supplier</option>
                                             {suppliers.map((s) => (
                                                 <option key={`po-supplier-${s.id}`} value={s.id}>{s.name}</option>
                                             ))}
@@ -580,80 +580,88 @@ export default function BranchPurchasesPage() {
                                     </div>
                                     <div className="space-y-3 border rounded-ios-lg p-4 bg-gray-50/50">
                                         {formData.items.map((item, index) => (
-                                            <div key={item._id} className="flex items-center gap-3">
-                                                <div className="flex-1">
+                                            <div key={item._id} className="space-y-2 pb-3 border-b border-gray-200 last:border-0 last:pb-0">
+                                                {/* Row 1: Item select + delete */}
+                                                <div className="flex items-center gap-2">
                                                     <select
                                                         value={item.item_id}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            console.log('Selected item SKU:', val);
                                                             const selectedItem = items.find(it => it.sku === val);
-                                                            console.log('Found item:', selectedItem);
                                                             setFormData(prev => ({
                                                                 ...prev,
                                                                 items: prev.items.map((it, i) => i === index ? { ...it, item_id: val, unit_price: selectedItem?.cost_price || 0 } : it)
                                                             }));
                                                         }}
-                                                        className="w-full border rounded-ios-lg px-3 py-2 text-sm bg-white"
+                                                        className="flex-1 border rounded-ios-lg px-3 py-2 text-sm bg-white"
                                                     >
-                                                        <option key="select-item-placeholder" value="">Select Item</option>
+                                                        <option value="">Select Item</option>
                                                         {items.map((it) => (
                                                             <option key={it.sku} value={it.sku}>{it.description} ({it.sku})</option>
                                                         ))}
                                                     </select>
+                                                    {formData.items.length > 1 && (
+                                                        <button onClick={() => setFormData(p => ({ ...p, items: p.items.filter((_, i) => i !== index) }))} className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors flex-shrink-0">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
-                                                <div className="w-24">
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="Qty"
-                                                        value={item.quantity}
-                                                        onChange={(e) => {
-                                                            const val = parseInt(e.target.value) || 0;
-                                                            setFormData(prev => ({
-                                                                ...prev,
-                                                                items: prev.items.map((it, i) => i === index ? { ...it, quantity: val } : it)
-                                                            }));
-                                                        }}
-                                                    />
+                                                {/* Row 2: Qty / Price / VAT / Total */}
+                                                <div className="grid grid-cols-4 gap-2 items-center">
+                                                    <div>
+                                                        <label className="text-xs text-gray-500 mb-1 block">Qty</label>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="Qty"
+                                                            value={item.quantity}
+                                                            onChange={(e) => {
+                                                                const val = parseInt(e.target.value) || 0;
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    items: prev.items.map((it, i) => i === index ? { ...it, quantity: val } : it)
+                                                                }));
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-gray-500 mb-1 block">Unit Price (KES)</label>
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="0.00"
+                                                            value={item.unit_price}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value) || 0;
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    items: prev.items.map((it, i) => i === index ? { ...it, unit_price: val } : it)
+                                                                }));
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-gray-500 mb-1 block">VAT</label>
+                                                        <select
+                                                            value={item.vat_rate || 16}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    items: prev.items.map((it, i) => i === index ? { ...it, vat_rate: val } : it)
+                                                                }));
+                                                            }}
+                                                            className="w-full border rounded-ios-lg px-2 py-2 text-sm bg-white"
+                                                        >
+                                                            <option value={16}>16% VAT</option>
+                                                            <option value={0}>0% VAT</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-gray-500 mb-1 block">Total</label>
+                                                        <div className="h-9 flex items-center justify-end font-semibold text-sm text-gray-900 bg-white border border-gray-200 rounded-ios-lg px-3">
+                                                            KES {(item.quantity * item.unit_price * (1 + (item.vat_rate || 0) / 100)).toLocaleString()}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className="w-32">
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="Price"
-                                                        value={item.unit_price}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value) || 0;
-                                                            setFormData(prev => ({
-                                                                ...prev,
-                                                                items: prev.items.map((it, i) => i === index ? { ...it, unit_price: val } : it)
-                                                            }));
-                                                        }}
-                                                    />
-                                                </div>
-                                                <div className="w-24">
-                                                    <select
-                                                        value={item.vat_rate || 16}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setFormData(prev => ({
-                                                                ...prev,
-                                                                items: prev.items.map((it, i) => i === index ? { ...it, vat_rate: val } : it)
-                                                            }));
-                                                        }}
-                                                        className="w-full border rounded-ios-lg px-2 py-2 text-sm bg-white"
-                                                    >
-                                                        <option value={16}>16% VAT</option>
-                                                        <option value={0}>0% VAT</option>
-                                                    </select>
-                                                </div>
-                                                <div className="w-32 text-right font-medium text-sm">
-                                                    KES {(item.quantity * item.unit_price * (1 + (item.vat_rate || 0) / 100)).toLocaleString()}
-                                                </div>
-                                                {formData.items.length > 1 && (
-                                                    <button onClick={() => setFormData(p => ({ ...p, items: p.items.filter((_, i) => i !== index) }))} className="p-2 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors">
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
-                                                )}
                                             </div>
                                         ))}
                                         <div className="flex justify-end pt-3 border-t">
@@ -814,11 +822,11 @@ export default function BranchPurchasesPage() {
                                         onChange={(e) => setInvoiceFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
                                         className="w-full border rounded-ios-lg px-3 py-2 text-sm bg-white"
                                     >
-                                        <option key="inv-supplier-placeholder" value="">Select Supplier</option>
+                                        <option value="">Select Supplier</option>
                                         {suppliers.map((s) => (
                                             <option key={`supplier-${s.id}`} value={String(s.id)}>{s.name}</option>
                                         ))}
-                                        <option key="inv-supplier-other" value="other">- Other (Manual Entry) -</option>
+                                        <option value="other">- Other (Manual Entry) -</option>
                                     </select>
                                 </div>
                                 {invoiceFormData.supplier_id === 'other' && (

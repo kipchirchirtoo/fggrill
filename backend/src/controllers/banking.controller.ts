@@ -130,9 +130,12 @@ export const recordBankingTransaction = async (
         const branch_id = req.body.branch_id || req.user?.branch_id;
         const recorded_by = req.user?.id;
 
-        if (!transaction_date || !transaction_type || !bank_name || !account_number || !amount || !reference_number || !purpose_description) {
-            throw new AppError('Required fields: transaction_date, transaction_type, bank_name, account_number, amount, reference_number, purpose_description', 400);
+        if (!transaction_date || !transaction_type || !bank_name || !amount || !purpose_description) {
+            throw new AppError('Required fields: transaction_date, transaction_type, bank_name, amount, purpose_description', 400);
         }
+
+        // Auto-generate reference_number if not provided
+        const finalReference = reference_number || `TXN-${Date.now()}`;
 
         const { data: transaction, error } = await supabase
             .from('banking_transactions')
@@ -141,10 +144,10 @@ export const recordBankingTransaction = async (
                 transaction_date,
                 transaction_type,
                 bank_name,
-                account_number,
+                account_number: account_number || '',
                 amount,
                 currency: currency || 'KES',
-                reference_number,
+                reference_number: finalReference,
                 source,
                 destination,
                 payment_method,

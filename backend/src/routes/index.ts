@@ -80,7 +80,15 @@ router.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    env_check: {
+      SUPABASE_PROJECT_URL: !!process.env.SUPABASE_PROJECT_URL,
+      SUPABASE_URL: !!process.env.SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      SUPABASE_JWT_SECRET: !!process.env.SUPABASE_JWT_SECRET,
+      JWT_SECRET: !!process.env.JWT_SECRET,
+      JWT_SECRET_value: process.env.JWT_SECRET === 'your_jwt_secret_key' ? 'PLACEHOLDER' : (process.env.JWT_SECRET ? 'SET' : 'MISSING'),
+    }
   });
 });
 

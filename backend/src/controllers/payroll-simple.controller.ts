@@ -9,31 +9,268 @@ import archiver from 'archiver';
 import { generatePayslipPDF } from '../utils/pdfGenerator';
 
 /**
- * Generate Payroll for a specific month/year
+ * Core payroll engine for a single staff member.
+ * Fetches ALL dynamic deductions fresh, computes totals, upserts the record,
+ * then marks every source record as deducted.
+ *
+ * Deduction rules:
+ *  - NSSF / SHIF / Housing Levy / PAYE → ONLY from staff_payroll_adjustments (never auto-calculated)
+ *  - Credit Bills  → ALL status='pending'
+ *  - Unpaid Bills  → ALL status='unpaid' where waiter_id = staffId
+ *  - Advances      → status='approved' AND month_to_deduct/year_to_deduct match
+ *  - Loans         → status='active', remaining_balance > 0, deduction period started
+ */
+async function processStaffPayroll(
+    staffId: string,
+    basicSalary: number,
+    month: number,
+    year: number,
+    existingPayrollId: string | null
+): Promise<any> {
+
+    // ── Step 1: If re-generating, reset previously-linked deductions ──────────
+    if (existingPayrollId) {
+        await Promise.all([
+            supabase.from('staff_advances')
+                .update({ status: 'approved', deducted_in_payroll_id: null })
+                .eq('deducted_in_payroll_id', existingPayrollId),
+            supabase.from('staff_credit_bills')
+                .update({ status: 'pending', deducted_in_payroll_id: null })
+                .eq('deducted_in_payroll_id', existingPayrollId),
+            supabase.from('unpaid_bills')
+                .update({ status: 'unpaid' })
+                .eq('status', 'deducted')
+                .like('remarks', `%payroll ${month}/${year}%`),
+            supabase.from('staff_payroll_adjustments')
+                .update({ status: 'pending', payroll_id: null })
+                .eq('payroll_id', existingPayrollId),
+        ]);
+    }
+
+    // ── Step 2: Fetch adjustments (statutory + misc) ──────────────────────────
+    const { data: adjustments } = await supabase
+        .from('staff_payroll_adjustments')
+        .select('id, type, category, amount')
+        .eq('staff_id', staffId)
+        .eq('month', String(month))
+        .eq('year', year)
+        .eq('status', 'pending');
+
+    let nssf = 0, shif = 0, housingLevy = 0, paye = 0;
+    let totalAllowances = 0, totalBonuses = 0;
+    let uniformDeductions = 0, absenceDeductions = 0, otherAdjustmentDeductions = 0;
+    const adjustmentIds: string[] = [];
+
+    for (const adj of adjustments || []) {
+        const amt = Number(adj.amount || 0);
+        adjustmentIds.push(adj.id);
+        if (adj.type === 'deduction') {
+            switch (adj.category) {
+                case 'nssf':         nssf += amt; break;
+                case 'shif':         shif += amt; break;
+                case 'housing_levy': housingLevy += amt; break;
+                case 'paye':         paye += amt; break;
+                case 'uniform':      uniformDeductions += amt; break;
+                case 'absent_day':   absenceDeductions += amt; break;
+                default:             otherAdjustmentDeductions += amt; break;
+            }
+        } else if (adj.type === 'addition') {
+            if (adj.category === 'allowance') totalAllowances += amt;
+            else totalBonuses += amt;
+        }
+    }
+
+    // ── Step 3: Fetch ALL dynamic deductions ─────────────────────────────────
+
+    // 3a. Credit bills — ALL pending
+    const { data: creditBillRows, error: cbErr } = await supabase
+        .from('staff_credit_bills')
+        .select('id, amount')
+        .eq('staff_id', staffId)
+        .eq('status', 'pending');
+    if (cbErr) throw cbErr;
+
+    // 3b. Unpaid bills — ALL unpaid for this waiter
+    const { data: unpaidBillRows, error: ubErr } = await supabase
+        .from('unpaid_bills')
+        .select('id, total_amount, balance_amount')
+        .eq('waiter_id', staffId)
+        .eq('status', 'unpaid');
+    if (ubErr) throw ubErr;
+
+    // 3c. Approved advances matching this payroll month/year
+    const { data: advanceRows, error: advErr } = await supabase
+        .from('staff_advances')
+        .select('id, amount')
+        .eq('staff_id', staffId)
+        .eq('status', 'approved')
+        .eq('month_to_deduct', month)
+        .eq('year_to_deduct', year);
+    if (advErr) throw advErr;
+
+    // 3d. Active loans whose deduction period has started (DB-level filter)
+    const { data: loanRows, error: loanErr } = await supabase
+        .from('staff_loans')
+        .select('id, installment_amount, remaining_balance, start_deduction_month, start_deduction_year')
+        .eq('staff_id', staffId)
+        .eq('status', 'active')
+        .gt('remaining_balance', 0)
+        .or(
+            `start_deduction_year.lt.${year},` +
+            `and(start_deduction_year.eq.${year},start_deduction_month.lte.${month})`
+        );
+    if (loanErr) throw loanErr;
+
+    // ── Step 4: Aggregate ─────────────────────────────────────────────────────
+    let totalCreditBills = 0;
+    const creditBillIds: string[] = [];
+    for (const b of creditBillRows || []) {
+        totalCreditBills += Number(b.amount || 0);
+        creditBillIds.push(b.id);
+    }
+
+    let totalUnpaidBills = 0;
+    const unpaidBillIds: string[] = [];
+    for (const b of unpaidBillRows || []) {
+        totalUnpaidBills += Number(b.balance_amount || b.total_amount || 0);
+        unpaidBillIds.push(b.id);
+    }
+
+    let totalAdvances = 0;
+    const advanceIds: string[] = [];
+    for (const a of advanceRows || []) {
+        totalAdvances += Number(a.amount || 0);
+        advanceIds.push(a.id);
+    }
+
+    let totalLoanDeductions = 0;
+    const loanDeductionMap: { id: string; deducted: number; newBalance: number }[] = [];
+    for (const loan of loanRows || []) {
+        const installment = Number(loan.installment_amount || 0);
+        const remaining = Number(loan.remaining_balance || 0);
+        const deducted = Math.min(installment, remaining);
+        totalLoanDeductions += deducted;
+        loanDeductionMap.push({ id: loan.id, deducted, newBalance: remaining - deducted });
+    }
+
+    // ── Step 5: Compute totals ────────────────────────────────────────────────
+    const grossSalary = basicSalary + totalAllowances + totalBonuses;
+    const statutoryDeductions = nssf + shif + housingLevy + paye;
+    const financialDeductions = totalCreditBills + totalUnpaidBills + totalAdvances + totalLoanDeductions;
+    const miscDeductions = uniformDeductions + absenceDeductions + otherAdjustmentDeductions;
+    const totalDeductions = statutoryDeductions + financialDeductions + miscDeductions;
+    const netPay = grossSalary - totalDeductions;
+
+    // ── Step 6: Upsert payroll record ─────────────────────────────────────────
+    const { data: payroll, error: payrollError } = await supabase
+        .from('staff_payroll')
+        .upsert({
+            staff_id: staffId,
+            month: String(month),
+            year,
+            basic_salary: basicSalary,
+            allowances: totalAllowances,
+            bonuses: totalBonuses,
+            nssf,
+            nssf_deduction: nssf,
+            shif_deduction: shif,
+            housing_levy: housingLevy,
+            housing_levy_deduction: housingLevy,
+            paye,
+            nhif: 0,
+            total_advances: totalAdvances,
+            loan_deduction: totalLoanDeductions,
+            total_credit_bills: totalCreditBills,
+            total_deductions: totalDeductions,
+            net_pay: netPay,
+            status: 'draft',
+            generated_at: new Date().toISOString(),
+        }, { onConflict: 'staff_id, month, year' })
+        .select()
+        .single();
+
+    if (payrollError) throw payrollError;
+
+    // ── Step 7: Mark all source records as deducted ───────────────────────────
+    const markPromises: PromiseLike<any>[] = [];
+
+    if (adjustmentIds.length > 0) {
+        markPromises.push(
+            supabase.from('staff_payroll_adjustments')
+                .update({ status: 'applied', payroll_id: payroll.id })
+                .in('id', adjustmentIds).then()
+        );
+    }
+    if (advanceIds.length > 0) {
+        markPromises.push(
+            supabase.from('staff_advances')
+                .update({ status: 'deducted', deducted_in_payroll_id: payroll.id })
+                .in('id', advanceIds).then()
+        );
+    }
+    if (creditBillIds.length > 0) {
+        markPromises.push(
+            supabase.from('staff_credit_bills')
+                .update({ status: 'deducted', deducted_in_payroll_id: payroll.id })
+                .in('id', creditBillIds).then()
+        );
+    }
+    if (unpaidBillIds.length > 0) {
+        markPromises.push(
+            supabase.from('unpaid_bills')
+                .update({ status: 'deducted', remarks: `Deducted from payroll ${month}/${year}` })
+                .in('id', unpaidBillIds).then()
+        );
+    }
+    for (const { id, newBalance } of loanDeductionMap) {
+        markPromises.push(
+            supabase.from('staff_loans')
+                .update({
+                    remaining_balance: newBalance,
+                    ...(newBalance <= 0 ? { status: 'paid' } : {}),
+                })
+                .eq('id', id).then()
+        );
+    }
+
+    await Promise.all(markPromises);
+    return payroll;
+}
+
+/**
+ * Generate Payroll for a specific month/year.
+ * Enforces: no current/future month processing.
  */
 export const generatePayroll = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { month, year, staff_id, branch_id } = req.body;
-        const processedBy = req.user?.id;
 
         if (!month || !year) {
             throw new AppError('Month and Year are required', 400);
         }
 
-        // 1. Fetch Staff Profiles (Active only)
-        // 1. Fetch Staff Profiles (Active only)
+        // ── Period lock: cannot process future months only ───────────────
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1-based
+        if (
+            Number(year) > currentYear ||
+            (Number(year) === currentYear && Number(month) > currentMonth)
+        ) {
+            throw new AppError(
+                `Cannot process payroll for a future period (${month}/${year}).`,
+                400
+            );
+        }
+
+        // ── Fetch active staff ────────────────────────────────────────────────
         let staffQuery = supabase
             .from('staff_profiles')
-            .select('id, basic_salary, nssf_enabled, shif_enabled, housing_fund_enabled, kra_pin, branch_id')
+            .select('id, basic_salary, branch_id')
             .eq('status', 'active');
 
-        if (staff_id) {
-            staffQuery = staffQuery.eq('id', staff_id);
-        }
-
-        if (branch_id) {
-            staffQuery = staffQuery.eq('branch_id', branch_id);
-        }
+        if (staff_id) staffQuery = staffQuery.eq('id', staff_id);
+        if (branch_id) staffQuery = staffQuery.eq('branch_id', branch_id);
 
         const { data: staffList, error: staffError } = await staffQuery;
         if (staffError) throw staffError;
@@ -41,259 +278,34 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
             throw new AppError('No active staff found', 404);
         }
 
-        const results = [];
-        const errors = [];
+        // ── Pre-fetch existing payroll records for this period (for idempotency reset) ──
+        const staffIds = staffList.map(s => s.id);
+        const { data: existingPayrolls } = await supabase
+            .from('staff_payroll')
+            .select('id, staff_id')
+            .in('staff_id', staffIds)
+            .eq('month', String(month))
+            .eq('year', Number(year));
 
-        // 2. Process each staff member
+        const existingPayrollMap = new Map(
+            (existingPayrolls || []).map(p => [p.staff_id, p.id])
+        );
+
+        const results: any[] = [];
+        const errors: any[] = [];
+
         for (const staff of staffList) {
             try {
-                const basicSalary = Number(staff.basic_salary) || 0;
-                const nssfEnabled = staff.nssf_enabled !== false; // Default true
-                const shifEnabled = staff.shif_enabled !== false; // Default true
-                const housingEnabled = staff.housing_fund_enabled !== false; // Default true
-
-                // A. Helper to get start/end dates for the month
-                // month is likely a number 1-12 or string. 
-                const monthIndex = Number(month) - 1; // 0-11
-                const startDate = new Date(year, monthIndex, 1).toISOString().split('T')[0];
-                const endDate = new Date(year, monthIndex + 1, 0).toISOString().split('T')[0];
-
-                // B. Fetch Pending Adjustments (Deductions & Additions)
-                const { data: adjustments } = await supabase
-                    .from('staff_payroll_adjustments')
-                    .select('id, type, category, amount')
-                    .eq('staff_id', staff.id)
-                    .eq('status', 'pending');
-
-                // C. Fetch Direct Financials (Advances, Loans, Credit Bills) not yet linked to adjustments
-                // This ensures we capture items directly filled by accountants/cashiers
-                const [advancesRes, loansRes, creditBillsRes, unpaidBillsRes] = await Promise.all([
-                    supabase.from('staff_advances').select('id, amount').eq('staff_id', staff.id).eq('status', 'approved').is('payroll_id', null),
-                    supabase.from('staff_loans').select('id, monthly_installment').eq('staff_id', staff.id).eq('status', 'active'),
-                    supabase.from('staff_credit_bills').select('id, amount, balance, payroll_id').eq('staff_id', staff.id).eq('is_paid', false),
-                    supabase.from('unpaid_bills').select('id, total_amount, balance_amount').eq('waiter_id', staff.id).eq('status', 'unpaid')
-                ]);
-                let totalCreditBills = 0;
-                let totalAdvances = 0;
-                let totalLoanDeductions = 0;
-                let totalUnpaidBills = 0;
-                let uniformDeductions = 0;
-                let absenceDeductions = 0;
-                let otherUnifiedDeductions = 0;
-                let totalAllowances = 0;
-                let totalBonuses = 0;
-                const adjustmentUpdates: string[] = [];
-                const advanceUpdates: string[] = [];
-                const creditBillUpdates: string[] = [];
-                const unpaidBillUpdates: string[] = [];
-
-                if (adjustments) {
-                    for (const adj of adjustments) {
-                        const amt = Number(adj.amount || 0);
-                        if (adj.type === 'deduction') {
-                            if (adj.category === 'credit_bill') totalCreditBills += amt;
-                            else if (adj.category === 'advance') totalAdvances += amt;
-                            else if (adj.category === 'loan_installment') totalLoanDeductions += amt;
-                            else if (adj.category === 'uniform') uniformDeductions += amt;
-                            else if (adj.category === 'absent_day') absenceDeductions += amt;
-                            else otherUnifiedDeductions += amt;
-                        } else if (adj.type === 'addition') {
-                            if (adj.category === 'allowance') totalAllowances += amt;
-                            else totalBonuses += amt;
-                        }
-                        adjustmentUpdates.push(adj.id);
-                    }
-                }
-
-                // Process Direct Advances
-                if (advancesRes.data) {
-                    for (const adv of advancesRes.data) {
-                        totalAdvances += Number(adv.amount || 0);
-                        advanceUpdates.push(adv.id);
-                    }
-                }
-
-                // Process Direct Loans (Recurring installments)
-                if (loansRes.data) {
-                    for (const loan of loansRes.data) {
-                        totalLoanDeductions += Number(loan.monthly_installment || 0);
-                    }
-                }
-
-                // Process Direct Credit Bills
-                if (creditBillsRes.data) {
-                    for (const bill of creditBillsRes.data) {
-                        // Skip if already linked to a payroll run
-                        if (bill.payroll_id) continue;
-                        totalCreditBills += Number(bill.balance || bill.amount || 0);
-                        creditBillUpdates.push(bill.id);
-                    }
-                }
-
-                // Process Unpaid Bills (Waiters accountability)
-                if (unpaidBillsRes.data) {
-                    for (const bill of unpaidBillsRes.data) {
-                        totalUnpaidBills += Number(bill.balance_amount || bill.total_amount || 0);
-                        unpaidBillUpdates.push(bill.id);
-                    }
-                }
-
-
-                // E. Kenyan Statutory Deductions
-                // First check for manual entry by branch accountant, otherwise auto-calculate
-                let nssf = 0;
-                let shif = 0;
-                const nhif = 0; // Deprecated
-                let housingLevy = 0;
-                let statutoryDeductionId = null;
-
-                const { data: manualStatutory } = await supabase
-                    .from('staff_monthly_statutory_deductions')
-                    .select('*')
-                    .eq('staff_id', staff.id)
-                    .eq('month', month)
-                    .eq('year', year)
-                    .eq('status', 'pending')
-                    .maybeSingle();
-
-                if (manualStatutory) {
-                    nssf = Number(manualStatutory.nssf_amount || 0);
-                    shif = Number(manualStatutory.shif_amount || 0);
-                    housingLevy = Number(manualStatutory.housing_fund_amount || 0);
-                    statutoryDeductionId = manualStatutory.id;
-                } else {
-                    // Auto-calculate standard Kenyan statutory deductions
-                    const grossForStatutory = basicSalary + totalAllowances + totalBonuses;
-
-                    // NSSF: 6% of gross, capped at KES 2,160 (Tier I: 6% up to 18,000 = 1,080; Tier II: 6% of next 18,001-36,000 = 1,080; total max 2,160)
-                    if (nssfEnabled) {
-                        const tier1 = Math.min(grossForStatutory, 18000) * 0.06;
-                        const tier2 = Math.min(Math.max(grossForStatutory - 18000, 0), 18000) * 0.06;
-                        nssf = Math.round(tier1 + tier2);
-                    }
-
-                    // SHIF (formerly NHIF): 2.75% of gross salary
-                    if (shifEnabled) {
-                        shif = Math.round(grossForStatutory * 0.0275);
-                    }
-
-                    // Housing Levy: 1.5% of gross salary
-                    if (housingEnabled) {
-                        housingLevy = Math.round(grossForStatutory * 0.015);
-                    }
-                }
-
-                // --- PAYE (Pay As You Earn - Income Tax) ---
-                // Taxable income = gross salary - NSSF (NSSF is tax-deductible)
-                // Calculate PAYE (Taxable Income = Gross - NSSF)
-                const calculatePAYE = (taxablePay: number) => {
-                    let tax = 0;
-                    if (taxablePay <= 24000) {
-                        tax = taxablePay * 0.1;
-                    } else if (taxablePay <= 32333) {
-                        tax = 2400 + (taxablePay - 24000) * 0.25;
-                    } else if (taxablePay <= 500000) {
-                        tax = 2400 + 2083.25 + (taxablePay - 32333) * 0.3;
-                    } else if (taxablePay <= 800000) {
-                        tax = 2400 + 2083.25 + 140300.1 + (taxablePay - 500000) * 0.325;
-                    } else {
-                        tax = 2400 + 2083.25 + 140300.1 + 97500 + (taxablePay - 800000) * 0.35;
-                    }
-                    return Math.max(0, tax - 2400); // Less personal relief
-                };
-
-                const grossSalary = basicSalary + totalAllowances + totalBonuses;
-                // PAYE only applies if staff has a KRA PIN registered
-                const paye = staff.kra_pin ? calculatePAYE(grossSalary - nssf) : 0;
-
-                // F. Calculate Net Pay
-                const statutoryDeductions = nssf + shif + paye + housingLevy;
-                const otherDeductions = totalCreditBills + totalAdvances + totalLoanDeductions + totalUnpaidBills + uniformDeductions + absenceDeductions + otherUnifiedDeductions;
-                const totalDeductions = statutoryDeductions + otherDeductions;
-                const netPay = (basicSalary + totalAllowances + totalBonuses) - totalDeductions;
-
-                // G. Create/Update Payroll Record
-                const { data: payroll, error: payrollError } = await supabase
-                    .from('staff_payroll')
-                    .upsert({
-                        staff_id: staff.id,
-                        month: String(month),
-                        year: Number(year),
-                        basic_salary: basicSalary,
-                        allowances: totalAllowances,
-                        bonuses: totalBonuses,
-                        total_credit_bills: totalCreditBills,
-                        total_advances: totalAdvances,
-                        loan_deduction: totalLoanDeductions,
-                        uncollected_bills_deduction: totalUnpaidBills,
-                        uniform_deduction: uniformDeductions,
-                        absence_deduction: absenceDeductions,
-                        nssf,
-                        nhif,
-                        paye,
-                        housing_levy: housingLevy,
-                        nssf_deduction: nssf,
-                        shif_deduction: shif,
-                        housing_levy_deduction: housingLevy,
-                        total_deductions: totalDeductions,
-                        net_pay: netPay,
-                        status: 'draft', // Draft until confirmed/paid
-                        generated_at: new Date().toISOString()
-                    }, { onConflict: 'staff_id, month, year' })
-                    .select()
-                    .single();
-
-                if (payrollError) throw payrollError;
-
-                // H. Update Related Records (Mark as applied)
-                if (payroll) {
-                    const updatePromises = [];
-                    if (adjustmentUpdates.length > 0) {
-                        updatePromises.push(
-                            supabase
-                                .from('staff_payroll_adjustments')
-                                .update({ status: 'applied', payroll_id: payroll.id })
-                                .in('id', adjustmentUpdates)
-                        );
-                    }
-                    if (advanceUpdates.length > 0) {
-                        updatePromises.push(
-                            supabase
-                                .from('staff_advances')
-                                .update({ payroll_id: payroll.id })
-                                .in('id', advanceUpdates)
-                        );
-                    }
-                    if (creditBillUpdates.length > 0) {
-                        updatePromises.push(
-                            supabase
-                                .from('staff_credit_bills')
-                                .update({ is_paid: true, balance: 0, payroll_id: payroll.id })
-                                .in('id', creditBillUpdates)
-                        );
-                    }
-                    if (unpaidBillUpdates.length > 0) {
-                        updatePromises.push(
-                            supabase
-                                .from('unpaid_bills')
-                                .update({ status: 'deducted', remarks: `Deducted from payroll for ${month}/${year}` })
-                                .in('id', unpaidBillUpdates)
-                        );
-                    }
-                    if (statutoryDeductionId) {
-                        updatePromises.push(
-                            supabase
-                                .from('staff_monthly_statutory_deductions')
-                                .update({ status: 'applied', payroll_id: payroll.id })
-                                .eq('id', statutoryDeductionId)
-                        );
-                    }
-                    await Promise.all(updatePromises);
-                }
-
-
+                const payroll = await processStaffPayroll(
+                    staff.id,
+                    Number(staff.basic_salary) || 0,
+                    Number(month),
+                    Number(year),
+                    existingPayrollMap.get(staff.id) || null
+                );
                 results.push(payroll);
             } catch (err: any) {
+                logger.error(`Payroll generation failed for staff ${staff.id}:`, err);
                 errors.push({ staff_id: staff.id, error: err.message });
             }
         }
@@ -304,8 +316,8 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
                 processed_count: results.length,
                 error_count: errors.length,
                 results,
-                errors
-            }
+                errors,
+            },
         });
 
     } catch (error) {
@@ -665,13 +677,10 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             `)
             .order('created_at', { ascending: false });
 
-        if (status === 'pending_accountant') {
-            creditBillsQuery = creditBillsQuery.eq('is_paid', false);
-        } else if (status === 'pending_auditor') {
-            // Fallback since auditor columns are missing
-            creditBillsQuery = creditBillsQuery.eq('is_paid', false);
+        if (status === 'pending_accountant' || status === 'pending_auditor') {
+            creditBillsQuery = creditBillsQuery.eq('status', 'pending');
         } else if (status === 'approved') {
-            creditBillsQuery = creditBillsQuery.eq('is_paid', true);
+            creditBillsQuery = creditBillsQuery.in('status', ['deducted', 'paid_cash']);
         }
 
         // Fetch advances
@@ -761,6 +770,56 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
 };
 
 /**
+ * Approve all draft payroll records for a given month/year (optionally filtered by branch).
+ * Sets status from 'draft' → 'approved'.
+ */
+export const approvePayrollBatch = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { month, year, branch_id } = req.body;
+        if (!month || !year) throw new AppError('month and year are required', 400);
+
+        // Fetch draft records for the period
+        let query = supabase
+            .from('staff_payroll')
+            .select('id, staff_id')
+            .eq('month', String(month))
+            .eq('year', Number(year))
+            .eq('status', 'draft');
+
+        if (branch_id) {
+            // Filter via staff_profiles join
+            const { data: staffInBranch } = await supabase
+                .from('staff_profiles')
+                .select('id')
+                .eq('branch_id', branch_id);
+            const ids = (staffInBranch || []).map(s => s.id);
+            if (ids.length === 0) throw new AppError('No staff found for this branch', 404);
+            query = query.in('staff_id', ids);
+        }
+
+        const { data: drafts, error: fetchErr } = await query;
+        if (fetchErr) throw fetchErr;
+        if (!drafts || drafts.length === 0) throw new AppError('No draft payroll records found for this period', 404);
+
+        const ids = drafts.map(d => d.id);
+        const { error: updateErr } = await supabase
+            .from('staff_payroll')
+            .update({ status: 'approved' })
+            .in('id', ids);
+
+        if (updateErr) throw updateErr;
+
+        res.status(200).json({
+            success: true,
+            data: { approved_count: ids.length },
+            message: `${ids.length} payroll record(s) approved for ${month}/${year}`,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Approve a payroll item (credit bill, loan, or advance)
  */
 export const approvePayrollItem = async (req: Request, res: Response, next: NextFunction) => {
@@ -779,18 +838,23 @@ export const approvePayrollItem = async (req: Request, res: Response, next: Next
         else throw new AppError('Invalid type', 400);
 
         // Update the record with auditor confirmation
+        let updatePayload: Record<string, any>;
+        if (type === 'advance') {
+            updatePayload = { status: 'approved', approved_by: auditorId };
+        } else if (type === 'loan') {
+            updatePayload = { status: 'active', approved_by: auditorId };
+        } else {
+            // credit_bill: already 'pending', no status change needed — just confirm it's valid
+            // We don't change status here; payroll generation will set it to 'deducted'
+            updatePayload = {};
+        }
+
         const { data, error } = await supabase
             .from(tableName)
-            .update({
-                auditor_confirmed_at: new Date().toISOString(),
-                auditor_id: auditorId,
-                status: type === 'loan' ? 'active' : 'approved'
-            })
+            .update(updatePayload)
             .eq('id', id)
             .select()
             .single();
-
-        if (error) throw error;
         if (!data) throw new AppError('Record not found', 404);
 
         res.status(200).json({
@@ -826,16 +890,14 @@ export const rejectPayrollItem = async (req: Request, res: Response, next: NextF
         else if (type === 'loan') tableName = 'staff_loans';
         else throw new AppError('Invalid type', 400);
 
-        // Update the record with rejection
+        // Update the record with rejection (cancelled is the valid status for all three tables)
         const { data, error } = await supabase
             .from(tableName)
             .update({
-                status: 'rejected',
-                auditor_id: auditorId,
-                // Store rejection reason in a notes/reason field if it exists
-                ...(tableName === 'staff_credit_bills' ? { description: `REJECTED: ${reason}` } : {}),
-                ...(tableName === 'staff_advances' ? { reason: `REJECTED: ${reason}` } : {}),
-                ...(tableName === 'staff_loans' ? { reason: `REJECTED: ${reason}` } : {})
+                status: 'cancelled',
+                ...(tableName === 'staff_credit_bills' ? { description: `CANCELLED: ${reason}` } : {}),
+                ...(tableName === 'staff_advances' ? { reason: `CANCELLED: ${reason}` } : {}),
+                ...(tableName === 'staff_loans' ? { reason: `CANCELLED: ${reason}` } : {})
             })
             .eq('id', id)
             .select()

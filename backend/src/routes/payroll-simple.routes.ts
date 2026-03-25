@@ -23,6 +23,7 @@ import {
     downloadPayslipsZip,
     getPendingApprovals,
     approvePayrollItem,
+    approvePayrollBatch,
     rejectPayrollItem
 } from '../controllers/payroll-simple.controller';
 import { protect, authorize } from '../middleware/auth';
@@ -67,6 +68,7 @@ router.post('/download-zip', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_M
 // AUDITOR APPROVAL
 // ==========================================
 router.get('/pending-approvals', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getPendingApprovals);
+router.post('/approve-batch', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]), approvePayrollBatch);
 router.post('/:type/:id/approve', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), approvePayrollItem);
 router.post('/:type/:id/reject', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), rejectPayrollItem);
 

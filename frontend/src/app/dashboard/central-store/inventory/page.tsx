@@ -181,7 +181,7 @@ export default function InventoryPage() {
                 <tbody className="divide-y divide-stone-50">
                   {isLoading ? (
                     Array(5).fill(0).map((_, i) => (
-                      <tr key={i}><td colSpan={5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
+                      <tr key={`skeleton-${i}`}><td colSpan={5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
                     ))
                   ) : filteredItems.length === 0 ? (
                     <tr><td colSpan={5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>

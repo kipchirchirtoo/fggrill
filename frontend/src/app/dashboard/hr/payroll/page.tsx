@@ -33,25 +33,50 @@ export default function HRPayrollPage() {
         creditBills: any[]; advances: any[]; loans: any[];
     }>({ creditBills: [], advances: [], loans: [] });
     const [summary, setSummary] = useState({ count: 0, totalBasic: 0, totalDeductions: 0, totalNet: 0 });
+    const [isApproving, setIsApproving] = useState(false);
 
     const selectedBranchName = selectedBranchId === 'all'
         ? 'All Branches'
         : branches.find(b => String(b.id) === selectedBranchId)?.name || 'Branch';
 
-    const fetchPendingDeductions = useCallback(async () => {
+    const fetchPendingDeductions = useCallback(async (freshRecords?: any[]) => {
         try {
             const [billsRes, advancesRes, loansRes] = await Promise.all([
                 staffAPI.simplePayroll.getCreditBills({ status: 'pending' }),
                 staffAPI.simplePayroll.getAdvances({ status: 'approved' }),
                 staffAPI.simplePayroll.getLoans({ status: 'active' }),
             ]);
+
+            // Filter advances to only those matching the selected payroll period
+            const month = Number(selectedMonth);
+            const year = Number(selectedYear);
+            const filteredAdvances = (advancesRes?.data || []).filter(
+                (a: any) => Number(a.month_to_deduct) === month && Number(a.year_to_deduct) === year
+            );
+
+            // Use freshRecords if provided (avoids stale state after payroll run)
+            const records = freshRecords ?? payrollRecords;
+            const existingPayrollStaffIds = new Set(
+                records
+                    .filter(r => Number(r.loan_deduction) > 0)
+                    .map(r => r.staff_id)
+            );
+            const filteredLoans = (loansRes?.data || []).filter((l: any) => {
+                const startYear = Number(l.start_deduction_year);
+                const startMonth = Number(l.start_deduction_month);
+                const hasStarted =
+                    startYear < year || (startYear === year && startMonth <= month);
+                const alreadyDeducted = existingPayrollStaffIds.has(l.staff_id);
+                return hasStarted && !alreadyDeducted;
+            });
+
             setPendingDeductions({
                 creditBills: billsRes?.data || [],
-                advances: advancesRes?.data || [],
-                loans: loansRes?.data || [],
+                advances: filteredAdvances,
+                loans: filteredLoans,
             });
         } catch (e) { /* non-critical */ }
-    }, []);
+    }, [selectedMonth, selectedYear, payrollRecords]);
 
     const fetchPayrollData = useCallback(async () => {
         setIsLoading(true);
@@ -80,8 +105,12 @@ export default function HRPayrollPage() {
 
     useEffect(() => {
         fetchPayrollData();
+    }, [fetchPayrollData]);
+
+    // Re-fetch pending deductions whenever payroll records or period changes
+    useEffect(() => {
         fetchPendingDeductions();
-    }, [fetchPayrollData, fetchPendingDeductions]);
+    }, [fetchPendingDeductions]);
 
     const handleRunPayroll = async () => {
         const branchLabel = selectedBranchId === 'all' ? 'ALL branches' : selectedBranchName;
@@ -95,14 +124,52 @@ export default function HRPayrollPage() {
                 toast.success('Payroll processed!', {
                     description: `Processed: ${res.data.processed_count}, Errors: ${res.data.error_count}`
                 });
-                fetchPayrollData();
+                // Fetch fresh records first, then pass them directly to avoid stale state
+                const params2: any = { month: Number(selectedMonth), year: Number(selectedYear) };
+                if (selectedBranchId !== 'all') params2.branch_id = Number(selectedBranchId);
+                const freshRes = await staffAPI.simplePayroll.getPayrollRecords(params2);
+                const freshRecords = freshRes?.data || [];
+                if (freshRes.success) {
+                    setPayrollRecords(freshRecords);
+                    setSummary({
+                        count: freshRecords.length,
+                        totalBasic: freshRecords.reduce((s: number, r: any) => s + Number(r.basic_salary), 0),
+                        totalDeductions: freshRecords.reduce((s: number, r: any) => s + Number(r.total_deductions), 0),
+                        totalNet: freshRecords.reduce((s: number, r: any) => s + Number(r.net_pay), 0),
+                    });
+                }
+                await fetchPendingDeductions(freshRecords);
             } else {
-                toast.error('Failed to process payroll');
+                toast.error(res.message || 'Failed to process payroll', { duration: 6000 });
             }
         } catch (error: any) {
-            toast.error(error.message || 'Processing failed');
+            toast.error(error.message || 'Processing failed', { duration: 6000 });
         } finally {
             setIsProcessing(false);
+        }
+    };
+
+    const handleApprovePayroll = async () => {
+        const hasDrafts = payrollRecords.some(r => r.status === 'draft');
+        if (!hasDrafts) { toast.error('No draft payroll records to approve'); return; }
+        const branchLabel = selectedBranchId === 'all' ? 'ALL branches' : selectedBranchName;
+        if (!confirm(`Approve payroll for ${branchLabel} — ${selectedMonth}/${selectedYear}? This will lock all draft records.`)) return;
+        setIsApproving(true);
+        try {
+            const params: any = { month: Number(selectedMonth), year: Number(selectedYear) };
+            if (selectedBranchId !== 'all') params.branch_id = Number(selectedBranchId);
+            const res = await staffAPI.simplePayroll.approvePayrollBatch(params);
+            if (res.success) {
+                toast.success(`Payroll approved — ${res.data.approved_count} records locked`);
+                await fetchPayrollData();
+                handleExportPDF('APPROVED');
+            } else {
+                toast.error(res.message || 'Approval failed', { duration: 6000 });
+            }
+        } catch (error: any) {
+            toast.error(error.message || 'Approval failed', { duration: 6000 });
+        } finally {
+            setIsApproving(false);
         }
     };
 
@@ -203,6 +270,9 @@ export default function HRPayrollPage() {
     };
 
     // Build the Python-ready employees array from already-loaded filteredRecords
+    const payrollStatus = filteredRecords.length > 0 && filteredRecords.every(r => r.status === 'approved')
+        ? 'APPROVED' : 'DRAFT';
+
     const buildEmployeesPayload = () => filteredRecords.map((r, i) => ({
         no:           i + 1,
         emp_id:       r.employee_id || r.staff?.employee_id || '—',
@@ -218,24 +288,26 @@ export default function HRPayrollPage() {
         credit_bills: Number(r.total_credit_bills || 0),
         advances:     Number(r.total_advances || 0),
         loans:        Number(r.loan_deduction || 0),
+        status:       (r.status || 'draft').toUpperCase(),
     }));
 
-    const handleExportPDF = async () => {
+    const handleExportPDF = async (overrideStatus?: string) => {
         if (filteredRecords.length === 0) { toast.error('No records to export'); return; }
         toast.info('Generating PDF...');
         try {
             const token = localStorage.getItem('token');
             const monthName = new Date(Number(selectedYear), Number(selectedMonth) - 1, 1)
                 .toLocaleString('en-US', { month: 'long', year: 'numeric' });
+            const effectiveStatus = overrideStatus ?? payrollStatus;
 
             const payload = {
                 reportType: 'payroll',
                 format: 'pdf',
-                employees: buildEmployeesPayload(),
+                employees: buildEmployeesPayload().map(e => ({ ...e, status: overrideStatus ?? e.status })),
                 period: monthName,
                 branch: selectedBranchName,
                 generated: new Date().toLocaleString('en-KE'),
-                status: 'DRAFT',
+                status: effectiveStatus,
                 company_name: 'FAMOUSGATE HOTELS',
                 company_address: 'Bomet, Kenya',
                 company_email: 'famousgateshotelsbmt@gmail.com',
@@ -260,22 +332,23 @@ export default function HRPayrollPage() {
         }
     };
 
-    const handleExportXLSX = async () => {
+    const handleExportXLSX = async (overrideStatus?: string) => {
         if (filteredRecords.length === 0) { toast.error('No records to export'); return; }
         toast.info('Generating Excel file...');
         try {
             const token = localStorage.getItem('token');
             const monthName = new Date(Number(selectedYear), Number(selectedMonth) - 1, 1)
                 .toLocaleString('en-US', { month: 'long', year: 'numeric' });
+            const effectiveStatus = overrideStatus ?? payrollStatus;
 
             const payload = {
                 reportType: 'payroll',
                 format: 'xlsx',
-                employees: buildEmployeesPayload(),
+                employees: buildEmployeesPayload().map(e => ({ ...e, status: overrideStatus ?? e.status })),
                 period: monthName,
                 branch: selectedBranchName,
                 generated: new Date().toLocaleString('en-KE'),
-                status: 'DRAFT',
+                status: effectiveStatus,
                 company_name: 'FAMOUSGATE HOTELS',
                 company_address: 'Bomet, Kenya',
                 company_email: 'famousgateshotelsbmt@gmail.com',
@@ -358,6 +431,12 @@ export default function HRPayrollPage() {
                                 <span>Process Payroll</span>
                             </button>
 
+                            <button onClick={handleApprovePayroll} disabled={isApproving || payrollRecords.every(r => r.status !== 'draft')}
+                                className="px-4 py-2 rounded-full bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-emerald-200 disabled:opacity-40">
+                                {isApproving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                <span>Approve & Download</span>
+                            </button>
+
                             <Link href="/dashboard/hr/adjustments"
                                 className="px-4 py-2 rounded-full bg-stone-100 text-stone-600 text-sm font-bold hover:bg-stone-200 transition-all flex items-center gap-2 active:scale-95">
                                 <ArrowDownUp className="h-4 w-4" />
@@ -377,7 +456,7 @@ export default function HRPayrollPage() {
                                 <span>ZIP</span>
                             </button>
 
-                            <button onClick={handleExportXLSX}
+                            <button onClick={() => handleExportXLSX()}
                                 className="px-4 py-2 rounded-full bg-emerald-700 text-white text-sm font-bold hover:bg-emerald-800 transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-emerald-200">
                                 <FileText className="h-4 w-4" />
                                 <span>Excel</span>
@@ -389,7 +468,7 @@ export default function HRPayrollPage() {
                                 <span>CSV</span>
                             </button>
 
-                            <button onClick={handleExportPDF}
+                            <button onClick={() => handleExportPDF()}
                                 className="px-4 py-2 rounded-full bg-rose-600 text-white text-sm font-bold hover:bg-rose-700 transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-rose-200">
                                 <TrendingDown className="h-4 w-4" />
                                 <span>PDF</span>
@@ -472,7 +551,7 @@ export default function HRPayrollPage() {
                                         {pendingDeductions.loans.slice(0, 5).map((l: any) => (
                                             <div key={l.id} className="flex justify-between text-xs py-1 border-b border-stone-50 last:border-0">
                                                 <span className="text-stone-600">{l.staff?.first_name} {l.staff?.last_name}</span>
-                                                <span className="font-bold text-red-500">KES {Number(l.monthly_installment).toLocaleString()}/mo</span>
+                                                <span className="font-bold text-red-500">KES {Number(l.installment_amount || l.monthly_installment || 0).toLocaleString()}/mo</span>
                                             </div>
                                         ))}
                                     </div>
@@ -553,7 +632,9 @@ export default function HRPayrollPage() {
                                                 <td className="px-3 py-4 text-right font-bold text-emerald-600 text-lg">{Number(item.net_pay).toLocaleString()}</td>
                                                 <td className="px-3 py-4 text-center">
                                                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
-                                                        item.status === 'paid' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-amber-50 border-amber-100 text-amber-600'
+                                                        item.status === 'paid' || item.status === 'approved'
+                                                            ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                                            : 'bg-amber-50 border-amber-100 text-amber-600'
                                                     }`}>{item.status}</span>
                                                 </td>
                                             </tr>

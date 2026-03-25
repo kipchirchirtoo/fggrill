@@ -89,12 +89,24 @@ export const exportExceptionSummary = async (req: Request, res: Response, next: 
   try {
     const { branch_ids, start_date, end_date, branch_name = 'All Branches' } = req.query as any;
 
-    let q = supabase.from('audit_exceptions').select('*, branch:branches(name), raised_by_user:users!raised_by(first_name, last_name)').order('created_at', { ascending: false });
+    let q = supabase.from('audit_exceptions').select('*, branch:branches(name)').order('created_at', { ascending: false });
     q = branchFilter(q, branch_ids);
     if (start_date) q = q.gte('created_at', start_date);
     if (end_date) q = q.lte('created_at', end_date + 'T23:59:59');
-    const { data: exceptions, error } = await q;
+    const { data: exceptionsRaw, error } = await q;
     if (error) throw error;
+
+    // Manually enrich raised_by user (no FK in schema)
+    const raisedByIds = [...new Set((exceptionsRaw || []).map((e: any) => e.raised_by).filter(Boolean))];
+    const raisedByMap: Record<string, any> = {};
+    if (raisedByIds.length > 0) {
+      const { data: raisedUsers } = await supabase.from('users').select('id, first_name, last_name').in('id', raisedByIds);
+      (raisedUsers || []).forEach((u: any) => { raisedByMap[u.id] = u; });
+    }
+    const exceptions = (exceptionsRaw || []).map((e: any) => ({
+      ...e,
+      raised_by_user: e.raised_by ? (raisedByMap[e.raised_by] || null) : null,
+    }));
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Exception Summary', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1 } });
@@ -709,7 +721,7 @@ export const getBranchPerformanceReport = exportRevenueReconciliation;
 export const getStockUsageReport = exportStockVarianceReport;
 export const getEmployeeCreditReport = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { data: bills, error } = await supabase.from('staff_credit_bills').select('*, employee:staff_profiles(id, first_name, last_name, id_number), branch:branches(name)').eq('is_paid', false).order('date', { ascending: false });
+    const { data: bills, error } = await supabase.from('staff_credit_bills').select('*, employee:staff_profiles(id, first_name, last_name, id_number), branch:branches(name)').eq('status', 'pending').order('bill_date', { ascending: false });
     if (error) throw error;
     res.status(200).json({ success: true, data: bills });
   } catch (e) { next(e); }

@@ -705,6 +705,39 @@ async function fetchHotelBillResponse(booking: any, res: Response): Promise<void
 }
 
 /**
+ * Links a completed payment to the cashier's active shift log (fire-and-forget)
+ */
+async function linkPaymentToActiveShift(
+    cashierId: string,
+    paymentId: string,
+    paymentRef: string,
+    paymentMethod: string,
+    amount: number
+): Promise<void> {
+    try {
+        const { data: shift } = await supabase
+            .from('cashier_shift_logs')
+            .select('id')
+            .eq('cashier_id', cashierId)
+            .eq('status', 'open')
+            .single();
+
+        if (!shift) return;
+
+        await supabase.from('cashier_shift_transactions').insert({
+            shift_id: shift.id,
+            transaction_id: paymentId,
+            transaction_ref: paymentRef,
+            payment_method: paymentMethod,
+            amount,
+            transaction_time: new Date().toISOString()
+        });
+    } catch {
+        // Non-critical — don't fail the payment if shift linking fails
+    }
+}
+
+/**
  * Process Manual/Cash Payment
  */
 export const processCashierPayment = async (
@@ -771,6 +804,7 @@ export const processCashierPayment = async (
                 reference: paymentRef,
                 metadata: {
                     processed_by: 'cashier',
+                    cashier_id: req.user?.id,
                     processed_at: new Date().toISOString(),
                     invoice_number: bookingId,
                     invoice_source: invoiceSource,
@@ -842,6 +876,7 @@ export const processCashierPayment = async (
                 });
             }
 
+            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
             res.json({
                 success: true,
                 message: 'Invoice payment processed successfully',
@@ -878,6 +913,7 @@ export const processCashierPayment = async (
                     reference: paymentRef,
                     metadata: {
                         processed_by: 'cashier',
+                        cashier_id: req.user?.id,
                         processed_at: new Date().toISOString(),
                         order_number: bookingId,
                         verification_required: !isVerifiedMethod
@@ -943,6 +979,7 @@ export const processCashierPayment = async (
                 }
             }
 
+            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
             res.json({
                 success: true,
                 message: 'Restaurant payment processed successfully',
@@ -979,6 +1016,7 @@ export const processCashierPayment = async (
                     reference: paymentRef,
                     metadata: {
                         processed_by: 'cashier',
+                        cashier_id: req.user?.id,
                         processed_at: new Date().toISOString(),
                         order_number: bookingId,
                         verification_required: !isVerifiedMethod
@@ -1020,6 +1058,7 @@ export const processCashierPayment = async (
                 }
             }
 
+            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
             res.json({
                 success: true,
                 message: 'Bar payment processed successfully',
@@ -1056,6 +1095,7 @@ export const processCashierPayment = async (
                     reference: paymentRef,
                     metadata: {
                         processed_by: 'cashier',
+                        cashier_id: req.user?.id,
                         processed_at: new Date().toISOString(),
                         transaction_ref: bookingId
                     }
@@ -1093,6 +1133,7 @@ export const processCashierPayment = async (
                 });
             }
 
+            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
             res.json({
                 success: true,
                 message: 'POS payment processed successfully',
@@ -1126,6 +1167,7 @@ export const processCashierPayment = async (
                         reference: paymentRef,
                         metadata: {
                             processed_by: 'cashier',
+                            cashier_id: req.user?.id,
                             processed_at: new Date().toISOString(),
                             transaction_number: bookingId,
                             source: 'kyogong'
@@ -1165,6 +1207,7 @@ export const processCashierPayment = async (
                     });
                 }
 
+                await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
                 res.json({
                     success: true,
                     message: 'Kyogong payment processed successfully',
@@ -1205,6 +1248,7 @@ export const processCashierPayment = async (
                     reference: paymentRef,
                     metadata: {
                         processed_by: 'cashier',
+                        cashier_id: req.user?.id,
                         processed_at: new Date().toISOString(),
                         bill_number: bookingId,
                         bill_type: bill.bill_type
@@ -1254,6 +1298,7 @@ export const processCashierPayment = async (
                 });
             }
 
+            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
             res.json({
                 success: true,
                 message: 'Bill payment processed successfully',
@@ -1292,6 +1337,7 @@ export const processCashierPayment = async (
                 reference: paymentRef,
                 metadata: {
                     processed_by: 'cashier',
+                    cashier_id: req.user?.id,
                     processed_at: new Date().toISOString(),
                     verification_required: !isVerifiedMethod,
                     original_id: bookingId
@@ -1331,6 +1377,7 @@ export const processCashierPayment = async (
             }
         }
 
+        await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
         res.json({
             success: true,
             message: 'Hotel payment processed successfully',
@@ -2764,19 +2811,18 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                                 .from('staff_credit_bills')
                                 .select('id')
                                 .eq('staff_id', bill.staff_id)
-                                .eq('date', today)
+                                .eq('bill_date', today)
                                 .eq('amount', bill.amount)
-                                .eq('is_paid', false)
+                                .eq('status', 'pending')
                                 .maybeSingle();
 
                             if (!existing) {
                                 await supabase.from('staff_credit_bills').insert({
                                     staff_id: bill.staff_id,
                                     amount: bill.amount,
-                                    balance: bill.amount,
-                                    date: today,
+                                    bill_date: today,
                                     description: `Cashier Logbook Credit (${type}): ${bill.customer_name || 'Staff'} - ${bill.reference || 'No Ref'}`,
-                                    is_paid: false
+                                    status: 'pending'
                                 });
                             }
                         } catch (err) {

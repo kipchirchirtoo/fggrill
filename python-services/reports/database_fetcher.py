@@ -339,14 +339,41 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             return data
             
         try:
-            # 1. Fetch ALL payments for the period (completed only)
+            # 1. Fetch ALL payments for the period (all statuses — cash=completed, mpesa/card=pending until verified)
             payments_query = self.client.table('payments').select('*')\
                 .gte('created_at', f'{start_date}T00:00:00')\
                 .lte('created_at', f'{end_date}T23:59:59')\
-                .eq('status', 'completed')
+                .in_('status', ['completed', 'pending', 'verified', 'approved'])
                 
             payments_response = payments_query.execute()
             all_payments = payments_response.data or []
+
+            # 1b. Also fetch from payment_verifications (the primary payments table used by cashiers)
+            pv_query = self.client.table('payment_verifications').select('*')\
+                .gte('recorded_at', f'{start_date}T00:00:00')\
+                .lte('recorded_at', f'{end_date}T23:59:59')
+            pv_response = pv_query.execute()
+            pv_payments = pv_response.data or []
+
+            # Normalize payment_verifications to match payments structure
+            for pv in pv_payments:
+                all_payments.append({
+                    'id': pv.get('id'),
+                    'amount': pv.get('amount'),
+                    'payment_method': pv.get('payment_method'),
+                    'status': pv.get('status', 'completed'),
+                    'reference': pv.get('reference_number'),
+                    'created_at': pv.get('recorded_at'),
+                    'branch_id': pv.get('branch_id'),
+                    'created_by': pv.get('recorded_by'),
+                    'restaurant_order_id': None,
+                    'bar_order_id': None,
+                    'booking_id': None,
+                    'pos_transaction_id': None,
+                    'outside_catering_id': None,
+                    'restaurant_pool_token_sales_id': None,
+                    '_source': 'payment_verification'
+                })
             
             # 2. Get Branch IDs to filter
             branch_ids = self._parse_branch_ids(filters)
@@ -409,7 +436,7 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 else: pos_sales_query = pos_sales_query.in_('branch_id', branch_ids)
             
             pos_sales_res = pos_sales_query.execute()
-            data['sales'] += sum(float(o.get('total_amount', 0) or 0) for o in (pos_sales_res.data or []))
+            data['sales'] += sum(float(o.get('total_amount') or 0) for o in (pos_sales_res.data or []))
 
             # Pool Token Sales
             pool_sales_query = self.client.table('restaurant_pool_token_sales').select('total_amount, branch_id')\
@@ -443,16 +470,16 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                     map_data[f"booking_user_{item['id']}"] = item.get('created_by')
                 
             if order_ids:
-                res = self.client.table('restaurant_orders').select('id, branch_id, staff_id').in_('id', order_ids).execute()
+                res = self.client.table('restaurant_orders').select('id, branch_id, created_by').in_('id', order_ids).execute()
                 for item in (res.data or []): 
                     map_data[f"rest_{item['id']}"] = item.get('branch_id')
-                    map_data[f"rest_user_{item['id']}"] = item.get('staff_id')
+                    map_data[f"rest_user_{item['id']}"] = item.get('created_by')
                 
             if bar_ids:
-                res = self.client.table('bar_orders').select('id, branch_id, staff_id').in_('id', bar_ids).execute()
+                res = self.client.table('bar_orders').select('id, branch_id, created_by').in_('id', bar_ids).execute()
                 for item in (res.data or []): 
                     map_data[f"bar_{item['id']}"] = item.get('branch_id')
-                    map_data[f"bar_user_{item['id']}"] = item.get('staff_id')
+                    map_data[f"bar_user_{item['id']}"] = item.get('created_by')
 
             if event_ids:
                 res = self.client.table('outside_catering_bookings').select('id, branch_id, created_by').in_('id', event_ids).execute()
@@ -461,10 +488,10 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                     map_data[f"event_user_{item['id']}"] = item.get('created_by')
 
             if pos_txn_ids:
-                res = self.client.table('pos_transactions').select('id, branch_id, created_by').in_('id', pos_txn_ids).execute()
+                res = self.client.table('pos_transactions').select('id, branch_id, cashier_id').in_('id', pos_txn_ids).execute()
                 for item in (res.data or []):
                     map_data[f"pos_{item['id']}"] = item.get('branch_id')
-                    map_data[f"pos_user_{item['id']}"] = item.get('created_by')
+                    map_data[f"pos_user_{item['id']}"] = item.get('cashier_id')
                 
             # Filter and Aggregate
             active_user_ids = []
@@ -513,6 +540,9 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 elif payment.get('outside_catering_id'): data['departments']['events'] += amount
                 elif payment.get('pos_transaction_id'): data['departments']['pos'] += amount
                 elif payment.get('restaurant_pool_token_sales_id'): data['departments']['pool'] += amount
+                elif payment.get('_source') == 'payment_verification':
+                    # Categorize by payment method for payment_verifications
+                    data['departments']['other'] += amount
                 else: data['departments']['other'] += amount
                 
                 # Cashier Summary
@@ -527,10 +557,10 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 if len(data['transactions']) < 100:
                     data['transactions'].append({
                         'date': payment.get('created_at'),
-                        'reference': payment.get('reference'),
+                        'reference': payment.get('reference') or payment.get('reference_number') or '',
                         'amount': amount,
                         'method': method,
-                        'type': 'Booking' if payment.get('booking_id') else 'Order' if payment.get('restaurant_order_id') else 'Bar' if payment.get('bar_order_id') else 'Catering' if payment.get('outside_catering_id') else 'POS' if payment.get('pos_transaction_id') else 'Other'
+                        'type': 'Booking' if payment.get('booking_id') else 'Order' if payment.get('restaurant_order_id') else 'Bar' if payment.get('bar_order_id') else 'Catering' if payment.get('outside_catering_id') else 'POS' if payment.get('pos_transaction_id') else 'Payment'
                     })
 
             # Fetch User Names for summaries

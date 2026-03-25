@@ -226,7 +226,10 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
       }
 
       // Note: Auditors can access branch-store stock-take detail pages for verification purposes
-      // Stock-take notifications use /dashboard/branch-store/stock-takes/${id} which is accessible to auditors
+      // Fix old/broken auditor/stock-takes URLs → correct branch-store path
+      if (fixedUrl.includes('/dashboard/auditor/stock-takes/')) {
+        fixedUrl = fixedUrl.replace('/dashboard/auditor/stock-takes/', '/dashboard/branch-store/stock-takes/');
+      }
 
       window.location.href = fixedUrl;
     }

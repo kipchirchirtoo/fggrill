@@ -40,7 +40,7 @@ router.post('/transactions',
 );
 
 router.put('/transactions/:id/approve',
-    authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.GENERAL_MANAGER]),
+    authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
     approveBankingTransaction
 );
 

@@ -569,30 +569,34 @@ function NewRecordModal({ type, staffList, onClose, onSuccess }: any) {
             // Call API
             let res;
             if (type === 'staff_credit') {
-                // Payload for credit_bill: { staff_id, amount, description, date }
                 res = await api.staff.simplePayroll.createCreditBill({
                     staff_id: formData.staff_id,
                     amount: parseFloat(formData.amount),
-                    description: formData.description || 'Staff credit bill'
+                    description: formData.description || 'Staff credit bill',
+                    date: new Date().toISOString().split('T')[0]
                 });
             } else if (type === 'loans') {
-                // Payload for loan: { staff_id, total_amount, monthly_installment, reason, start_date }
                 const total = parseFloat(formData.amount);
                 const months = parseInt(formData.repayment_period) || 1;
+                const [deductYear, deductMonth] = formData.deduction_month.split('-').map(Number);
                 res = await api.staff.simplePayroll.createLoan({
                     staff_id: formData.staff_id,
                     total_amount: total,
-                    monthly_installment: total / months,
+                    installment_amount: parseFloat((total / months).toFixed(2)),
                     reason: formData.description || 'Staff loan',
-                    start_date: new Date().toISOString().split('T')[0]
+                    loan_date: new Date().toISOString().split('T')[0],
+                    start_deduction_month: deductMonth,
+                    start_deduction_year: deductYear
                 });
             } else if (type === 'advances') {
-                // Payload for advance: { staff_id, amount, reason, request_date }
+                const [deductYear, deductMonth] = formData.deduction_month.split('-').map(Number);
                 res = await api.staff.simplePayroll.createAdvance({
                     staff_id: formData.staff_id,
                     amount: parseFloat(formData.amount),
                     reason: formData.description || 'Salary advance',
-                    request_date: `${formData.deduction_month}-01` // Use first of the month
+                    advance_date: new Date().toISOString().split('T')[0],
+                    month_to_deduct: deductMonth,
+                    year_to_deduct: deductYear
                 });
             } else {
                 toast.error('Invalid request type');
@@ -665,17 +669,28 @@ function NewRecordModal({ type, staffList, onClose, onSuccess }: any) {
 
                     {/* Type Specific Fields */}
                     {type === 'loans' && (
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-stone-700">Repayment Period (Months)</label>
-                            <select
-                                className="w-full h-10 px-3 rounded-lg border border-stone-200 bg-white"
-                                value={formData.repayment_period}
-                                onChange={(e) => setFormData({ ...formData, repayment_period: e.target.value })}
-                            >
-                                {[1, 2, 3, 4, 5, 6, 9, 12].map(m => (
-                                    <option key={m} value={m}>{m} Month{m > 1 ? 's' : ''}</option>
-                                ))}
-                            </select>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-stone-700">Repayment Period (Months)</label>
+                                <select
+                                    className="w-full h-10 px-3 rounded-lg border border-stone-200 bg-white"
+                                    value={formData.repayment_period}
+                                    onChange={(e) => setFormData({ ...formData, repayment_period: e.target.value })}
+                                >
+                                    {[1, 2, 3, 4, 5, 6, 9, 12].map(m => (
+                                        <option key={m} value={m}>{m} Month{m > 1 ? 's' : ''}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-stone-700">Start Deduction Month</label>
+                                <input
+                                    type="month"
+                                    className="w-full h-10 px-3 rounded-lg border border-stone-200"
+                                    value={formData.deduction_month}
+                                    onChange={(e) => setFormData({ ...formData, deduction_month: e.target.value })}
+                                />
+                            </div>
                         </div>
                     )}
 

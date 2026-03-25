@@ -16,20 +16,16 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             .insert({
                 staff_id,
                 amount,
-                balance: amount,
                 description,
-                date: date || new Date().toISOString().split('T')[0],
-                is_paid: false
+                bill_date: date || new Date().toISOString().split('T')[0],
+                status: 'pending'
             })
             .select()
             .single();
 
         if (error) throw error;
 
-        res.status(201).json({
-            success: true,
-            data
-        });
+        res.status(201).json({ success: true, data });
     } catch (error) {
         next(error);
     }
@@ -42,11 +38,11 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         let query = supabase
             .from('staff_credit_bills')
             .select('*')
-            .order('date', { ascending: false });
+            .order('bill_date', { ascending: false });
 
         if (staff_id) query = query.eq('staff_id', staff_id);
-        if (status === 'pending') query = query.eq('is_paid', false);
-        if (status === 'paid' || status === 'deducted') query = query.eq('is_paid', true);
+        if (status === 'pending') query = query.eq('status', 'pending');
+        if (status === 'paid' || status === 'deducted') query = query.eq('status', status);
 
         const { data, error } = await query;
         if (error) throw error;
@@ -87,29 +83,26 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
 export const updateCreditBillStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { status } = req.body; // Expecting 'paid' or boolean
+        const { status } = req.body; // 'pending' | 'deducted' | 'cancelled' | 'paid_cash'
 
-        let is_paid = false;
-        if (status === 'paid' || status === 'deducted' || status === true) {
-            is_paid = true;
+        const validStatuses = ['pending', 'deducted', 'cancelled', 'paid_cash'];
+        // Map legacy 'paid' to 'paid_cash'
+        const resolvedStatus = status === 'paid' ? 'paid_cash' : status;
+
+        if (!validStatuses.includes(resolvedStatus)) {
+            throw new AppError(`Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
         }
 
         const { data, error } = await supabase
             .from('staff_credit_bills')
-            .update({
-                is_paid,
-                balance: is_paid ? 0 : undefined // Reset balance to 0 if marking as paid
-            })
+            .update({ status: resolvedStatus })
             .eq('id', id)
             .select()
             .single();
 
         if (error) throw error;
 
-        res.status(200).json({
-            success: true,
-            data
-        });
+        res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
     }

@@ -502,11 +502,75 @@ export const submitStockTake = async (req: Request, res: Response) => {
         // Handle different error cases from the RPC function
         if (!parsedResult.success) {
             switch (parsedResult.error) {
-                case 'NOT_FOUND':
-                    return res.status(404).json({
-                        success: false,
-                        message: parsedResult.message
+                case 'NOT_FOUND': {
+                    // Fallback: check if this ID exists in stock_counts (legacy system)
+                    const { data: stockCount, error: countError } = await supabase
+                        .from('stock_counts')
+                        .select('*')
+                        .eq('id', id)
+                        .single();
+
+                    if (countError || !stockCount) {
+                        return res.status(404).json({
+                            success: false,
+                            message: 'Stock take not found'
+                        });
+                    }
+
+                    // Already submitted/verified
+                    if (stockCount.status === 'submitted' || stockCount.status === 'verified') {
+                        return res.status(409).json({
+                            success: false,
+                            message: 'Stock take has already been submitted',
+                            code: 'ALREADY_SUBMITTED',
+                            current_status: stockCount.status
+                        });
+                    }
+
+                    // Submit via stock_counts table
+                    const { data: updatedCount, error: updateError } = await supabase
+                        .from('stock_counts')
+                        .update({
+                            status: 'submitted',
+                            counted_by: userId,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', id)
+                        .select()
+                        .single();
+
+                    if (updateError) throw updateError;
+
+                    // Create approval request for auditor
+                    await supabase.from('approval_requests').insert({
+                        request_type: 'stock_take',
+                        status: 'pending',
+                        branch_id: stockCount.branch_id,
+                        requested_by: userId,
+                        description: `Stock count submission review: ${stockCount.count_number || id}`,
+                        metadata: { stock_count_id: id }
                     });
+
+                    // Notify auditor
+                    notificationService.notifyRole(
+                        'auditor',
+                        'Stock Take Submission',
+                        `A new stock take (${stockCount.count_number || id}) has been submitted for audit.`,
+                        {
+                            type: 'warning',
+                            category: 'audit',
+                            priority: 'medium',
+                            actionUrl: `/dashboard/branch-store/stock-takes/${id}`,
+                            metadata: { stock_count_id: id, type: 'stock_take' }
+                        }
+                    ).catch((e: any) => console.error('Failed to notify auditor:', e));
+
+                    return res.json({
+                        success: true,
+                        message: 'Stock take submitted for auditor review',
+                        data: updatedCount
+                    });
+                }
                 
                 case 'ALREADY_SUBMITTED':
                     return res.status(409).json({

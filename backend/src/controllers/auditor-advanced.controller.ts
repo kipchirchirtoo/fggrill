@@ -441,7 +441,7 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         const { data: bills, error: billsError } = await supabase
             .from('staff_credit_bills')
             .select('*, staff:staff_profiles(branch_id)')
-            .eq('is_paid', false);
+            .eq('status', 'pending');
 
         // 3. Fetch pending staff advances
         const { data: advances, error: advancesError } = await supabase

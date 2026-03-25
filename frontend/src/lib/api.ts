@@ -1060,7 +1060,9 @@ export const staffAPI = {
         console.error('Error downloading ZIP:', error);
         return { success: false, message: error instanceof Error ? error.message : 'Download failed' };
       }
-    }
+    },
+    approvePayrollBatch: (data: { month: number; year: number; branch_id?: number }) =>
+      fetchAPI<any>('/payroll/approve-batch', { method: 'POST', body: JSON.stringify(data) }),
   },
   assignTraining: (data: any) => fetchAPI<any>('/staff/trainings', { method: 'POST', body: JSON.stringify(data) }),
   completeTraining: (id: string) => fetchAPI<any>(`/staff/trainings/${id}/complete`, { method: 'PUT' }),
@@ -3672,7 +3674,11 @@ export const auditorReportsAPI = {
   },
   exportBrandedPdf: async (reportType: string, params: any) => {
     const query = new URLSearchParams();
-    Object.keys(params).forEach(key => query.append(key, String(params[key])));
+    Object.keys(params).forEach(key => {
+      if (params[key] !== undefined && params[key] !== null) {
+        query.append(key, String(params[key]));
+      }
+    });
     const response = await fetch(`${PYTHON_SERVICE_URL}/api/reports/auditor/export/${reportType}?${query}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -3847,6 +3853,7 @@ export const paymentsVerificationAPI = {
     payment_method?: string;
     start_date?: string;
     end_date?: string;
+    include_banking?: string;
   }) => {
     const query = new URLSearchParams();
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
@@ -3854,6 +3861,7 @@ export const paymentsVerificationAPI = {
     if (params?.payment_method) query.append('payment_method', params.payment_method);
     if (params?.start_date) query.append('start_date', params.start_date);
     if (params?.end_date) query.append('end_date', params.end_date);
+    if (params?.include_banking) query.append('include_banking', params.include_banking);
     return fetchAPI<any>(`/payments-verification?${query.toString()}`);
   },
 

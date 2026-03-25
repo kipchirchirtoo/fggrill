@@ -1,23 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
 
-// Check required environment variables
-const requiredEnvVars = [
-  'SUPABASE_PROJECT_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_JWT_SECRET'
-];
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    logger.error(`Missing required environment variable: ${envVar}`);
-    process.exit(1);
-  }
+// Support both SUPABASE_PROJECT_URL and SUPABASE_URL (common in production deployments)
+const supabaseUrl = process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  logger.error('Missing required Supabase env vars: SUPABASE_PROJECT_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY');
+  process.exit(1);
+}
+
+// SUPABASE_JWT_SECRET is optional — warn but don't crash
+if (!process.env.SUPABASE_JWT_SECRET && !process.env.JWT_SECRET) {
+  logger.warn('Neither SUPABASE_JWT_SECRET nor JWT_SECRET is set — using fallback secret (NOT safe for production)');
 }
 
 // Initialize Supabase client
 const supabase = createClient(
-  process.env.SUPABASE_PROJECT_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  supabaseUrl,
+  supabaseServiceKey,
   {
     auth: {
       autoRefreshToken: false,

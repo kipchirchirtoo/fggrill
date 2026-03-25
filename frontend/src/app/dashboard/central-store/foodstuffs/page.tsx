@@ -96,7 +96,7 @@ export default function FoodstuffsPage() {
                                 <tbody className="divide-y divide-stone-50">
                                     {isLoading ? (
                                         Array(3).fill(0).map((_, i) => (
-                                            <tr key={i}><td colSpan={4} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
+                                            <tr key={`skeleton-${i}`}><td colSpan={4} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
                                         ))
                                     ) : filteredItems.length === 0 ? (
                                         <tr><td colSpan={4} className="p-20 text-center text-stone-400">No food items found.</td></tr>
@@ -104,7 +104,7 @@ export default function FoodstuffsPage() {
                                         filteredItems.map((item, idx) => {
                                             const isLow = item.quantity <= item.reorder_level;
                                             return (
-                                                <tr key={item.id ?? item.sku ?? idx} className="hover:bg-stone-50/50 transition-colors">
+                                                <tr key={item.id || item.sku || `row-${idx}`} className="hover:bg-stone-50/50 transition-colors">
                                                     <td className="p-4">
                                                         <p className="font-medium text-stone-900">{item.item_name}</p>
                                                         <p className="text-[11px] font-mono text-stone-400 mt-0.5 uppercase">{item.sku}</p>

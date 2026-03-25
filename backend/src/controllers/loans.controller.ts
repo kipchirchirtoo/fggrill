@@ -4,10 +4,10 @@ import { AppError } from '../middleware/errorHandler';
 
 export const createLoan = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { staff_id, total_amount, monthly_installment, reason, start_date } = req.body;
+        const { staff_id, total_amount, installment_amount, reason, loan_date, start_deduction_month, start_deduction_year } = req.body;
 
-        if (!staff_id || !total_amount || !monthly_installment || !reason || !start_date) {
-            throw new AppError('Missing required fields', 400);
+        if (!staff_id || !total_amount || !installment_amount || !reason || !start_deduction_month || !start_deduction_year) {
+            throw new AppError('Missing required fields: staff_id, total_amount, installment_amount, reason, start_deduction_month, start_deduction_year', 400);
         }
 
         const { data, error } = await supabase
@@ -15,21 +15,20 @@ export const createLoan = async (req: Request, res: Response, next: NextFunction
             .insert({
                 staff_id,
                 total_amount,
-                monthly_installment,
-                remaining_balance: total_amount, // Initial balance is total
+                installment_amount,
+                remaining_balance: total_amount,
                 reason,
-                start_date,
-                status: 'pending' // Changed from 'active' to 'pending'
+                loan_date: loan_date || new Date().toISOString().split('T')[0],
+                start_deduction_month: Number(start_deduction_month),
+                start_deduction_year: Number(start_deduction_year),
+                status: 'pending_approval'
             })
             .select()
             .single();
 
         if (error) throw error;
 
-        res.status(201).json({
-            success: true,
-            data
-        });
+        res.status(201).json({ success: true, data });
     } catch (error) {
         next(error);
     }
@@ -97,6 +96,7 @@ export const approveLoan = async (req: Request, res: Response, next: NextFunctio
                 approved_by: adminId
             })
             .eq('id', id)
+            .eq('status', 'pending_approval')
             .select()
             .single();
 

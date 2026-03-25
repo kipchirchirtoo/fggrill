@@ -4,10 +4,10 @@ import { AppError } from '../middleware/errorHandler';
 
 export const createAdvance = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { staff_id, amount, reason, request_date } = req.body;
+        const { staff_id, amount, reason, advance_date, month_to_deduct, year_to_deduct } = req.body;
 
-        if (!staff_id || !amount || !reason) {
-            throw new AppError('Missing required fields', 400);
+        if (!staff_id || !amount || !reason || !month_to_deduct || !year_to_deduct) {
+            throw new AppError('Missing required fields: staff_id, amount, reason, month_to_deduct, year_to_deduct', 400);
         }
 
         const { data, error } = await supabase
@@ -16,7 +16,9 @@ export const createAdvance = async (req: Request, res: Response, next: NextFunct
                 staff_id,
                 amount,
                 reason,
-                request_date: request_date || new Date().toISOString().split('T')[0],
+                advance_date: advance_date || new Date().toISOString().split('T')[0],
+                month_to_deduct: Number(month_to_deduct),
+                year_to_deduct: Number(year_to_deduct),
                 status: 'pending'
             })
             .select()
@@ -24,10 +26,7 @@ export const createAdvance = async (req: Request, res: Response, next: NextFunct
 
         if (error) throw error;
 
-        res.status(201).json({
-            success: true,
-            data
-        });
+        res.status(201).json({ success: true, data });
     } catch (error) {
         next(error);
     }

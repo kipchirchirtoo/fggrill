@@ -95,13 +95,20 @@ export function AddAdjustmentDialog({ open, onOpenChange, onSuccess, initialStaf
             { id: 'bonus', label: 'Performance Bonus' },
             { id: 'overtime', label: 'Overtime Payment' },
             { id: 'allowance', label: 'Travel/Fuel Allowance' },
-            { id: 'other', label: 'Other Addition' }
+            { id: 'other', label: 'Other Addition' },
         ]
         : [
-            { id: 'advance', label: 'Salary Advance' },
+            // Statutory — only applied when explicitly created here
+            { id: 'nssf', label: 'NSSF' },
+            { id: 'shif', label: 'SHIF (Health Insurance)' },
+            { id: 'housing_levy', label: 'Housing Levy' },
+            { id: 'paye', label: 'PAYE (Income Tax)' },
+            // Other deductions
             { id: 'unpaid_leave', label: 'Unpaid Leave' },
+            { id: 'uniform', label: 'Uniform Deduction' },
+            { id: 'absent_day', label: 'Absent Day Penalty' },
             { id: 'penalty', label: 'Disciplinary Fine' },
-            { id: 'other', label: 'Other Deduction' }
+            { id: 'other', label: 'Other Deduction' },
         ];
 
     return (
@@ -153,7 +160,7 @@ export function AddAdjustmentDialog({ open, onOpenChange, onSuccess, initialStaf
                                     Addition
                                 </button>
                                 <button
-                                    onClick={() => setFormData({ ...formData, type: 'deduction', category: 'unpaid_leave' })}
+                                    onClick={() => setFormData({ ...formData, type: 'deduction', category: 'nssf' })}
                                     className={`flex-1 py-2 text-[11px] font-bold rounded-lg transition-all ${formData.type === 'deduction' ? 'bg-white text-stone-900 shadow-sm border border-stone-100' : 'text-stone-400 hover:text-stone-600'}`}
                                 >
                                     Deduction

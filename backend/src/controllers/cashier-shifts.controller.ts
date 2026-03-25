@@ -54,9 +54,82 @@ export const getShiftLogs = async (
 
         if (error) throw error;
 
+        const shifts = data || [];
+
+        // Batch-fetch user names for shifts missing cashier_name
+        const missingNameIds = [...new Set(
+            shifts.filter((s: any) => !s.cashier_name && s.cashier_id).map((s: any) => s.cashier_id)
+        )];
+        const userNameMap: Record<string, string> = {};
+        if (missingNameIds.length > 0) {
+            const { data: users } = await supabase
+                .from('users')
+                .select('id, first_name, last_name')
+                .in('id', missingNameIds);
+            (users || []).forEach((u: any) => {
+                userNameMap[u.id] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'N/A';
+            });
+        }
+
+        // Enrich each shift: if total_sales is 0, recompute from actual payments table
+        const enriched = await Promise.all(shifts.map(async (shift: any) => {
+            // cashier_name is stored directly on the shift row, fallback to users lookup
+            const cashierName = shift.cashier_name || userNameMap[shift.cashier_id] || 'N/A';
+
+            // If totals are already populated, return as-is (just fix cashier name)
+            if (shift.total_sales > 0) {
+                return { ...shift, cashier_name: cashierName };
+            }
+
+            // Recompute from payments table for this shift's time window
+            if (!shift.shift_start) return { ...shift, cashier_name: cashierName };
+
+            const shiftEnd = shift.shift_end || new Date().toISOString();
+
+            // Fetch payments linked to this cashier during the shift window
+            const { data: payments } = await supabase
+                .from('payments')
+                .select('amount, payment_method, recorded_by')
+                .eq('recorded_by', shift.cashier_id)
+                .gte('recorded_at', shift.shift_start)
+                .lte('recorded_at', shiftEnd);
+
+            if (!payments || payments.length === 0) {
+                return { ...shift, cashier_name: cashierName };
+            }
+
+            const totalCash = payments
+                .filter((p: any) => p.payment_method === 'Cash')
+                .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+            const totalMpesa = payments
+                .filter((p: any) => p.payment_method === 'M-Pesa')
+                .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+            const totalCard = payments
+                .filter((p: any) => p.payment_method === 'Card')
+                .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+            const totalSales = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+            // Recompute expected closing float and variance
+            const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash;
+            const closingFloat = Number(shift.closing_float || 0);
+            const variance = closingFloat > 0 ? closingFloat - expectedClosingFloat : 0;
+
+            return {
+                ...shift,
+                cashier_name: cashierName,
+                total_sales: totalSales,
+                total_cash_sales: totalCash,
+                total_mpesa_sales: totalMpesa,
+                total_card_sales: totalCard,
+                transaction_count: payments.length,
+                expected_closing_float: expectedClosingFloat,
+                variance: closingFloat > 0 ? variance : shift.variance,
+            };
+        }));
+
         res.status(200).json({
             success: true,
-            data: data || []
+            data: enriched
         });
     } catch (error) {
         next(error);
@@ -92,12 +165,54 @@ export const getShiftLog = async (
 
         if (txError) throw txError;
 
+        // Enrich cashier name — fallback to users table if not stored on shift
+        let cashierName = shift.cashier_name;
+        if (!cashierName && shift.cashier_id) {
+            const { data: user } = await supabase
+                .from('users')
+                .select('first_name, last_name')
+                .eq('id', shift.cashier_id)
+                .single();
+            cashierName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : 'N/A';
+        }
+        cashierName = cashierName || 'N/A';
+
+        // If totals are zero, recompute from payments table
+        let enrichedShift = { ...shift, cashier_name: cashierName, transactions: transactions || [] };
+
+        if (shift.total_sales === 0 && shift.cashier_id && shift.shift_start) {
+            const shiftEnd = shift.shift_end || new Date().toISOString();
+            const { data: payments } = await supabase
+                .from('payments')
+                .select('amount, payment_method, recorded_by')
+                .eq('recorded_by', shift.cashier_id)
+                .gte('recorded_at', shift.shift_start)
+                .lte('recorded_at', shiftEnd);
+
+            if (payments && payments.length > 0) {
+                const totalCash = payments.filter((p: any) => p.payment_method === 'Cash').reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+                const totalMpesa = payments.filter((p: any) => p.payment_method === 'M-Pesa').reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+                const totalCard = payments.filter((p: any) => p.payment_method === 'Card').reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+                const totalSales = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+                const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash;
+                const closingFloat = Number(shift.closing_float || 0);
+
+                enrichedShift = {
+                    ...enrichedShift,
+                    total_sales: totalSales,
+                    total_cash_sales: totalCash,
+                    total_mpesa_sales: totalMpesa,
+                    total_card_sales: totalCard,
+                    transaction_count: payments.length,
+                    expected_closing_float: expectedClosingFloat,
+                    variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
+                };
+            }
+        }
+
         res.status(200).json({
             success: true,
-            data: {
-                ...shift,
-                transactions: transactions || []
-            }
+            data: enrichedShift
         });
     } catch (error) {
         next(error);
@@ -292,10 +407,9 @@ export const closeShift = async (
                     .map((bill: any) => ({
                         staff_id: bill.staff_id,
                         amount: bill.amount,
-                        balance: bill.amount,
                         description: `Shift Credit - Shift #${shift.shift_number} - ${bill.name}`,
-                        date: new Date().toISOString().split('T')[0],
-                        is_paid: false
+                        bill_date: new Date().toISOString().split('T')[0],
+                        status: 'pending'
                     }));
 
                 if (creditBillsToInsert.length > 0) {
@@ -321,18 +435,17 @@ export const closeShift = async (
                     await supabase.from('staff_credit_bills').insert({
                         staff_id: bill.staff_id,
                         amount: amountPaid,
-                        balance: 0,
                         description: `Shift Payment - Shift #${shift.shift_number} - ${bill.name}`,
-                        date: new Date().toISOString().split('T')[0],
-                        is_paid: true
+                        bill_date: new Date().toISOString().split('T')[0],
+                        status: 'paid_cash'
                     });
 
-                    // B. SETTLE FIFO: Find pending credits (balance > 0) ordered by oldest first
+                    // B. SETTLE FIFO: Find pending credits ordered by oldest first
                     const { data: credits, error: fetchError } = await supabase
                         .from('staff_credit_bills')
-                        .select('id, balance')
+                        .select('id, amount')
                         .eq('staff_id', bill.staff_id)
-                        .gt('balance', 0)
+                        .eq('status', 'pending')
                         .order('created_at', { ascending: true });
 
                     if (fetchError) {
@@ -345,19 +458,16 @@ export const closeShift = async (
                         for (const credit of credits) {
                             if (remainingPayment <= 0) break;
 
-                            const creditBalance = parseFloat(credit.balance);
-                            const settlement = Math.min(remainingPayment, creditBalance);
-                            const newBalance = creditBalance - settlement;
-
-                            await supabase
-                                .from('staff_credit_bills')
-                                .update({
-                                    balance: newBalance,
-                                    is_paid: newBalance <= 0
-                                })
-                                .eq('id', credit.id);
-
-                            remainingPayment -= settlement;
+                            const creditAmount = parseFloat(credit.amount);
+                            if (remainingPayment >= creditAmount) {
+                                // Fully settle this credit bill
+                                await supabase
+                                    .from('staff_credit_bills')
+                                    .update({ status: 'paid_cash' })
+                                    .eq('id', credit.id);
+                                remainingPayment -= creditAmount;
+                            }
+                            // Partial settlement: leave as pending (no partial balance column in schema)
                         }
                     }
                 }

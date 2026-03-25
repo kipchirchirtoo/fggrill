@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 dotenv.config();
-import { supabase } from '../config/supabase';
+import { supabase, supabaseAuth } from '../config/supabase';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
@@ -106,22 +106,43 @@ export const login = async (
 
     // No demo accounts - use real authentication only
 
-    // Try Supabase Auth first
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    // Try Supabase Auth first (uses anon key — required for signInWithPassword)
+    const { data: authData, error: authError } = await supabaseAuth.auth.signInWithPassword({
       email,
       password
     });
 
+    logger.info(`[AUTH-DEBUG] Supabase Auth attempt for ${email}: ${authError ? `FAILED - ${authError.message}` : 'SUCCESS'}`);
+
     if (!authError && authData?.user) {
       // Supabase Auth succeeded
-      const { data: profile, error: profileError } = await supabase
+      let { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
         .single();
 
-      if (profileError) {
-        throw profileError;
+      // Auto-heal: if public.users row is missing, create it now
+      if (profileError?.code === 'PGRST116' || !profile) {
+        logger.warn(`Auto-healing missing public.users row for ${email}`);
+        const meta = authData.user.user_metadata || {};
+        const emailPrefix = email.split('@')[0];
+        await supabase.from('users').insert({
+          id:         authData.user.id,
+          email,
+          first_name: meta.first_name || emailPrefix || 'User',
+          last_name:  meta.last_name  || 'Account',
+          role:       meta.role       || 'guest',
+          status:     'active',
+          created_at: new Date().toISOString(),
+        });
+        const refetch = await supabase.from('users').select('*').eq('id', authData.user.id).single();
+        profile = refetch.data;
+        profileError = refetch.error;
+      }
+
+      if (profileError || !profile) {
+        throw profileError || new Error('Failed to create user profile');
       }
 
       // Update last login
@@ -162,6 +183,43 @@ export const login = async (
 
       if (dbError || !dbUser) {
         logger.warn(`User not found in users table: ${email} - Error: ${dbError ? JSON.stringify(dbError) : 'No error, but no data'}`);
+
+        // Auto-heal: check if user exists in Supabase Auth and create the public.users row
+        try {
+          const { data: authList } = await supabase.auth.admin.listUsers();
+          const authUser = authList?.users?.find((u: any) => u.email === email);
+          if (authUser) {
+            logger.warn(`Auto-healing missing public.users row for ${email} (found in auth.users)`);
+            const meta = authUser.user_metadata || {};
+            const emailPrefix = email.split('@')[0];
+            await supabase.from('users').insert({
+              id:         authUser.id,
+              email,
+              first_name: meta.first_name || emailPrefix || 'User',
+              last_name:  meta.last_name  || 'Account',
+              role:       meta.role       || 'guest',
+              status:     'active',
+              created_at: new Date().toISOString(),
+            });
+            // Re-query after insert
+            const { data: requeried } = await supabase
+              .from('users')
+              .select('id, email, first_name, last_name, role, branch_id, status, password_hash')
+              .eq('email', email)
+              .single();
+            if (requeried) {
+              userId = requeried.id;
+              storedHash = requeried.password_hash;
+              userProfile = {
+                id: requeried.id, email: requeried.email,
+                first_name: requeried.first_name, last_name: requeried.last_name,
+                role: requeried.role, branch_id: requeried.branch_id, status: requeried.status
+              };
+            }
+          }
+        } catch (healErr: any) {
+          logger.warn('Auto-heal attempt failed:', healErr.message);
+        }
       } else {
         userId = dbUser.id;
         storedHash = dbUser.password_hash;
@@ -365,9 +423,9 @@ export const getMe = async (
         userId: req.user.id,
         error: profileError?.message || 'No profile data'
       });
-      res.status(404).json({
+      res.status(401).json({
         success: false,
-        message: 'User profile not found'
+        message: 'User profile not found — please log in again'
       });
       return;
     }

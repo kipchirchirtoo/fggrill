@@ -1,0 +1,26 @@
+{
+  "identifier": "main-window",
+  "description": "Permissions for the main dashboard window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "http:default",
+    "notification:default",
+    "os:default",
+    "shell:default",
+    "sql:default",
+    "store:default",
+    "updater:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-set-title",
+    "core:window:allow-set-focus",
+    "core:app:allow-name",
+    "core:app:allow-version",
+    "core:path:allow-resolve",
+    "core:path:allow-resolve-directory",
+    "core:event:allow-listen",
+    "core:event:allow-emit"
+  ]
+}

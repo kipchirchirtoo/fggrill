@@ -721,15 +721,16 @@ function BranchRoomsManagementContent() {
 
       {/* Add Room Modal */}
       <Dialog open={showAddRoomModal} onOpenChange={setShowAddRoomModal}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Add New Room</DialogTitle>
             <DialogDescription>
               Fill in the details to add a new room to {activeBranch?.name}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleCreateRoom} className="space-y-4">
+          <form onSubmit={handleCreateRoom} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="room_number">Room Number *</Label>
@@ -849,7 +850,7 @@ function BranchRoomsManagementContent() {
                 )}
 
                 {/* Upload button */}
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                <label className="block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors cursor-pointer">
                   <Upload className="mx-auto h-8 w-8 text-gray-400" />
                   <p className="mt-1 text-sm text-gray-600">
                     Click to upload room images
@@ -859,7 +860,7 @@ function BranchRoomsManagementContent() {
                     type="file"
                     accept="image/*"
                     multiple
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    className="hidden"
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []);
 
@@ -891,7 +892,7 @@ function BranchRoomsManagementContent() {
                       });
                     }}
                   />
-                </div>
+                </label>
               </div>
             </div>
 
@@ -925,8 +926,9 @@ function BranchRoomsManagementContent() {
                 <option value="out_of_order">Out of Order</option>
               </select>
             </div>
+            </div>{/* end scrollable area */}
 
-            <DialogFooter>
+            <DialogFooter className="flex-shrink-0 pt-4 border-t">
               <IOSButton
                 type="button"
                 variant="outline"

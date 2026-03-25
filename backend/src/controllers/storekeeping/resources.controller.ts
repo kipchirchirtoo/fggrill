@@ -934,7 +934,7 @@ export const completeStockTake = async (req: Request, res: Response) => {
         type: 'warning',
         category: 'audit',
         priority: 'medium',
-        actionUrl: `/dashboard/auditor/stock-takes/${id}`,
+        actionUrl: `/dashboard/branch-store/stock-takes/${id}`,
         metadata: { stock_count_id: id, type: 'stock_take' }
       }
     ).catch(e => logger.error('Failed to notify auditor of stock take submission', e));

@@ -2146,9 +2146,17 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
       case 'exception':
         const { data: exception, error: excError } = await supabase
           .from('audit_exceptions')
-          .select('*, auditor:users!resolved_by(first_name, last_name)')
+          .select('*')
           .eq('id', id)
           .single();
+        if (exception && exception.resolved_by) {
+          const { data: auditorUser } = await supabase
+            .from('users')
+            .select('first_name, last_name')
+            .eq('id', exception.resolved_by)
+            .maybeSingle();
+          (exception as any).auditor = auditorUser || null;
+        }
         data = exception;
         error = excError;
         break;
@@ -2362,7 +2370,7 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
           user:users!user_id(first_name, last_name, email)
         )
       `)
-      .order('date', { ascending: false });
+      .order('bill_date', { ascending: false });
 
     // 2. Fetch Staff Advances
     let advancesQuery = supabase
@@ -2374,7 +2382,7 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
           user:users!user_id(first_name, last_name, email)
         )
       `)
-      .order('request_date', { ascending: false });
+      .order('advance_date', { ascending: false });
 
     // 3. Fetch Staff Loans
     let loansQuery = supabase
@@ -2386,7 +2394,7 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
           user:users!user_id(first_name, last_name, email)
         )
       `)
-      .order('start_date', { ascending: false });
+      .order('loan_date', { ascending: false });
 
     // Apply filters
     if (staff_id && staff_id !== 'all') {
@@ -2396,14 +2404,14 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
     }
 
     if (start_date) {
-      creditQuery = creditQuery.gte('date', start_date);
-      advancesQuery = advancesQuery.gte('request_date', start_date);
-      loansQuery = loansQuery.gte('start_date', start_date);
+      creditQuery = creditQuery.gte('bill_date', start_date);
+      advancesQuery = advancesQuery.gte('advance_date', start_date);
+      loansQuery = loansQuery.gte('loan_date', start_date);
     }
     if (end_date) {
-      creditQuery = creditQuery.lte('date', end_date);
-      advancesQuery = advancesQuery.lte('request_date', end_date);
-      loansQuery = loansQuery.lte('start_date', end_date);
+      creditQuery = creditQuery.lte('bill_date', end_date);
+      advancesQuery = advancesQuery.lte('advance_date', end_date);
+      loansQuery = loansQuery.lte('loan_date', end_date);
     }
 
     // Await all
@@ -2443,13 +2451,13 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
 
       unifiedRecords.push({
         id: bill.id,
-        date: bill.date,
+        date: bill.bill_date || bill.date,
         type: 'Credit Bill',
         amount: bill.amount,
         staff_name: name,
         staff_id: bill.staff_id,
         description: bill.description,
-        status: bill.is_paid ? 'Paid' : 'Unpaid',
+        status: bill.status === 'pending' ? 'Unpaid' : bill.status === 'deducted' ? 'Deducted' : bill.status === 'paid_cash' ? 'Paid' : (bill.is_paid ? 'Paid' : 'Unpaid'),
         reference: bill.id.substring(0, 8).toUpperCase(),
         original_record: bill
       });

@@ -65,10 +65,9 @@ export const migratePendingBills = async () => {
                         .insert({
                             staff_id: order.waiter_id,
                             amount: order.total_amount,
-                            balance: order.total_amount,
                             description: `Unsettled Order - ${order.order_number} - ${location}`,
-                            date: new Date().toISOString().split('T')[0],
-                            is_paid: false
+                            bill_date: new Date().toISOString().split('T')[0],
+                            status: 'pending'
                         })
                         .select()
                         .single();

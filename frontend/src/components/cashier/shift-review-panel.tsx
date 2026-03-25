@@ -66,14 +66,17 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
     const [isLoading, setIsLoading] = useState(false);
 
     const fetchShifts = async () => {
+        if (!activeBranchId) return;
         try {
             const statusFilter = role === 'accountant' ? 'closed' : 'reconciled';
             const response = await fetchAPI(`/cashier/shifts?branch_id=${activeBranchId}&status=${statusFilter}`) as any;
             if (response.success) {
                 setShifts(response.data || []);
+            } else if (response.message) {
+                toast.error(response.message);
             }
         } catch (error: any) {
-            console.error('Error fetching shifts:', error);
+            toast.error(error.message || 'Failed to load shifts');
         }
     };
 
@@ -99,6 +102,8 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                 setNotes('');
                 setSelectedShift(null);
                 fetchShifts();
+            } else {
+                toast.error(response.message || `Failed to ${endpoint} shift`);
             }
         } catch (error: any) {
             toast.error(error.message || `Failed to ${role === 'accountant' ? 'reconcile' : 'verify'} shift`);
@@ -158,16 +163,16 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                     <div>
                                         <p className="text-xs text-stone-500">Cashier</p>
                                         <p className="font-bold">
-                                            {shift.cashier_name || (shift.cashier ? `${shift.cashier.first_name} ${shift.cashier.last_name}` : 'N/A')}
+                                            {shift.cashier_name || (shift.cashier ? `${shift.cashier.first_name} ${shift.cashier.last_name}`.trim() : 'N/A')}
                                         </p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-stone-500">Sales</p>
                                         <p className="font-bold text-emerald-600">
-                                            KES {shift.total_sales.toLocaleString()}
+                                            KES {(shift.total_sales || 0).toLocaleString()}
                                         </p>
                                     </div>
-                                    {shift.variance !== undefined && (
+                                    {shift.variance !== undefined && shift.variance !== null && (
                                         <div>
                                             <p className="text-xs text-stone-500">Variance</p>
                                             <p className={`font-bold ${getVarianceColor(shift.variance)}`}>

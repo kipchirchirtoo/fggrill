@@ -54,8 +54,10 @@ export function PaymentDetailModal({ payment, onClose, onVerified, userRole }: P
     }
   };
 
-  const canAccountantVerify = userRole === 'branch_accountant' && payment.status === 'pending';
-  const canAuditorVerify = userRole === 'auditor' && payment.status === 'accountant_verified';
+  // Verification actions only apply to payment_verifications records
+  const isVerifiable = !payment._source || payment._source === 'payment_verification';
+  const canAccountantVerify = isVerifiable && userRole === 'branch_accountant' && payment.status === 'pending';
+  const canAuditorVerify = isVerifiable && userRole === 'auditor' && payment.status === 'accountant_verified';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -70,6 +72,17 @@ export function PaymentDetailModal({ payment, onClose, onVerified, userRole }: P
 
         {/* Content */}
         <div className="p-6 space-y-6">
+          {/* Source badge for non-payment_verification records */}
+          {payment._source && payment._source !== 'payment_verification' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
+              <CreditCard className="h-4 w-4" />
+              <span>
+                {payment._source === 'banking' ? 'Banking Transaction — read-only view' :
+                 payment._source === 'pos' ? 'POS Transaction — read-only view' :
+                 payment._source === 'payment' ? 'Cashier Payment — read-only view' : ''}
+              </span>
+            </div>
+          )}
           {/* Status Badge */}
           <div className="flex items-center justify-between">
             <div>
