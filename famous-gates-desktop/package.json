@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "famous-gates-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Famous Gates Hotels — Hybrid Desktop Application (Tauri 2)",
   "author": {
