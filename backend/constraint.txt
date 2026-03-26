@@ -1,0 +1,1 @@
+CHECK ((department = ANY (ARRAY['housekeeping'::text, 'restaurant'::text, 'reception'::text, 'maintenance'::text, 'finance'::text, 'management'::text, 'security'::text, 'bar_lounge'::text, 'administration'::text, 'general'::text])))

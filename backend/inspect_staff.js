@@ -1,20 +1,17 @@
-const { Pool } = require('pg');
-require('dotenv').config({ path: './.env' });
+const { Client } = require('pg');
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-});
+async function inspect() {
+    const client = new Client({ connectionString: 'postgresql://postgres.utsvlihpudfraxzcmtle:Allan%4013900@aws-1-eu-west-1.pooler.supabase.com:5432/postgres' });
+    await client.connect();
 
-async function run() {
-    const table = 'staff_profiles';
-    try {
-        const res = await pool.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_name = '${table}'`);
-        console.log(`\nTable: ${table}`);
-        res.rows.forEach(col => console.log(`  - ${col.column_name} (${col.data_type})`));
-    } catch (err) {
-        console.error(`Error inspecting ${table}:`, err.message);
-    }
-    process.exit(0);
+    // How many total?
+    const total = await client.query("SELECT COUNT(*) FROM staff_profiles");
+    console.log("TOTAL staff_profiles:", total.rows[0].count);
+
+    // Group by branch
+    const byBranch = await client.query("SELECT b.name, COUNT(s.id) FROM branches b JOIN staff_profiles s ON s.branch_id = b.id GROUP BY b.name");
+    console.log("By Branch:", byBranch.rows);
+
+    await client.end();
 }
-
-run();
+inspect().catch(console.error);

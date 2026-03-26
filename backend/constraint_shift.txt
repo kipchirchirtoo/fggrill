@@ -1,0 +1,1 @@
+CHECK ((shift = ANY (ARRAY['morning'::text, 'evening'::text, 'night'::text])))

@@ -86,7 +86,7 @@ export default function HREmployeesPage() {
         setIsLoading(true);
         try {
             const [staffRes, branchesRes, departmentsRes, rolesRes, driversRes, usersRes] = await Promise.all([
-                staffAPI.getStaff(),
+                staffAPI.getStaff({ limit: 1000 }),
                 systemAPI.getBranches(),
                 systemAPI.getDepartments(),
                 staffAPI.getRoles(),
