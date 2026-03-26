@@ -13,7 +13,7 @@ import Link from 'next/link';
 
 export default function BranchStoreDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ totalItems: 0, lowStock: 0 });
+  const [stats, setStats] = useState({ totalItems: 0, lowStock: 0, pendingRequests: 0, incomingDispatches: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -22,9 +22,12 @@ export default function BranchStoreDashboard() {
       const [dashboardRes] = await Promise.all([
         storeAPI.getBranchDashboard(),
       ]);
+      const d = dashboardRes.data?.stats || dashboardRes.data || {};
       setStats({
-        totalItems: dashboardRes.data?.totalItems || 0,
-        lowStock: dashboardRes.data?.lowStockItems || 0,
+        totalItems:        d.totalItems        || 0,
+        lowStock:          d.lowStock          || d.lowStockItems || 0,
+        pendingRequests:   d.pendingRequests   || 0,
+        incomingDispatches: d.incomingDispatches || 0,
       });
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
@@ -43,8 +46,10 @@ export default function BranchStoreDashboard() {
   ];
 
   const statCards = [
-    { label: 'Total Items', value: stats.totalItems, icon: Package },
-    { label: 'Low Stock', value: stats.lowStock, icon: AlertTriangle },
+    { label: 'Total Items',        value: stats.totalItems,         icon: Package,       color: 'text-blue-600',   bg: 'bg-blue-50' },
+    { label: 'Low Stock',          value: stats.lowStock,           icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: 'Pending Requests',   value: stats.pendingRequests,    icon: ClipboardList, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { label: 'Incoming Deliveries',value: stats.incomingDispatches, icon: Truck,         color: 'text-emerald-600',bg: 'bg-emerald-50' },
   ];
 
   return (
@@ -67,10 +72,10 @@ export default function BranchStoreDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {statCards.map((stat, i) => (
               <div key={i} className="stat-card">
-                <div className="stat-icon">
-                  <stat.icon className="h-5 w-5" />
+                <div className={`stat-icon ${stat.bg}`}>
+                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
                 </div>
-                <p className="stat-value">{stat.value}</p>
+                <p className="stat-value">{isLoading ? '—' : stat.value}</p>
                 <p className="stat-label">{stat.label}</p>
               </div>
             ))}

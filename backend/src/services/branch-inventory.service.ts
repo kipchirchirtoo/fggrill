@@ -1149,18 +1149,23 @@ export async function getCentralDashboardStats() {
  * Get dashboard stats for branch
  */
 export async function getBranchDashboardStats(branchId: number) {
-  const [totalItems, lowStock, pendingRequests, incomingDispatches] = await Promise.all([
-    supabase.from('branch_stock').select('id', { count: 'exact' }).eq('branch_id', branchId),
-    supabase.from('branch_stock').select('id', { count: 'exact' }).eq('branch_id', branchId).lte('quantity', 10), // Simplified
-    supabase.from('stock_requests').select('id', { count: 'exact' }).eq('requesting_branch_id', branchId).in('status', ['PENDING', 'APPROVED']),
-    supabase.from('dispatch_notes').select('id', { count: 'exact' }).eq('to_branch_id', branchId).eq('status', 'IN_TRANSIT')
+  const [totalItemsRes, allStockRes, pendingRequestsRes, incomingDispatchesRes] = await Promise.all([
+    supabase.from('branch_stock').select('id', { count: 'exact', head: true }).eq('branch_id', branchId),
+    supabase.from('branch_stock').select('id, quantity, reorder_level').eq('branch_id', branchId),
+    supabase.from('stock_requests').select('id', { count: 'exact', head: true }).eq('requesting_branch_id', branchId).in('status', ['PENDING', 'APPROVED', 'UNDER_REVIEW']),
+    supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).eq('to_branch_id', branchId).eq('status', 'IN_TRANSIT')
   ]);
 
+  // Low stock = items where quantity <= reorder_level
+  const allStock = allStockRes.data || [];
+  const lowStockCount = allStock.filter(item => Number(item.quantity || 0) <= Number(item.reorder_level || 10)).length;
+
   return {
-    totalItems: totalItems.count || 0,
-    lowStock: lowStock.count || 0,
-    pendingRequests: pendingRequests.count || 0,
-    incomingDispatches: incomingDispatches.count || 0
+    totalItems: totalItemsRes.count || 0,
+    lowStock: lowStockCount,
+    lowStockItems: lowStockCount,
+    pendingRequests: pendingRequestsRes.count || 0,
+    incomingDispatches: incomingDispatchesRes.count || 0
   };
 }
 

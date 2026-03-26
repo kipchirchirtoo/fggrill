@@ -124,10 +124,10 @@ export default function GoodsReceivingPage() {
                             item_name: pi.item_name,
                             sku: pi.sku || pi.item_code,
                             unit: pi.unit || pi.unit_of_measure,
-                            scanned_quantity: pi.quantity, // Pre-fill with ordered quantity or 0?
+                            scanned_quantity: Number(pi.quantity || pi.quantity_ordered) || 0,
                             // Usually storekeepers want to verify, but user said "sync",
                             // let's pre-fill with ordered quantity to save time if they match.
-                            cost_price: pi.unit_price || 0,
+                            cost_price: Number(pi.unit_price || pi.cost_price) || 0,
                             po_item_id: pi.id
                         }));
                         setScannedItems(itemsToPopulate);
@@ -574,7 +574,7 @@ export default function GoodsReceivingPage() {
                                 {/* Scanned List */}
                                 <div className="card-elevated overflow-hidden">
                                     <div className="p-4 bg-stone-50 border-b border-stone-100 flex justify-between items-center">
-                                        <h3 className="font-semibold text-stone-800">Scanned Items ({scannedItems.reduce((a, b) => a + b.scanned_quantity, 0)})</h3>
+                                        <h3 className="font-semibold text-stone-800">Scanned Items ({scannedItems.reduce((a, b) => a + (Number(b.scanned_quantity) || 0), 0)})</h3>
                                         <div className="text-sm text-stone-500">
                                             {scannedItems.length} unique items
                                         </div>
@@ -661,7 +661,7 @@ export default function GoodsReceivingPage() {
                                         </div>
                                         <div className="flex justify-between py-2 border-b border-stone-100">
                                             <span className="text-stone-500">Total Units</span>
-                                            <span className="font-bold text-stone-900">{scannedItems.reduce((a, b) => a + b.scanned_quantity, 0)}</span>
+                                            <span className="font-bold text-stone-900">{scannedItems.reduce((a, b) => a + (Number(b.scanned_quantity) || 0), 0)}</span>
                                         </div>
                                     </div>
 

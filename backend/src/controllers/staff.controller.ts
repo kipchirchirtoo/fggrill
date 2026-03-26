@@ -919,18 +919,33 @@ export const getStaffHistory = async (
   try {
     const { data, error } = await supabase
       .from('staff_employment_history')
-      .select(`
-        *,
-        creator:users!created_by(id, first_name, last_name)
-      `)
+      .select('*')
       .eq('staff_id', req.params.id)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
+    // Fetch creator names separately to avoid FK schema cache issues
+    const creatorIds = [...new Set((data || []).map((r: any) => r.created_by).filter(Boolean))];
+    let creatorMap: Record<string, string> = {};
+    if (creatorIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', creatorIds);
+      (users || []).forEach((u: any) => {
+        creatorMap[u.id] = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+      });
+    }
+
+    const enriched = (data || []).map((r: any) => ({
+      ...r,
+      creator: r.created_by ? { id: r.created_by, full_name: creatorMap[r.created_by] || 'Unknown' } : null,
+    }));
+
     res.status(200).json({
       success: true,
-      data
+      data: enriched
     });
   } catch (error) {
     next(error);

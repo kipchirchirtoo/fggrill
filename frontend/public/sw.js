@@ -1,5 +1,5 @@
 // Service Worker for Famous Gates Hotels
-const CACHE_NAME = 'fg-hotels-cache-v3';
+const CACHE_NAME = 'fg-hotels-cache-v4';
 const DB_NAME = 'fg-hotels-offline-v3';
 const DB_VERSION = 1;
 
@@ -50,7 +50,16 @@ self.addEventListener('fetch', (event) => {
 
   // BYPASS CACHE for navigation requests to ensure latest code in development
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('/offline.html')));
+    event.respondWith(
+      fetch(request).catch(() => {
+        return caches.match('/offline.html').then(response => {
+           return response || new Response('Offline - please check your connection', { 
+             status: 503, 
+             headers: { 'Content-Type': 'text/html' } 
+           });
+        });
+      })
+    );
     return;
   }
 
@@ -71,6 +80,10 @@ self.addEventListener('fetch', (event) => {
               caches.open(CACHE_NAME).then(cache => cache.put(request, resClone));
           }
           return response;
+      }).catch(err => {
+          console.warn('[SW] Fetch failed for:', request.url, err);
+          // Return a generic error response for non-navigation requests
+          return new Response('Network error', { status: 408 });
       });
     })
   );

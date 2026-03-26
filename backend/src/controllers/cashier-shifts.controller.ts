@@ -71,60 +71,89 @@ export const getShiftLogs = async (
             });
         }
 
-        // Enrich each shift: if total_sales is 0, recompute from actual payments table
+        // Enrich each shift: compute live sales from source revenue tables
         const enriched = await Promise.all(shifts.map(async (shift: any) => {
-            // cashier_name is stored directly on the shift row, fallback to users lookup
             const cashierName = shift.cashier_name || userNameMap[shift.cashier_id] || 'N/A';
 
-            // If totals are already populated, return as-is (just fix cashier name)
-            if (shift.total_sales > 0) {
+            // For closed/reconciled shifts that already have totals stored, use them as-is
+            if (shift.status !== 'open' && shift.total_sales > 0) {
                 return { ...shift, cashier_name: cashierName };
             }
 
-            // Recompute from payments table for this shift's time window
-            if (!shift.shift_start) return { ...shift, cashier_name: cashierName };
+            if (!shift.shift_start || !shift.branch_id) {
+                return { ...shift, cashier_name: cashierName };
+            }
 
             const shiftEnd = shift.shift_end || new Date().toISOString();
+            const branchId = shift.branch_id;
 
-            // Fetch payments linked to this cashier during the shift window
-            const { data: payments } = await supabase
-                .from('payments')
-                .select('amount, payment_method, recorded_by')
-                .eq('recorded_by', shift.cashier_id)
-                .gte('recorded_at', shift.shift_start)
-                .lte('recorded_at', shiftEnd);
+            try {
+                // First try the RPC (works when cashier_shift_transactions are linked)
+                const { data: summary } = await supabase
+                    .rpc('calculate_shift_summary', { p_shift_id: shift.id });
 
-            if (!payments || payments.length === 0) {
-                return { ...shift, cashier_name: cashierName };
+                if (summary && summary.total_sales > 0) {
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0);
+                    const closingFloat = Number(shift.closing_float || 0);
+                    return {
+                        ...shift,
+                        cashier_name: cashierName,
+                        total_sales: summary.total_sales,
+                        total_cash_sales: summary.total_cash || 0,
+                        total_mpesa_sales: summary.total_mpesa || 0,
+                        total_card_sales: summary.total_card || 0,
+                        transaction_count: summary.transaction_count || 0,
+                        expected_closing_float: expectedClosingFloat,
+                        variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
+                    };
+                }
+
+                // Fallback: aggregate from source revenue tables by time window only (no branch filter)
+                const [
+                    { data: restOrders },
+                    { data: barOrders },
+                ] = await Promise.all([
+                    supabase.from('restaurant_orders')
+                        .select('total_amount, payment_method')
+                        .gte('created_at', shift.shift_start)
+                        .lte('created_at', shiftEnd),
+                    supabase.from('bar_orders')
+                        .select('total_amount, payment_method')
+                        .gte('created_at', shift.shift_start)
+                        .lte('created_at', shiftEnd),
+                ]);
+
+                const allOrders = [
+                    ...(restOrders || []),
+                    ...(barOrders || []),
+                ];
+                const totalCash  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'cash').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                const totalMpesa = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase().includes('mpesa') || (o.payment_method || '').toLowerCase().includes('m-pesa')).reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                const totalCard  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'card').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                const restBarTotal = allOrders.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                const totalSales = restBarTotal;
+                const txCount = allOrders.length;
+
+                if (totalSales > 0) {
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash;
+                    const closingFloat = Number(shift.closing_float || 0);
+                    return {
+                        ...shift,
+                        cashier_name: cashierName,
+                        total_sales: totalSales,
+                        total_cash_sales: totalCash,
+                        total_mpesa_sales: totalMpesa,
+                        total_card_sales: totalCard,
+                        transaction_count: txCount,
+                        expected_closing_float: expectedClosingFloat,
+                        variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
+                    };
+                }
+            } catch (err) {
+                logger.warn(`Sales enrichment failed for shift ${shift.id}:`, err);
             }
 
-            const totalCash = payments
-                .filter((p: any) => p.payment_method === 'Cash')
-                .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-            const totalMpesa = payments
-                .filter((p: any) => p.payment_method === 'M-Pesa')
-                .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-            const totalCard = payments
-                .filter((p: any) => p.payment_method === 'Card')
-                .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-            const totalSales = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-
-            // Recompute expected closing float and variance
-            const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash;
-            const closingFloat = Number(shift.closing_float || 0);
-            const variance = closingFloat > 0 ? closingFloat - expectedClosingFloat : 0;
-
-            return {
-                ...shift,
-                cashier_name: cashierName,
-                total_sales: totalSales,
-                total_cash_sales: totalCash,
-                total_mpesa_sales: totalMpesa,
-                total_card_sales: totalCard,
-                transaction_count: payments.length,
-                expected_closing_float: expectedClosingFloat,
-                variance: closingFloat > 0 ? variance : shift.variance,
-            };
+            return { ...shift, cashier_name: cashierName };
         }));
 
         res.status(200).json({
@@ -180,33 +209,75 @@ export const getShiftLog = async (
         // If totals are zero, recompute from payments table
         let enrichedShift = { ...shift, cashier_name: cashierName, transactions: transactions || [] };
 
-        if (shift.total_sales === 0 && shift.cashier_id && shift.shift_start) {
+        if (shift.cashier_id && shift.shift_start) {
             const shiftEnd = shift.shift_end || new Date().toISOString();
-            const { data: payments } = await supabase
-                .from('payments')
-                .select('amount, payment_method, recorded_by')
-                .eq('recorded_by', shift.cashier_id)
-                .gte('recorded_at', shift.shift_start)
-                .lte('recorded_at', shiftEnd);
+            const branchId = shift.branch_id;
+            let rpcOk = false;
 
-            if (payments && payments.length > 0) {
-                const totalCash = payments.filter((p: any) => p.payment_method === 'Cash').reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-                const totalMpesa = payments.filter((p: any) => p.payment_method === 'M-Pesa').reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-                const totalCard = payments.filter((p: any) => p.payment_method === 'Card').reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-                const totalSales = payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-                const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash;
-                const closingFloat = Number(shift.closing_float || 0);
+            // Step 1: try RPC
+            try {
+                const { data: summary } = await supabase
+                    .rpc('calculate_shift_summary', { p_shift_id: shift.id });
 
-                enrichedShift = {
-                    ...enrichedShift,
-                    total_sales: totalSales,
-                    total_cash_sales: totalCash,
-                    total_mpesa_sales: totalMpesa,
-                    total_card_sales: totalCard,
-                    transaction_count: payments.length,
-                    expected_closing_float: expectedClosingFloat,
-                    variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
-                };
+                if (summary && summary.total_sales > 0) {
+                    rpcOk = true;
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0);
+                    const closingFloat = Number(shift.closing_float || 0);
+                    enrichedShift = {
+                        ...enrichedShift,
+                        total_sales: summary.total_sales,
+                        total_cash_sales: summary.total_cash || 0,
+                        total_mpesa_sales: summary.total_mpesa || 0,
+                        total_card_sales: summary.total_card || 0,
+                        transaction_count: summary.transaction_count || 0,
+                        expected_closing_float: expectedClosingFloat,
+                        variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
+                    };
+                }
+            } catch (rpcErr) {
+                logger.warn(`calculate_shift_summary failed for shift ${shift.id}:`, rpcErr);
+            }
+
+            // Step 2: fallback — aggregate from source revenue tables by time window only
+            if (!rpcOk) {
+                try {
+                    const [
+                        { data: restOrders },
+                        { data: barOrders },
+                    ] = await Promise.all([
+                        supabase.from('restaurant_orders')
+                            .select('total_amount, payment_method')
+                            .gte('created_at', shift.shift_start)
+                            .lte('created_at', shiftEnd),
+                        supabase.from('bar_orders')
+                            .select('total_amount, payment_method')
+                            .gte('created_at', shift.shift_start)
+                            .lte('created_at', shiftEnd),
+                    ]);
+
+                    const allOrders = [...(restOrders || []), ...(barOrders || [])];
+                    const totalCash  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'cash').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                    const totalMpesa = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase().includes('mpesa') || (o.payment_method || '').toLowerCase().includes('m-pesa')).reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                    const totalCard  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'card').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                    const totalSales = allOrders.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+
+                    if (totalSales > 0) {
+                        const expectedClosingFloat = Number(shift.opening_float || 0) + totalCash;
+                        const closingFloat = Number(shift.closing_float || 0);
+                        enrichedShift = {
+                            ...enrichedShift,
+                            total_sales: totalSales,
+                            total_cash_sales: totalCash,
+                            total_mpesa_sales: totalMpesa,
+                            total_card_sales: totalCard,
+                            transaction_count: allOrders.length,
+                            expected_closing_float: expectedClosingFloat,
+                            variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
+                        };
+                    }
+                } catch (fallbackErr) {
+                    logger.warn(`Source-table fallback failed for shift ${shift.id}:`, fallbackErr);
+                }
             }
         }
 
@@ -345,16 +416,27 @@ export const closeShift = async (
         const { data: summary } = await supabase
             .rpc('calculate_shift_summary', { p_shift_id: id });
 
-        // Extract values for reconciliation formula
         const cash_sales = summary?.total_cash || 0;
+        const mpesa_sales = summary?.total_mpesa || 0;
+        const card_sales = summary?.total_card || 0;
+        const total_sales_rpc = summary?.total_sales || 0;
         const credit_paid_cash = paid_bills_value || 0;
-        const expenses = 0; // Not currently tracked in this body
-        const refunds = 0;
 
-        // Apply strict accounting formula
-        // Expected = Opening Float + Cash Sales + Cash from Credit Payments - Expenses - Refunds
-        const expectedClosingFloat = (shift.opening_float || 0) + cash_sales + credit_paid_cash - expenses - refunds;
-        const variance = closing_float - expectedClosingFloat;
+        // Strict accounting formula: Expected = Opening Float + Cash Sales + Cash Received for Credit Payments
+        // NOTE: Only cash-affecting items count toward expected closing float
+        const expectedClosingFloat = (shift.opening_float || 0) + cash_sales + credit_paid_cash;
+        const variance = (closing_float || 0) - expectedClosingFloat;
+
+        // Compute unpaid_bills server-side (credit issued minus credit paid)
+        const creditTaken = (credit_bills_details || []).reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
+        const creditPaid  = (paid_bills_details  || []).reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
+        const computedUnpaidBills = Math.max(0, creditTaken - creditPaid);
+
+        // Reconciliation warning: payment method sum should equal total_sales
+        const methodSum = cash_sales + mpesa_sales + card_sales + (other_revenue || 0);
+        if (total_sales_rpc > 0 && Math.abs(methodSum - total_sales_rpc) > 0.01) {
+            logger.warn(`Shift ${id} reconciliation warning: method sum ${methodSum} ≠ total_sales ${total_sales_rpc}`);
+        }
 
         // Update shift with all revenue breakdown
         const { data: updatedShift, error: updateError } = await supabase

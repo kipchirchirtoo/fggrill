@@ -225,7 +225,25 @@ export const approvePayroll = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { runId } = req.body;
+    let { runId, month, year, branch_id } = req.body;
+
+    // Fallback: If runId is missing but we have month/year/branch, find the draft
+    if (!runId && month && year) {
+      const { data: foundRun } = await supabase
+        .from('payroll_runs')
+        .select('id')
+        .eq('month', month)
+        .eq('year', year)
+        .eq('status', 'draft')
+        .maybeSingle();
+      
+      if (foundRun) runId = foundRun.id;
+    }
+
+    if (!runId) {
+      res.status(400).json({ success: false, message: 'Missing payroll Run ID or period details' });
+      return;
+    }
 
     // 1. Ensure run exists and is in draft
     const { data: run, error: runError } = await supabase
@@ -643,10 +661,20 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
       return;
     }
 
+    // Fetch approver name
+    let approverName = '';
+    if (run.approved_by) {
+      const { data: approver } = await supabase
+        .from('users')
+        .select('first_name, last_name')
+        .eq('id', run.approved_by)
+        .single();
+      if (approver) approverName = `${approver.first_name || ''} ${approver.last_name || ''}`.trim();
+    }
+
     // Optionally get branch name
     let branchName = 'All Branches';
     const effectiveBranchId = branch_id && branch_id !== '0' ? branch_id : run.branch_id;
-    
     if (effectiveBranchId) {
       const { data: branch } = await supabase.from('branches').select('name').eq('id', effectiveBranchId).single();
       if (branch?.name) branchName = branch.name;
@@ -656,39 +684,55 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
       .from('payroll_records')
       .select('*')
       .eq('payroll_run_id', runId);
-    
     if (branch_id && branch_id !== '0') {
       query = query.eq('branch_id', branch_id);
     }
-
     const { data: records, error } = await query;
-
     if (error) throw error;
 
-    // Recalculate totals for the filtered branch if applicable
-    let runDataForPDF = { ...run };
-    if (branch_id && branch_id !== '0') {
-      const totals = (records || []).reduce((acc, r) => ({
-        basic: acc.basic + parseFloat(r.basic_salary || 0),
-        gross: acc.gross + parseFloat(r.gross_pay || 0),
-        deductions: acc.deductions + parseFloat(r.total_deductions || 0),
-        net: acc.net + parseFloat(r.net_pay || 0)
-      }), { basic: 0, gross: 0, deductions: 0, net: 0 });
-
-      runDataForPDF = {
-        ...run,
-        total_basic_salary: totals.basic,
-        total_gross_pay: totals.gross,
-        total_deductions: totals.deductions,
-        total_net_pay: totals.net
-      };
+    // Fetch staff roles for each record (payroll_records.staff_id → users.id → staff_profiles.user_id)
+    const staffUserIds = (records || []).map((r: any) => r.staff_id).filter(Boolean);
+    let roleMap = new Map<string, string>();
+    if (staffUserIds.length > 0) {
+      const { data: staffProfiles } = await supabase
+        .from('staff_profiles')
+        .select('user_id, role, position, department')
+        .in('user_id', staffUserIds);
+      (staffProfiles || []).forEach((sp: any) => {
+        roleMap.set(sp.user_id, sp.position || sp.role || sp.department || 'Staff');
+      });
     }
-    
+
+    // Enrich records with role
+    const enrichedRecords = (records || []).map((r: any) => ({
+      ...r,
+      role: roleMap.get(r.staff_id) || r.role || 'Staff',
+    }));
+
+    // Always recalculate totals from actual records (never trust stale run totals)
+    const totals = enrichedRecords.reduce((acc: any, r: any) => ({
+      basic: acc.basic + parseFloat(r.basic_salary || 0),
+      gross: acc.gross + parseFloat(r.gross_pay || 0),
+      additions: acc.additions + parseFloat(r.total_additions || 0),
+      deductions: acc.deductions + parseFloat(r.total_deductions || 0),
+      net: acc.net + parseFloat(r.net_pay || 0),
+    }), { basic: 0, gross: 0, additions: 0, deductions: 0, net: 0 });
+
+    const runDataForPDF = {
+      ...run,
+      total_basic_salary: totals.basic,
+      total_gross_pay: totals.gross,
+      total_additions: totals.additions,
+      total_deductions: totals.deductions,
+      total_net_pay: totals.net,
+      approver_name: approverName,
+    };
+
     // Call the branded A3 landscape generator
     await generateBrandedPayrollSummaryV2(
       res,
       runDataForPDF,
-      records || [],
+      enrichedRecords,
       branchName
     );
   } catch (error) {

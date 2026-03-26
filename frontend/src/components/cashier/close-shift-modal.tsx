@@ -237,11 +237,21 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
     };
 
     const totalRevenue = calculateTotalRevenue();
-    
-    // Strict accounting formula for frontend expectation
-    // Expected = Opening Float + Cash Revenue + Credit Payments - (Expenses/Refunds = 0 here for now)
-    const expectedClosing = (currentShift?.opening_float || 0) + totalRevenue + (formData.paid_bills_value || 0);
+
+    // ── Strict accounting formula (matches backend exactly) ──────────────────
+    // Expected = Opening Float + Cash Sales only + Cash received for credit payments
+    // NOTE: M-Pesa and Card do NOT affect the cash drawer
+    const cashSales = currentShift?.total_cash_sales || 0;
+    const expectedClosing = (currentShift?.opening_float || 0) + cashSales + (formData.paid_bills_value || 0);
     const variance = (formData.closing_float || 0) - expectedClosing;
+
+    // Credit bills outstanding
+    const outstandingCredit = Math.max(0, (formData.credit_bills_taken || 0) - (formData.paid_bills_value || 0));
+
+    // Variance label & colour
+    const varianceLabel = variance === 0 ? 'Fully Reconciled' : variance > 0 ? 'Surplus' : 'Shortage';
+    const varianceColor = variance === 0 ? 'text-emerald-600' : variance > 0 ? 'text-blue-600' : 'text-rose-600';
+    const varianceBg    = variance === 0 ? 'bg-emerald-50 border-emerald-200' : variance > 0 ? 'bg-blue-50 border-blue-200' : 'bg-rose-50 border-rose-200';
 
     const handleSubmit = () => {
         onSubmit(formData);
@@ -249,7 +259,7 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-[85vw] w-[85vw] h-[90vh] flex p-0 overflow-hidden bg-white border border-slate-200 rounded-none shadow-2xl focus:outline-none focus:ring-0">
+            <DialogContent className="max-w-[92vw] w-[92vw] h-[92vh] flex p-0 overflow-hidden bg-white border border-slate-200 rounded-xl shadow-2xl focus:outline-none focus:ring-0">
                 
                 {/* ── Absolute Close Button ── */}
                 <button 
@@ -259,63 +269,123 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                     <X className="h-6 w-6" />
                 </button>
 
-                {/* ── Left Sidebar: Shift Summary (Light Theme) ── */}
-                <div className="w-[400px] bg-slate-50/50 flex flex-col p-10 shrink-0 border-r border-slate-200/60 backdrop-blur-sm rounded-none">
-                    <div className="mb-16">
-                        <div className="p-3 bg-slate-50 rounded-xl w-fit mb-6 shadow-sm border border-slate-100">
-                            <Clock className="h-6 w-6 text-slate-400" />
+                {/* ── Left Sidebar: Shift Summary + Live Breakdown ── */}
+                <div className="w-72 bg-slate-50/50 flex flex-col p-5 shrink-0 border-r border-slate-200/60 overflow-y-auto rounded-none"
+                     style={{ minWidth: '280px', maxWidth: '288px' }}>
+                    <div className="mb-6">
+                        <div className="p-2 bg-slate-50 rounded-lg w-fit mb-3 shadow-sm border border-slate-100">
+                            <Clock className="h-5 w-5 text-slate-400" />
                         </div>
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-3">Shift {currentShift?.shift_number}</h2>
-                        <div className="space-y-2 opacity-50">
-                            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                                <Clock className="h-3 w-3" /> {currentShift?.shift_start && new Date(currentShift.shift_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                                <User className="h-3 w-3" /> {currentShift?.cashier_id?.slice(0, 8) || '---'}
-                            </p>
-                        </div>
+                        <h2 className="text-lg font-black text-slate-900 tracking-tight mb-1">Shift {currentShift?.shift_number}</h2>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
+                            {currentShift?.shift_start && new Date(currentShift.shift_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
                     </div>
 
-                    <div className="flex-1 space-y-8">
-                        {/* Expected Cash Flow Badge */}
-                        <div className="p-8 bg-white rounded-none border border-slate-100 shadow-sm">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-3">Expected Cash Flow</p>
-                            <p className="text-4xl font-black text-slate-900 tabular-nums tracking-tighter">
-                                <span className="text-sm font-bold text-slate-300 mr-2 uppercase">KES</span>
-                                {expectedClosing?.toLocaleString()}
-                            </p>
-                        </div>
+                    {/* ── Shift Breakdown Panel ── */}
+                    <div className="flex-1 space-y-3 text-xs">
 
-                        {/* Variance Analysis */}
-                        <div className={`p-8 rounded-none border transition-all duration-500 bg-white border-slate-100`}>
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-slate-400">Variance Analysis</p>
-                            <div className="flex items-center justify-between">
-                                <p className={`text-5xl font-black tabular-nums tracking-tighter ${
-                                    !formData.closing_float ? 'text-slate-200' : 'text-slate-900'
-                                }`}>
-                                    {formData.closing_float ? (variance > 0 ? `+${variance.toLocaleString()}` : variance.toLocaleString()) : '0'}
-                                </p>
-                                <div className={`p-4 rounded-xl bg-slate-100 text-slate-400`}>
-                                    {!formData.closing_float ? <Clock className="h-6 w-6" /> :
-                                     variance === 0 ? <CheckCircle2 className="h-6 w-6" /> : 
-                                     <AlertCircle className="h-6 w-6" />}
+                        {/* Cash Reconciliation */}
+                        <div className="p-3 bg-white rounded-lg border border-slate-100 shadow-sm space-y-1.5">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Cash Reconciliation</p>
+                            {[
+                                { label: 'Opening Float', value: currentShift?.opening_float || 0 },
+                                { label: 'Cash Sales', value: cashSales },
+                                { label: 'Credit Paid', value: formData.paid_bills_value || 0 },
+                            ].map(row => (
+                                <div key={row.label} className="flex justify-between items-center">
+                                    <span className="text-slate-500">{row.label}</span>
+                                    <span className="font-black text-slate-800 tabular-nums">KES {row.value.toLocaleString()}</span>
                                 </div>
+                            ))}
+                            <div className="border-t border-slate-100 pt-1.5 flex justify-between items-center">
+                                <span className="text-slate-600 font-black text-[9px] uppercase tracking-wider">Expected</span>
+                                <span className="font-black text-slate-900 tabular-nums">KES {expectedClosing.toLocaleString()}</span>
                             </div>
-                            <p className={`text-[10px] font-bold mt-4 uppercase tracking-[0.1em] ${
-                                !formData.closing_float ? 'text-slate-300' : 'text-slate-500'
-                            }`}>
-                                {!formData.closing_float ? 'Enter actual cash count' :
-                                 variance === 0 ? 'Fully Reconciled' : 
-                                 variance > 0 ? 'Excess Balance' : 'Discrepancy Found'}
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-600 font-black text-[9px] uppercase tracking-wider">Actual</span>
+                                <span className="font-black text-slate-900 tabular-nums">KES {(formData.closing_float || 0).toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        {/* Sales by Payment Method */}
+                        <div className="p-3 bg-white rounded-lg border border-slate-100 shadow-sm space-y-1.5">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">By Payment Method</p>
+                            {[
+                                { label: 'Cash', value: currentShift?.total_cash_sales || 0 },
+                                { label: 'M-Pesa', value: currentShift?.total_mpesa_sales || 0 },
+                                { label: 'Card', value: currentShift?.total_card_sales || 0 },
+                            ].map(row => (
+                                <div key={row.label} className="flex justify-between items-center">
+                                    <span className="text-slate-500">{row.label}</span>
+                                    <span className="font-black text-slate-800 tabular-nums">{row.value > 0 ? `KES ${row.value.toLocaleString()}` : '—'}</span>
+                                </div>
+                            ))}
+                            <div className="border-t border-slate-100 pt-1.5 flex justify-between items-center">
+                                <span className="text-slate-600 font-black text-[9px] uppercase tracking-wider">Total Sales</span>
+                                <span className="font-black text-slate-900 tabular-nums">KES {(currentShift?.total_sales || 0).toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        {/* Revenue by Stream */}
+                        <div className="p-3 bg-white rounded-lg border border-slate-100 shadow-sm space-y-1.5">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Revenue by Stream</p>
+                            {[
+                                { label: 'Restaurant', value: formData.restaurant_revenue || 0 },
+                                { label: 'Bar', value: formData.bar_revenue || 0 },
+                                { label: 'Rooms', na: formData.rooms_na, value: formData.room_booking_revenue || 0 },
+                                { label: 'Conference', na: formData.conference_na, value: formData.conference_revenue || 0 },
+                                { label: 'Pool', na: formData.pool_na, value: formData.swimming_pool_revenue || 0 },
+                                { label: 'Other', value: formData.other_revenue || 0 },
+                            ].map(row => (
+                                <div key={row.label} className="flex justify-between items-center">
+                                    <span className="text-slate-500">{row.label}</span>
+                                    <span className="font-black text-slate-800 tabular-nums">
+                                        {row.na ? <span className="text-slate-300 text-[9px]">N/A</span> : row.value > 0 ? `KES ${row.value.toLocaleString()}` : '—'}
+                                    </span>
+                                </div>
+                            ))}
+                            <div className="border-t border-slate-100 pt-1.5 flex justify-between items-center">
+                                <span className="text-slate-600 font-black text-[9px] uppercase tracking-wider">Subtotal</span>
+                                <span className="font-black text-slate-900 tabular-nums">KES {totalRevenue.toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        {/* Credit & Bills */}
+                        <div className="p-3 bg-white rounded-lg border border-slate-100 shadow-sm space-y-1.5">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Credit & Bills</p>
+                            {[
+                                { label: 'Created', value: formData.credit_bills_taken || 0, color: 'text-orange-600' },
+                                { label: 'Paid', value: formData.paid_bills_value || 0, color: 'text-emerald-600' },
+                                { label: 'Outstanding', value: outstandingCredit, color: outstandingCredit > 0 ? 'text-rose-600' : 'text-slate-800' },
+                            ].map(row => (
+                                <div key={row.label} className="flex justify-between items-center">
+                                    <span className="text-slate-500">{row.label}</span>
+                                    <span className={`font-black tabular-nums ${row.color}`}>{row.value > 0 ? `KES ${row.value.toLocaleString()}` : '—'}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Variance */}
+                        <div className={`p-3 rounded-lg border transition-all duration-300 ${varianceBg}`}>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Variance</p>
+                            <p className="text-[9px] text-slate-400 mb-2 leading-relaxed">
+                                {(currentShift?.opening_float || 0).toLocaleString()} + {cashSales.toLocaleString()} + {(formData.paid_bills_value || 0).toLocaleString()} = {expectedClosing.toLocaleString()}
                             </p>
+                            <div className="flex items-center justify-between">
+                                <span className={`text-[10px] font-black uppercase tracking-wider ${varianceColor}`}>{varianceLabel}</span>
+                                <span className={`text-xl font-black tabular-nums ${varianceColor}`}>
+                                    {formData.closing_float ? (variance >= 0 ? `+${variance.toLocaleString()}` : variance.toLocaleString()) : '—'}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="pt-8 mt-auto">
-                        <IOSButton 
-                            onClick={onClose} 
-                            variant="secondary" 
-                            className="w-full h-14 bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-900 text-xs font-black rounded-xl border border-slate-100 transition-all active:scale-95 uppercase tracking-widest shadow-sm"
+                    <div className="pt-6 mt-4">
+                        <IOSButton
+                            onClick={onClose}
+                            variant="secondary"
+                            className="w-full h-12 bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-900 text-xs font-black rounded-xl border border-slate-100 transition-all active:scale-95 uppercase tracking-widest shadow-sm"
                         >
                             Cancel and Return
                         </IOSButton>
@@ -351,7 +421,7 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-3">Cash Sales</p>
                                         <p className="text-3xl font-black text-slate-900 tabular-nums">
                                             <span className="text-xs font-bold text-slate-300 mr-2 uppercase">KES</span>
-                                            {currentShift?.cash_sales?.toLocaleString() || currentShift?.total_cash_sales?.toLocaleString()}
+                                            {(currentShift?.total_cash_sales || 0).toLocaleString()}
                                         </p>
                                     </div>
                                 </div>

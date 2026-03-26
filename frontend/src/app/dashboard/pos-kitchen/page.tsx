@@ -200,9 +200,13 @@ export default function POSKitchenDashboard() {
         }
       }
 
+      const userId = (user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) 
+        ? user.id 
+        : '';
+
       const [ordersResult, salesResult] = await Promise.allSettled([
         restaurantAPI.getMyOrders(
-          waiterFilter === 'all-orders' ? '' : (user?.id || 'offline-user'), 
+          waiterFilter === 'all-orders' ? '' : userId, 
           currentBranchId || undefined,
           filters // Always pass filters with date range
         ),

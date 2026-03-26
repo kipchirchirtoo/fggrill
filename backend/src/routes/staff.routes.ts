@@ -53,7 +53,14 @@ router.use(protect);
 
 // Admin, Manager, Restaurant staff, POS Kitchen, Cashier, and Auditor routes
 router.get('/',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.KITCHEN, UserRole.HR_MANAGER, UserRole.CASHIER, UserRole.AUDITOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  authorize([
+    UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER,
+    UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.KITCHEN,
+    UserRole.HR_MANAGER, UserRole.CASHIER, UserRole.AUDITOR,
+    UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT,
+    UserRole.KYOGONG_SPA_CASHIER, UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+    UserRole.KYOGONG_SPORTS_BAR_CASHIER, UserRole.KYOGONG_RECEPTION_CASHIER
+  ]),
   getStaff
 );
 

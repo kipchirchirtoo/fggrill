@@ -4152,7 +4152,7 @@ export const payrollAPI = {
   },
   approve: (data: { runId?: string; month?: number; year?: number; branch_id?: number }) =>
     fetchAPI<any>('/payroll/approve', { method: 'POST', body: JSON.stringify(data) }),
-  approveDraft: (data: { month: number; year: number; branch_id?: number }) =>
+  approveDraft: (data: { runId?: string; month: number; year: number; branch_id?: number }) =>
     fetchAPI<any>('/payroll/approve', { method: 'POST', body: JSON.stringify(data) }),
   addAdjustment: (data: { recordId?: string; staff_id?: string; type: string; amount: number; reference?: string; month?: number; year?: number }) =>
     fetchAPI<any>('/payroll/adjustments', { method: 'POST', body: JSON.stringify(data) }),
@@ -4167,7 +4167,7 @@ export const payrollAPI = {
     return fetchAPI<any>(`/payroll-adjustments?${query}`);
   },
   voidAdjustment: (id: string) =>
-    fetchAPI<any>(`/payroll-adjustments/${id}/void`, { method: 'POST' }),
+    fetchAPI<any>(`/payroll-adjustments/${id}/void`, { method: 'PATCH' }),
   getHistory: () => fetchAPI<any>('/payroll/history'),
   downloadPayslipsZip: async (params: { month: number; year: number; branch_id?: number }) => {
     // We first need to get the run ID for these params

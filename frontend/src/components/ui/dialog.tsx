@@ -41,6 +41,7 @@ const DialogContent = React.forwardRef<
       aria-describedby={undefined}
       {...props}
     >
+      <DialogTitle className="sr-only">Modal Content</DialogTitle>
       {children}
     </DialogPrimitive.Content>
   </DialogPortal>

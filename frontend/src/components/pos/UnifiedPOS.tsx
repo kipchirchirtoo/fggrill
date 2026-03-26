@@ -530,6 +530,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             return;
         }
 
+        if (isSubmitting) return;
+
         setIsSubmitting(true);
         try {
             // Check if we're editing an existing order

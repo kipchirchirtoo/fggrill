@@ -1279,7 +1279,8 @@ export async function generateBrandedPayrollSummaryV2(
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const monthName = monthNames[(runData.month || 1) - 1];
   const title = `PAYROLL SUMMARY REPORT - ${monthName.toUpperCase()} ${runData.year}`;
-  const subtitle = `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()} · Total Employees: ${records.length}`;
+  const approverLine = runData.approver_name ? `Approved by: ${runData.approver_name}` : '';
+  const subtitle = `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()} · Total Employees: ${records.length}${approverLine ? ' · ' + approverLine : ''}`;
 
   // A3 LANDSCAPE: 1190 × 842 pt
   const doc = new PDFDocument({ margin: 36, size: 'A3', layout: 'landscape' });
@@ -1305,12 +1306,19 @@ export async function generateBrandedPayrollSummaryV2(
     d.fontSize(9).font('Helvetica-Bold').fillColor(PRIMARY).text(t, PAGE_W - MARGIN - 400, 32, { width: 400, align: 'right' });
     if (st) d.fontSize(8).font('Helvetica').fillColor(SECONDARY).text(st, PAGE_W - MARGIN - 400, 48, { width: 400, align: 'right' });
 
+    // Approved by line (prominent, below subtitle)
+    if (runData.approver_name) {
+      d.fontSize(8).font('Helvetica-Bold').fillColor('#15803d')
+        .text(`Approved by: ${runData.approver_name}${runData.approved_at ? '  ·  ' + new Date(runData.approved_at).toLocaleDateString('en-KE') : ''}`,
+          PAGE_W - MARGIN - 400, 62, { width: 400, align: 'right' });
+    }
+
     d.strokeColor(BORDER).lineWidth(1).moveTo(MARGIN, 94).lineTo(PAGE_W - MARGIN, 94).stroke();
     d.rect(MARGIN, 95, PAGE_W - (MARGIN * 2), 3).fill(GOLD);
     return 115;
   };
 
-  let y = drawHeader(doc, title, subtitle);
+  let y = drawHeader(doc, title, `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()} · Total Employees: ${records.length}`);
 
   // Column definitions for A3 Landscape
   const C = [
@@ -1341,11 +1349,15 @@ export async function generateBrandedPayrollSummaryV2(
 
   y = drawTHeader(doc, y);
 
+  // Running totals (computed from actual records)
+  let sumBasic = 0, sumAdditions = 0, sumGross = 0, sumNssf = 0, sumShif = 0;
+  let sumLoans = 0, sumAdvances = 0, sumCredits = 0, sumTotalDed = 0, sumNet = 0;
+
   records.forEach((r, i) => {
     if (y > 750) { // Page break
       drawFooter(doc);
       doc.addPage();
-      y = drawHeader(doc, title + ' (cont.)', subtitle);
+      y = drawHeader(doc, title + ' (cont.)', `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()}`);
       y = drawTHeader(doc, y);
     }
 
@@ -1354,32 +1366,51 @@ export async function generateBrandedPayrollSummaryV2(
     
     doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
 
-    // Extract categories from deductions array
-    const ded = r.deductions || [];
-    const getAmt = (cat: string) => ded.filter((d: any) => (d.category || '').toLowerCase() === cat.toLowerCase()).reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0);
-    
-    const nssf = getAmt('nssf');
-    const shif = getAmt('shif');
-    const loans = getAmt('loan');
-    const advances = getAmt('advance');
-    const credits = getAmt('credit_bill');
+    // Extract categories from deductions JSONB array
+    // Categories used: 'nssf', 'shif', 'loan', 'advance', 'credit_bills', 'absenteeism', 'uniform', 'paye', etc.
+    const ded: any[] = Array.isArray(r.deductions) ? r.deductions : [];
+    const getAmt = (cat: string) => ded
+      .filter((d: any) => (d.category || '').toLowerCase() === cat.toLowerCase())
+      .reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0);
+
+    const nssf      = getAmt('nssf');
+    const shif      = getAmt('shif');
+    const loans     = getAmt('loan');
+    const advances  = getAmt('advance');
+    const credits   = getAmt('credit_bills');
     const additions = parseFloat(r.total_additions || 0);
+    const basic     = parseFloat(r.basic_salary || 0);
+    const gross     = parseFloat(r.gross_pay || 0);
+    const totalDed  = parseFloat(r.total_deductions || 0);
+    const netPay    = parseFloat(r.net_pay || 0);
+
+    // Accumulate totals
+    sumBasic     += basic;
+    sumAdditions += additions;
+    sumGross     += gross;
+    sumNssf      += nssf;
+    sumShif      += shif;
+    sumLoans     += loans;
+    sumAdvances  += advances;
+    sumCredits   += credits;
+    sumTotalDed  += totalDed;
+    sumNet       += netPay;
 
     const values = [
-      { v: String(i + 1), x: C[0].x, w: C[0].width },
-      { v: r.employee_code || '—', x: C[1].x, w: C[1].width },
-      { v: r.employee_name || '—', x: C[2].x, w: C[2].width },
-      { v: r.role || 'Staff', x: C[3].x, w: C[3].width },
-      { v: fmt(r.basic_salary), x: C[4].x, w: C[4].width, a: 'right' },
-      { v: additions > 0 ? fmt(additions) : '—', x: C[5].x, w: C[5].width, a: 'right' },
-      { v: fmt(r.gross_pay), x: C[6].x, w: C[6].width, a: 'right' },
-      { v: nssf > 0 ? fmt(nssf) : '—', x: C[7].x, w: C[7].width, a: 'right' },
-      { v: shif > 0 ? fmt(shif) : '—', x: C[8].x, w: C[8].width, a: 'right' },
-      { v: loans > 0 ? fmt(loans) : '—', x: C[9].x, w: C[9].width, a: 'right' },
-      { v: advances > 0 ? fmt(advances) : '—', x: C[10].x, w: C[10].width, a: 'right' },
-      { v: credits > 0 ? fmt(credits) : '—', x: C[11].x, w: C[11].width, a: 'right' },
-      { v: fmt(r.total_deductions), x: C[12].x, w: C[12].width, a: 'right' },
-      { v: fmt(r.net_pay), x: C[13].x, w: C[13].width, a: 'right' },
+      { v: String(i + 1),                              x: C[0].x, w: C[0].width },
+      { v: r.employee_code || '—',                     x: C[1].x, w: C[1].width },
+      { v: r.employee_name || '—',                     x: C[2].x, w: C[2].width },
+      { v: r.role || 'Staff',                          x: C[3].x, w: C[3].width },
+      { v: fmt(basic),                                 x: C[4].x, w: C[4].width, a: 'right' },
+      { v: additions > 0 ? fmt(additions) : '—',       x: C[5].x, w: C[5].width, a: 'right' },
+      { v: fmt(gross),                                 x: C[6].x, w: C[6].width, a: 'right' },
+      { v: nssf > 0 ? fmt(nssf) : '—',                x: C[7].x, w: C[7].width, a: 'right' },
+      { v: shif > 0 ? fmt(shif) : '—',                x: C[8].x, w: C[8].width, a: 'right' },
+      { v: loans > 0 ? fmt(loans) : '—',              x: C[9].x, w: C[9].width, a: 'right' },
+      { v: advances > 0 ? fmt(advances) : '—',        x: C[10].x, w: C[10].width, a: 'right' },
+      { v: credits > 0 ? fmt(credits) : '—',          x: C[11].x, w: C[11].width, a: 'right' },
+      { v: fmt(totalDed),                              x: C[12].x, w: C[12].width, a: 'right' },
+      { v: fmt(netPay),                                x: C[13].x, w: C[13].width, a: 'right' },
     ];
 
     values.forEach(val => {
@@ -1390,17 +1421,22 @@ export async function generateBrandedPayrollSummaryV2(
     y += 20;
   });
 
-  // Totals Row
+  // Totals Row — computed from actual records, not stale run data
   doc.rect(MARGIN, y, PAGE_W - (MARGIN * 2), 24).fill('#eef2f7');
   doc.fillColor(PRIMARY).fontSize(9).font('Helvetica-Bold');
   doc.text('TOTALS', C[0].x, y + 7);
   
   const sumCols = [
-    { v: (parseFloat(runData.total_basic_salary) || 0).toLocaleString(), x: C[4].x, w: C[4].width },
-    { v: records.reduce((s, r) => s + (parseFloat(r.total_additions) || 0), 0).toLocaleString(), x: C[5].x, w: C[5].width },
-    { v: (parseFloat(runData.total_gross_pay) || 0).toLocaleString(), x: C[6].x, w: C[6].width },
-    { v: (parseFloat(runData.total_deductions) || 0).toLocaleString(), x: C[12].x, w: C[12].width },
-    { v: (parseFloat(runData.total_net_pay) || 0).toLocaleString(), x: C[13].x, w: C[13].width },
+    { v: fmt(sumBasic),     x: C[4].x,  w: C[4].width },
+    { v: fmt(sumAdditions), x: C[5].x,  w: C[5].width },
+    { v: fmt(sumGross),     x: C[6].x,  w: C[6].width },
+    { v: fmt(sumNssf),      x: C[7].x,  w: C[7].width },
+    { v: fmt(sumShif),      x: C[8].x,  w: C[8].width },
+    { v: fmt(sumLoans),     x: C[9].x,  w: C[9].width },
+    { v: fmt(sumAdvances),  x: C[10].x, w: C[10].width },
+    { v: fmt(sumCredits),   x: C[11].x, w: C[11].width },
+    { v: fmt(sumTotalDed),  x: C[12].x, w: C[12].width },
+    { v: fmt(sumNet),       x: C[13].x, w: C[13].width },
   ];
 
   sumCols.forEach(sc => {
@@ -1416,10 +1452,21 @@ export async function generateBrandedPayrollSummaryV2(
   }
 
   drawSummaryBox(doc, y, [
-    { label: 'Gross Salary Total', value: fmt(runData.total_gross_pay) },
-    { label: 'Total Deductions',   value: fmt(runData.total_deductions) },
-    { label: 'Net Pay Total (KES)', value: fmt(runData.total_net_pay) },
+    { label: 'Gross Salary Total',  value: fmt(sumGross) },
+    { label: 'Total Deductions',    value: fmt(sumTotalDed) },
+    { label: 'Net Pay Total (KES)', value: fmt(sumNet) },
   ]);
+
+  // Approval signature block
+  if (runData.approver_name || runData.approved_at) {
+    const sigY = y + 80;
+    doc.fontSize(8).font('Helvetica').fillColor(SECONDARY)
+      .text('Approved & Authorized by:', MARGIN, sigY)
+      .font('Helvetica-Bold').fillColor(PRIMARY)
+      .text(runData.approver_name || '___________________________', MARGIN, sigY + 12)
+      .font('Helvetica').fillColor(SECONDARY)
+      .text(runData.approved_at ? new Date(runData.approved_at).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' }) : '', MARGIN, sigY + 24);
+  }
 
   drawFooter(doc);
   doc.end();

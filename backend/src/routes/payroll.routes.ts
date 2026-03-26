@@ -9,6 +9,7 @@ import {
   downloadPayslipsZip,
   downloadSummaryPDF
 } from '../controllers/payroll.controller';
+import { getPayrollSummary } from '../controllers/payroll-simple.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
@@ -29,6 +30,13 @@ router.get(
   '/history',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
   getPayrollHistory
+);
+
+// Get payroll summary stats
+router.get(
+  '/summary',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
+  getPayrollSummary
 );
 
 // Approve and lock a draft payroll run

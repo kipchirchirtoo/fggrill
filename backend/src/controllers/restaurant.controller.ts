@@ -365,47 +365,58 @@ export const createOrder = async (
     }
 
     // Generate order number
-    // console.log('Generating order number via RPC...');
-    const { data: orderNumber, error: rpcError } = await supabase
-      .rpc('generate_order_number');
-
-    if (rpcError) {
-      console.error('RPC Error generating order number:', rpcError);
-      logger.error('RPC Error generating order number', { error: rpcError });
-    }
-
-    // Determine order number with fallback
-    const finalOrderNumber = orderNumber || `ORD${new Date().toISOString().replace(/[-:T]/g, '').slice(2, 12)}`;
-    // console.log('Final order number being used:', finalOrderNumber);
-
-    // Create order
-    const orderData = {
-      order_number: finalOrderNumber,
-      order_type: orderType,
-      table_number: tableNumber,
-      room_number: roomNumber,
-      guest_id: guestId,
-      guest_name: guestName,
-      special_instructions: specialInstructions,
-      total_amount: 0, // Will be calculated by trigger
-      payment_method: paymentMethod,
-      payment_status: status === 'confirmed' ? 'paid' : 'pending',
-      status: status || 'pending',
-      confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
-      confirmed_by: status === 'confirmed' ? req.user?.id : null,
-      created_by: req.user?.id,
-      branch_id: branchId
+    // Generate a collision-resistant order number locally — skip the non-atomic RPC
+    const makeOrderNumber = () => {
+      const date = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(2, 15); // YYMMDDHHmmss
+      const rand = Math.random().toString(36).substring(2, 8).toUpperCase();      // 6 random chars
+      return `ORD${date}${rand}`;
     };
 
-    // console.log('Creating order with data:', JSON.stringify(orderData, null, 2));
+    // Create order with retry logic for unique constraint violations
+    let order: any = null;
+    let attempts = 0;
+    const maxAttempts = 5;
 
-    const { data: order, error: orderError } = await supabase
-      .from('restaurant_orders')
-      .insert([orderData])
-      .select()
-      .single();
+    while (attempts < maxAttempts) {
+      attempts++;
+      const currentOrderNumber = makeOrderNumber();
 
-    if (orderError || !order) {
+      const orderData = {
+        order_number: currentOrderNumber,
+        order_type: orderType,
+        table_number: tableNumber,
+        room_number: roomNumber,
+        guest_id: guestId,
+        guest_name: guestName,
+        special_instructions: specialInstructions,
+        total_amount: 0,
+        payment_method: paymentMethod,
+        payment_status: status === 'confirmed' ? 'paid' : 'pending',
+        status: status || 'pending',
+        confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
+        confirmed_by: status === 'confirmed' ? req.user?.id : null,
+        created_by: req.user?.id,
+        branch_id: branchId
+      };
+
+      const { data: insertedOrder, error: orderError } = await supabase
+        .from('restaurant_orders')
+        .insert([orderData])
+        .select()
+        .single();
+
+      if (!orderError && insertedOrder) {
+        order = insertedOrder;
+        break;
+      }
+
+      // If it's a unique constraint violation on order_number, retry with a fresh number
+      if (orderError?.code === '23505' && attempts < maxAttempts) {
+        logger.warn(`Order number collision on attempt ${attempts}. Retrying...`);
+        continue;
+      }
+
+      // Otherwise throw the error
       throw orderError || new Error('Failed to create order');
     }
 
@@ -482,7 +493,7 @@ export const createOrder = async (
       data: updatedOrder
     });
 
-    logger.info(`New order created: ${orderNumber} `);
+    logger.info(`New order created: ${order?.order_number || 'unknown'} `);
   } catch (error) {
     next(error);
   }
@@ -795,7 +806,15 @@ export const getOrders = async (
       query = query.gte('created_at', req.query.startDate).lte('created_at', req.query.endDate);
     }
     if (req.query.created_by) {
-      query = query.eq('created_by', req.query.created_by);
+      // Validate that created_by is a valid UUID
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.query.created_by as string);
+      if (isUUID) {
+        query = query.eq('created_by', req.query.created_by);
+      } else {
+        logger.warn(`Invalid UUID for created_by filter: ${req.query.created_by}`);
+        // If it's something like 'offline-user', just don't apply the filter
+        // so it returns all orders for the branch (most likely intent).
+      }
     }
 
     const { data: orders, error, count } = await query;

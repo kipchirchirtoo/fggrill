@@ -243,6 +243,8 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
       return;
     }
 
+    if (isSubmitting) return;
+
     if (orderType === 'dine_in' && !tableNumber) {
       toast.error('Please enter table number');
       return;

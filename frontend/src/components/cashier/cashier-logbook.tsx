@@ -9,9 +9,10 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
 import { CloseShiftModal, CloseShiftData } from './close-shift-modal';
+import { ShiftBreakdownReport } from './shift-breakdown-report';
 import {
     Clock, DollarSign, TrendingUp, CheckCircle,
-    AlertTriangle, Loader2, PlayCircle, StopCircle
+    AlertTriangle, Loader2, PlayCircle, StopCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 interface ShiftLog {
@@ -40,6 +41,23 @@ export function CashierLogbook({ type }: { type?: string }) {
     const [isLoading, setIsLoading] = useState(false);
     const [openingFloat, setOpeningFloat] = useState('');
     const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
+    const [modalShiftData, setModalShiftData] = useState<any>(null);
+    const [isLoadingShift, setIsLoadingShift] = useState(false);
+    const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
+
+    const openCloseModal = async () => {
+        if (!currentShift?.id) return;
+        setIsLoadingShift(true);
+        try {
+            const res = await fetchAPI(`/cashier/shifts/${currentShift.id}`) as any;
+            setModalShiftData(res.success && res.data ? res.data : currentShift);
+        } catch {
+            setModalShiftData(currentShift);
+        } finally {
+            setIsLoadingShift(false);
+            setCloseShiftModalOpen(true);
+        }
+    };
 
     const fetchShifts = async () => {
         try {
@@ -174,11 +192,11 @@ export function CashierLogbook({ type }: { type?: string }) {
                     </div>
 
                     <IOSButton
-                        onClick={() => setCloseShiftModalOpen(true)}
-                        disabled={isLoading}
+                        onClick={openCloseModal}
+                        disabled={isLoading || isLoadingShift}
                         className="w-full bg-stone-900 h-12"
                     >
-                        <StopCircle className="mr-2" />
+                        {isLoadingShift ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <StopCircle className="mr-2" />}
                         Close Shift
                     </IOSButton>
                 </IOSCard>
@@ -214,46 +232,66 @@ export function CashierLogbook({ type }: { type?: string }) {
             <div>
                 <h3 className="font-bold text-stone-900 mb-4">Recent Shifts</h3>
                 <div className="space-y-3">
-                    {shifts.filter(s => s.status !== 'open').slice(0, 10).map((shift) => (
-                        <IOSCard key={shift.id} className="p-4 hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <span className="font-bold text-stone-900">{shift.shift_number}</span>
-                                        <span className={`px-2 py-0.5 text-xs font-bold rounded-full border ${getStatusColor(shift.status)}`}>
-                                            {shift.status.toUpperCase()}
-                                        </span>
-                                    </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
-                                        <div>
-                                            <p className="text-xs text-stone-500">Cashier</p>
-                                            <p className="font-bold">{shift.cashier_name || 'Unknown'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-stone-500">Date</p>
-                                            <p className="font-bold">{new Date(shift.shift_start).toLocaleDateString()}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-stone-500">Sales</p>
-                                            <p className="font-bold text-emerald-600">KES {shift.total_sales.toLocaleString()}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-stone-500">Transactions</p>
-                                            <p className="font-bold">{shift.transaction_count}</p>
-                                        </div>
-                                        {shift.variance !== undefined && (
-                                            <div>
-                                                <p className="text-xs text-stone-500">Variance</p>
-                                                <p className={`font-bold ${shift.variance === 0 ? 'text-emerald-600' : shift.variance > 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                                                    {shift.variance > 0 ? '+' : ''}{shift.variance.toLocaleString()}
-                                                </p>
+                    {shifts.filter(s => s.status !== 'open').slice(0, 10).map((shift) => {
+                        const isExpanded = expandedShiftId === shift.id;
+                        const variance = shift.variance ?? 0;
+                        return (
+                            <IOSCard key={shift.id} className="overflow-hidden transition-shadow hover:shadow-md">
+                                {/* Summary row — click to expand */}
+                                <button
+                                    className="w-full text-left p-4"
+                                    onClick={() => setExpandedShiftId(isExpanded ? null : shift.id)}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <span className="font-bold text-stone-900">{shift.shift_number}</span>
+                                                <span className={`px-2 py-0.5 text-xs font-bold rounded-full border ${getStatusColor(shift.status)}`}>
+                                                    {shift.status.toUpperCase()}
+                                                </span>
                                             </div>
-                                        )}
+                                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                                                <div>
+                                                    <p className="text-xs text-stone-500">Cashier</p>
+                                                    <p className="font-bold">{shift.cashier_name || 'Unknown'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-stone-500">Date</p>
+                                                    <p className="font-bold">{new Date(shift.shift_start).toLocaleDateString()}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-stone-500">Sales</p>
+                                                    <p className="font-bold text-emerald-600">KES {shift.total_sales.toLocaleString()}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-stone-500">Transactions</p>
+                                                    <p className="font-bold">{shift.transaction_count}</p>
+                                                </div>
+                                                {shift.variance !== undefined && (
+                                                    <div>
+                                                        <p className="text-xs text-stone-500">Variance</p>
+                                                        <p className={`font-bold ${variance === 0 ? 'text-emerald-600' : variance > 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+                                                            {variance > 0 ? '+' : ''}{variance.toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="ml-4 text-stone-400">
+                                            {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                        </IOSCard>
-                    ))}
+                                </button>
+
+                                {/* Expanded breakdown */}
+                                {isExpanded && (
+                                    <div className="px-4 pb-4 border-t border-stone-100 pt-4">
+                                        <ShiftBreakdownReport shift={shift} />
+                                    </div>
+                                )}
+                            </IOSCard>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -262,7 +300,7 @@ export function CashierLogbook({ type }: { type?: string }) {
                 isOpen={closeShiftModalOpen}
                 onClose={() => setCloseShiftModalOpen(false)}
                 onSubmit={handleCloseShift}
-                currentShift={currentShift}
+                currentShift={modalShiftData || currentShift}
                 isLoading={isLoading}
             />
         </div>

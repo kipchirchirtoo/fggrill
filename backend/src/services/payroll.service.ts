@@ -169,8 +169,8 @@ export class PayrollService {
     const { data: advances } = await supabase
       .from('staff_advances')
       .select('id, amount, reason, accountant_id, auditor_id')
-      .eq('staff_id', staff.user_id || staff.id) // Support both profile and user ID mappings
-      .in('status', ['auditor_confirmed', 'approved']) // Strictly requirement: Audited/Approved
+      .eq('staff_id', staff.id) // staff_advances.staff_id → staff_profiles.id
+      .in('status', ['auditor_confirmed', 'approved'])
       .eq('month_to_deduct', month)
       .eq('year_to_deduct', year);
 
@@ -189,14 +189,13 @@ export class PayrollService {
       }
     }
 
-    // 2. Active Audited Loans
+    // 2. Active Loans — deduct any active loan approved before or during this payroll month
     const { data: loans } = await supabase
       .from('staff_loans')
       .select('id, installment_amount, remaining_balance, reason, auditor_id')
-      .eq('staff_id', staff.user_id || staff.id)
-      .in('status', ['active', 'auditor_confirmed']) // Strictly requirement: Audited/Active
-      .gt('remaining_balance', 0)
-      .or(`start_deduction_year.lt.${year},and(start_deduction_year.eq.${year},start_deduction_month.lte.${month})`);
+      .eq('staff_id', staff.id)
+      .in('status', ['active', 'auditor_confirmed'])
+      .gt('remaining_balance', 0);
 
     if (loans) {
       for (const loan of loans) {
@@ -218,23 +217,17 @@ export class PayrollService {
       }
     }
 
-    // 3. Unpaid Credit Bills (Audited & within exact month range)
+    // 3. Unpaid Credit Bills — pick up all pending/confirmed bills not yet deducted
     const { data: bills } = await supabase
       .from('staff_credit_bills')
       .select('id, amount, description, status, accountant_id, auditor_id, source_logbook_id, cashier_logbooks(status)')
-      .eq('staff_id', staff.user_id || staff.id)
+      .eq('staff_id', staff.id)
       .is('paid_via_payroll_run_id', null)
-      .in('status', ['accountant_confirmed', 'auditor_confirmed', 'approved', 'reconciled', 'audited']) 
-      .lte('bill_date', endDate.split('T')[0]);  // End of current month
+      .in('status', ['pending', 'accountant_confirmed', 'auditor_confirmed', 'approved', 'reconciled', 'audited'])
+      .lte('bill_date', endDate.split('T')[0]);
 
     if (bills) {
       for (const bill of bills) {
-        // If the bill came from a logbook, we verify if that logbook is reconciled (approved)
-        const sourceLogbook = (bill as any).cashier_logbooks;
-        if (bill.source_logbook_id && sourceLogbook && sourceLogbook.status !== 'approved') {
-          continue; // Skip if not yet reconciled by accountant/auditor
-        }
-
         dynamicDeductions.push({
           category: 'credit_bills',
           source: 'system',
@@ -242,7 +235,7 @@ export class PayrollService {
           source_id: bill.id,
           amount: parseFloat(bill.amount || '0'),
           reference: bill.description || 'Credit bill',
-          audit_ref: bill.auditor_id ? `Audited by ${bill.auditor_id}` : (bill.accountant_id ? `Approved by ${bill.accountant_id}` : (bill.source_logbook_id ? 'Logbook Reconciled' : 'Confirmed')),
+          audit_ref: bill.auditor_id ? `Audited by ${bill.auditor_id}` : (bill.accountant_id ? `Approved by ${bill.accountant_id}` : 'Pending'),
           timestamp: new Date().toISOString()
         });
       }
@@ -277,14 +270,14 @@ export class PayrollService {
       }
     }
 
-    // 5. Unpaid Bills in POS (Waiter/Staff items tracked in unpaid_bills table)
+    // 5. Unpaid Bills in POS
     const { data: posBills } = await supabase
       .from('unpaid_bills')
       .select('id, balance_amount, customer_name, bill_number, waiter_id, customer_id, accountant_id, auditor_id')
-      .or(`waiter_id.eq.${staff.user_id || staff.id},customer_id.eq.${staff.user_id || staff.id}`)
+      .or(`waiter_id.eq.${staff.id},customer_id.eq.${staff.id}`)
       .eq('status', 'unpaid')
-      .or('accountant_id.not.is.null,auditor_id.not.is.null') // Requirement 3 & 4: Only finalized/audited POS bills
-      .gte('bill_date', startDate.split('T')[0]) 
+      .or('accountant_id.not.is.null,auditor_id.not.is.null')
+      .gte('bill_date', startDate.split('T')[0])
       .lte('bill_date', endDate.split('T')[0]);
 
     if (posBills) {
@@ -320,7 +313,7 @@ export class PayrollService {
     const { data: hrAdjustments } = await supabase
       .from('staff_payroll_adjustments')
       .select('id, type, category, amount, description, created_by')
-      .eq('staff_id', staff.user_id || staff.id)
+      .eq('staff_id', staff.id) // staff_payroll_adjustments.staff_id → staff_profiles.id
       .eq('month', String(month))
       .eq('year', year)
       .in('status', ['pending', 'applied', 'Pending', 'Applied', 'APPLIED', 'PENDING']);

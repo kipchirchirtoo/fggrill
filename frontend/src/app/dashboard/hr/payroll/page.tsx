@@ -216,6 +216,7 @@ export default function PayrollPage() {
     setIsApproving(true);
     try {
       const res = await api.payroll.approveDraft({
+        runId: summary.id,
         month,
         year,
         branch_id: (activeBranchId && activeBranchId > 0) ? activeBranchId : undefined
@@ -391,7 +392,7 @@ export default function PayrollPage() {
               </div>
               <div>
                 <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Gross Pay</p>
-                <p className="text-xl font-black text-stone-900 leading-none mt-0.5">{KES(summary?.total_gross_pay || 0)}</p>
+                <p className="text-xl font-black text-stone-900 leading-none mt-0.5">{KES(branchTotals.gross || 0)}</p>
               </div>
             </div>
           </div>
@@ -403,7 +404,7 @@ export default function PayrollPage() {
               </div>
               <div>
                 <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Total Deductions</p>
-                <p className="text-xl font-black text-stone-900 leading-none mt-0.5">{KES(summary?.total_deductions || 0)}</p>
+                <p className="text-xl font-black text-stone-900 leading-none mt-0.5">{KES(branchTotals.deductions || 0)}</p>
               </div>
             </div>
           </div>
@@ -415,7 +416,7 @@ export default function PayrollPage() {
               </div>
               <div>
                 <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Net Payable</p>
-                <p className="text-xl font-black text-stone-900 leading-none mt-0.5">{KES(summary?.total_net_pay || 0)}</p>
+                <p className="text-xl font-black text-stone-900 leading-none mt-0.5">{KES(branchTotals.net || 0)}</p>
               </div>
             </div>
           </div>
