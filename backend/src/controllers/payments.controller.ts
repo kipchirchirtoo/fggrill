@@ -5,7 +5,7 @@ export class PaymentsController {
   // Get all payments for a branch with filters (includes banking, payments, pos_transactions)
   async getPayments(req: Request, res: Response) {
     try {
-      const { branch_id, status, payment_method, start_date, end_date } = req.query;
+      const { branch_id, status, payment_method, start_date, end_date, limit } = req.query;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -16,6 +16,8 @@ export class PaymentsController {
         ? ((end_date as string).length === 10 ? `${end_date}T23:59:59.999Z` : end_date as string)
         : null;
 
+      const itemsLimit = limit ? parseInt(limit as string) : null;
+
       // ── 1. payment_verifications ────────────────────────────────────────
       let pvQuery = supabase.from('payment_verifications').select('*').order('recorded_at', { ascending: false });
       if (branch_id) pvQuery = pvQuery.eq('branch_id', branch_id);
@@ -23,6 +25,8 @@ export class PaymentsController {
       if (payment_method) pvQuery = pvQuery.eq('payment_method', payment_method);
       if (start_date) pvQuery = pvQuery.gte('recorded_at', start_date as string);
       if (endOfDay)   pvQuery = pvQuery.lte('recorded_at', endOfDay);
+      if (itemsLimit) pvQuery = pvQuery.limit(itemsLimit);
+
       const { data: pvData, error: pvError } = await pvQuery;
       if (pvError) {
         console.error('Error fetching payment_verifications:', pvError);
@@ -37,6 +41,7 @@ export class PaymentsController {
         if (branch_id) btQuery = btQuery.eq('branch_id', branch_id);
         if (start_date) btQuery = btQuery.gte('transaction_date', start_date as string);
         if (end_date)   btQuery = btQuery.lte('transaction_date', end_date as string);
+        if (itemsLimit) btQuery = btQuery.limit(itemsLimit);
         const { data: btData } = await btQuery;
         bankingRecords = (btData || []).map((bt: any) => ({
           id: bt.id,
@@ -62,9 +67,10 @@ export class PaymentsController {
       // ── 3. payments table (branch inferred via related orders) ──────────
       let rawPayments: any[] = [];
       if (!status) {
-        let payQuery = supabase.from('payments').select('*');
+        let payQuery = supabase.from('payments').select('*').order('created_at', { ascending: false });
         if (start_date) payQuery = payQuery.gte('created_at', `${start_date}T00:00:00`);
         if (end_date)   payQuery = payQuery.lte('created_at', `${end_date}T23:59:59`);
+        if (itemsLimit) payQuery = payQuery.limit(itemsLimit);
         const { data: payData } = await payQuery;
 
         if (payData && payData.length > 0) {
@@ -142,6 +148,7 @@ export class PaymentsController {
         if (branch_id) posQuery = posQuery.eq('branch_id', branch_id);
         if (start_date) posQuery = posQuery.gte('created_at', `${start_date}T00:00:00`);
         if (end_date)   posQuery = posQuery.lte('created_at', `${end_date}T23:59:59`);
+        if (itemsLimit) posQuery = posQuery.limit(itemsLimit);
         const { data: posData } = await posQuery;
         posRecords = (posData || []).map((pos: any) => ({
           id: pos.id,
@@ -159,7 +166,18 @@ export class PaymentsController {
       }
 
       // ── 5. Merge all sources ────────────────────────────────────────────
-      const allPayments = [...pvRecords, ...bankingRecords, ...rawPayments, ...posRecords];
+      let allPayments = [...pvRecords, ...bankingRecords, ...rawPayments, ...posRecords];
+
+      // Sort combined results by date descending
+      allPayments.sort((a: any, b: any) =>
+        new Date(b.recorded_at || b._transaction_date || 0).getTime() -
+        new Date(a.recorded_at || a._transaction_date || 0).getTime()
+      );
+
+      // Apply limit if provided to final result
+      if (itemsLimit) {
+        allPayments = allPayments.slice(0, itemsLimit);
+      }
 
       // ── 6. Enrich with user + branch info ───────────────────────────────
       const userIds = new Set<string>();
@@ -190,11 +208,6 @@ export class PaymentsController {
         auditor_verified_by_user: p.auditor_verified_by ? usersMap.get(p.auditor_verified_by) : null,
         branch: p.branch_id ? branchesMap.get(p.branch_id) : null,
       }));
-
-      enriched.sort((a: any, b: any) =>
-        new Date(b.recorded_at || b._transaction_date || 0).getTime() -
-        new Date(a.recorded_at || a._transaction_date || 0).getTime()
-      );
 
       return res.json({ success: true, data: enriched });
     } catch (error: any) {

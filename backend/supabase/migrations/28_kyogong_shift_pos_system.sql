@@ -21,8 +21,22 @@ CREATE TABLE IF NOT EXISTS sales_points (
 );
 
 -- Create index for faster lookups
-CREATE INDEX idx_sales_points_branch ON sales_points(branch_id);
-CREATE INDEX idx_sales_points_code ON sales_points(code);
+CREATE INDEX IF NOT EXISTS idx_sales_points_branch ON sales_points(branch_id);
+CREATE INDEX IF NOT EXISTS idx_sales_points_code ON sales_points(code);
+
+-- Fix for existing table mismatch
+ALTER TABLE sales_points ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE sales_points ADD COLUMN IF NOT EXISTS requires_staff_assignment BOOLEAN DEFAULT FALSE;
+ALTER TABLE sales_points ADD COLUMN IF NOT EXISTS supports_petty_cash BOOLEAN DEFAULT FALSE;
+ALTER TABLE sales_points ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- Ensure unique constraint on code for ON CONFLICT
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'sales_points_code_key') THEN
+        ALTER TABLE sales_points ADD CONSTRAINT sales_points_code_key UNIQUE (code);
+    END IF;
+END $$;
 
 -- Insert Kyogong Branch Sales Points (assuming branch_id = 2 for Kyogong)
 -- Note: Adjust branch_id based on your actual Kyogong branch ID

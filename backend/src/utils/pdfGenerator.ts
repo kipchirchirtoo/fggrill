@@ -10,10 +10,8 @@ export interface PayslipData {
     overtime_pay: number;
     allowances: number;
     gross_pay: number;
-    paye_tax: number;
     nssf_deduction: number;
     shif_deduction: number;
-    housing_levy_deduction: number;
     total_deductions: number;
     net_salary: number;
     employee: {
@@ -123,11 +121,10 @@ export const generatePayslipPDF = (data: PayslipData): Promise<Buffer> => {
         const formatCurrency = (amt: number) => amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         const rows = [
-            ['Basic Salary', formatCurrency(data.base_salary), 'PAYE Tax', formatCurrency(data.paye_tax)],
-            ['Overtime Pay', formatCurrency(data.overtime_pay), 'NSSF (Tier I+II)', formatCurrency(data.nssf_deduction)],
-            ['Allowances', formatCurrency(data.allowances), 'SHIF (Health)', formatCurrency(data.shif_deduction)],
-            ['Other Bonuses', formatCurrency(0), 'Housing Levy', formatCurrency(data.housing_levy_deduction)],
-            ['', '', 'Other Deductions', formatCurrency(0)],
+            ['Basic Salary', formatCurrency(data.base_salary), 'NSSF (Tier I+II)', formatCurrency(data.nssf_deduction)],
+            ['Overtime Pay', formatCurrency(data.overtime_pay), 'SHIF (Health)', formatCurrency(data.shif_deduction)],
+            ['Allowances', formatCurrency(data.allowances), 'Other Deductions', formatCurrency(data.total_deductions - data.nssf_deduction - data.shif_deduction)],
+            ['', '', '', ''],
             ['Total Earnings', formatCurrency(data.gross_pay), 'Total Deductions', formatCurrency(data.total_deductions)]
         ];
 
@@ -177,7 +174,106 @@ export const generatePayslipPDF = (data: PayslipData): Promise<Buffer> => {
         doc.text('---------------------------------------------------------', { align: 'center' });
         doc.text('This is a computer generated document and does not require a physical signature.', { align: 'center' });
         doc.moveDown(0.5);
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
+        doc.end();
+    });
+};
+
+export interface PayrollSummaryData {
+    month: string;
+    year: number;
+    branch_name: string;
+    total_gross: number;
+    total_deductions: number;
+    total_net: number;
+    records: {
+        employee_name: string;
+        employee_code: string;
+        basic_salary: number;
+        gross_pay: number;
+        total_deductions: number;
+        net_pay: number;
+    }[];
+}
+
+export const generatePayrollSummaryPDF = (data: PayrollSummaryData): Promise<Buffer> => {
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+        const chunks: Buffer[] = [];
+
+        doc.on('data', (chunk) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', (err) => reject(err));
+
+        const PRIMARY = '#1a1a1a';
+        const BORDER = '#e0e0e0';
+        const HEADER_BG = '#333333';
+
+        // Header
+        doc.fillColor(PRIMARY).fontSize(16).font('Helvetica-Bold').text('FamousGate Hotels Payroll Summary', { align: 'center' });
+        doc.fontSize(12).text(`${data.month} ${data.year} - ${data.branch_name}`, { align: 'center' });
+        doc.moveDown(1);
+
+        // Totals Bar
+        const summaryY = doc.y;
+        doc.rect(30, summaryY, 780, 25).fill('#f3f4f6');
+        doc.fillColor(PRIMARY).fontSize(9).font('Helvetica-Bold');
+        doc.text(`Total Gross: KES ${data.total_gross.toLocaleString()}`, 40, summaryY + 8);
+        doc.text(`Total Deductions: KES ${data.total_deductions.toLocaleString()}`, 250, summaryY + 8);
+        doc.text(`Total Net Payable: KES ${data.total_net.toLocaleString()}`, 480, summaryY + 8);
+
+        doc.moveDown(2);
+
+        // Table Header
+        const tableTop = doc.y;
+        const cols = [
+            { label: 'Employee Name', w: 180 },
+            { label: 'Code', w: 80 },
+            { label: 'Basic Salary', w: 120, align: 'right' },
+            { label: 'Gross Pay', w: 120, align: 'right' },
+            { label: 'Deductions', w: 120, align: 'right' },
+            { label: 'Net Pay', w: 120, align: 'right' }
+        ];
+
+        doc.rect(30, tableTop, 780, 20).fill(HEADER_BG);
+        doc.fillColor('white').fontSize(8);
+        
+        let currentX = 40;
+        cols.forEach(c => {
+            doc.text(c.label, currentX, tableTop + 6, { width: c.w - 10, align: c.align as any || 'left' });
+            currentX += c.w;
+        });
+
+        let currentY = tableTop + 20;
+
+        // Records
+        data.records.forEach((r, i) => {
+            if (i % 2 === 1) doc.rect(30, currentY, 780, 18).fill('#f9fafb');
+            
+            doc.fillColor(PRIMARY).font('Helvetica').fontSize(8);
+            let rowX = 40;
+            
+            doc.text(r.employee_name, rowX, currentY + 5);
+            rowX += cols[0].w;
+            doc.text(r.employee_code, rowX, currentY + 5);
+            rowX += cols[1].w;
+            doc.text(r.basic_salary.toLocaleString(), rowX, currentY + 5, { width: cols[2].w - 10, align: 'right' });
+            rowX += cols[2].w;
+            doc.text(r.gross_pay.toLocaleString(), rowX, currentY + 5, { width: cols[3].w - 10, align: 'right' });
+            rowX += cols[3].w;
+            doc.text(r.total_deductions.toLocaleString(), rowX, currentY + 5, { width: cols[4].w - 10, align: 'right' });
+            rowX += cols[4].w;
+            doc.font('Helvetica-Bold').text(r.net_pay.toLocaleString(), rowX, currentY + 5, { width: cols[5].w - 10, align: 'right' });
+
+            doc.strokeColor(BORDER).lineWidth(0.2).moveTo(30, currentY + 18).lineTo(810, currentY + 18).stroke();
+            currentY += 18;
+
+            // Page break check
+            if (currentY > 530) {
+                doc.addPage({ margin: 30, size: 'A4', layout: 'landscape' });
+                currentY = 40;
+                // Redraw header on new page if needed
+            }
+        });
 
         doc.end();
     });

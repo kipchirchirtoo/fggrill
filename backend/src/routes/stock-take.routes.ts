@@ -2,87 +2,78 @@ import express from 'express';
 import {
     getStockTakes,
     getStockTake,
+    getStockTakeItems,
     createStockTake,
-    completeStockTake
+    updateStockTake,
+    completeStockTake,
+    generateWorksheet
 } from '../controllers/storekeeping/resources.controller';
-import { updateStockTake, submitStockTake } from '../controllers/stock-take.controller'; // Keep for now if resources doesn't have a generic update
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
-import { deleteStockTake } from '../controllers/stock-take.controller';
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(protect);
 
+// Unified roles for all stock take operations
+const AUDIT_ROLES = [
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.AUDITOR,
+    UserRole.BRANCH_MANAGER,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.BRANCH_STOREKEEPER
+];
+
 // Get all stock takes
 router.get('/',
-    authorize([
-        UserRole.SUPER_ADMIN,
-        UserRole.GENERAL_MANAGER,
-        UserRole.BRANCH_MANAGER,
-        UserRole.ACCOUNTANT,
-        UserRole.AUDITOR,
-        UserRole.BRANCH_ACCOUNTANT
-    ]),
+    authorize(AUDIT_ROLES),
     getStockTakes
+);
+
+// Global worksheet generation (usually by category/branch)
+router.get('/worksheet',
+    authorize(AUDIT_ROLES),
+    generateWorksheet
 );
 
 // Get single stock take
 router.get('/:id',
-    authorize([
-        UserRole.SUPER_ADMIN,
-        UserRole.GENERAL_MANAGER,
-        UserRole.BRANCH_MANAGER,
-        UserRole.ACCOUNTANT,
-        UserRole.AUDITOR,
-        UserRole.BRANCH_ACCOUNTANT,
-        UserRole.BRANCH_STOREKEEPER
-    ]),
+    authorize(AUDIT_ROLES),
     getStockTake
+);
+
+// Get stock take items
+router.get('/:id/items',
+    authorize(AUDIT_ROLES),
+    getStockTakeItems
 );
 
 // Create stock take
 router.post('/',
-    authorize([
-        UserRole.SUPER_ADMIN,
-        UserRole.GENERAL_MANAGER,
-        UserRole.BRANCH_MANAGER,
-        UserRole.BRANCH_ACCOUNTANT
-    ]),
+    authorize(AUDIT_ROLES),
     createStockTake
 );
 
-// Update stock take
+// Update stock take (Bulk items update / Progress save)
+// Frontend uses PUT /api/stock-takes/:id
 router.put('/:id',
-    authorize([
-        UserRole.SUPER_ADMIN,
-        UserRole.GENERAL_MANAGER,
-        UserRole.BRANCH_MANAGER,
-        UserRole.BRANCH_ACCOUNTANT,
-        UserRole.AUDITOR
-    ]),
+    authorize(AUDIT_ROLES),
     updateStockTake
 );
 
 // Submit stock take to auditor
-router.put('/:id/submit',
-    authorize([
-        UserRole.SUPER_ADMIN,
-        UserRole.GENERAL_MANAGER,
-        UserRole.BRANCH_MANAGER,
-        UserRole.BRANCH_ACCOUNTANT
-    ]),
-    submitStockTake
+// Frontend uses POST /api/stock-takes/:id/submit
+router.post('/:id/submit',
+    authorize(AUDIT_ROLES),
+    completeStockTake
 );
 
-// Delete stock take
-router.delete('/:id',
-    authorize([
-        UserRole.SUPER_ADMIN,
-        UserRole.GENERAL_MANAGER
-    ]),
-    deleteStockTake
+// Specific worksheet generation for an existing stock take
+router.get('/:id/worksheet',
+    authorize(AUDIT_ROLES),
+    generateWorksheet
 );
 
 export default router;

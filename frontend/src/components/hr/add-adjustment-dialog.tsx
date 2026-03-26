@@ -98,17 +98,14 @@ export function AddAdjustmentDialog({ open, onOpenChange, onSuccess, initialStaf
             { id: 'other', label: 'Other Addition' },
         ]
         : [
-            // Statutory — only applied when explicitly created here
+            { id: 'credit_bills', label: 'Credit Bills' },
+            { id: 'absenteeism', label: 'Absenteeism Deduction' },
+            { id: 'loan', label: 'Loans' },
+            { id: 'advance', label: 'Advances' },
+            { id: 'shif', label: 'SHIF' },
             { id: 'nssf', label: 'NSSF' },
-            { id: 'shif', label: 'SHIF (Health Insurance)' },
-            { id: 'housing_levy', label: 'Housing Levy' },
-            { id: 'paye', label: 'PAYE (Income Tax)' },
-            // Other deductions
-            { id: 'unpaid_leave', label: 'Unpaid Leave' },
-            { id: 'uniform', label: 'Uniform Deduction' },
-            { id: 'absent_day', label: 'Absent Day Penalty' },
-            { id: 'penalty', label: 'Disciplinary Fine' },
-            { id: 'other', label: 'Other Deduction' },
+            { id: 'uniform', label: 'Uniform' },
+            { id: 'other', label: 'Other Deductions' },
         ];
 
     return (

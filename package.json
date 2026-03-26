@@ -1,6 +1,6 @@
 {
   "name": "fggrill-central",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": {
     "name": "HIRALL",
     "email": "info@kyogong.com"
@@ -102,9 +102,9 @@
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux",
-    "release": "electron-builder -p always",
-    "release:all": "electron-builder --win --linux -p always",
-    "release:win": "electron-builder --win -p always",
+    "release:electron:hold": "electron-builder -p always",
+    "release:electron:all:hold": "electron-builder --win --linux -p always",
+    "release:electron:win:hold": "electron-builder --win -p always",
     "electron:dev": "set ELECTRON_IS_DEV=1 && set NODE_ENV=development && electron .",
     "electron:start": "set NODE_ENV=production && electron .",
     "postinstall": "electron-builder install-app-deps"

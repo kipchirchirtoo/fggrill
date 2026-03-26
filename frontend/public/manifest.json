@@ -1,86 +1,57 @@
 {
-  "name": "Kyogong Housekeeping",
-  "short_name": "FG Housekeeping",
-  "description": "Housekeeping management system for Kyogongs",
-  "start_url": "/dashboard/housekeeping",
+  "name": "Famous Gates Hotels",
+  "short_name": "FG Hotels",
+  "description": "Premium Hospitality Management System",
+  "start_url": "/dashboard/central-store/suppliers/payments",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0ea5e9",
+  "background_color": "#FAFAF8",
+  "theme_color": "#007AFF",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icons/icon-72x72.png",
+      "src": "/fglogo.png",
       "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-96x96.png",
+      "src": "/fglogo.png",
       "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-128x128.png",
+      "src": "/fglogo.png",
       "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-144x144.png",
+      "src": "/fglogo.png",
       "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-152x152.png",
+      "src": "/fglogo.png",
       "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "/fglogo.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-384x384.png",
+      "src": "/fglogo.png",
       "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/fglogo.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "type": "image/png"
     }
   ],
-  "categories": ["productivity", "business"],
-  "shortcuts": [
-    {
-      "name": "My Tasks",
-      "short_name": "Tasks",
-      "description": "View my assigned tasks",
-      "url": "/dashboard/housekeeping/tasks?filter=my-tasks",
-      "icons": [{ "src": "/icons/tasks-shortcut.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Room Status",
-      "short_name": "Rooms",
-      "description": "View room status grid",
-      "url": "/dashboard/housekeeping/rooms",
-      "icons": [{ "src": "/icons/rooms-shortcut.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Scan QR",
-      "short_name": "Scan",
-      "description": "Scan room QR code",
-      "url": "/dashboard/housekeeping/scan",
-      "icons": [{ "src": "/icons/scan-shortcut.png", "sizes": "96x96" }]
-    }
-  ],
+
+  "categories": ["business"],
   "related_applications": [],
   "prefer_related_applications": false
 }
+

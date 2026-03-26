@@ -6,12 +6,12 @@ import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { API_URL } from '@/lib/config';
-import { ArrowLeft, RefreshCw, Package, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Package, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Calendar, FileDown, Save, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { storeAPI } from '@/lib/api';
+import { storeAPI, stockTakeAPI } from '@/lib/api';
 
 interface StockTakeItem {
   id: string;
@@ -54,6 +54,9 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   const router = useRouter();
   const [stockTake, setStockTake] = useState<StockTake | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [editedStocks, setEditedStocks] = useState<Record<string, number>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchStockTake = async () => {
     setIsLoading(true);
@@ -77,6 +80,84 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   useEffect(() => {
     fetchStockTake();
   }, [id]);
+
+  const handleDownloadWorksheet = async () => {
+    toast.info('Preparing worksheet...');
+    try {
+      const result = await stockTakeAPI.downloadWorksheet(id);
+      if (!result.success) throw new Error(result.message);
+      toast.success('Download complete');
+    } catch (error: any) {
+      console.error('Download error:', error);
+      toast.error(error.message || 'Failed to download worksheet');
+    }
+  };
+
+  const handleStockChange = (itemId: string, value: string) => {
+    const numValue = value === '' ? 0 : parseFloat(value);
+    setEditedStocks(prev => ({
+      ...prev,
+      [itemId]: isNaN(numValue) ? 0 : numValue
+    }));
+  };
+
+  const handleSaveProgress = async () => {
+    setIsSaving(true);
+    try {
+      const itemsToUpdate = Object.entries(editedStocks).map(([itemId, quantity]) => ({
+        id: itemId,
+        counted_quantity: quantity
+      }));
+
+      if (itemsToUpdate.length === 0) {
+        toast.info('No changes to save');
+        return;
+      }
+
+      const result = await stockTakeAPI.updateStockTake(id, { items: itemsToUpdate });
+      if (result.success) {
+        toast.success('Progress saved successfully');
+        setEditedStocks({});
+        fetchStockTake();
+      } else {
+        toast.error(result.message || 'Failed to save progress');
+      }
+    } catch (error) {
+      toast.error('Error saving progress');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSubmitToAuditor = async () => {
+    if (!confirm('Are you sure you want to submit this stock take to the auditor? You will not be able to edit it further.')) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // First save any unsaved changes
+      if (Object.keys(editedStocks).length > 0) {
+        const itemsToUpdate = Object.entries(editedStocks).map(([itemId, quantity]) => ({
+          id: itemId,
+          counted_quantity: quantity
+        }));
+        await stockTakeAPI.updateStockTake(id, { items: itemsToUpdate });
+      }
+
+      const result = await stockTakeAPI.submitToAuditor(id);
+      if (result.success) {
+        toast.success('Stock take submitted to auditor');
+        fetchStockTake();
+      } else {
+        toast.error(result.message || 'Failed to submit');
+      }
+    } catch (error) {
+      toast.error('Error submitting stock take');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -156,12 +237,41 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
             <div className="flex gap-2">
               <IOSButton
                 variant="secondary"
+                onClick={handleDownloadWorksheet}
+                leftIcon={<FileDown className="h-4 w-4" />}
+              >
+                Download PDF
+              </IOSButton>
+              <IOSButton
+                variant="secondary"
                 onClick={fetchStockTake}
                 leftIcon={<RefreshCw className="h-4 w-4" />}
+                disabled={isLoading}
               >
                 Refresh
               </IOSButton>
+              {(stockTake.status?.toLowerCase() === 'draft' || stockTake.status?.toLowerCase() === 'in_progress') && (
+                <>
+                  <IOSButton
+                    variant="secondary"
+                    onClick={handleSaveProgress}
+                    leftIcon={<Save className="h-4 w-4" />}
+                    loading={isSaving}
+                    disabled={Object.keys(editedStocks).length === 0}
+                  >
+                    Save Progress
+                  </IOSButton>
+                  <IOSButton
+                    onClick={handleSubmitToAuditor}
+                    leftIcon={<Send className="h-4 w-4" />}
+                    loading={isSubmitting}
+                  >
+                    Submit to Auditor
+                  </IOSButton>
+                </>
+              )}
             </div>
+
           </div>
 
           {/* Summary Cards */}
@@ -302,10 +412,21 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                           <p className="text-xs text-gray-500">{item.item?.unit || 'units'}</p>
                         </td>
                         <td className="text-right py-3 px-4">
-                          <p className="font-medium">
-                            {item.counted_quantity !== null ? item.counted_quantity : '-'}
-                          </p>
+                          {(stockTake.status?.toLowerCase() === 'draft' || stockTake.status?.toLowerCase() === 'in_progress') ? (
+                            <input
+                              type="number"
+                              className="w-24 px-2 py-1 border border-gray-300 rounded-md text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              value={editedStocks[item.id] !== undefined ? editedStocks[item.id] : (item.counted_quantity ?? '')}
+                              onChange={(e) => handleStockChange(item.id, e.target.value)}
+                              placeholder="0"
+                            />
+                          ) : (
+                            <p className="font-medium">
+                              {item.counted_quantity !== null ? item.counted_quantity : '-'}
+                            </p>
+                          )}
                         </td>
+
                         <td className="text-right py-3 px-4">
                           <p className={`font-bold ${getVarianceColor(item.variance)}`}>
                             {item.variance > 0 && '+'}

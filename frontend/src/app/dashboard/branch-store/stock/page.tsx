@@ -4,31 +4,55 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
-import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditorReportsAPI } from '@/lib/api';
-import { Package, RefreshCw, Search, AlertTriangle, ShoppingCart, FileDown, TrendingDown } from 'lucide-react';
+import { Package, RefreshCw, Search, AlertTriangle, ShoppingCart, FileDown, TrendingDown, LayoutGrid, List, Plus, Settings2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StockAdjustmentModal } from '@/components/store/StockAdjustmentModal';
 
-interface StockItem { id: string; sku: string; name: string; category: string; quantity: number; min_quantity: number; unit: string; }
+interface StockItem {
+  id: string;
+  sku: string;
+  name: string;
+  category: string;
+  quantity: number;
+  min_quantity: number;
+  unit: string;
+  last_updated?: string;
+}
+
+interface CatalogItem {
+  sku: string;
+  item_name: string;
+  category: string;
+  unit_of_measure: string;
+  description?: string;
+}
 
 export default function BranchStockPage() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'stock' | 'catalog'>('stock');
   const [items, setItems] = useState<StockItem[]>([]);
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
-  const fetchItems = useCallback(async () => {
+  // Modal State
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [selectedStockItem, setSelectedStockItem] = useState<StockItem | null>(null);
+  const [initialAdjustmentType, setInitialAdjustmentType] = useState<string>('MANUAL_ADJUSTMENT');
+
+  const fetchStock = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await storeAPI.getBranchStock();
       if (response.success && response.data) {
-        // Map backend data to StockItem interface
         const mappedItems: StockItem[] = response.data.map((record: any) => ({
           id: record.id,
           sku: record.item_sku,
@@ -36,17 +60,50 @@ export default function BranchStockPage() {
           category: record.item?.category || 'Uncategorized',
           quantity: record.quantity || 0,
           min_quantity: record.reorder_level || 10,
-          unit: record.item?.unit_of_measure || 'units'
+          unit: record.item?.unit_of_measure || 'units',
+          last_updated: record.updated_at
         }));
         setItems(mappedItems);
       }
-    } catch (error) { console.error('Error:', error); }
-    finally { setIsLoading(false); }
+    } catch (error) {
+      console.error('Error fetching stock:', error);
+      toast.error('Failed to load branch stock');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  const fetchCatalog = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await storeAPI.getMasterCatalog({
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        search: searchQuery || undefined
+      });
+      if (response.success) {
+        setCatalog(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching catalog:', error);
+      toast.error('Failed to load master catalog');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCategory, searchQuery]);
 
-  const filteredItems = items.filter((i) => (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
+  useEffect(() => {
+    if (activeTab === 'stock') {
+      fetchStock();
+    } else {
+      fetchCatalog();
+    }
+  }, [activeTab, fetchStock, fetchCatalog]);
+
+  const filteredStock = items.filter((i) =>
+    (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (i.sku || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
 
   const handleRequestStock = async (item: StockItem) => {
@@ -58,7 +115,30 @@ export default function BranchStockPage() {
         reason: 'Stock replenishment',
       });
       toast.success('Request submitted');
-    } catch (error: any) { toast.error(error.message || 'Failed'); }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to submit request');
+    }
+  };
+
+  const handleAdjustStock = (item: StockItem) => {
+    setSelectedStockItem(item);
+    setInitialAdjustmentType('MANUAL_ADJUSTMENT');
+    setIsAdjustmentModalOpen(true);
+  };
+
+  const handleAddToBranch = (catalogItem: CatalogItem) => {
+    // We reuse the adjustment modal to perform an "Initial Stock" entry
+    setSelectedStockItem({
+      id: '',
+      sku: catalogItem.sku,
+      name: catalogItem.item_name,
+      category: catalogItem.category,
+      quantity: 0,
+      min_quantity: 10,
+      unit: catalogItem.unit_of_measure
+    });
+    setInitialAdjustmentType('INITIAL_STOCK');
+    setIsAdjustmentModalOpen(true);
   };
 
   const handleExport = async () => {
@@ -80,99 +160,269 @@ export default function BranchStockPage() {
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
       <DashboardLayout>
         <div className="space-y-6">
+          {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {user?.role === UserRole.AUDITOR ? 'Inventory Oversight' : 'Stock'}
+              <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
+                {user?.role === UserRole.AUDITOR ? 'Inventory Oversight' : 'Master Inventory'}
               </h1>
-              <p className="text-gray-500">
-                {user?.role === UserRole.AUDITOR ? 'Review branch inventory levels' : 'Branch inventory'}
+              <p className="text-stone-500 text-sm">
+                Manage branch stock levels and reference the master catalog.
               </p>
             </div>
-            <div className="flex gap-2">
-              <IOSButton variant="secondary" onClick={fetchItems} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>Refresh</IOSButton>
+            <div className="flex items-center gap-2">
+              <IOSButton variant="secondary" onClick={() => activeTab === 'stock' ? fetchStock() : fetchCatalog()} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>
+                Refresh
+              </IOSButton>
               {user?.role === UserRole.AUDITOR && (
                 <IOSButton variant="secondary" onClick={handleExport} leftIcon={<FileDown />}>Export Ledger</IOSButton>
               )}
               {user?.role !== UserRole.AUDITOR && (
-                <Link href="/dashboard/branch-store/requests"><IOSButton leftIcon={<ShoppingCart />}>Requests</IOSButton></Link>
+                <div className="flex gap-2">
+                  <Link href="/dashboard/branch-store/receive">
+                    <IOSButton variant="secondary" leftIcon={<ArrowRight className="h-4 w-4" />}>Receive Dispatches</IOSButton>
+                  </Link>
+                  <Link href="/dashboard/branch-store/requests">
+                    <IOSButton leftIcon={<Package className="h-4 w-4" />}>My Requests</IOSButton>
+                  </Link>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <IOSCard className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center text-stone-600">
+          {/* Stats Summary (Always visible) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <IOSCard className="p-4 flex items-center gap-4 border-none shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-stone-100 flex items-center justify-center text-stone-600">
                 <Package className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Total Items</p>
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">In Stock SKUs</p>
                 <p className="text-xl font-black text-stone-900">{items.length}</p>
               </div>
             </IOSCard>
-            <IOSCard className="p-4 flex items-center gap-4 border-l-4 border-yellow-500">
-              <div className="w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-600">
+            <IOSCard className="p-4 flex items-center gap-4 border-l-4 border-amber-500 shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
                 <AlertTriangle className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-yellow-600">Low Stock</p>
-                <p className="text-xl font-black text-yellow-600">{lowStockItems.length}</p>
+                <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Low Stock Items</p>
+                <p className="text-xl font-black text-amber-600">{lowStockItems.length}</p>
               </div>
             </IOSCard>
-            <IOSCard className="p-4 flex items-center gap-4 border-l-4 border-red-500">
-              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-600">
-                <TrendingDown className="h-6 w-6" />
+            <IOSCard className="p-4 flex items-center gap-4 border-l-4 border-stone-300 shadow-sm sm:col-span-2 md:col-span-1">
+              <div className="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-stone-400">
+                <LayoutGrid className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-red-600">Stock Out</p>
-                <p className="text-xl font-black text-red-600">{items.filter(i => i.quantity === 0).length}</p>
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Master Catalog</p>
+                <p className="text-xl font-black text-stone-900">{catalog.length || '...'}</p>
               </div>
             </IOSCard>
           </div>
 
-          {lowStockItems.length > 0 && (
-            <IOSCard className="p-4 bg-yellow-50 border-yellow-200">
-              <div className="flex items-center gap-2 mb-3"><AlertTriangle className="h-5 w-5 text-yellow-600" /><p className="font-medium text-yellow-800">Low Stock Alert</p></div>
-              <div className="flex flex-wrap gap-2">
-                {lowStockItems.slice(0, 5).map((item) => (
-                  <IOSButton key={item.id} size="sm" variant="secondary" onClick={() => handleRequestStock(item)}>{item.name} ({item.quantity})</IOSButton>
-                ))}
-              </div>
-            </IOSCard>
-          )}
+          {/* Main Action Tabs */}
+          <div className="flex items-center p-1 bg-stone-100 rounded-xl w-fit">
+            <button
+              onClick={() => setActiveTab('stock')}
+              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'stock' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+            >
+              Current Stock
+            </button>
+            <button
+              onClick={() => setActiveTab('catalog')}
+              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'catalog' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+            >
+              Master Catalog
+            </button>
+          </div>
 
-          <IOSCard className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
-              <Input placeholder="Search items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+          {/* Search and Filters */}
+          <IOSCard className="p-4 space-y-4 shadow-sm border-none">
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-stone-400" />
+                <Input
+                  placeholder={activeTab === 'stock' ? "Search branch inventory..." : "Search master product catalog..."}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-11 bg-stone-50 border-stone-100"
+                />
+              </div>
+              <select
+                className="h-11 px-4 bg-stone-50 border border-stone-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400 transition-shadow min-w-[180px]"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="all">All Categories</option>
+                <option value="food">Foodstuffs</option>
+                <option value="beverage">Beverage</option>
+                <option value="toiletries">Toiletries</option>
+                <option value="linen">Linen</option>
+                <option value="office_supplies">Stationery</option>
+                <option value="cleaning_supplies">Cleaning</option>
+                <option value="maintenance_items">Maintenance</option>
+                <option value="kitchen_equipment">Equipment</option>
+              </select>
             </div>
+            {activeTab === 'stock' && user?.role !== UserRole.AUDITOR && (
+              <div className="pt-4 border-t border-stone-50 flex justify-end">
+                <IOSButton 
+                  size="sm" 
+                  variant="secondary" 
+                  onClick={() => setActiveTab('catalog')}
+                  leftIcon={<Plus className="h-4 w-4" />}
+                >
+                  Add New Item from Catalog
+                </IOSButton>
+              </div>
+            )}
           </IOSCard>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredItems.map((item) => {
-                const isLow = item.quantity <= item.min_quantity;
-                const isOut = item.quantity === 0;
-                return (
-                  <IOSCard key={item.id} className={`p-4 ${isOut ? 'border-red-200 bg-red-50' : isLow ? 'border-yellow-200 bg-yellow-50' : ''}`}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div><p className="font-bold">{item.name}</p><p className="text-sm text-gray-500">{item.category}</p></div>
-                      {isOut ? <IOSBadge variant="light" color="danger">Out</IOSBadge> : isLow ? <IOSBadge variant="light" color="warning">Low</IOSBadge> : null}
-                    </div>
-                    <div className="flex items-end justify-between mt-4">
-                      <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">Min: {item.min_quantity} {item.unit}</p></div>
-                      {user?.role !== UserRole.AUDITOR && (isLow || isOut) && (
-                        <IOSButton size="sm" onClick={() => handleRequestStock(item)}>Request</IOSButton>
-                      )}
-                    </div>
-                  </IOSCard>
-                );
-              })}
-            </div>
-          )}
+          {/* Table / Grid Contents */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden min-h-[400px]">
+            {isLoading ? (
+              <div className="p-8 space-y-4">
+                {Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+              </div>
+            ) : activeTab === 'stock' ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-stone-50/50 border-b border-stone-100 text-left">
+                    <tr>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest px-6">Item</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Category</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest text-center">Available</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest text-right px-6">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-50">
+                    {filteredStock.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-20 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <Package className="h-10 w-10 text-stone-200" />
+                            <p className="text-stone-400">No matching items found in your branch stock.</p>
+                            <IOSButton size="sm" variant="secondary" onClick={() => setActiveTab('catalog')}>
+                              Find in Master Catalog
+                            </IOSButton>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredStock.map((item) => {
+                        const isLow = item.quantity <= item.min_quantity;
+                        const isOut = item.quantity === 0;
+                        return (
+                          <tr key={item.id} className="hover:bg-stone-50/50 transition-colors group">
+                            <td className="p-4 px-6">
+                              <p className="font-bold text-stone-900">{item.name}</p>
+                              <p className="text-[10px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{item.sku}</p>
+                            </td>
+                            <td className="p-4">
+                              <IOSBadge variant="light" className="text-stone-500 capitalize">{item.category}</IOSBadge>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex flex-col items-center">
+                                <p className={`text-lg font-black ${isOut ? 'text-red-600' : isLow ? 'text-amber-500' : 'text-stone-900'}`}>
+                                  {item.quantity}
+                                </p>
+                                <p className="text-[10px] font-medium text-stone-400">{item.unit}</p>
+                              </div>
+                            </td>
+                            <td className="p-4 px-6 text-right">
+                              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <IOSButton size="sm" variant="secondary" onClick={() => handleAdjustStock(item)} leftIcon={<Settings2 className="h-3 w-3" />}>
+                                  Adjust
+                                </IOSButton>
+                                {(isLow || isOut) && (
+                                  <IOSButton size="sm" onClick={() => handleRequestStock(item)} leftIcon={<Plus className="h-3 w-3" />}>
+                                    Request
+                                  </IOSButton>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-stone-50/50 border-b border-stone-100 text-left">
+                    <tr>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest px-6">Product Catalog</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Category</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Status</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest text-right px-6">Operation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-50">
+                    {catalog.length === 0 ? (
+                      <tr><td colSpan={4} className="p-20 text-center text-stone-400">No catalog items found. Try a different search.</td></tr>
+                    ) : (
+                      catalog.map((cItem) => {
+                        const inBranch = items.find(i => i.sku === cItem.sku);
+                        return (
+                          <tr key={cItem.sku} className="hover:bg-stone-50/50 transition-colors group">
+                            <td className="p-4 px-6">
+                              <p className="font-bold text-stone-900">{cItem.item_name}</p>
+                              <p className="text-[10px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{cItem.sku}</p>
+                            </td>
+                            <td className="p-4">
+                              <span className="text-[12px] bg-stone-100 px-2 py-0.5 rounded text-stone-600 capitalize font-medium">{cItem.category}</span>
+                            </td>
+                            <td className="p-4">
+                              {inBranch ? (
+                                <div className="flex items-center gap-1.5 text-stone-400 text-xs italic font-medium">
+                                  <LayoutGrid className="h-3 w-3" />
+                                  <span>Already in Branch ({inBranch.quantity})</span>
+                                </div>
+                              ) : (
+                                <IOSBadge variant="light" color="secondary">Not in Inventory</IOSBadge>
+                              )}
+                            </td>
+                            <td className="p-4 px-6 text-right">
+                              {inBranch ? (
+                                <IOSButton size="sm" variant="secondary" onClick={() => handleAdjustStock(inBranch)} leftIcon={<Settings2 className="h-3 w-3" />}>
+                                  Manage
+                                </IOSButton>
+                              ) : (
+                                <IOSButton size="sm" onClick={() => handleAddToBranch(cItem)} leftIcon={<Plus className="h-3 w-3" />}>
+                                  Add to Stock
+                                </IOSButton>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Integration Modals */}
+        <StockAdjustmentModal
+          isOpen={isAdjustmentModalOpen}
+          onClose={() => setIsAdjustmentModalOpen(false)}
+          item={selectedStockItem ? {
+            sku: selectedStockItem.sku,
+            name: selectedStockItem.name,
+            quantity: selectedStockItem.quantity,
+            unit: selectedStockItem.unit
+          } : null}
+          initialType={initialAdjustmentType}
+          onSuccess={() => {
+            fetchStock();
+            if (activeTab === 'catalog') fetchCatalog();
+          }}
+        />
       </DashboardLayout>
     </ProtectedRoute>
   );

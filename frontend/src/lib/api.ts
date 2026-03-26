@@ -316,6 +316,12 @@ export const storeAPI = {
   previewSKU: (data: any) => fetchAPI<any>('/store/preview-sku', { method: 'POST', body: JSON.stringify(data) }),
   generateSKU: (data: any) => fetchAPI<any>('/store/generate-sku', { method: 'POST', body: JSON.stringify(data) }),
   suggestAttributes: (item_name: string) => fetchAPI<any>('/storekeeping/items/suggest', { method: 'POST', body: JSON.stringify({ item_name }) }),
+  getMasterCatalog: (params?: { category?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.category) query.append('category', params.category);
+    if (params?.search) query.append('search', params.search);
+    return fetchAPI<any>(`/store/master-catalog?${query}`);
+  },
 
   // Branch Stock
   getBranchStock: (branchId?: number) => {
@@ -328,6 +334,8 @@ export const storeAPI = {
   },
   recordStockOut: (data: { item_sku: string; quantity: number; reason: string; notes?: string; branch_id?: number }) =>
     fetchAPI<any>('/store/branch-stock/out', { method: 'POST', body: JSON.stringify(data) }),
+  adjustBranchStock: (data: { item_sku: string; quantity: number; movement_type: string; notes?: string; reorder_level?: number }) =>
+    fetchAPI<any>('/store/branch-stock/adjustment', { method: 'POST', body: JSON.stringify(data) }),
   getStockMovements: (params?: { branch_id?: number; item_sku?: string; from_date?: string; to_date?: string }) => {
     const query = new URLSearchParams();
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
@@ -499,8 +507,6 @@ export const storeAPI = {
   getBranches: () => fetchAPI<any>('/store/branches'),
   getBranchesWithStock: () => fetchAPI<any>('/store/branches-stock'),
 
-  // Master Catalog
-  getMasterCatalog: () => fetchAPI<any>('/store/master-catalog'),
 
   // Vehicles
   getVehicles: () => fetchAPI<any>('/store/vehicles'),
@@ -598,10 +604,49 @@ export const storeAPI = {
       await downloadDispatchPDF(dispatch);
       return { success: true };
     } catch (error) {
-      console.error('Error in frontend PDF generation:', error);
       return { success: false, message: error instanceof Error ? error.message : 'Generation failed' };
     }
   },
+};
+
+export const stockTakeAPI = {
+  getStockTakes: () => fetchAPI<any>('/stock-takes'),
+  getStockTake: (id: string) => fetchAPI<any>(`/stock-takes/${id}`),
+  createStockTake: (data: { branch_id: number; take_type: string; notes?: string }) =>
+    fetchAPI<any>('/stock-takes', { method: 'POST', body: JSON.stringify(data) }),
+  updateStockTake: (id: string, data: any) => fetchAPI<any>(`/stock-takes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  submitToAuditor: (id: string) => fetchAPI<any>(`/stock-takes/${id}/submit`, { method: 'POST' }),
+  deleteStockTake: (id: string) => fetchAPI<any>(`/stock-takes/${id}`, { method: 'DELETE' }),
+  downloadWorksheet: async (id?: string, params?: { branch_id?: number; category?: string }) => {
+    try {
+      const query = new URLSearchParams();
+      if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+      if (params?.category) query.append('category', params.category);
+      const endpoint = id ? `/stock-takes/${id}/worksheet` : `/stock-takes/worksheet`;
+      const qs = query.toString();
+      const url = `${API_URL}/api${endpoint}${qs ? `?${qs}` : ''}`;
+      
+      const response = await fetch(url, {
+        headers: getHeaders()
+      });
+
+      if (!response.ok) throw new Error('Download failed');
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `StockTakeWorksheet_${id || 'All'}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : 'Download failed' };
+    }
+  }
 };
 
 export const storekeepingAPI = storeAPI;
@@ -669,6 +714,14 @@ export const procurementAPI = {
     const qs = query.toString();
     return fetchAPI<any>(`/procurement/payments${qs ? `?${qs}` : ''}`);
   },
+  createPayment: (data: {
+    supplier_id: string;
+    payment_method: string;
+    payment_amount: number;
+    reference_number?: string;
+    notes?: string;
+    allocations?: { invoice_id: string; amount: number }[];
+  }) => fetchAPI<any>('/procurement/payments', { method: 'POST', body: JSON.stringify(data) }),
 
   // Ledger & Performance
   getSupplierLedger: (supplierId: string) => fetchAPI<any>(`/procurement/ledger/${supplierId}`),
@@ -1021,8 +1074,6 @@ export const staffAPI = {
       if (params?.status) query.append('status', params.status);
       return fetchAPI<any>(`/payroll/loans?${query}`);
     },
-    approveLoan: (id: string) => fetchAPI<any>(`/payroll/loans/${id}/approve`, { method: 'PATCH' }),
-
     // Payroll Generation & History
     generatePayroll: (data: { month: number; year: number; staff_id?: string; branch_id?: number }) =>
       fetchAPI<any>('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
@@ -4090,32 +4141,62 @@ export const payrollAPI = {
   verifyBankAccount: (data: { accountNumber: string; bankCode: string }) =>
     fetchAPI<any>('/payroll/verify-bank', { method: 'POST', body: JSON.stringify(data) }),
   emailPayslips: (data: any) => fetchAPI<any>('/payroll/email-all', { method: 'POST', body: JSON.stringify(data) }),
-  downloadPayslipsZip: (data: any) => fetchAPI<any>('/payroll/download-zip', { method: 'POST', body: JSON.stringify(data) }),
 
-  // Workflow Actions
-  review: (id: string) => fetchAPI<any>(`/payroll/${id}/review`, { method: 'PUT' }),
-  approve: (id: string) => fetchAPI<any>(`/payroll/${id}/approve`, { method: 'PUT' }),
-
-  // Unified Adjustments (Deductions/Additions)
-  getAdjustments: (params?: { staff_id?: string; status?: string; type?: string; month?: string; year?: string }) => {
+  // ── New Draft-Based Payroll System Endpoints ──────────────────────────────
+  getDraft: (params: { month: number; year: number; branch_id?: number }) => {
     const query = new URLSearchParams();
-    if (params?.staff_id) query.append('staff_id', params.staff_id);
-    if (params?.status) query.append('status', params.status);
-    if (params?.type) query.append('type', params.type);
-    if (params?.month) query.append('month', params.month);
-    if (params?.year) query.append('year', params.year);
+    query.append('month', String(params.month));
+    query.append('year', String(params.year));
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    return fetchAPI<any>(`/payroll/draft?${query}`);
+  },
+  approve: (data: { runId?: string; month?: number; year?: number; branch_id?: number }) =>
+    fetchAPI<any>('/payroll/approve', { method: 'POST', body: JSON.stringify(data) }),
+  approveDraft: (data: { month: number; year: number; branch_id?: number }) =>
+    fetchAPI<any>('/payroll/approve', { method: 'POST', body: JSON.stringify(data) }),
+  addAdjustment: (data: { recordId?: string; staff_id?: string; type: string; amount: number; reference?: string; month?: number; year?: number }) =>
+    fetchAPI<any>('/payroll/adjustments', { method: 'POST', body: JSON.stringify(data) }),
+  createAdjustment: (data: { staff_id: string; type: string; category: string; amount: number; description?: string; month: number | string; year: number }) =>
+    fetchAPI<any>('/payroll-adjustments', { method: 'POST', body: JSON.stringify(data) }),
+  getAdjustments: (params: { staff_id?: string; month?: string; year?: string; branch_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params.staff_id) query.append('staff_id', params.staff_id || '');
+    if (params.month) query.append('month', params.month || '');
+    if (params.year) query.append('year', String(params.year || ''));
+    if (params.branch_id) query.append('branch_id', String(params.branch_id || ''));
     return fetchAPI<any>(`/payroll-adjustments?${query}`);
   },
-  createAdjustment: (data: {
-    staff_id: string;
-    type: 'deduction' | 'addition';
-    category: string;
-    amount: number;
-    description?: string;
-    month: string;
-    year: number
-  }) => fetchAPI<any>('/payroll-adjustments', { method: 'POST', body: JSON.stringify(data) }),
-  voidAdjustment: (id: string) => fetchAPI<any>(`/payroll-adjustments/${id}/void`, { method: 'PATCH' }),
+  voidAdjustment: (id: string) =>
+    fetchAPI<any>(`/payroll-adjustments/${id}/void`, { method: 'POST' }),
+  getHistory: () => fetchAPI<any>('/payroll/history'),
+  downloadPayslipsZip: async (params: { month: number; year: number; branch_id?: number }) => {
+    // We first need to get the run ID for these params
+    const { data: run } = await payrollAPI.getDraft(params);
+    if (!run?.summary?.id) throw new Error('No payroll run found to download');
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/payroll/run/${run.summary.id}/payslips-zip`;
+  },
+  downloadSummaryPDF: async (params: { month: number; year: number; branch_id?: number }) => {
+    const { data: run } = await payrollAPI.getDraft(params);
+    if (!run?.summary?.id) throw new Error('No payroll run found to download');
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/payroll/run/${run.summary.id}/summary-pdf`;
+  }
+};
+
+// ── Payroll Policies API ──────────────────────────────────────────────────────
+export const payrollPoliciesAPI = {
+  getPolicies: () => fetchAPI<any>('/payroll-policies'),
+  getPolicy: (id: string) => fetchAPI<any>(`/payroll-policies/${id}`),
+  createPolicy: (data: any) => fetchAPI<any>('/payroll-policies', { method: 'POST', body: JSON.stringify(data) }),
+  updatePolicy: (id: string, data: any) => fetchAPI<any>(`/payroll-policies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePolicy: (id: string) => fetchAPI<any>(`/payroll-policies/${id}`, { method: 'DELETE' }),
+  getStaffItems: (params: { month: number; year: number; staff_id?: string; branch_id?: number }) => {
+    const query = new URLSearchParams();
+    query.append('month', String(params.month));
+    query.append('year', String(params.year));
+    if (params.staff_id) query.append('staff_id', params.staff_id);
+    if (params.branch_id) query.append('branch_id', String(params.branch_id));
+    return fetchAPI<any>(`/payroll-policies/staff-items?${query}`);
+  }
 };
 
 // =====================================================
@@ -4790,6 +4871,16 @@ export const cashierAPI = {
       method: 'POST',
       body: JSON.stringify({ action, notes })
     }),
+  getPayments: (params?: { branch_id?: number; status?: string; payment_method?: string; start_date?: string; end_date?: string; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
+    if (params?.status) query.append('status', params.status);
+    if (params?.payment_method) query.append('payment_method', params.payment_method);
+    if (params?.start_date) query.append('start_date', params.start_date);
+    if (params?.end_date) query.append('end_date', params.end_date);
+    if (params?.limit) query.append('limit', String(params.limit));
+    return fetchAPI<any>(`/payments-verification?${query}`);
+  },
 };
 
 // =====================================================
@@ -4851,6 +4942,7 @@ export const api = {
   attendanceAnalytics: attendanceAnalyticsAPI,
   pettyCash: pettyCashAPI,
   payroll: payrollAPI,
+  payrollPolicies: payrollPoliciesAPI,
   notifications: notificationsAPI,
   cashier: cashierAPI,
   employeePortal: employeePortalAPI,
@@ -4896,14 +4988,22 @@ export const kyogongAPI = {
     sales_point_id?: number;
     start_date?: string;
     end_date?: string;
+    branch_id?: string;
   }) => {
     const query = new URLSearchParams();
     if (params?.status) query.append('status', params.status);
     if (params?.sales_point_id) query.append('sales_point_id', String(params.sales_point_id));
     if (params?.start_date) query.append('start_date', params.start_date);
     if (params?.end_date) query.append('end_date', params.end_date);
+    if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     return fetchAPI<any>(`/kyogong/shifts?${query}`);
   },
+
+  auditShift: (id: string, action: 'approve' | 'flag', notes?: string) =>
+    fetchAPI<any>(`/kyogong/shifts/${id}/${action}`, {
+      method: 'PUT',
+      body: JSON.stringify({ notes })
+    }),
 
   getShiftDetails: (id: string) =>
     fetchAPI<any>(`/kyogong/shifts/${id}`),

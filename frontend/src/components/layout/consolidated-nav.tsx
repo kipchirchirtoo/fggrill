@@ -913,7 +913,7 @@ export function ConsolidatedNav() {
         <NavItem
           href="/dashboard/branch-store/stock"
           icon={Package}
-          label="Stock Levels"
+          label="Master Inventory"
           active={pathname === '/dashboard/branch-store/stock'}
         />
         <NavItem

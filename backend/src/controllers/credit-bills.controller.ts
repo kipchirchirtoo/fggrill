@@ -11,6 +11,17 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             throw new AppError('Missing required fields', 400);
         }
 
+        const cashier_id = (req as any).user?.id;
+        const branch_id = (req as any).user?.branch_id;
+
+        // Auto-detect current open shift for this cashier
+        const { data: currentShift } = await supabase
+            .from('cashier_shifts')
+            .select('id')
+            .eq('cashier_id', cashier_id)
+            .eq('status', 'open')
+            .single();
+
         const { data, error } = await supabase
             .from('staff_credit_bills')
             .insert({
@@ -18,7 +29,9 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 amount,
                 description,
                 bill_date: date || new Date().toISOString().split('T')[0],
-                status: 'pending'
+                status: 'pending',
+                shift_id: currentShift?.id || (req.body as any).shift_id,
+                branch_id: branch_id || (req.body as any).branch_id
             })
             .select()
             .single();
@@ -93,9 +106,26 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
             throw new AppError(`Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
         }
 
+        let updateData: any = { status: resolvedStatus };
+
+        // If paying in cash, link to the current shift for reconciliation
+        if (resolvedStatus === 'paid_cash') {
+            const cashier_id = (req as any).user?.id;
+            const { data: currentShift } = await supabase
+                .from('cashier_shifts')
+                .select('id')
+                .eq('cashier_id', cashier_id)
+                .eq('status', 'open')
+                .single();
+            
+            if (currentShift) {
+                updateData.paid_in_shift_id = currentShift.id;
+            }
+        }
+
         const { data, error } = await supabase
             .from('staff_credit_bills')
-            .update({ status: resolvedStatus })
+            .update(updateData)
             .eq('id', id)
             .select()
             .single();

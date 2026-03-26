@@ -345,7 +345,15 @@ export const closeShift = async (
         const { data: summary } = await supabase
             .rpc('calculate_shift_summary', { p_shift_id: id });
 
-        const expectedClosingFloat = shift.opening_float + (summary?.total_cash || 0);
+        // Extract values for reconciliation formula
+        const cash_sales = summary?.total_cash || 0;
+        const credit_paid_cash = paid_bills_value || 0;
+        const expenses = 0; // Not currently tracked in this body
+        const refunds = 0;
+
+        // Apply strict accounting formula
+        // Expected = Opening Float + Cash Sales + Cash from Credit Payments - Expenses - Refunds
+        const expectedClosingFloat = (shift.opening_float || 0) + cash_sales + credit_paid_cash - expenses - refunds;
         const variance = closing_float - expectedClosingFloat;
 
         // Update shift with all revenue breakdown
@@ -357,7 +365,7 @@ export const closeShift = async (
                 expected_closing_float: expectedClosingFloat,
                 variance,
                 // Payment method totals
-                total_cash_sales: summary?.total_cash || 0,
+                total_cash_sales: cash_sales,
                 total_mpesa_sales: summary?.total_mpesa || 0,
                 total_card_sales: summary?.total_card || 0,
                 total_sales: summary?.total_sales || 0,
@@ -409,7 +417,8 @@ export const closeShift = async (
                         amount: bill.amount,
                         description: `Shift Credit - Shift #${shift.shift_number} - ${bill.name}`,
                         bill_date: new Date().toISOString().split('T')[0],
-                        status: 'pending'
+                        status: 'pending',
+                        shift_id: shift.id
                     }));
 
                 if (creditBillsToInsert.length > 0) {
@@ -437,7 +446,8 @@ export const closeShift = async (
                         amount: amountPaid,
                         description: `Shift Payment - Shift #${shift.shift_number} - ${bill.name}`,
                         bill_date: new Date().toISOString().split('T')[0],
-                        status: 'paid_cash'
+                        status: 'paid_cash',
+                        paid_in_shift_id: shift.id
                     });
 
                     // B. SETTLE FIFO: Find pending credits ordered by oldest first

@@ -231,8 +231,28 @@ export const closeShift = async (req: Request, res: Response) => {
       });
     }
 
-    // Calculate expected cash: opening float + total cash-in from transactions
-    const cash_expected = (shift.opening_float || 0) + (shift.total_cash_in || 0);
+    // 1. Get detailed reconciliation totals using the new RPC
+    const { data: totals, error: totalsError } = await supabase.rpc('get_shift_reconciliation_totals', { 
+      p_shift_id: id 
+    });
+
+    if (totalsError) {
+      console.error('Error fetching reconciliation totals:', totalsError);
+      // Fallback if RPC fails or isn't available yet
+    }
+
+    const cash_sales = totals?.cash_sales || shift.total_cash_in || 0;
+    const mpesa_sales = totals?.mpesa_sales || shift.total_mpesa_in || 0;
+    const card_sales = totals?.card_sales || shift.total_card_in || 0;
+    const credit_created = totals?.credit_created || 0;
+    const credit_paid_cash = totals?.credit_paid_cash || 0;
+
+    // 2. Calculate expected cash using the strict accounting formula:
+    // Expected = Opening Float + Cash Sales + Cash from Credit Payments - Expenses - Refunds
+    const expenses = shift.total_expenses || 0; // Check if these exist in shift record
+    const refunds = shift.total_refunds || 0;
+    
+    const cash_expected = (shift.opening_float || 0) + cash_sales + credit_paid_cash - expenses - refunds;
     const cash_variance = closing_cash_counted - cash_expected;
 
     // Check if variance explanation is required (>5% or >1000 KES)
@@ -244,7 +264,14 @@ export const closeShift = async (req: Request, res: Response) => {
         data: {
           cash_expected,
           cash_counted: closing_cash_counted,
-          variance: cash_variance
+          variance: cash_variance,
+          breakdown: {
+            opening_float: shift.opening_float,
+            cash_sales,
+            credit_paid_cash,
+            expenses,
+            refunds
+          }
         }
       });
     }
@@ -283,6 +310,14 @@ export const closeShift = async (req: Request, res: Response) => {
         actual_cash: closing_cash_counted,
         cash_variance,
         variance_reason,
+        // Added reconciliation breakdown fields
+        total_cash_in: cash_sales,
+        total_mpesa_in: mpesa_sales,
+        total_card_in: card_sales,
+        total_revenue: cash_sales + mpesa_sales + card_sales,
+        total_credit_created: credit_created,
+        total_credit_paid_cash: credit_paid_cash,
+        expected_closing_amount: cash_expected,
         submitted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })

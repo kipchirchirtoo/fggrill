@@ -113,7 +113,8 @@ export async function updateBranchStock(
   referenceType?: string,
   referenceId?: string,
   referenceNumber?: string,
-  notes?: string
+  notes?: string,
+  reorderLevel?: number
 ) {
   // Get current stock
   const { data: current, error: fetchError } = await supabase
@@ -135,6 +136,7 @@ export async function updateBranchStock(
       branch_id: branchId,
       item_sku: itemSku,
       quantity: Math.max(0, newStock),
+      reorder_level: reorderLevel !== undefined ? reorderLevel : undefined,
       last_stock_in: quantityChange > 0 ? new Date().toISOString() : undefined,
       last_stock_out: quantityChange < 0 ? new Date().toISOString() : undefined,
       updated_at: new Date().toISOString()

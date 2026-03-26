@@ -133,7 +133,7 @@ export const updateBranchStock = async (
 ): Promise<void> => {
   try {
     const branchId = req.user?.branch_id;
-    const { item_sku, quantity, movement_type, notes } = req.body;
+    const { item_sku, quantity, movement_type, notes, reorder_level } = req.body;
 
     if (!branchId) {
       res.status(400).json({ success: false, message: 'Branch ID required' });
@@ -159,7 +159,8 @@ export const updateBranchStock = async (
       'MANUAL',
       undefined,
       undefined,
-      notes || 'Manual stock adjustment'
+      notes || 'Manual stock adjustment',
+      reorder_level ? parseInt(reorder_level) : undefined
     );
 
     res.status(200).json({

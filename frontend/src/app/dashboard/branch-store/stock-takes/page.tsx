@@ -7,11 +7,12 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { storeAPI } from '@/lib/api';
-import { ClipboardList, RefreshCw, Plus, Calendar, User } from 'lucide-react';
+import { storeAPI, stockTakeAPI } from '@/lib/api';
+import { ClipboardList, RefreshCw, Plus, Calendar, User, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { API_URL } from '@/lib/config';
 
 interface StockTake {
   id: string;
@@ -32,7 +33,7 @@ export default function BranchStockTakesPage() {
   const fetchStockTakes = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await storeAPI.getStockTakes();
+      const response = await stockTakeAPI.getStockTakes();
       if (response.success) setStockTakes(response.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
@@ -42,13 +43,26 @@ export default function BranchStockTakesPage() {
 
   const handleStartStockTake = async () => {
     try {
-      await storeAPI.createStockTake({
+      await stockTakeAPI.createStockTake({
         branch_id: user?.branch_id || (user as any)?.branchId || 1,
         take_type: 'daily'
       });
       toast.success('Stock take session initialized');
       fetchStockTakes();
     } catch (error: any) { toast.error(error.message || 'Failed'); }
+  };
+
+  const handleDownloadWorksheet = async () => {
+    toast.info('Preparing worksheet...');
+    try {
+      const branchId = user?.branch_id || (user as any)?.branchId || 1;
+      const result = await stockTakeAPI.downloadWorksheet(undefined, { branch_id: Number(branchId) });
+      if (!result.success) throw new Error(result.message);
+      toast.success('Download complete');
+    } catch (error: any) {
+      console.error('Download error:', error);
+      toast.error(error.message || 'Failed to download worksheet');
+    }
   };
 
   const statusConfig: Record<string, { color: string; bg: string }> = {
@@ -66,8 +80,10 @@ export default function BranchStockTakesPage() {
             <div><h1 className="text-2xl font-bold text-gray-900">Stock Take History</h1><p className="text-gray-500">View and manage branch inventory audits</p></div>
             <div className="flex gap-2">
               <IOSButton variant="secondary" onClick={fetchStockTakes} leftIcon={<RefreshCw />}>Refresh</IOSButton>
+              <IOSButton variant="secondary" onClick={handleDownloadWorksheet} leftIcon={<FileDown />}>Download Worksheet</IOSButton>
               <IOSButton onClick={handleStartStockTake} leftIcon={<Plus />}>Start New Count</IOSButton>
             </div>
+
           </div>
 
           {isLoading ? (

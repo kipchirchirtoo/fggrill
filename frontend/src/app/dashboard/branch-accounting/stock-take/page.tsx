@@ -7,8 +7,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-import { Package, RefreshCw, CheckCircle, AlertTriangle, Plus, ArrowRight } from 'lucide-react';
-import { storeAPI } from '@/lib/api';
+import { Package, RefreshCw, CheckCircle, AlertTriangle, Plus, ArrowRight, FileDown } from 'lucide-react';
+import { storeAPI, stockTakeAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import { StockTakeDetail } from '@/components/dashboard/branch/StockTakeDetail';
 
@@ -98,6 +98,32 @@ export default function BranchStockTakePage() {
         }
     };
 
+    const handleDownloadWorksheet = async () => {
+        if (!activeBranchId) return;
+        toast.info('Preparing branch worksheet...');
+        try {
+            const res = await stockTakeAPI.downloadWorksheet(undefined, { branch_id: activeBranchId });
+            if (!res.success) throw new Error(res.message);
+            toast.success('Download complete');
+        } catch (error: any) {
+            console.error('Download error:', error);
+            toast.error(error.message || 'Failed to download worksheet');
+        }
+    };
+
+    const handleDownloadRowWorksheet = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        toast.info('Preparing stock take PDF...');
+        try {
+            const res = await stockTakeAPI.downloadWorksheet(id);
+            if (!res.success) throw new Error(res.message);
+            toast.success('Download complete');
+        } catch (error: any) {
+            console.error('Download error:', error);
+            toast.error(error.message || 'Failed to download worksheet');
+        }
+    };
+
     if (activeStockTakeId) {
         return (
             <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
@@ -128,6 +154,13 @@ export default function BranchStockTakePage() {
                             <p className="text-gray-500">View and manage stock takes. Completed takes are sent to Auditor.</p>
                         </div>
                         <div className="flex gap-2">
+                            <IOSButton 
+                                variant="secondary" 
+                                onClick={handleDownloadWorksheet} 
+                                leftIcon={<FileDown className="h-4 w-4" />}
+                            >
+                                Download Worksheet
+                            </IOSButton>
                             <IOSButton variant="secondary" onClick={fetchStockTakes} leftIcon={<RefreshCw />}>Refresh</IOSButton>
                             <IOSButton onClick={handleCreateStockTake} leftIcon={<Plus />}>Start New Stock Take</IOSButton>
                         </div>
@@ -174,22 +207,31 @@ export default function BranchStockTakePage() {
                                                         </span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    {take.status === 'draft' ? (
+                                                 <td className="px-6 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
                                                         <button
-                                                            onClick={() => setActiveStockTakeId(take.id)}
-                                                            className="text-blue-600 hover:text-blue-800 font-medium flex items-center justify-end gap-1 w-full"
+                                                            onClick={(e) => handleDownloadRowWorksheet(e, take.id)}
+                                                            className="text-stone-500 hover:text-blue-600 p-1"
+                                                            title="Download PDF"
                                                         >
-                                                            Continue <ArrowRight className="h-3 w-3" />
+                                                            <FileDown className="h-4 w-4" />
                                                         </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => setActiveStockTakeId(take.id)}
-                                                            className="text-stone-500 hover:text-stone-800 font-medium"
-                                                        >
-                                                            View Details
-                                                        </button>
-                                                    )}
+                                                        {take.status === 'draft' ? (
+                                                            <button
+                                                                onClick={() => setActiveStockTakeId(take.id)}
+                                                                className="text-blue-600 hover:text-blue-800 font-medium flex items-center justify-end gap-1"
+                                                            >
+                                                                Continue <ArrowRight className="h-3 w-3" />
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => setActiveStockTakeId(take.id)}
+                                                                className="text-stone-500 hover:text-stone-800 font-medium"
+                                                            >
+                                                                View Details
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))

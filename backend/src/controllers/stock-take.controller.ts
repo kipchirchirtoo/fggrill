@@ -687,3 +687,76 @@ export const submitStockTake = async (req: Request, res: Response) => {
         });
     }
 };
+
+
+// Generate a stock take worksheet PDF
+export const generateWorksheet = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params; // If id is provided, use items from this stock take
+        const { branch_id, category } = req.query;
+        const user = (req as any).user;
+
+        let items = [];
+        let branchName = 'Main Branch';
+        let title = 'Physical Stock Take';
+
+        if (id && id !== 'undefined') {
+            // Get items from specific stock take
+            const { data: stockTake, error: takeError } = await supabase
+                .from('stock_takes')
+                .select('*, branch:branches(name)')
+                .eq('id', id)
+                .single();
+
+            if (takeError) throw takeError;
+            if (stockTake.branch) branchName = stockTake.branch.name;
+            title = `Stock Take Worksheet - ${stockTake.take_number}`;
+
+            const { data: takeItems, error: itemsError } = await supabase
+                .from('stock_take_items')
+                .select('*, item:inventory_items(name, unit)')
+                .eq('stock_take_id', id);
+
+            if (itemsError) throw itemsError;
+            items = takeItems || [];
+        } else {
+            // Get all active items for the branch
+            const bId = branch_id || user?.branch_id || 1;
+            
+            const { data: branch } = await supabase
+                .from('branches')
+                .select('name')
+                .eq('id', bId)
+                .single();
+            if (branch) branchName = branch.name;
+
+            let query = supabase
+                .from('inventory_items')
+                .select('*')
+                .eq('is_active', true);
+
+            if (category && category !== 'ALL') {
+                query = query.eq('category', category as string);
+            }
+
+            const { data: activeItems, error: fetchError } = await query;
+            if (fetchError) throw fetchError;
+            items = activeItems || [];
+            title = `Inventory Count Worksheet${category ? ` - ${category}` : ''}`;
+        }
+
+        const { generateStockTakeWorksheetPDF } = await import('../services/native-pdf-reports.service');
+        
+        await generateStockTakeWorksheetPDF(res, {
+            title,
+            branchName,
+            items,
+            generatedBy: `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'System'
+        });
+
+    } catch (error: any) {
+        console.error('Error generating stock take worksheet:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+

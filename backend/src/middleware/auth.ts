@@ -35,6 +35,11 @@ export const protect = async (
       }
     }
 
+    // Also allow token as query param for browser-initiated downloads (window.open, <a href>)
+    if (!token && req.query.token) {
+      token = req.query.token as string;
+    }
+
     // Token is mandatory - no dev fallbacks
     if (!token) {
       res.status(401).json({
@@ -159,6 +164,12 @@ export const authorize = (roles: UserRole[]) => {
     const allowedRoles = roles.map(r => String(r).toLowerCase());
 
     if (!allowedRoles.includes(userRole)) {
+      logger.error('Authorization failed', {
+        userId: req.user.id,
+        userRole,
+        expectedOneOf: allowedRoles,
+        url: req.originalUrl
+      });
       res.status(403).json({
         success: false,
         message: `User role ${req.user.role} is not authorized to access this route. Expected one of: ${roles.join(', ')}`

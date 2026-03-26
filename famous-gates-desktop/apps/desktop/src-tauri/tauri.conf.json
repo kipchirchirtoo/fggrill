@@ -1,6 +1,6 @@
 {
   "productName": "Famous Gates Hotels",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.hirall.famousgates",
   "build": {
     "beforeDevCommand": "npm run build:frontend -- --watch",
@@ -31,7 +31,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "deb", "appimage"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

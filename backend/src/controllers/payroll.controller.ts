@@ -1,338 +1,223 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
-import { paystackService } from '../services/paystack.service';
-import { mpesaService } from '../services/mpesa.service';
 import { PayrollService } from '../services/payroll.service';
-import { generatePayslipPDF } from '../utils/pdfGenerator';
-import axios from 'axios';
-import { emailService } from '../services/email.service';
-import { bankDistributionService } from '../services/bankDistribution.service';
+import { generatePayslipPDF, generatePayrollSummaryPDF } from '../utils/pdfGenerator';
+import { generateBrandedPayrollSummaryV2 } from '../services/native-pdf-reports.service';
 
-// @desc    Get payroll summary
-// @route   GET /api/payroll/summary
-// @access  Private (Admin, HR)
-export const getPayrollSummary = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { startDate, endDate, department, branch_id } = req.query;
+// HELPER: Ensure a draft run exists
+async function getOrCreateDraftRun(month: number, year: number, reqUser: any) {
+  const { data: existingRun } = await supabase
+    .from('payroll_runs')
+    .select('*')
+    .eq('month', month)
+    .eq('year', year)
+    .maybeSingle();
 
-    let query = supabase
-      .from('payroll_records')
-      .select(`
-        *,
-        employee:staff_profiles!inner(
-          *,
-          user:users!user_id(
-            first_name,
-            last_name,
-            email,
-            phone_number
-          )
-        )
-      `)
-      .order('month', { ascending: false });
+  if (existingRun) return existingRun;
 
-    // Apply filters
-    if (branch_id) {
-      // Use the inner joined employee table to filter by branch
-      query = query.eq('employee.branch_id', branch_id);
-    }
+  const { data: newRun, error } = await supabase
+    .from('payroll_runs')
+    .insert([{ month, year, created_by: reqUser?.id }])
+    .select()
+    .single();
 
-    if (department) {
-      query = query.eq('employee.department', department);
-    }
-
-    if (startDate) {
-      // Logic for filtration based on date
-    }
-
-    const { data: payrollRecords, error } = await query;
-
-    if (error) throw error;
-
-    const summary = {
-      totalEmployees: new Set(payrollRecords.map(r => r.staff_id)).size,
-      totalGrossPay: payrollRecords.reduce((sum, r) => sum + parseFloat(r.gross_pay || 0), 0),
-      totalDeductions: payrollRecords.reduce((sum, r) => sum + parseFloat(r.total_deductions || 0), 0),
-      totalNetPay: payrollRecords.reduce((sum, r) => sum + parseFloat(r.net_salary || 0), 0),
-      payrollRecords: payrollRecords.map(record => ({
-        id: record.id,
-        employeeId: record.staff_id,
-        employeeName: `${record.employee?.user?.first_name} ${record.employee?.user?.last_name}`,
-        department: record.employee?.department,
-        month: record.month,
-        year: record.year,
-        basicSalary: parseFloat(record.base_salary),
-        allowances: parseFloat(record.allowances || 0),
-        overtime: parseFloat(record.overtime_hours || 0) * (record.overtime_rate || 1.5),
-        bonuses: parseFloat(record.bonuses || 0),
-        grossPay: parseFloat(record.gross_pay),
-        taxDeductions: parseFloat(record.tax_deductions || 0),
-        shifDeductions: parseFloat(record.shif_deduction || 0),
-        housingLevyDeductions: parseFloat(record.housing_levy_deduction || 0),
-        nssfDeductions: parseFloat(record.nssf_deduction || 0),
-        otherDeductions: parseFloat(record.other_deductions || 0),
-        totalDeductions: parseFloat(record.total_deductions),
-        netPay: parseFloat(record.net_salary),
-        approvalStatus: record.approval_status,
-        paymentStatus: record.status,
-        paymentMethod: record.payment_method,
-        paymentDate: record.payment_date,
-        paymentReference: record.payment_reference
-      }))
-    };
-
-    res.status(200).json({
-      success: true,
-      data: summary
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Calculate payroll for an employee
-// @route   POST /api/payroll/calculate
-// @access  Private (Admin, HR)
-// @desc    Calculate payroll for an employee or all active employees
-// @route   POST /api/payroll/calculate
-// @access  Private (Admin, HR)
-export const calculatePayroll = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const {
-      employeeId,
-      payPeriodStart,
-      payPeriodEnd,
-      basicSalary,
-      allowances = 0,
-      overtime = 0,
-      bonuses = 0,
-      loans = 0,
-      advances = 0,
-      absencePenalties = 0,
-      customDeductions = 0,
-      customAllowances = 0,
-      unpaidLeaveDeductionOverride = null
-    } = req.body;
-
-    const month = new Date(payPeriodStart).getMonth() + 1;
-    const year = new Date(payPeriodStart).getFullYear();
-
-    // Helper function to process a single employee
-    const processSingleEmployee = async (id: string, salary: number) => {
-      // 1. PRE-VALIDATION: Check if payroll is already locked (Approved/Paid)
-      const { data: existingPayroll } = await supabase
-        .from('staff_payroll')
-        .select('approval_status')
-        .eq('staff_id', id)
+  // Handle race condition: another request may have inserted concurrently
+  if (error) {
+    if (error.code === '23505') {
+      // Duplicate key — fetch the row that was just inserted by the other request
+      const { data: racedRun, error: fetchError } = await supabase
+        .from('payroll_runs')
+        .select('*')
         .eq('month', month)
         .eq('year', year)
-        .maybeSingle();
+        .single();
+      if (fetchError) throw fetchError;
+      return racedRun;
+    }
+    throw error;
+  }
+  return newRun;
+}
 
-      if (existingPayroll && (existingPayroll.approval_status === 'approved' || existingPayroll.approval_status === 'paid')) {
-        return; // Skip locked records
-      }
+// @desc    Get Draft Payroll (Dynamic recalculation)
+// @route   GET /api/payroll/draft
+// @access  Private (Admin, HR)
+export const getDraftPayroll = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const month = parseInt(req.query.month as string);
+    const year = parseInt(req.query.year as string);
+    const branch_id = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
 
-      // 2. WORKFLOW VALIDATION: Check if attendance is confirmed and leave is locked
-      const { data: attendanceCheck } = await supabase
-        .from('staff_attendance')
-        .select('id')
-        .eq('staff_id', id)
-        .gte('attendance_date', payPeriodStart)
-        .lte('attendance_date', payPeriodEnd)
-        .eq('is_confirmed', false)
-        .limit(1);
+    if (!month || !year) {
+      res.status(400).json({ success: false, message: 'Month and year are required' });
+      return;
+    }
 
-      if (attendanceCheck && attendanceCheck.length > 0) {
-        throw new Error(`Attendance not confirmed for staff ${id}`);
-      }
+    // 1. Get or Create the Run
+    const run = await getOrCreateDraftRun(month, year, req.user);
 
-      let finalOvertime = parseFloat(overtime.toString());
+    // If approved or downloaded, just return the static locked records
+    if (run.status !== 'draft') {
+      let query = supabase
+        .from('payroll_records')
+        .select(`*, employee:users!staff_id(id, first_name, last_name, email)`)
+        .eq('payroll_run_id', run.id);
+        
+      if (branch_id) query = query.eq('branch_id', branch_id);
+      
+      const { data: staticRecords, error } = await query;
+      if (error) throw error;
+      
+      res.status(200).json({ success: true, data: { run, records: staticRecords } });
+      return;
+    }
 
-      // AUTO-INTEGRATION: If overtime is not provided, fetch from approved attendance
-      if (finalOvertime === 0) {
-        const { data: attendance } = await supabase
-          .from('staff_attendance')
-          .select(`
-            hours_ot_weekday, 
-            hours_ot_rest, 
-            hours_ot_holiday, 
-            staff:staff_profiles(hourly_base_rate)
-          `)
-          .eq('staff_id', id)
-          .gte('attendance_date', payPeriodStart)
-          .lte('attendance_date', payPeriodEnd)
-          .eq('is_approved', true)
-          .eq('is_confirmed', true);
+    // 2. Fetch Active Staff with valid user accounts (staff_id in payroll_records FK references users)
+    let staffQuery = supabase
+      .from('staff_profiles')
+      .select('*, user:users!user_id(id, first_name, last_name)')
+      .eq('status', 'active')
+      .not('user_id', 'is', null);
+    if (branch_id) staffQuery = staffQuery.eq('branch_id', branch_id);
+    const { data: rawStaffList } = await staffQuery;
+    // Filter out any whose user join came back null (user row deleted but profile remains)
+    const staffList = (rawStaffList || []).filter(s => s.user !== null);
+    logger.info(`Payroll draft: ${staffList.length} eligible staff (${(rawStaffList || []).length} total active, filtered ${(rawStaffList || []).length - staffList.length} with no user)`);
 
-        if (attendance && attendance.length > 0) {
-          const staff: any = attendance[0].staff;
-          const baseRate = Number(Array.isArray(staff) ? staff[0]?.hourly_base_rate : staff?.hourly_base_rate || 0);
+    // 3. Fetch Existing Draft Records to preserve manual JSON entries
+    const { data: existingRecords } = await supabase
+      .from('payroll_records')
+      .select('*')
+      .eq('payroll_run_id', run.id);
 
-          finalOvertime = attendance.reduce((sum, rec) => {
-            const weekdayVal = Number(rec.hours_ot_weekday || 0) * baseRate * 1.5;
-            const restVal = Number(rec.hours_ot_rest || 0) * baseRate * 2.0;
-            const holidayVal = Number(rec.hours_ot_holiday || 0) * baseRate * 2.0;
-            return sum + weekdayVal + restVal + holidayVal;
-          }, 0);
-        }
-      }
+    const existingMap = new Map(existingRecords?.map(r => [r.staff_id, r]) || []);
 
-      // 3. AUTO-INTEGRATION: Fetch unpaid leave and calculate deductions
-      let unpaidLeaveDeduction = Number(unpaidLeaveDeductionOverride);
-      if (unpaidLeaveDeductionOverride === null || unpaidLeaveDeductionOverride === undefined) {
-        const { data: unpaidLeave } = await supabase
-          .from('staff_leave')
-          .select('start_date, end_date')
-          .eq('staff_id', id)
-          .eq('leave_type', 'unpaid')
-          .eq('status', 'approved')
-          .eq('is_locked', true)
-          .gte('start_date', payPeriodStart)
-          .lte('end_date', payPeriodEnd);
+    // 4. Dynamically Recalculate
+    const recordsToUpsert = [];
 
-        if (unpaidLeave && unpaidLeave.length > 0) {
-          let totalUnpaidDays = 0;
-          unpaidLeave.forEach(leave => {
-            const start = new Date(leave.start_date);
-            const end = new Date(leave.end_date);
-            const diffTime = Math.abs(end.getTime() - start.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            totalUnpaidDays += diffDays;
-          });
-
-          const dailyRate = salary / 26;
-          unpaidLeaveDeduction = totalUnpaidDays * dailyRate;
-        } else {
-          unpaidLeaveDeduction = 0;
-        }
-      }
-
-      const grossPay = salary + parseFloat(allowances.toString()) + finalOvertime + parseFloat(bonuses.toString()) + parseFloat(customAllowances.toString());
-
-      // Calculate deductions using Service
-      const taxDeductions = await PayrollService.calculatePAYE(grossPay);
-      const shifDeductions = await PayrollService.calculateSHIF(grossPay);
-      const housingLevyDeductions = await PayrollService.calculateHousingLevy(grossPay);
-      const nssfDeductions = await PayrollService.calculateNSSF(grossPay);
-
-      const otherDeductions = parseFloat(loans.toString()) + parseFloat(advances.toString()) + parseFloat(absencePenalties.toString()) + parseFloat(customDeductions.toString()) + unpaidLeaveDeduction;
-      const totalDeductions = taxDeductions + shifDeductions + nssfDeductions + housingLevyDeductions + otherDeductions;
-      const netPay = grossPay - totalDeductions;
-
-      const payrollData = {
-        staff_id: id,
+    for (const staff of staffList) {
+      const existing = existingMap.get(staff.user_id) || { additions: [], deductions: [] };
+      
+      const calculatedInfo = await PayrollService.generateDynamicCalculation(
+        staff,
         month,
         year,
-        base_salary: salary,
-        allowances,
-        overtime_hours: finalOvertime / 1,
-        overtime_rate: 1.5,
-        bonuses,
-        gross_pay: grossPay,
-        tax_deductions: taxDeductions,
-        shif_deduction: shifDeductions,
-        housing_levy_deduction: housingLevyDeductions,
-        nssf_deduction: nssfDeductions,
-        other_deductions: otherDeductions,
-        absence_penalties: absencePenalties,
-        custom_deductions: customDeductions,
-        custom_allowances: customAllowances,
-        unpaid_leave_deduction: unpaidLeaveDeduction,
-        total_deductions: totalDeductions,
-        net_salary: netPay,
-        approval_status: 'draft',
-        status: 'pending',
-        created_at: new Date().toISOString()
-      };
+        existing.additions,
+        existing.deductions
+      );
 
-      const { data: savedPayroll, error: saveError } = await supabase
-        .from('staff_payroll')
-        .upsert([payrollData], { onConflict: 'staff_id, month, year' })
-        .select()
-        .single();
+      (staff as any).calculatedInfo = calculatedInfo;
 
-      if (saveError) throw saveError;
-      return savedPayroll;
-    };
-
-    // MAIN LOGIC: Bulk vs Single
-    if (employeeId) {
-      // Single Employee Calculation
-      const saved = await processSingleEmployee(employeeId, parseFloat(basicSalary));
-      res.status(200).json({ success: true, data: saved });
-    } else {
-      // Bulk Calculation for ALL Active Staff
-      const { data: activeStaff, error: staffError } = await supabase
-        .from('staff_profiles')
-        .select('id, salary')
-        .eq('status', 'active');
-
-      if (staffError) throw staffError;
-
-      let processedCount = 0;
-      const errors = [];
-
-      for (const staff of activeStaff || []) {
-        try {
-          await processSingleEmployee(staff.id, parseFloat(staff.salary || 0));
-          processedCount++;
-        } catch (err: any) {
-          logger.error(`Failed to process payroll for staff ${staff.id}:`, err);
-          errors.push({ id: staff.id, error: err.message });
-        }
-      }
-
-      res.status(200).json({
-        success: true,
-        message: `Processed ${processedCount} records. ${errors.length} failed.`,
-        errors
+      recordsToUpsert.push({
+        payroll_run_id: run.id,
+        staff_id: staff.user_id,
+        branch_id: staff.branch_id,
+        employee_name: `${staff.user.first_name} ${staff.user.last_name}`,
+        employee_code: staff.employee_id || staff.id_number || staff.id || 'N/A',
+        national_id: staff.national_id || staff.id_number || 'N/A',
+        basic_salary: calculatedInfo.basic_salary,
+        shif: (calculatedInfo.deductions || []).filter((d: any) => (d.category || '').toLowerCase() === 'shif').reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0),
+        nssf: (calculatedInfo.deductions || []).filter((d: any) => (d.category || '').toLowerCase() === 'nssf').reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0),
+        additions: calculatedInfo.additions,
+        deductions: calculatedInfo.deductions,
+        total_additions: calculatedInfo.total_additions,
+        total_deductions: calculatedInfo.total_deductions,
+        gross_pay: calculatedInfo.gross_pay,
+        net_pay: calculatedInfo.net_pay
       });
     }
 
+    // 5. Bulk Upsert Draft Records
+    if (recordsToUpsert.length > 0) {
+      const { data: upsertedRecords, error: upsertError } = await supabase
+        .from('payroll_records')
+        .upsert(recordsToUpsert, { onConflict: 'payroll_run_id, staff_id' })
+        .select();
+      
+      if (upsertError) throw upsertError;
+      logger.info(`Upserted ${recordsToUpsert.length} payroll records for run ${run.id}`);
+
+      // 5.1. Save Traceable Items (staff_payroll_items)
+      const payrollItems: any[] = [];
+      for (const rec of upsertedRecords || []) {
+        const sourceData = recordsToUpsert.find(r => r.staff_id === rec.staff_id);
+        if (sourceData) {
+          // Flatten additions and deductions into items table
+          [...sourceData.additions, ...sourceData.deductions].forEach(item => {
+            payrollItems.push({
+              payroll_id: rec.id, // Reference to the record we just saved
+              category: item.category || item.type,
+              amount: item.amount,
+              source_table: item.source_table || null,
+              source_id: item.source_id || null,
+              policy_id: item.policy_id || null,
+              reference: item.reference,
+              approval_status: item.audit_ref ? 'audited' : 'system_calculated'
+            });
+          });
+        }
+      }
+
+      if (payrollItems.length > 0) {
+        // Delete old items for these records first to avoid duplicates on recalculation
+        const recordIds = (upsertedRecords || []).map(r => r.id);
+        await supabase.from('staff_payroll_items').delete().in('payroll_id', recordIds);
+        
+        const { error: itemsError } = await supabase.from('staff_payroll_items').insert(payrollItems);
+        if (itemsError) logger.error(`Error saving payroll items: ${itemsError.message}`);
+      }
+    } else {
+      logger.warn(`No staff to upsert for payroll run ${run.id} (month=${month}, year=${year})`);
+    }
+
+    // 6. Return Draft Response
+    let finalQuery = supabase
+      .from('payroll_records')
+      .select(`
+        *, 
+        items:staff_payroll_items(*),
+        employee:users!staff_id(id, first_name, last_name, email)
+      `)
+      .eq('payroll_run_id', run.id);
+
+    if (branch_id) finalQuery = finalQuery.eq('branch_id', branch_id);
+
+    const { data: finalDraftRecords, error: fetchError } = await finalQuery;
+
+    if (fetchError) logger.error(`Error fetching final draft records: ${fetchError.message}`);
+    logger.info(`Final draft records count: ${finalDraftRecords?.length ?? 0} for run ${run.id}`);
+
+    // Update Run Totals for the Draft
+    const totals = finalDraftRecords?.reduce((acc, r) => ({
+      basic: acc.basic + parseFloat(r.basic_salary),
+      gross: acc.gross + parseFloat(r.gross_pay),
+      deductions: acc.deductions + parseFloat(r.total_deductions),
+      net: acc.net + parseFloat(r.net_pay)
+    }), { basic: 0, gross: 0, deductions: 0, net: 0 }) || { basic: 0, gross: 0, deductions: 0, net: 0 };
+
+    await supabase.from('payroll_runs').update({
+      total_basic_salary: totals.basic,
+      total_gross_pay: totals.gross,
+      total_deductions: totals.deductions,
+      total_net_pay: totals.net,
+    }).eq('id', run.id);
+
+    const updatedRun = { ...run, ...totals };
+
+    res.status(200).json({ success: true, data: { run: updatedRun, records: finalDraftRecords } });
+
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Review payroll record
-// @route   PUT /api/payroll/:id/review
-// @access  Private (Admin, HR)
-export const reviewPayroll = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { data, error } = await supabase
-      .from('staff_payroll')
-      .update({
-        approval_status: 'reviewed',
-        reviewed_by: req.user?.id,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    res.status(200).json({ success: true, data });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Approve payroll record
-// @route   PUT /api/payroll/:id/approve
+// @desc    Approve & Lock Payroll
+// @route   POST /api/payroll/approve
 // @access  Private (Admin)
 export const approvePayroll = async (
   req: Request,
@@ -340,22 +225,227 @@ export const approvePayroll = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const { runId } = req.body;
 
-    // Transition from Reviewed to Approved
-    const { data, error } = await supabase
-      .from('staff_payroll')
-      .update({
-        approval_status: 'approved',
-        approved_by_id: req.user?.id,
-        approved_at: new Date().toISOString(),
-        attendance_snapshot_verified_at: new Date().toISOString(),
-        leave_snapshot_verified_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .eq('approval_status', 'reviewed') // Require reviewed status first
-      .select()
+    // 1. Ensure run exists and is in draft
+    const { data: run, error: runError } = await supabase
+      .from('payroll_runs')
+      .select('*')
+      .eq('id', runId)
       .single();
+
+    if (runError || !run) {
+      res.status(404).json({ success: false, message: 'Payroll run not found' });
+      return;
+    }
+
+    if (run.status !== 'draft') {
+      res.status(400).json({ success: false, message: 'Payroll run is already approved/locked' });
+      return;
+    }
+
+    // 2. Lock the run
+    const { error: updateError } = await supabase
+      .from('payroll_runs')
+      .update({
+        status: 'approved',
+        approved_by: req.user?.id,
+        approved_at: new Date().toISOString()
+      })
+      .eq('id', runId);
+
+    if (updateError) throw updateError;
+
+    // 3. Update related items to mark them as paid/deducted (ONLY if net_pay > 0)
+    // Fetch all records with their net_pay to check eligibility for reset
+    const { data: recordsData } = await supabase
+      .from('payroll_records')
+      .select('id, staff_id, net_pay')
+      .eq('payroll_run_id', runId);
+    
+    const records = recordsData || [];
+    const validRecordIds = records.filter(r => parseFloat(r.net_pay || 0) > 0).map(r => r.id);
+
+    if (validRecordIds.length > 0) {
+      const { data: items } = await supabase
+        .from('staff_payroll_items')
+        .select('category, source_table, source_id, amount, staff_id')
+        .in('payroll_id', validRecordIds);
+      
+      if (items) {
+        for (const item of items) {
+          if (!item.source_table || !item.source_id) continue;
+
+          // Update the source record status based on table type
+          if (item.source_table === 'staff_credit_bills') {
+            await supabase.from('staff_credit_bills').update({ status: 'deducted', paid_via_payroll_run_id: runId }).eq('id', item.source_id);
+          } else if (item.source_table === 'staff_payroll_adjustments') {
+            await supabase.from('staff_payroll_adjustments').update({ status: 'applied', payroll_id: runId }).eq('id', item.source_id);
+          } else if (item.source_table === 'staff_advances') {
+            await supabase.from('staff_advances').update({ status: 'deducted', deducted_in_payroll_id: runId }).eq('id', item.source_id);
+          } else if (item.source_table === 'unpaid_bills') {
+             await supabase.from('unpaid_bills').update({ status: 'deducted' }).eq('id', item.source_id);
+          } else if (item.source_table === 'staff_loans') {
+            const { data: loan } = await supabase.from('staff_loans').select('remaining_balance').eq('id', item.source_id).single();
+            if (loan) {
+               const newBalance = Math.max(0, parseFloat(loan.remaining_balance) - parseFloat(item.amount));
+               await supabase.from('staff_loans').update({ 
+                 remaining_balance: newBalance,
+                 status: newBalance <= 0 ? 'paid' : 'active'
+               }).eq('id', item.source_id);
+            }
+          }
+        }
+      }
+    }
+
+    res.status(200).json({ success: true, message: 'Payroll approved and locked successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Add manual adjustment (Addition/Deduction)
+// @route   POST /api/payroll/adjustments
+// @access  Private (Admin, HR)
+export const addAdjustment = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    let { recordId, staff_id, month, year, type, source, amount, reference, isAddition } = req.body;
+
+    // 1. If recordId is missing but we have staff info, find it
+    if (!recordId && staff_id && month && year) {
+        const { data: run } = await supabase
+          .from('payroll_runs')
+          .select('id')
+          .eq('month', parseInt(month as string))
+          .eq('year', parseInt(year as string))
+          .single();
+        
+        if (run) {
+          const { data: rec } = await supabase
+            .from('payroll_records')
+            .select('id')
+            .eq('payroll_run_id', run.id)
+            .eq('staff_id', staff_id)
+            .single();
+          if (rec) recordId = rec.id;
+        }
+    }
+
+    if (!recordId) {
+      res.status(404).json({ success: false, message: 'Payroll record not found for this period. Please load the draft first.' });
+      return;
+    }
+
+    const { data: record, error: fetchError } = await supabase
+      .from('payroll_records')
+      .select('*, payroll_runs!inner(status)')
+      .eq('id', recordId)
+      .single();
+
+    if (fetchError || !record) {
+      res.status(404).json({ success: false, message: 'Record not found' });
+      return;
+    }
+
+    // Prevent edit if locked
+    if ((record.payroll_runs as any).status !== 'draft') {
+      res.status(400).json({ success: false, message: 'Cannot edit locked payroll' });
+      return;
+    }
+
+    const adjustment = {
+      type,
+      source: source || 'manual',
+      amount: parseFloat(amount),
+      reference: reference || '',
+      timestamp: new Date().toISOString()
+    };
+
+    let updateData: any = {};
+    if (isAddition) {
+      const additions = [...(record.additions as any[]), adjustment];
+      updateData.additions = additions;
+    } else {
+      const deductions = [...(record.deductions as any[]), adjustment];
+      updateData.deductions = deductions;
+    }
+
+    // Update the record JSON. Totals will be recalculated on the next GET /draft fetch!
+    const { error: updateError } = await supabase
+      .from('payroll_records')
+      .update(updateData)
+      .eq('id', recordId);
+
+    if (updateError) throw updateError;
+
+    res.status(200).json({ success: true, message: 'Adjustment saved. Refresh to recalculate.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get manual adjustments for a specific staff member and period
+// @route   GET /api/payroll/adjustments
+// @access  Private (Admin, HR, Auditor)
+export const getAdjustments = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { staff_id, month, year } = req.query;
+
+    if (!staff_id || !month || !year) {
+      res.status(400).json({ success: false, message: 'Missing staff_id, month, or year' });
+      return;
+    }
+
+    // 1. Find the payroll run for this period
+    const { data: run } = await supabase
+      .from('payroll_runs')
+      .select('id')
+      .eq('month', parseInt(month as string))
+      .eq('year', parseInt(year as string))
+      .single();
+
+    if (!run) {
+      res.status(404).json({ success: false, message: 'Payroll run not found for this period' });
+      return;
+    }
+
+    // 2. Find the record for this staff in this run
+    const { data: record, error } = await supabase
+      .from('payroll_records')
+      .select('additions, deductions')
+      .eq('payroll_run_id', run.id)
+      .eq('staff_id', staff_id)
+      .single();
+
+    if (error || !record) {
+      res.status(200).json({ success: true, data: { additions: [], deductions: [] } });
+      return;
+    }
+
+    res.status(200).json({ success: true, data: record });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get history list of payroll runs
+// @route   GET /api/payroll/history
+export const getPayrollHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('payroll_runs')
+      .select('*, approver:users!approved_by(first_name, last_name)')
+      .order('year', { ascending: false })
+      .order('month', { ascending: false });
 
     if (error) throw error;
     res.status(200).json({ success: true, data });
@@ -364,143 +454,23 @@ export const approvePayroll = async (
   }
 };
 
-// REST OF THE ORIGINAL FUNCTIONS (Payments, Banks, etc.)
-export const processPayrollPayment = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { payrollRecordId, paymentMethod, employeePhone, bankDetails } = req.body;
-
-    const { data: payrollRecord, error: fetchError } = await supabase
-      .from('payroll_records')
-      .select('*, employee:staff_profiles!staff_id(*, user:users!user_id(*))')
-      .eq('id', payrollRecordId)
-      .single();
-
-    if (fetchError || !payrollRecord) {
-      res.status(404).json({ success: false, message: 'Payroll record not found' });
-      return;
-    }
-
-    if (payrollRecord.approval_status !== 'approved') {
-      res.status(403).json({ success: false, message: 'Only approved payroll can be paid' });
-      return;
-    }
-
-    let paymentReference;
-    if (paymentMethod === 'mpesa') {
-      const phone = employeePhone || payrollRecord.employee.user.phone_number;
-      const result = await mpesaService.b2cPayment(phone, parseFloat(payrollRecord.net_salary), 'Salary', 'Salary');
-      paymentReference = result.ConversationID;
-    } else if (paymentMethod === 'paystack') {
-      const recipient = await paystackService.createTransferRecipient({
-        type: 'nuban',
-        name: `${payrollRecord.employee.user.first_name} ${payrollRecord.employee.user.last_name}`,
-        account_number: bankDetails.accountNumber,
-        bank_code: bankDetails.bankCode,
-        currency: 'KES'
-      });
-      const result = await paystackService.initiateTransfer(parseFloat(payrollRecord.net_salary), recipient.data.recipient_code, 'Salary');
-      paymentReference = result.data.transfer_code;
-    }
-
-    const { error: updateError } = await supabase
-      .from('staff_payroll')
-      .update({
-        status: 'paid',
-        approval_status: 'paid',
-        payment_method: paymentMethod,
-        payment_reference: paymentReference,
-        payment_date: new Date().toISOString()
-      })
-      .eq('id', payrollRecordId);
-
-    if (updateError) throw updateError;
-
-    // 4. Create Finance Transaction for accounting
-    const { error: financeError } = await supabase
-      .from('finance_transactions')
-      .insert([{
-        transaction_number: `PAY-${Date.now()}`,
-        transaction_type: 'expense',
-        amount: parseFloat(payrollRecord.net_salary),
-        description: `Salary Payment - ${payrollRecord.employee.user.first_name} ${payrollRecord.employee.user.last_name} (${payrollRecord.month}/${payrollRecord.year})`,
-        category: 'Salaries & Wages',
-        payment_method: paymentMethod,
-        branch_id: payrollRecord.employee.branch_id,
-        payment_date: new Date().toISOString(),
-        payment_status: 'completed',
-        reference_type: 'payroll',
-        reference_id: payrollRecordId,
-        notes: `PAYE: ${payrollRecord.tax_deductions}, NSSF: ${payrollRecord.nssf_deduction}, SHIF: ${payrollRecord.shif_deduction}, Housing Levy: ${payrollRecord.housing_levy_deduction}`,
-        created_by: req.user?.id
-      }]);
-
-    if (financeError) {
-      logger.error('Error creating finance transaction for payroll:', financeError);
-      // We don't throw here to avoid rollback of the 'paid' status, 
-      // but in a real enterprise app, this should be a transaction.
-    }
-
-    // 5. Send Payslip Email
-    try {
-      const monthName = new Date(0, payrollRecord.month - 1).toLocaleString('en-US', { month: 'long' });
-      const pdfBuffer = await generatePayslipPDF({
-        ...payrollRecord,
-        month: monthName,
-        company: 'Famous Gates Hotels',
-        company_email: 'famous-gates-hotelsbmt@gmail.com'
-      });
-      await emailService.sendPayslipEmail(payrollRecord.employee, monthName, payrollRecord.year, pdfBuffer);
-      logger.info(`Payslip email sent to ${payrollRecord.employee.user.email} after payment`);
-    } catch (emailError) {
-      logger.error('Failed to send payslip email after payment:', emailError);
-      // We don't fail the request if just the email fails
-    }
-
-    res.status(200).json({ success: true, data: { paymentReference, status: 'paid' } });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const processBulkPayroll = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { payrollRecordIds, paymentMethod } = req.body;
-    const { data: records, error } = await supabase.from('payroll_records').select('*').in('id', payrollRecordIds);
-    if (error) throw error;
-
-    // Filter only approved ones
-    const approvedRecords = records.filter(r => r.approval_status === 'approved');
-
-    // Bulk processing logic (simplified for this restoration)
-    res.status(200).json({ success: true, message: `Processing ${approvedRecords.length} approved records` });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Generate payslip PDF
+// @desc    Generate individual payslip PDF
 // @route   GET /api/payroll/:id/payslip
-// @access  Private
-export const generatePayslip = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+export const generatePayslip = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
 
-    // Get payroll record with all details
     const { data: record, error } = await supabase
       .from('payroll_records')
-      .select('*, employee:staff_profiles!staff_id(*, user:users!user_id(*))')
+      .select(`
+        *,
+        run:payroll_runs!payroll_run_id(month, year, status),
+        staff:staff_profiles!inner(
+          id, id_number, national_id, phone, department, role, position,
+          bank_name, account_number, kra_pin, employment_type,
+          user:users!user_id(first_name, last_name, email)
+        )
+      `)
       .eq('id', id)
       .single();
 
@@ -509,103 +479,218 @@ export const generatePayslip = async (
       return;
     }
 
-    // Call Python service to generate PDF
-    // We send all data including new statutory fields
-    try {
-      const response = await axios.post(`${process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com'}/api/reports/generate/branded-pdf`, {
-        reportType: 'payslip',
-        data: {
-          ...record,
-          company: 'Famous Gates Hotels',
-          generatedAt: new Date().toISOString()
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthName = MONTHS[(record.run?.month || 1) - 1];
+
+    // Extract deduction amounts by type
+    const deductions: any[] = record.deductions || [];
+    const getAmt = (type: string) => deductions.filter(d => d.type === type).reduce((s: number, d: any) => s + parseFloat(d.amount || 0), 0);
+
+    const pdfBuffer = await generatePayslipPDF({
+      month: monthName,
+      year: record.run?.year || new Date().getFullYear(),
+      base_salary: parseFloat(record.basic_salary || 0),
+      overtime_pay: 0,
+      allowances: parseFloat(record.total_additions || 0),
+      gross_pay: parseFloat(record.gross_pay || 0),
+      nssf_deduction: getAmt('nssf'),
+      shif_deduction: getAmt('shif'),
+      total_deductions: parseFloat(record.total_deductions || 0),
+      net_salary: parseFloat(record.net_pay || 0),
+      employee: {
+        national_id: record.staff?.national_id || record.national_id || 'N/A',
+        kra_pin: record.staff?.kra_pin || 'N/A',
+        employee_type: record.staff?.employment_type || record.staff?.role || 'Staff',
+        department: record.staff?.department || 'General',
+        bank_name: record.staff?.bank_name || 'N/A',
+        bank_account_number: record.staff?.account_number || 'N/A',
+        user: {
+          first_name: record.staff?.user?.first_name || record.employee_name?.split(' ')[0] || '',
+          last_name: record.staff?.user?.last_name || record.employee_name?.split(' ').slice(1).join(' ') || '',
         }
-      }, {
-        responseType: 'arraybuffer',
-        timeout: 5000 // 5 second timeout for Python service
-      });
+      },
+      company: 'Famous Gates Hotels',
+      company_email: 'info@famousgatehotels.com',
+      company_address: 'Bomet, Kenya'
+    });
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=Payslip_${record.employee.user.last_name}_${record.month}_${record.year}.pdf`);
-      res.send(response.data);
-    } catch (pythonError) {
-      console.error('Python PDF service failed, using Node.js fallback:', pythonError);
-
-      // Fallback to Node.js PDF generation
-      const pdfBuffer = await generatePayslipPDF({
-        ...record,
-        company: 'Famous Gates Hotels',
-        company_email: 'famous-gates-hotelsbmt@gmail.com',
-        company_address: 'Bomet, Kenya'
-      });
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=Payslip_${record.employee.user.last_name}_${record.month}_${record.year}_Fallback.pdf`);
-      res.send(pdfBuffer);
-    }
+    const filename = `Payslip_${record.employee_name?.replace(/\s+/g, '_')}_${monthName}_${record.run?.year}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
   } catch (error) {
     next(error);
   }
 };
 
-export const getBanks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// @desc    Download all payslips as ZIP for a payroll run
+// @route   GET /api/payroll/run/:runId/payslips-zip
+export const downloadPayslipsZip = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const banks = await paystackService.getBanks('kenya');
-    res.status(200).json({ success: true, data: banks.data });
-  } catch (error) {
-    next(error);
-  }
-};
+    const { runId } = req.params;
+    const { branch_id } = req.query;
 
-export const verifyBankAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { accountNumber, bankCode } = req.body;
-    const verification = await paystackService.verifyBankAccount(accountNumber, bankCode);
-    res.status(200).json({ success: true, data: verification.data });
-  } catch (error) {
-    next(error);
-  }
-};
+    const { data: run, error: runError } = await supabase
+      .from('payroll_runs')
+      .select('*')
+      .eq('id', runId)
+      .single();
 
-// @desc    Export bank distribution file (CSV)
-// @route   GET /api/payroll/export/bank-distribution
-// @access  Private (Admin, HR)
-export const exportBankDistribution = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const { month, year } = req.query;
-
-    if (!month || !year) {
-      res.status(400).json({ success: false, message: 'Month and year are required' });
+    if (runError || !run) {
+      res.status(404).json({ success: false, message: 'Payroll run not found' });
       return;
     }
 
-    const { data: records, error } = await supabase
+    let query = supabase
       .from('payroll_records')
-      .select('*, employee:staff_profiles!staff_id(*, user:users!user_id(*))')
-      .eq('month', parseInt(month as string))
-      .eq('year', parseInt(year as string))
-      .eq('approval_status', 'approved');
+      .select('*')
+      .eq('payroll_run_id', runId);
+    
+    if (branch_id && branch_id !== '0') {
+      query = query.eq('branch_id', branch_id);
+    }
+
+    const { data: records, error } = await query;
+
+    if (error) throw error;
+    if (!records || records.length === 0) {
+      res.status(404).json({ success: false, message: 'No payroll records found for this run' });
+      return;
+    }
+
+    // Fetch staff profile data separately (payroll_records.staff_id FK → users, not staff_profiles directly)
+    const staffIds = records.map(r => r.staff_id).filter(Boolean);
+    const { data: staffProfiles } = await supabase
+      .from('staff_profiles')
+      .select('id, national_id, phone, department, role, bank_name, account_number, kra_pin, employment_type, user_id')
+      .in('user_id', staffIds);
+    const staffMap = new Map((staffProfiles || []).map(s => [s.user_id, s]));
+
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthName = MONTHS[(run.month || 1) - 1];
+
+    const archiver = require('archiver');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="Payslips_${monthName}_${run.year}.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err: any) => { if (!res.headersSent) res.status(500).json({ success: false, message: err.message }); });
+    archive.pipe(res);
+
+    for (const record of records) {
+      try {
+        const staff = staffMap.get(record.staff_id);
+        const deductions: any[] = record.deductions || [];
+        const getAmt = (cat: string) => deductions.filter((d: any) => d.category === cat).reduce((s: number, d: any) => s + parseFloat(d.amount || 0), 0);
+
+        const pdfBuffer = await generatePayslipPDF({
+          month: monthName,
+          year: run.year,
+          base_salary: parseFloat(record.basic_salary || 0),
+          overtime_pay: 0,
+          allowances: parseFloat(record.total_additions || 0),
+          gross_pay: parseFloat(record.gross_pay || 0),
+          nssf_deduction: getAmt('nssf'),
+          shif_deduction: getAmt('shif'),
+          total_deductions: parseFloat(record.total_deductions || 0),
+          net_salary: parseFloat(record.net_pay || 0),
+          employee: {
+            national_id: staff?.national_id || record.national_id || 'N/A',
+            kra_pin: staff?.kra_pin || 'N/A',
+            employee_type: staff?.employment_type || staff?.role || 'Staff',
+            department: staff?.department || 'General',
+            bank_name: staff?.bank_name || 'N/A',
+            bank_account_number: staff?.account_number || 'N/A',
+            user: {
+              first_name: record.employee_name?.split(' ')[0] || '',
+              last_name: record.employee_name?.split(' ').slice(1).join(' ') || '',
+            }
+          },
+          company: 'Famous Gates Hotels',
+          company_email: 'info@famousgatehotels.com',
+          company_address: 'Bomet, Kenya'
+        });
+
+        const filename = `Payslip_${record.employee_name?.replace(/\s+/g, '_')}_${monthName}_${run.year}.pdf`;
+        archive.append(pdfBuffer, { name: filename });
+      } catch (pdfErr) {
+        logger.error(`Failed to generate PDF for ${record.employee_name}:`, pdfErr);
+        archive.append(Buffer.from(`Error generating payslip for ${record.employee_name}: ${pdfErr}`), { name: `ERROR_${record.employee_name?.replace(/\s+/g, '_')}.txt` });
+      }
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Download payroll summary PDF
+// @route   GET /api/payroll/run/:runId/summary-pdf
+export const downloadSummaryPDF = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { runId } = req.params;
+    const { branch_id } = req.query;
+
+    const { data: run, error: runError } = await supabase
+      .from('payroll_runs')
+      .select('*')
+      .eq('id', runId)
+      .single();
+
+    if (runError || !run) {
+      res.status(404).json({ success: false, message: `Payroll run not found: ${runError?.message || 'unknown'}` });
+      return;
+    }
+
+    // Optionally get branch name
+    let branchName = 'All Branches';
+    const effectiveBranchId = branch_id && branch_id !== '0' ? branch_id : run.branch_id;
+    
+    if (effectiveBranchId) {
+      const { data: branch } = await supabase.from('branches').select('name').eq('id', effectiveBranchId).single();
+      if (branch?.name) branchName = branch.name;
+    }
+
+    let query = supabase
+      .from('payroll_records')
+      .select('*')
+      .eq('payroll_run_id', runId);
+    
+    if (branch_id && branch_id !== '0') {
+      query = query.eq('branch_id', branch_id);
+    }
+
+    const { data: records, error } = await query;
 
     if (error) throw error;
 
-    if (!records || records.length === 0) {
-      res.status(404).json({ success: false, message: 'No approved records found for this period' });
-      return;
+    // Recalculate totals for the filtered branch if applicable
+    let runDataForPDF = { ...run };
+    if (branch_id && branch_id !== '0') {
+      const totals = (records || []).reduce((acc, r) => ({
+        basic: acc.basic + parseFloat(r.basic_salary || 0),
+        gross: acc.gross + parseFloat(r.gross_pay || 0),
+        deductions: acc.deductions + parseFloat(r.total_deductions || 0),
+        net: acc.net + parseFloat(r.net_pay || 0)
+      }), { basic: 0, gross: 0, deductions: 0, net: 0 });
+
+      runDataForPDF = {
+        ...run,
+        total_basic_salary: totals.basic,
+        total_gross_pay: totals.gross,
+        total_deductions: totals.deductions,
+        total_net_pay: totals.net
+      };
     }
-
-    const bankRecords = records.map(r => ({
-      account_number: r.employee.bank_account_number || 'N/A',
-      account_name: `${r.employee.user.first_name} ${r.employee.user.last_name}`,
-      bank_name: r.employee.bank_name || 'N/A',
-      bank_branch: r.employee.bank_branch || 'N/A',
-      amount: parseFloat(r.net_salary),
-      reference: `SALARY-${r.month}-${r.year}`
-    }));
-
-    const csv = await bankDistributionService.generateBankCSV(bankRecords);
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=Bank_Distribution_${month}_${year}.csv`);
-    res.status(200).send(csv);
+    
+    // Call the branded A3 landscape generator
+    await generateBrandedPayrollSummaryV2(
+      res,
+      runDataForPDF,
+      records || [],
+      branchName
+    );
   } catch (error) {
     next(error);
   }

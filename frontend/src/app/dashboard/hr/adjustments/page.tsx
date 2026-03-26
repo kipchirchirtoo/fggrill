@@ -15,17 +15,16 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CATEGORIES_DEDUCTION = [
-    { id: 'nssf', label: 'NSSF' },
+    { id: 'credit_bills', label: 'Credit Bills' },
+    { id: 'absenteeism', label: 'Absenteeism Deduction' },
+    { id: 'loan', label: 'Loans' },
+    { id: 'advance', label: 'Advances' },
     { id: 'shif', label: 'SHIF' },
-    { id: 'housing_levy', label: 'Housing Levy' },
-    { id: 'paye', label: 'PAYE' },
-    { id: 'unpaid_leave', label: 'Unpaid Leave' },
+    { id: 'nssf', label: 'NSSF' },
     { id: 'uniform', label: 'Uniform' },
-    { id: 'absent_day', label: 'Absent Day' },
-    { id: 'penalty', label: 'Disciplinary Fine' },
-    { id: 'credit_bill', label: 'Credit Bill' },
-    { id: 'other', label: 'Other Deduction' },
+    { id: 'other', label: 'Other Deductions' },
 ];
+const ALLOWED_DEDUCTION_IDS = CATEGORIES_DEDUCTION.map(c => c.id);
 const CATEGORIES_ADDITION = [
     { id: 'bonus', label: 'Performance Bonus' },
     { id: 'overtime', label: 'Overtime' },
@@ -59,6 +58,7 @@ export default function PayrollAdjustmentsPage() {
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState({ type: 'deduction' as 'deduction' | 'addition', category: 'other', amount: '', description: '' });
     const [submitting, setSubmitting] = useState(false);
+    const [updatingStatutory, setUpdatingStatutory] = useState(false);
 
     // Load all staff once
     useEffect(() => {
@@ -114,6 +114,26 @@ export default function PayrollAdjustmentsPage() {
             toast.error(e.message);
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const handleToggleStatutory = async (field: 'shif_enabled' | 'nssf_enabled' | 'uniform_enabled') => {
+        if (!selectedStaff || !canManage) return;
+        setUpdatingStatutory(true);
+        try {
+            const newValue = !selectedStaff[field];
+            const res = await staffAPI.updateStaffMember(selectedStaff.id, { [field]: newValue });
+            if (res.success) {
+                toast.success('Enrollment updated');
+                setSelectedStaff({ ...selectedStaff, [field]: newValue });
+                setStaffList(prev => prev.map(s => s.id === selectedStaff.id ? { ...s, [field]: newValue } : s));
+            } else {
+                toast.error(res.message || 'Failed to update');
+            }
+        } catch (e: any) {
+            toast.error('Network error');
+        } finally {
+            setUpdatingStatutory(false);
         }
     };
 
@@ -262,6 +282,38 @@ export default function PayrollAdjustmentsPage() {
                                         </div>
                                     </div>
 
+                                    {/* Statutory Deductions Toggles */}
+                                    {canManage && (
+                                    <div className="px-5 py-3 border-b border-stone-50 bg-stone-50/30 flex items-center justify-between gap-4">
+                                        <p className="text-[11px] font-bold text-stone-500 uppercase tracking-widest shrink-0">Statutory Deductions (Opt-In):</p>
+                                        <div className="flex items-center gap-3">
+                                            {[
+                                                { id: 'shif_enabled', label: 'SHIF/SHA' },
+                                                { id: 'nssf_enabled', label: 'NSSF' },
+                                                { id: 'uniform_enabled', label: 'Uniform' }
+                                            ].map(stat => {
+                                                const isActive = selectedStaff[stat.id];
+                                                return (
+                                                    <button
+                                                        key={stat.id}
+                                                        disabled={updatingStatutory}
+                                                        onClick={() => handleToggleStatutory(stat.id as any)}
+                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] uppercase font-bold tracking-wider transition-all border ${
+                                                            isActive 
+                                                                ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700 group' 
+                                                                : 'bg-white border-stone-200 text-stone-400 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700'
+                                                        }`}
+                                                        title={isActive ? 'Click to Disable' : 'Click to Enable'}
+                                                    >
+                                                        <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-blue-500 group-hover:bg-red-500' : 'bg-stone-300'}`} />
+                                                        {stat.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    )}
+
                                     {/* Inline add form */}
                                     {showForm && (
                                         <div className="p-5 border-b border-stone-100 bg-stone-50/50">
@@ -375,7 +427,9 @@ export default function PayrollAdjustmentsPage() {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-stone-50">
-                                                    {folioAdjustments.map(adj => (
+                                                    {folioAdjustments
+                                                        .filter(adj => adj.type === 'addition' || ALLOWED_DEDUCTION_IDS.includes(adj.category.toLowerCase()))
+                                                        .map(adj => (
                                                         <tr key={adj.id} className="hover:bg-stone-50/40 transition-colors">
                                                             <td className="px-5 py-3.5">
                                                                 <IOSBadge color={adj.type === 'deduction' ? 'danger' : 'success'} className="text-[10px]">

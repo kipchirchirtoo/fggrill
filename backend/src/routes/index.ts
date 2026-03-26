@@ -55,7 +55,7 @@ import attendanceRoutes from './attendance.routes';
 import pettyCashRoutes from './petty-cash.routes';
 import creditRoutes from './credit.routes';
 import kitchenRoutes from './kitchen.routes';
-import payrollRoutes from './payroll-simple.routes';
+import payrollRoutes from './payroll.routes';
 import procurementRoutes from './procurement.routes';
 import hrReportRoutes from './hr-reports.routes';
 import stockTakeRoutes from './stock-take.routes';
@@ -71,6 +71,7 @@ import payrollAdjustmentsRoutes from './payroll-adjustments.routes';
 import statutoryDeductionsRoutes from './statutory-deductions.routes';
 import performanceRoutes from './performance.routes';
 import paymentsRoutes from './payments.routes';
+import payrollPoliciesRoutes from './payroll-policies.routes';
 
 const router = express.Router();
 
@@ -165,6 +166,7 @@ router.use('/payroll-adjustments', payrollAdjustmentsRoutes);
 router.use('/payroll-statutory', statutoryDeductionsRoutes);
 router.use('/performance', performanceRoutes);
 router.use('/payments-verification', paymentsRoutes);
+router.use('/payroll-policies', payrollPoliciesRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

@@ -37,9 +37,9 @@ export function BranchSelector({
     const newValue = e.target.value ? Number(e.target.value) : null;
     
     if (onChange) {
-      onChange(newValue);
-    } else if (newValue !== null) {
-      setActiveBranch(newValue);
+      onChange(newValue === 0 ? null : newValue);
+    } else {
+      setActiveBranch(newValue === null ? 0 : newValue);
     }
   };
 
@@ -73,7 +73,7 @@ export function BranchSelector({
         )}
       >
         {showAllOption && (
-          <option value="">{allOptionLabel}</option>
+          <option value="0">{allOptionLabel}</option>
         )}
         {userBranches.map((branch) => (
           <option key={branch.id} value={branch.id}>

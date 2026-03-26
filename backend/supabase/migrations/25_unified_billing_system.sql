@@ -416,12 +416,20 @@ $$ LANGUAGE plpgsql;
 
 -- ============ TRIGGERS ============
 
+-- Trigger function for update_bill_totals_on_order_change
+CREATE OR REPLACE FUNCTION trigger_update_bill_totals()
+RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM calculate_bill_totals(COALESCE(NEW.bill_id, OLD.bill_id));
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Trigger to update bill totals when orders change
 CREATE TRIGGER update_bill_totals_on_order_change
   AFTER INSERT OR UPDATE OR DELETE ON restaurant_orders
   FOR EACH ROW
-  WHEN (NEW.bill_id IS NOT NULL OR OLD.bill_id IS NOT NULL)
-  EXECUTE FUNCTION calculate_bill_totals(COALESCE(NEW.bill_id, OLD.bill_id));
+  EXECUTE FUNCTION trigger_update_bill_totals();
 
 -- Trigger to update bill status on payment
 CREATE TRIGGER update_bill_status_on_payment_trigger

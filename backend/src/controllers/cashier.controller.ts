@@ -2797,23 +2797,20 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                 if (linesError) throw linesError;
             }
 
-            // 3. (NEW) Sync Credit Bills to 'staff_credit_bills' for Payroll
+            // 3. Sync Credit Bills to 'staff_credit_bills' for Payroll
             // We want to ensure these are recorded in the payroll system
             if (credit_bills && Array.isArray(credit_bills)) {
                 for (const bill of credit_bills) {
                     if (bill.staff_id && Number(bill.amount) > 0) {
                         try {
-                            // Check if already exists for this logbook to prevent duplicates on multiple saves
-                            // We use a unique reference composed of logbook_id and staff_id or just check strict duplication
-                            // For simplicity, we'll check if a pending bill exists for this staff on this date with this amount matching this logbook reference
-                            // Ideally, we should double check duplicate policies.
+                            // Link to source logbook to allow payroll to check if logbook is approved/reconciled
                             const { data: existing } = await supabase
                                 .from('staff_credit_bills')
                                 .select('id')
                                 .eq('staff_id', bill.staff_id)
                                 .eq('bill_date', today)
                                 .eq('amount', bill.amount)
-                                .eq('status', 'pending')
+                                .eq('source_logbook_id', logbook.id)
                                 .maybeSingle();
 
                             if (!existing) {
@@ -2822,12 +2819,12 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                                     amount: bill.amount,
                                     bill_date: today,
                                     description: `Cashier Logbook Credit (${type}): ${bill.customer_name || 'Staff'} - ${bill.reference || 'No Ref'}`,
-                                    status: 'pending'
+                                    status: 'pending',
+                                    source_logbook_id: logbook.id
                                 });
                             }
                         } catch (err) {
                             console.error('Failed to sync credit bill to payroll:', err);
-                            // Don't fail the whole logbook save for this, just log it
                         }
                     }
                 }

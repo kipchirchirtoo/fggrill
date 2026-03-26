@@ -328,25 +328,97 @@ export async function generateVATReportPDF(
 // ── PROCUREMENT INTELLIGENCE ──────────────────────────────────────────────────
 export async function generateProcurementIntelligencePDF(
   res: Response,
-  filters: { from_date: string; to_date: string }
+  filters: {
+    from_date?: string; start_date?: string;
+    to_date?: string;   end_date?: string;
+  }
 ) {
-  const { from_date, to_date } = filters;
+  const from_date = filters.from_date ?? filters.start_date ?? '';
+  const to_date   = filters.to_date   ?? filters.end_date   ?? new Date().toISOString().split('T')[0];
 
-  const { data: invoices } = await supabase
-    .from('store_supplier_invoices')
-    .select(`supplier_id, supplier:store_suppliers(name, supplier_code), total_amount, invoice_date`)
-    .in('status', ['approved', 'paid'])
-    .gte('invoice_date', from_date)
-    .lte('invoice_date', to_date);
+  logger.info(`Generating Procurement Intelligence PDF: from=${from_date}, to=${to_date}`);
 
-  const { data: grns } = await supabase
-    .from('store_grn')
-    .select('id, grn_number, grn_date, total_value, supplier:store_suppliers(name)')
-    .gte('grn_date', from_date)
-    .lte('grn_date', to_date)
-    .order('grn_date', { ascending: false });
+  const ALL_STATUSES = ['approved', 'paid', 'partial', 'pending'];
 
-  // Aggregate by supplier
+  // ── Connection Test ──
+  const { count: userCount, error: userError } = await supabase.from('users').select('*', { count: 'exact', head: true });
+  logger.info(`Connection Test: Users Count = ${userCount}, Error = ${JSON.stringify(userError)}`);
+
+  // ── 1. Fetch invoices — three-level fallback ──────────────────────────────
+  let invoices: any[] | null = null;
+
+  // Attempt 1: filter by invoice_date in range
+  if (from_date) {
+    const { data, error } = await supabase
+      .from('store_supplier_invoices')
+      .select('supplier_id, supplier:store_suppliers(name, supplier_code), total_amount, invoice_date, created_at, status')
+      .in('status', ALL_STATUSES)
+      .gte('invoice_date', from_date)
+      .lte('invoice_date', to_date);
+    logger.info(`Invoice Attempt 1 (invoice_date): count=${data?.length}, error=${JSON.stringify(error)}`);
+    if (data?.length) invoices = data;
+  }
+
+  // Attempt 2: filter by created_at in range (catches invoices with null invoice_date)
+  if (!invoices?.length && from_date) {
+    const { data, error } = await supabase
+      .from('store_supplier_invoices')
+      .select('supplier_id, supplier:store_suppliers(name, supplier_code), total_amount, invoice_date, created_at, status')
+      .in('status', ALL_STATUSES)
+      .gte('created_at', `${from_date}T00:00:00`)
+      .lte('created_at', `${to_date}T23:59:59`);
+    logger.info(`Invoice Attempt 2 (created_at): count=${data?.length}, error=${JSON.stringify(error)}`);
+    if (data?.length) invoices = data;
+  }
+
+  // Attempt 3: last resort — return all invoices (any date, any status)
+  if (!invoices?.length) {
+    const { data, error } = await supabase
+      .from('store_supplier_invoices')
+      .select('supplier_id, supplier:store_suppliers(name, supplier_code), total_amount, invoice_date, created_at, status')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    logger.info(`Invoice Attempt 3 (last resort): count=${data?.length}, error=${JSON.stringify(error)}`);
+    invoices = data ?? [];
+  }
+
+  // ── 2. Fetch GRNs — three-level fallback ─────────────────────────────────
+  let grnData: any[] = [];
+
+  // Attempt 1: filter by grn_date in range
+  if (from_date) {
+    const { data } = await supabase
+      .from('store_grn')
+      .select('id, grn_number, grn_date, total_value, created_at, supplier:store_suppliers(name)')
+      .gte('grn_date', from_date)
+      .lte('grn_date', to_date)
+      .order('grn_date', { ascending: false });
+    if (data?.length) grnData = data;
+  }
+
+  // Attempt 2: filter by created_at in range
+  if (!grnData.length && from_date) {
+    const { data } = await supabase
+      .from('store_grn')
+      .select('id, grn_number, grn_date, total_value, created_at, supplier:store_suppliers(name)')
+      .gte('created_at', `${from_date}T00:00:00`)
+      .lte('created_at', `${to_date}T23:59:59`)
+      .order('created_at', { ascending: false });
+    if (data?.length) grnData = data;
+  }
+
+  // Attempt 3: last resort — most recent 30 GRNs
+  if (!grnData.length) {
+    const { data } = await supabase
+      .from('store_grn')
+      .select('id, grn_number, grn_date, total_value, created_at, supplier:store_suppliers(name)')
+      .order('created_at', { ascending: false })
+      .limit(30);
+    grnData = data ?? [];
+  }
+
+
+  // ── 3. Aggregate by supplier ──
   const supplierMap: Record<string, { name: string; code: string; total: number; count: number }> = {};
   (invoices ?? []).forEach((inv: any) => {
     const id = inv.supplier_id;
@@ -362,22 +434,24 @@ export async function generateProcurementIntelligencePDF(
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition',
-    `attachment; filename=FG_Procurement_Intelligence_${from_date}_${to_date}.pdf`);
+    `attachment; filename=FG_procurement_intelligence_${new Date().toISOString().split('T')[0]}.pdf`);
   doc.pipe(res);
 
-  const periodLabel = `Period: ${fmtDate(from_date)} – ${fmtDate(to_date)}`;
+  const periodLabel = from_date && to_date
+    ? `Period: ${fmtDate(from_date)} – ${fmtDate(to_date)}`
+    : `Report Date: ${fmtDate(new Date().toISOString())}`;
   let y = drawBrandedHeader(doc, 'PROCUREMENT INTELLIGENCE REPORT', periodLabel);
 
   // Summary strip
   doc.rect(40, y, doc.page.width - 80, 28).fill('#eef2f7');
   doc.fillColor(PRIMARY).fontSize(9).font('Helvetica-Bold');
   doc.text(`Total Invoices: ${invoices?.length ?? 0}`, 55, y + 9);
-  doc.text(`Total GRNs: ${grns?.length ?? 0}`, 200, y + 9);
+  doc.text(`Total GRNs: ${grnData.length}`, 200, y + 9);
   doc.text(`Total Spend: ${fmt(grandTotal)}`, 340, y + 9);
   doc.text(`Report Date: ${fmtDate(new Date().toISOString())}`, 460, y + 9);
   y += 38;
 
-  // Top suppliers
+  // Top suppliers table
   doc.fontSize(10).font('Helvetica-Bold').fillColor(ACCENT).text('Top Suppliers by Spend', 40, y);
   y += 12;
 
@@ -412,7 +486,7 @@ export async function generateProcurementIntelligencePDF(
     y += 30;
   }
 
-  // Recent GRNs
+  // Recent GRNs table
   y += 18;
   if (y > doc.page.height - 120) {
     drawFooter(doc);
@@ -431,24 +505,31 @@ export async function generateProcurementIntelligencePDF(
   ];
   y = drawTableHeader(doc, y, grnCols);
 
-  (grns ?? []).slice(0, 30).forEach((grn: any, i: number) => {
+  (grnData).slice(0, 30).forEach((grn: any, i: number) => {
     if (y > doc.page.height - 60) {
       drawFooter(doc);
       doc.addPage();
       y = drawBrandedHeader(doc, 'PROCUREMENT INTELLIGENCE (cont.)', periodLabel);
       y = drawTableHeader(doc, y, grnCols);
     }
+    const dateVal = grn.grn_date ?? grn.created_at;
     y = drawRow(doc, y, [
       { value: grn.grn_number ?? '—',      x: 42,  width: 100 },
-      { value: fmtDate(grn.grn_date),       x: 146, width: 70 },
+      { value: fmtDate(dateVal),             x: 146, width: 70 },
       { value: grn.supplier?.name ?? '—',   x: 220, width: 230 },
       { value: fmt(grn.total_value),         x: 454, width: 100, align: 'right' },
     ], i % 2 === 0);
   });
 
+  if (!grnData.length) {
+    doc.fontSize(9).fillColor(SECONDARY).text('No GRN records found.', 40, y + 10);
+    y += 30;
+  }
+
   drawFooter(doc);
   doc.end();
 }
+
 
 // ── HR PERFORMANCE REPORT ─────────────────────────────────────────────────────
 export async function generateHRPerformancePDF(
@@ -1120,6 +1201,229 @@ export async function generateDocumentationPDF(
   });
 }
 
+/**
+ * GENERATE STOCK TAKE WORKSHEET PDF
+ * A branded worksheet for physical inventory counting
+ */
+export async function generateStockTakeWorksheetPDF(
+  res: Response,
+  data: {
+    title: string;
+    branchName: string;
+    items: any[];
+    generatedBy: string;
+  }
+) {
+  const { title, branchName, items, generatedBy } = data;
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  const safeTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+  res.setHeader('Content-Disposition', `attachment; filename=FG_Worksheet_${safeTitle}_${new Date().toISOString().split('T')[0]}.pdf`);
+  doc.pipe(res);
+
+  const subtitle = `Branch: ${branchName} | Generated By: ${generatedBy}`;
+  let y = drawBrandedHeader(doc, title.toUpperCase(), subtitle);
+
+  const cols = [
+    { label: '#',           x: 42,  width: 25 },
+    { label: 'Item Name',   x: 67,  width: 170 },
+    { label: 'SKU',         x: 237, width: 150 },
+    { label: 'System Qty',  x: 387, width: 60, align: 'right' },
+    { label: 'Physical Count', x: 447, width: 106, align: 'right' },
+  ];
+
+  y = drawTableHeader(doc, y, cols);
+
+  items.forEach((item, i) => {
+    if (y > doc.page.height - 70) {
+      drawFooter(doc);
+      doc.addPage();
+      y = drawBrandedHeader(doc, title.toUpperCase() + ' (cont.)', subtitle);
+      y = drawTableHeader(doc, y, cols);
+    }
+
+    const rowY = y;
+    if (i % 2 === 0) doc.rect(40, rowY, doc.page.width - 80, 20).fill(ROW_BG);
+    
+    doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
+    doc.text(String(i + 1), 42, rowY + 6, { width: 25 });
+    doc.text(item.name || item.item?.name || '—', 67, rowY + 6, { width: 170, ellipsis: true });
+    doc.text(item.item_sku || item.item_code || '—', 237, rowY + 6, { width: 150, ellipsis: true });
+    doc.text(String(item.system_quantity || item.current_stock || 0), 387, rowY + 6, { width: 60, align: 'right' });
+    
+    // Draw an input box for physical count
+    doc.rect(455, rowY + 3, 90, 14).stroke(BORDER);
+
+    doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, rowY + 20).lineTo(doc.page.width - 40, rowY + 20).stroke();
+    y = rowY + 20;
+  });
+
+  if (items.length === 0) {
+    doc.fontSize(10).fillColor(SECONDARY).text('No items found for this worksheet.', 40, y + 20);
+  }
+
+  drawFooter(doc);
+  doc.end();
+}
+
+/**
+ * A branded A3 Landscape Payroll Summary report using the new payroll_runs/records tables.
+ */
+export async function generateBrandedPayrollSummaryV2(
+  res: Response,
+  runData: any,
+  records: any[],
+  branchName: string = 'All Branches'
+) {
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthName = monthNames[(runData.month || 1) - 1];
+  const title = `PAYROLL SUMMARY REPORT - ${monthName.toUpperCase()} ${runData.year}`;
+  const subtitle = `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()} · Total Employees: ${records.length}`;
+
+  // A3 LANDSCAPE: 1190 × 842 pt
+  const doc = new PDFDocument({ margin: 36, size: 'A3', layout: 'landscape' });
+  
+  const filename = `Payroll_Summary_${branchName.replace(/\s+/g, '_')}_${monthName}_${runData.year}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  doc.pipe(res);
+
+  const MARGIN = 36;
+  const PAGE_W = 1190;
+  
+  // Custom header for A3
+  const drawHeader = (d: PDFKit.PDFDocument, t: string, st?: string) => {
+    const logoPath = getLogoPath();
+    if (fs.existsSync(logoPath)) {
+      d.image(logoPath, MARGIN, 28, { width: 60 });
+    }
+    d.fillColor(PRIMARY).fontSize(18).font('Helvetica-Bold').text(COMPANY_NAME, MARGIN + 70, 30);
+    d.fontSize(9).font('Helvetica').fillColor(SECONDARY).text(COMPANY_ADDRESS, MARGIN + 70, 50);
+    
+    // Right side info
+    d.fontSize(9).font('Helvetica-Bold').fillColor(PRIMARY).text(t, PAGE_W - MARGIN - 400, 32, { width: 400, align: 'right' });
+    if (st) d.fontSize(8).font('Helvetica').fillColor(SECONDARY).text(st, PAGE_W - MARGIN - 400, 48, { width: 400, align: 'right' });
+
+    d.strokeColor(BORDER).lineWidth(1).moveTo(MARGIN, 94).lineTo(PAGE_W - MARGIN, 94).stroke();
+    d.rect(MARGIN, 95, PAGE_W - (MARGIN * 2), 3).fill(GOLD);
+    return 115;
+  };
+
+  let y = drawHeader(doc, title, subtitle);
+
+  // Column definitions for A3 Landscape
+  const C = [
+    { label: '#',          x: 36,   width: 25 },
+    { label: 'Emp ID',     x: 61,   width: 55 },
+    { label: 'Staff Name', x: 116,  width: 155 },
+    { label: 'Role',       x: 271,  width: 95 },
+    { label: 'Basic',      x: 366,  width: 80,  align: 'right' },
+    { label: 'Additions',  x: 446,  width: 75,  align: 'right' },
+    { label: 'Gross',      x: 521,  width: 85,  align: 'right' },
+    { label: 'NSSF',       x: 606,  width: 65,  align: 'right' },
+    { label: 'SHIF',       x: 671,  width: 65,  align: 'right' },
+    { label: 'Loans',      x: 736,  width: 65,  align: 'right' },
+    { label: 'Advances',   x: 801,  width: 65,  align: 'right' },
+    { label: 'Credits',    x: 866,  width: 70,  align: 'right' },
+    { label: 'Total Ded.', x: 936,  width: 85,  align: 'right' },
+    { label: 'Net Pay',    x: 1021, width: 90,  align: 'right' },
+  ];
+
+  const drawTHeader = (d: PDFKit.PDFDocument, curY: number) => {
+    d.rect(MARGIN, curY, PAGE_W - (MARGIN * 2), 22).fill(HEADER_BG);
+    d.fillColor('white').fontSize(8.5).font('Helvetica-Bold');
+    C.forEach(col => {
+      d.text(col.label, col.x, curY + 6, { width: col.width, align: (col.align as any) || 'left' });
+    });
+    return curY + 22;
+  };
+
+  y = drawTHeader(doc, y);
+
+  records.forEach((r, i) => {
+    if (y > 750) { // Page break
+      drawFooter(doc);
+      doc.addPage();
+      y = drawHeader(doc, title + ' (cont.)', subtitle);
+      y = drawTHeader(doc, y);
+    }
+
+    const shade = i % 2 === 0;
+    if (shade) doc.rect(MARGIN, y, PAGE_W - (MARGIN * 2), 20).fill(ROW_BG);
+    
+    doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
+
+    // Extract categories from deductions array
+    const ded = r.deductions || [];
+    const getAmt = (cat: string) => ded.filter((d: any) => (d.category || '').toLowerCase() === cat.toLowerCase()).reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0);
+    
+    const nssf = getAmt('nssf');
+    const shif = getAmt('shif');
+    const loans = getAmt('loan');
+    const advances = getAmt('advance');
+    const credits = getAmt('credit_bill');
+    const additions = parseFloat(r.total_additions || 0);
+
+    const values = [
+      { v: String(i + 1), x: C[0].x, w: C[0].width },
+      { v: r.employee_code || '—', x: C[1].x, w: C[1].width },
+      { v: r.employee_name || '—', x: C[2].x, w: C[2].width },
+      { v: r.role || 'Staff', x: C[3].x, w: C[3].width },
+      { v: fmt(r.basic_salary), x: C[4].x, w: C[4].width, a: 'right' },
+      { v: additions > 0 ? fmt(additions) : '—', x: C[5].x, w: C[5].width, a: 'right' },
+      { v: fmt(r.gross_pay), x: C[6].x, w: C[6].width, a: 'right' },
+      { v: nssf > 0 ? fmt(nssf) : '—', x: C[7].x, w: C[7].width, a: 'right' },
+      { v: shif > 0 ? fmt(shif) : '—', x: C[8].x, w: C[8].width, a: 'right' },
+      { v: loans > 0 ? fmt(loans) : '—', x: C[9].x, w: C[9].width, a: 'right' },
+      { v: advances > 0 ? fmt(advances) : '—', x: C[10].x, w: C[10].width, a: 'right' },
+      { v: credits > 0 ? fmt(credits) : '—', x: C[11].x, w: C[11].width, a: 'right' },
+      { v: fmt(r.total_deductions), x: C[12].x, w: C[12].width, a: 'right' },
+      { v: fmt(r.net_pay), x: C[13].x, w: C[13].width, a: 'right' },
+    ];
+
+    values.forEach(val => {
+      doc.text(val.v, val.x, y + 5, { width: val.w, align: (val.a as any) || 'left', ellipsis: true });
+    });
+
+    doc.strokeColor(BORDER).lineWidth(0.2).moveTo(MARGIN, y + 20).lineTo(PAGE_W - MARGIN, y + 20).stroke();
+    y += 20;
+  });
+
+  // Totals Row
+  doc.rect(MARGIN, y, PAGE_W - (MARGIN * 2), 24).fill('#eef2f7');
+  doc.fillColor(PRIMARY).fontSize(9).font('Helvetica-Bold');
+  doc.text('TOTALS', C[0].x, y + 7);
+  
+  const sumCols = [
+    { v: (parseFloat(runData.total_basic_salary) || 0).toLocaleString(), x: C[4].x, w: C[4].width },
+    { v: records.reduce((s, r) => s + (parseFloat(r.total_additions) || 0), 0).toLocaleString(), x: C[5].x, w: C[5].width },
+    { v: (parseFloat(runData.total_gross_pay) || 0).toLocaleString(), x: C[6].x, w: C[6].width },
+    { v: (parseFloat(runData.total_deductions) || 0).toLocaleString(), x: C[12].x, w: C[12].width },
+    { v: (parseFloat(runData.total_net_pay) || 0).toLocaleString(), x: C[13].x, w: C[13].width },
+  ];
+
+  sumCols.forEach(sc => {
+    doc.text(sc.v, sc.x, y + 7, { width: sc.w, align: 'right' });
+  });
+
+  // Summary box
+  y += 40;
+  if (y > 700) {
+    drawFooter(doc);
+    doc.addPage();
+    y = 50;
+  }
+
+  drawSummaryBox(doc, y, [
+    { label: 'Gross Salary Total', value: fmt(runData.total_gross_pay) },
+    { label: 'Total Deductions',   value: fmt(runData.total_deductions) },
+    { label: 'Net Pay Total (KES)', value: fmt(runData.total_net_pay) },
+  ]);
+
+  drawFooter(doc);
+  doc.end();
+}
 
 
 

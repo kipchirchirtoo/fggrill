@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
 import {
-  getPayrollSummary,
-  calculatePayroll,
-  processPayrollPayment,
-  processBulkPayroll,
-  getBanks,
-  verifyBankAccount,
-  generatePayslip
+  getDraftPayroll,
+  approvePayroll,
+  addAdjustment,
+  getAdjustments,
+  getPayrollHistory,
+  generatePayslip,
+  downloadPayslipsZip,
+  downloadSummaryPDF
 } from '../controllers/payroll.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -16,37 +17,56 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Get current dynamic draft (creates one if it doesn't exist for the period)
 router.get(
-  '/summary',
+  '/draft',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
-  getPayrollSummary
+  getDraftPayroll
 );
 
+// Get history of approved payroll runs
+router.get(
+  '/history',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
+  getPayrollHistory
+);
+
+// Approve and lock a draft payroll run
 router.post(
-  '/calculate',
+  '/approve',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
-  calculatePayroll
+  approvePayroll
 );
 
+// Add a custom addition or deduction
 router.post(
-  '/pay',
+  '/adjustments',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
-  processPayrollPayment
+  addAdjustment
 );
 
-router.post(
-  '/bulk-pay',
+// Get additions/deductions for a specific staff member and period
+router.get(
+  '/adjustments',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
-  processBulkPayroll
+  getAdjustments
 );
 
-// Get banks for payment setup
-router.get('/banks', getBanks);
-
-// Verify bank account
-router.post('/verify-bank', verifyBankAccount);
-
-// Generate payslip
+// Generate payslip PDF
 router.get('/:id/payslip', generatePayslip);
+
+// Download all payslips as ZIP for a run
+router.get(
+  '/run/:runId/payslips-zip',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
+  downloadPayslipsZip
+);
+
+// Download payroll summary PDF
+router.get(
+  '/run/:runId/summary-pdf',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
+  downloadSummaryPDF
+);
 
 export default router;

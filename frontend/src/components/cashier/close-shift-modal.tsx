@@ -7,12 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     DollarSign, Waves, Ticket, Users, Bed,
     UtensilsCrossed, Wine, Plus, CreditCard,
     Banknote, Building, AlertCircle, CheckCircle2, Clock,
-    Trash2, User
+    Trash2, User, X
 } from 'lucide-react';
 import {
     Select,
@@ -237,9 +236,12 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
         return revenue.reduce((sum, val) => sum + val, 0);
     };
 
-    const expectedClosing = currentShift?.opening_float + (currentShift?.total_cash_sales || 0);
-    const variance = formData.closing_float - expectedClosing;
     const totalRevenue = calculateTotalRevenue();
+    
+    // Strict accounting formula for frontend expectation
+    // Expected = Opening Float + Cash Revenue + Credit Payments - (Expenses/Refunds = 0 here for now)
+    const expectedClosing = (currentShift?.opening_float || 0) + totalRevenue + (formData.paid_bills_value || 0);
+    const variance = (formData.closing_float || 0) - expectedClosing;
 
     const handleSubmit = () => {
         onSubmit(formData);
@@ -247,625 +249,347 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl w-[95vw] h-[90vh] flex flex-col p-0 overflow-hidden bg-white border-none shadow-2xl">
-                <div className="px-6 py-5 border-b border-stone-100 bg-stone-50/50">
-                    <DialogHeader>
-                        <DialogTitle className="text-2xl font-black text-stone-900 tracking-tight">Close Shift - {currentShift?.shift_number}</DialogTitle>
-                        <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2 mt-1">
-                            <Clock className="h-3 w-3" />
-                            Started: {currentShift?.shift_start && new Date(currentShift.shift_start).toLocaleString()}
-                        </p>
-                    </DialogHeader>
-                </div>
+            <DialogContent className="max-w-[85vw] w-[85vw] h-[90vh] flex p-0 overflow-hidden bg-white border border-slate-200 rounded-none shadow-2xl focus:outline-none focus:ring-0">
+                
+                {/* ── Absolute Close Button ── */}
+                <button 
+                    onClick={onClose}
+                    className="absolute top-6 right-6 z-50 p-3 bg-white/80 backdrop-blur-md border border-slate-200 text-slate-400 hover:text-slate-900 hover:bg-white hover:border-slate-400 transition-all rounded-none"
+                >
+                    <X className="h-6 w-6" />
+                </button>
 
-                <div className="flex-1 overflow-y-auto p-6">
-                    <Tabs defaultValue="cash" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 mb-8 bg-stone-100/50 p-1 rounded-xl">
-                            <TabsTrigger value="cash" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Cash Float</TabsTrigger>
-                            <TabsTrigger value="revenue" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Revenue</TabsTrigger>
-                            <TabsTrigger value="credit" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Credit/Bills</TabsTrigger>
-                            <TabsTrigger value="banking" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Banking</TabsTrigger>
-                        </TabsList>
+                {/* ── Left Sidebar: Shift Summary (Light Theme) ── */}
+                <div className="w-[400px] bg-slate-50/50 flex flex-col p-10 shrink-0 border-r border-slate-200/60 backdrop-blur-sm rounded-none">
+                    <div className="mb-16">
+                        <div className="p-3 bg-slate-50 rounded-xl w-fit mb-6 shadow-sm border border-slate-100">
+                            <Clock className="h-6 w-6 text-slate-400" />
+                        </div>
+                        <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-3">Shift {currentShift?.shift_number}</h2>
+                        <div className="space-y-2 opacity-50">
+                            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                <Clock className="h-3 w-3" /> {currentShift?.shift_start && new Date(currentShift.shift_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                <User className="h-3 w-3" /> {currentShift?.cashier_id?.slice(0, 8) || '---'}
+                            </p>
+                        </div>
+                    </div>
 
-                        {/* Tab 1: Cash Float */}
-                        <TabsContent value="cash" className="space-y-6 mt-0">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 bg-stone-50 rounded-xl border border-stone-100">
-                                    <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                        <Banknote className="h-3 w-3" /> Opening Float
-                                    </p>
-                                    <p className="text-2xl font-black text-stone-900">
-                                        KES {currentShift?.opening_float?.toLocaleString() || 0}
-                                    </p>
-                                </div>
-                                <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                                    <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                        <DollarSign className="h-3 w-3" /> Cash Sales
-                                    </p>
-                                    <p className="text-2xl font-black text-emerald-700">
-                                        KES {currentShift?.total_cash_sales?.toLocaleString() || 0}
-                                    </p>
-                                </div>
-                            </div>
+                    <div className="flex-1 space-y-8">
+                        {/* Expected Cash Flow Badge */}
+                        <div className="p-8 bg-white rounded-none border border-slate-100 shadow-sm">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-3">Expected Cash Flow</p>
+                            <p className="text-4xl font-black text-slate-900 tabular-nums tracking-tighter">
+                                <span className="text-sm font-bold text-slate-300 mr-2 uppercase">KES</span>
+                                {expectedClosing?.toLocaleString()}
+                            </p>
+                        </div>
 
-                            <div className="space-y-3">
-                                <Label className="text-[12px] font-bold text-stone-900 uppercase tracking-widest">Actual Closing Cash Count *</Label>
-                                <Input
-                                    type="number"
-                                    placeholder="Enter physical cash amount"
-                                    value={formData.closing_float || ''}
-                                    onChange={(e) => updateField('closing_float', parseFloat(e.target.value) || 0)}
-                                    className="h-14 text-2xl font-black text-stone-900 border-2 focus:border-stone-900 transition-all rounded-xl px-6"
-                                />
-                            </div>
-
-                            {formData.closing_float > 0 && (
-                                <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100">
-                                        <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mb-1">Expected Cash</p>
-                                        <p className="text-xl font-black text-blue-700">
-                                            KES {expectedClosing?.toLocaleString()}
-                                        </p>
-                                    </div>
-                                    <div className={`p-4 rounded-xl border ${variance === 0 ? 'bg-emerald-50/50 border-emerald-100' : variance > 0 ? 'bg-orange-50/50 border-orange-100' : 'bg-rose-50/50 border-rose-100'}`}>
-                                        <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${variance === 0 ? 'text-emerald-500' : variance > 0 ? 'text-orange-500' : 'text-rose-500'}`}>
-                                            Net Variance
-                                        </p>
-                                        <p className={`text-xl font-black ${variance === 0 ? 'text-emerald-700' : variance > 0 ? 'text-orange-700' : 'text-rose-700'}`}>
-                                            {variance > 0 ? '+' : ''}KES {variance?.toLocaleString()}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </TabsContent>
-
-                        {/* Tab 2: Revenue by Source */}
-                        <TabsContent value="revenue" className="space-y-6 mt-0 pb-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Swimming Pool */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Waves className="h-4 w-4 text-blue-500" />
-                                            Swimming Pool
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.pool_na}
-                                                onCheckedChange={(checked) => updateField('pool_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.pool_na}
-                                        value={formData.pool_na ? '' : formData.swimming_pool_revenue || ''}
-                                        onChange={(e) => updateField('swimming_pool_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Pool Tokens */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Ticket className="h-4 w-4 text-cyan-500" />
-                                            Pool Tokens
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.pool_tokens_na}
-                                                onCheckedChange={(checked) => updateField('pool_tokens_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.pool_tokens_na}
-                                        value={formData.pool_tokens_na ? '' : formData.pool_token_revenue || ''}
-                                        onChange={(e) => updateField('pool_token_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Conference */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Users className="h-4 w-4 text-purple-500" />
-                                            Conference
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.conference_na}
-                                                onCheckedChange={(checked) => updateField('conference_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.conference_na}
-                                        value={formData.conference_na ? '' : formData.conference_revenue || ''}
-                                        onChange={(e) => updateField('conference_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Room Bookings */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Bed className="h-4 w-4 text-indigo-500" />
-                                            Rooms
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.rooms_na}
-                                                onCheckedChange={(checked) => updateField('rooms_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.rooms_na}
-                                        value={formData.rooms_na ? '' : formData.room_booking_revenue || ''}
-                                        onChange={(e) => updateField('room_booking_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Restaurant */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                        <UtensilsCrossed className="h-4 w-4 text-orange-500" />
-                                        Restaurant
-                                    </Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.restaurant_revenue || ''}
-                                        onChange={(e) => updateField('restaurant_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Bar */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                        <Wine className="h-4 w-4 text-rose-500" />
-                                        Bar
-                                    </Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.bar_revenue || ''}
-                                        onChange={(e) => updateField('bar_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Catering */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <UtensilsCrossed className="h-4 w-4 text-amber-500" />
-                                            Catering
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.catering_na}
-                                                onCheckedChange={(checked) => updateField('catering_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.catering_na}
-                                        value={formData.catering_na ? '' : formData.catering_revenue || ''}
-                                        onChange={(e) => updateField('catering_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Spa */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Waves className="h-4 w-4 text-teal-500" />
-                                            Spa
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.spa_na}
-                                                onCheckedChange={(checked) => updateField('spa_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.spa_na}
-                                        value={formData.spa_na ? '' : formData.spa_revenue || ''}
-                                        onChange={(e) => updateField('spa_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Sports Bar */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Wine className="h-4 w-4 text-green-500" />
-                                            Sports Bar
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.sports_bar_na}
-                                                onCheckedChange={(checked) => updateField('sports_bar_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.sports_bar_na}
-                                        value={formData.sports_bar_na ? '' : formData.sports_bar_revenue || ''}
-                                        onChange={(e) => updateField('sports_bar_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Executive Bar */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Wine className="h-4 w-4 text-violet-500" />
-                                            Executive Bar
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.executive_bar_na}
-                                                onCheckedChange={(checked) => updateField('executive_bar_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.executive_bar_na}
-                                        value={formData.executive_bar_na ? '' : formData.executive_bar_revenue || ''}
-                                        onChange={(e) => updateField('executive_bar_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Car Wash */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <Waves className="h-4 w-4 text-sky-500" />
-                                            Car Wash
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.car_wash_na}
-                                                onCheckedChange={(checked) => updateField('car_wash_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.car_wash_na}
-                                        value={formData.car_wash_na ? '' : formData.car_wash_revenue || ''}
-                                        onChange={(e) => updateField('car_wash_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Cashier Station */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                            <CreditCard className="h-4 w-4 text-slate-500" />
-                                            Cashier Station
-                                        </Label>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                checked={formData.cashier_station_na}
-                                                onCheckedChange={(checked) => updateField('cashier_station_na', checked)}
-                                                className="border-stone-300"
-                                            />
-                                            <span className="text-[10px] font-bold text-stone-500 uppercase">N/A</span>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        disabled={formData.cashier_station_na}
-                                        value={formData.cashier_station_na ? '' : formData.cashier_station_revenue || ''}
-                                        onChange={(e) => updateField('cashier_station_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-
-                                {/* Other */}
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100 transition-all focus-within:border-stone-400 md:col-span-2">
-                                    <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                        <Plus className="h-4 w-4 text-stone-500" />
-                                        Other
-                                    </Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.other_revenue || ''}
-                                        onChange={(e) => updateField('other_revenue', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white rounded-lg px-4"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="p-5 bg-stone-900 text-white rounded-2xl shadow-xl shadow-stone-900/10">
-                                <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mb-1">Shift Total Revenue (All Streams)</p>
-                                <p className="text-3xl font-black">
-                                    KES {totalRevenue.toLocaleString()}
+                        {/* Variance Analysis */}
+                        <div className={`p-8 rounded-none border transition-all duration-500 bg-white border-slate-100`}>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-slate-400">Variance Analysis</p>
+                            <div className="flex items-center justify-between">
+                                <p className={`text-5xl font-black tabular-nums tracking-tighter ${
+                                    !formData.closing_float ? 'text-slate-200' : 'text-slate-900'
+                                }`}>
+                                    {formData.closing_float ? (variance > 0 ? `+${variance.toLocaleString()}` : variance.toLocaleString()) : '0'}
                                 </p>
-                            </div>
-                        </TabsContent>
-
-                        {/* Tab 3: Credit & Bills */}
-                        <TabsContent value="credit" className="space-y-6 mt-0">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Credit Bills Section */}
-                                <div className="space-y-4">
-                                    <div className="p-4 bg-rose-50/50 rounded-xl border border-rose-100">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <Label className="text-[11px] font-bold text-rose-600 uppercase tracking-widest flex items-center gap-2">
-                                                <User className="h-4 w-4" /> Credit Bills (Staff)
-                                            </Label>
-                                            <span className="text-xs font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
-                                                Total: {formData.credit_bills_taken?.toLocaleString()} ({formData.credit_bills_count})
-                                            </span>
-                                        </div>
-
-                                        <div className="space-y-3 mb-4">
-                                            <Select
-                                                value={newCreditBill.staffId}
-                                                onValueChange={(val) => setNewCreditBill({ ...newCreditBill, staffId: val })}
-                                            >
-                                                <SelectTrigger className="bg-white">
-                                                    <SelectValue placeholder="Select Staff Member" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {staffList.map((staff) => (
-                                                        <SelectItem key={staff.id} value={staff.id}>
-                                                            {staff.first_name} {staff.last_name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    type="number"
-                                                    placeholder="Amount"
-                                                    value={newCreditBill.amount}
-                                                    onChange={(e) => setNewCreditBill({ ...newCreditBill, amount: e.target.value })}
-                                                    className="bg-white"
-                                                />
-                                                <IOSButton
-                                                    onClick={addCreditBill}
-                                                    variant="secondary"
-                                                    className="bg-rose-100 text-rose-700 hover:bg-rose-200"
-                                                    disabled={!newCreditBill.staffId || !newCreditBill.amount}
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </IOSButton>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                                            {formData.credit_bills_details?.map((bill: any) => (
-                                                <div key={bill.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-rose-100 text-sm">
-                                                    <div>
-                                                        <p className="font-bold text-stone-700">{bill.name}</p>
-                                                        <p className="text-xs text-stone-400">{new Date(bill.timestamp).toLocaleTimeString()}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="font-bold text-rose-600">{bill.amount.toLocaleString()}</span>
-                                                        <button
-                                                            onClick={() => removeCreditBill(bill.id)}
-                                                            className="text-stone-400 hover:text-rose-600 transition-colors"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {(!formData.credit_bills_details || formData.credit_bills_details.length === 0) && (
-                                                <p className="text-center text-xs text-stone-400 py-4 italic">No credit bills added</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Paid Bills Section */}
-                                <div className="space-y-4">
-                                    <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <Label className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-2">
-                                                <CheckCircle2 className="h-4 w-4" /> Paid Bills
-                                            </Label>
-                                            <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                                                Total: {formData.paid_bills_value?.toLocaleString()} ({formData.paid_bills_count})
-                                            </span>
-                                        </div>
-
-                                        <div className="space-y-3 mb-4">
-                                            <Select
-                                                value={newPaidBill.staffId}
-                                                onValueChange={(val) => setNewPaidBill({ ...newPaidBill, staffId: val })}
-                                            >
-                                                <SelectTrigger className="bg-white">
-                                                    <SelectValue placeholder="Select Payer (Staff)" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {staffList.map((staff) => (
-                                                        <SelectItem key={staff.id} value={staff.id}>
-                                                            {staff.first_name} {staff.last_name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    type="number"
-                                                    placeholder="Amount"
-                                                    value={newPaidBill.amount}
-                                                    onChange={(e) => setNewPaidBill({ ...newPaidBill, amount: e.target.value })}
-                                                    className="bg-white"
-                                                />
-                                                <IOSButton
-                                                    onClick={addPaidBill}
-                                                    variant="secondary"
-                                                    className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                                                    disabled={!newPaidBill.staffId || !newPaidBill.amount}
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </IOSButton>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                                            {formData.paid_bills_details?.map((bill: any) => (
-                                                <div key={bill.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-emerald-100 text-sm">
-                                                    <div>
-                                                        <p className="font-bold text-stone-700">{bill.name}</p>
-                                                        <p className="text-xs text-stone-400">{new Date(bill.timestamp).toLocaleTimeString()}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="font-bold text-emerald-600">{bill.amount.toLocaleString()}</span>
-                                                        <button
-                                                            onClick={() => removePaidBill(bill.id)}
-                                                            className="text-stone-400 hover:text-emerald-600 transition-colors"
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {(!formData.paid_bills_details || formData.paid_bills_details.length === 0) && (
-                                                <p className="text-center text-xs text-stone-400 py-4 italic">No paid bills added</p>
-                                            )}
-                                        </div>
-                                    </div>
+                                <div className={`p-4 rounded-xl bg-slate-100 text-slate-400`}>
+                                    {!formData.closing_float ? <Clock className="h-6 w-6" /> :
+                                     variance === 0 ? <CheckCircle2 className="h-6 w-6" /> : 
+                                     <AlertCircle className="h-6 w-6" />}
                                 </div>
                             </div>
+                            <p className={`text-[10px] font-bold mt-4 uppercase tracking-[0.1em] ${
+                                !formData.closing_float ? 'text-slate-300' : 'text-slate-500'
+                            }`}>
+                                {!formData.closing_float ? 'Enter actual cash count' :
+                                 variance === 0 ? 'Fully Reconciled' : 
+                                 variance > 0 ? 'Excess Balance' : 'Discrepancy Found'}
+                            </p>
+                        </div>
+                    </div>
 
-
-                        </TabsContent>
-
-                        {/* Tab 4: Banking */}
-                        <TabsContent value="banking" className="space-y-6 mt-0">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100">
-                                    <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                        <Banknote className="h-4 w-4 text-emerald-500" />
-                                        Physical Cash at Hand
-                                    </Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.cash_at_hand || ''}
-                                        onChange={(e) => updateField('cash_at_hand', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white"
-                                    />
-                                </div>
-                                <div className="space-y-3 p-4 bg-stone-50/50 rounded-xl border border-stone-100">
-                                    <Label className="flex items-center gap-2 text-[11px] font-bold text-stone-900 uppercase tracking-widest">
-                                        <Building className="h-4 w-4 text-blue-500" />
-                                        Commercial Bank Deposit
-                                    </Label>
-                                    <Input
-                                        type="number"
-                                        value={formData.cash_deposited || ''}
-                                        onChange={(e) => updateField('cash_deposited', parseFloat(e.target.value) || 0)}
-                                        placeholder="0.00"
-                                        className="h-11 font-bold bg-white"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <Label className="text-[11px] font-bold text-stone-900 uppercase tracking-widest">Deposit Transaction Reference</Label>
-                                <Input
-                                    type="text"
-                                    value={formData.bank_deposit_ref || ''}
-                                    onChange={(e) => updateField('bank_deposit_ref', e.target.value)}
-                                    placeholder="Enter deposit slip ID or mobile ref"
-                                    className="h-12 font-bold px-6 border-2 focus:border-stone-900 rounded-xl"
-                                />
-                            </div>
-
-                            <div className="space-y-3">
-                                <Label className="text-[11px] font-bold text-stone-900 uppercase tracking-widest">Shift Performance Notes (Optional)</Label>
-                                <Textarea
-                                    value={formData.notes || ''}
-                                    onChange={(e) => updateField('notes', e.target.value)}
-                                    placeholder="Brief summary of shift highlights, anomalies or specific events..."
-                                    className="min-h-[120px] p-5 bg-stone-50/50 border-stone-200 rounded-2xl resize-none text-[14px] font-medium leading-relaxed"
-                                />
-                            </div>
-                        </TabsContent>
-                    </Tabs>
+                    <div className="pt-8 mt-auto">
+                        <IOSButton 
+                            onClick={onClose} 
+                            variant="secondary" 
+                            className="w-full h-14 bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-900 text-xs font-black rounded-xl border border-slate-100 transition-all active:scale-95 uppercase tracking-widest shadow-sm"
+                        >
+                            Cancel and Return
+                        </IOSButton>
+                    </div>
                 </div>
 
-                <div className="p-6 border-t border-stone-100 bg-white flex items-center justify-end gap-3">
-                    <IOSButton
-                        onClick={onClose}
-                        variant="ghost"
-                        className="h-12 px-6 rounded-xl font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors"
-                        disabled={isLoading}
-                    >
-                        Keep Open
-                    </IOSButton>
-                    <IOSButton
-                        onClick={handleSubmit}
-                        className="h-12 px-8 rounded-xl font-bold bg-stone-900 text-white shadow-lg shadow-stone-900/20 hover:bg-stone-800 hover:shadow-stone-900/30 transition-all active:scale-95"
-                        disabled={isLoading || !formData.closing_float}
-                    >
-                        {isLoading ? (
-                            <span className="flex items-center gap-2">
-                                <Plus className="h-4 w-4 animate-spin" /> Finalizing...
-                            </span>
-                        ) : (
-                            <span className="flex items-center gap-2">
-                                <CheckCircle2 className="h-4 w-4" /> Confirm & Archive
-                            </span>
-                        )}
-                    </IOSButton>
+                {/* ── Main Content Area (Minimal Light Theme) ── */}
+                <div className="flex-1 overflow-y-auto px-16 py-20 custom-scrollbar bg-white">
+                    <div className="max-w-[1300px] mx-auto space-y-24 pb-32">
+
+                        {/* ── Section 1: Cash Reconciliation ── */}
+                        <section className="space-y-10">
+                            <div className="flex items-center gap-6 border-b border-slate-100 pb-8">
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/50">
+                                    <Banknote className="h-6 w-6 text-slate-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">I. Cash Reconciliation</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Verify physical cash drawer totals</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="p-8 bg-slate-50/50 rounded-none border border-slate-100 shadow-sm relative overflow-hidden group">
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-3">Opening Float</p>
+                                        <p className="text-3xl font-black text-slate-900 tabular-nums">
+                                            <span className="text-xs font-bold text-slate-300 mr-2 uppercase">KES</span>
+                                            {currentShift?.opening_float?.toLocaleString()}
+                                        </p>
+                                    </div>
+                                    <div className="p-8 bg-slate-50/50 rounded-none border border-slate-100 shadow-sm relative overflow-hidden group">
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-3">Cash Sales</p>
+                                        <p className="text-3xl font-black text-slate-900 tabular-nums">
+                                            <span className="text-xs font-bold text-slate-300 mr-2 uppercase">KES</span>
+                                            {currentShift?.cash_sales?.toLocaleString() || currentShift?.total_cash_sales?.toLocaleString()}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="p-8 bg-white rounded-none border-2 border-slate-900 shadow-2xl shadow-slate-900/5 relative overflow-hidden transition-all">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <Label className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">Actual Cash Count</Label>
+                                            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        </div>
+                                    </div>
+                                    <div className="relative">
+                                        <span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-300 font-black text-xl">KES</span>
+                                        <Input
+                                            type="number"
+                                            value={formData.closing_float || ''}
+                                            onChange={(e) => updateField('closing_float', parseFloat(e.target.value) || 0)}
+                                            placeholder="0.00"
+                                            className="h-20 text-6xl font-black bg-transparent border-none focus:ring-0 p-0 pl-16 tabular-nums placeholder:text-slate-100 rounded-xl"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* ── Section 2: Revenue Sources ── */}
+                        <section className="space-y-10">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-8">
+                                <div className="flex items-center gap-6">
+                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/50">
+                                        <UtensilsCrossed className="h-6 w-6 text-slate-400" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">II. Revenue Sources</h3>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Departmental revenue declarations</p>
+                                    </div>
+                                </div>
+                                <div className="px-6 py-3 bg-slate-900 rounded-xl shadow-lg shadow-slate-900/20">
+                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.2em] mb-1">Total Revenue</p>
+                                    <p className="text-xl font-black text-white tabular-nums">KES {totalRevenue.toLocaleString()}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {[
+                                    { label: 'Swimming Pool', id: 'swimming_pool_revenue', icon: Waves, na: 'pool_na' },
+                                    { label: 'Pool Tokens', id: 'pool_token_revenue', icon: Ticket, na: 'pool_tokens_na' },
+                                    { label: 'Conference', id: 'conference_revenue', icon: Users, na: 'conference_na' },
+                                    { label: 'Rooms', id: 'room_booking_revenue', icon: Bed, na: 'rooms_na' },
+                                    { label: 'Restaurant', id: 'restaurant_revenue', icon: UtensilsCrossed },
+                                    { label: 'Bar', id: 'bar_revenue', icon: Wine },
+                                    { label: 'Catering', id: 'catering_revenue', icon: UtensilsCrossed, na: 'catering_na' },
+                                    { label: 'Spa & Wellness', id: 'spa_revenue', icon: Waves, na: 'spa_na' },
+                                    { label: 'Sports Bar', id: 'sports_bar_revenue', icon: Wine, na: 'sports_bar_na' },
+                                    { label: 'Executive Bar', id: 'executive_bar_revenue', icon: Wine, na: 'executive_bar_na' },
+                                    { label: 'Car Wash', id: 'car_wash_revenue', icon: Waves, na: 'car_wash_na' },
+                                    { label: 'Cashier Station', id: 'cashier_station_revenue', icon: CreditCard, na: 'cashier_station_na' },
+                                ].map((item) => (
+                                    <div key={item.id} className={`p-6 bg-slate-50/50 rounded-none border border-slate-100 shadow-sm transition-all hover:bg-white hover:shadow-xl hover:-translate-y-0.5 group ${formData[item.na as keyof CloseShiftData] ? 'opacity-30 grayscale' : ''}`}>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <Label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                                <item.icon className={`h-4 w-4 text-slate-400`} /> {item.label}
+                                            </Label>
+                                            {item.na && (
+                                                <Checkbox
+                                                    checked={!!formData[item.na as keyof CloseShiftData]}
+                                                    onCheckedChange={(checked) => updateField(item.na as keyof CloseShiftData, checked)}
+                                                    className="h-3 w-3 rounded-full border-slate-300"
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="relative">
+                                            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">KES</span>
+                                            <Input
+                                                type="number"
+                                                disabled={!!formData[item.na as keyof CloseShiftData]}
+                                                value={(formData[item.na as keyof CloseShiftData] ? '' : (formData[item.id as keyof CloseShiftData] ?? '')) as string | number}
+                                                onChange={(e) => updateField(item.id as keyof CloseShiftData, parseFloat(e.target.value) || 0)}
+                                                className="h-10 text-xl font-black bg-transparent border-none focus:ring-0 p-0 pl-8 tabular-nums placeholder:text-slate-200 rounded-xl"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* ── Section 3: Credit & Bills ── */}
+                        <section className="space-y-10">
+                            <div className="flex items-center gap-6 border-b border-slate-100 pb-8">
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/50">
+                                    <CreditCard className="h-6 w-6 text-slate-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">III. Credit & Bills</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Reconcile staff credit and debt clearance</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div className="p-8 bg-slate-50/50 rounded-none border border-slate-100">
+                                    <div className="flex items-center justify-between mb-8">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                            <User className="h-4 w-4" /> Staff Credit Issues
+                                        </p>
+                                        <p className="text-2xl font-black text-slate-900 tabular-nums">KES {formData.credit_bills_taken?.toLocaleString()}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 mb-8">
+                                        <Select value={newCreditBill.staffId} onValueChange={(val) => setNewCreditBill({ ...newCreditBill, staffId: val })}>
+                                            <SelectTrigger className="h-12 bg-white border-slate-100 rounded-xl text-xs font-bold px-4">
+                                                <SelectValue placeholder="Staff" />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-xl border-slate-100">
+                                                {staffList.map((staff) => (
+                                                    <SelectItem key={staff.id} value={staff.id}>{staff.first_name} {staff.last_name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                type="number"
+                                                placeholder="Amount"
+                                                value={newCreditBill.amount}
+                                                onChange={(e) => setNewCreditBill({ ...newCreditBill, amount: e.target.value })}
+                                                className="h-12 bg-white border-slate-100 rounded-xl px-4 text-xs font-bold"
+                                            />
+                                            <IOSButton onClick={addCreditBill} className="bg-slate-900 hover:bg-black text-white h-12 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-slate-200" disabled={!newCreditBill.staffId || !newCreditBill.amount}>
+                                                <Plus className="h-5 w-5" />
+                                            </IOSButton>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                        {(formData.credit_bills_details || []).map((bill: any) => (
+                                            <div key={bill.id} className="flex items-center justify-between p-4 bg-white rounded-none border border-slate-50 shadow-sm group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400 uppercase">
+                                                        {bill.name.substring(0, 2)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-black text-slate-900">{bill.name}</p>
+                                                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{new Date(bill.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-sm font-black text-slate-600 tabular-nums">{bill.amount.toLocaleString()}</span>
+                                                    <button onClick={() => removeCreditBill(bill.id)} className="p-2 text-slate-200 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="p-8 bg-slate-50/50 rounded-none border border-slate-100">
+                                    <div className="flex items-center justify-between mb-8">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                            <CheckCircle2 className="h-4 w-4" /> Debt Receipts
+                                        </p>
+                                        <p className="text-2xl font-black text-slate-900 tabular-nums">KES {formData.paid_bills_value?.toLocaleString()}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 mb-8">
+                                        <Select value={newPaidBill.staffId} onValueChange={(val) => setNewPaidBill({ ...newPaidBill, staffId: val })}>
+                                            <SelectTrigger className="h-12 bg-white border-slate-100 rounded-xl text-xs font-bold px-4">
+                                                <SelectValue placeholder="Payer" />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-xl border-slate-100">
+                                                {staffList.map((staff) => (
+                                                    <SelectItem key={staff.id} value={staff.id}>{staff.first_name} {staff.last_name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                type="number"
+                                                placeholder="Amount"
+                                                value={newPaidBill.amount}
+                                                onChange={(e) => setNewPaidBill({ ...newPaidBill, amount: e.target.value })}
+                                                className="h-12 bg-white border-slate-100 rounded-xl px-4 text-xs font-bold"
+                                            />
+                                            <IOSButton onClick={addPaidBill} className="bg-slate-900 hover:bg-black text-white h-12 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-slate-200" disabled={!newPaidBill.staffId || !newPaidBill.amount}>
+                                                <Plus className="h-5 w-5" />
+                                            </IOSButton>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                        {(formData.paid_bills_details || []).map((bill: any) => (
+                                            <div key={bill.id} className="flex items-center justify-between p-4 bg-white rounded-none border border-slate-50 shadow-sm group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400 uppercase">
+                                                        {bill.name.substring(0, 2)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-black text-slate-900">{bill.name}</p>
+                                                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{new Date(bill.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-sm font-black text-slate-600 tabular-nums">{bill.amount.toLocaleString()}</span>
+                                                    <button onClick={() => removePaidBill(bill.id)} className="p-2 text-slate-200 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* ── Final Section: Handover Notes ── */}
+                        <section className="space-y-10 pt-16 border-t border-slate-100">
+                            <div className="flex items-center gap-6">
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <Plus className="h-6 w-6 text-slate-400" />
+                                </div>
+                                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Handover Notes</h3>
+                            </div>
+                            <Textarea
+                                placeholder="Any observations or handover notes..."
+                                value={formData.notes || ''}
+                                onChange={(e) => updateField('notes', e.target.value)}
+                                className="min-h-[150px] text-lg font-medium bg-slate-50 border-none rounded-xl p-8 focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all shadow-inner placeholder:text-slate-200"
+                            />
+                        </section>
+
+                        {/* ── Submission Footer ── */}
+                        <div className="pt-20 pb-16 flex justify-center">
+                            <IOSButton 
+                                onClick={handleSubmit} 
+                                loading={isLoading}
+                                className="h-20 px-16 bg-slate-900 hover:bg-black text-white rounded-xl text-xl font-black shadow-2xl shadow-slate-900/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-4"
+                                disabled={isLoading || !formData.closing_float}
+                            >
+                                <CheckCircle2 className="h-6 w-6 text-white" />
+                                Archive Shift Log
+                            </IOSButton>
+                        </div>
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>

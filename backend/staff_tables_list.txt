@@ -1,0 +1,17 @@
+staff_advances
+staff_attendance
+staff_credit_bills
+staff_documents
+staff_employment_history
+staff_leave
+staff_loan_payments
+staff_loans
+staff_monthly_statutory_deductions
+staff_payroll
+staff_payroll_adjustments
+staff_payroll_items
+staff_performance
+staff_profiles
+staff_schedules
+staff_shifts
+staff_usage_summary
