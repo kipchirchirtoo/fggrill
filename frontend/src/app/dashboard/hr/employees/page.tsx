@@ -27,6 +27,7 @@ interface Staff {
     department?: string;
     phone?: string;
     national_id?: string;
+    id_number?: string;
     status: 'active' | 'inactive';
     nssf_enabled?: boolean;
     shif_enabled?: boolean;
@@ -515,7 +516,7 @@ export default function HREmployeesPage() {
                                                         </div>
                                                         <div>
                                                             <p className="text-[14px] font-bold text-stone-900 leading-none">{member.first_name} {member.last_name}</p>
-                                                            <p className="text-[11px] text-stone-400 mt-1 font-medium select-all">{member.id.substring(0, 8)}</p>
+                                                            <p className="text-[11px] text-stone-400 mt-1 font-medium select-all">{member.id_number || member.id.substring(0, 8)}</p>
                                                         </div>
                                                     </div>
                                                 </td>

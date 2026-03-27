@@ -211,8 +211,8 @@ export default function AdminStaffPage() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Team Management</h1>
-              <p className="text-stone-500">Manage employee records, roles, and branch assignments</p>
+              <h1 className="text-[28px] font-bold text-stone-900 tracking-tight font-sf-pro-display">Personnel Registry</h1>
+              <p className="text-stone-500">Manage employee records, job roles, and department assignments</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -426,7 +426,7 @@ export default function AdminStaffPage() {
               <WizardStepIndicator
                 steps={[
                   { id: 1, title: 'Personal Info', description: 'Name & contact' },
-                  { id: 2, title: 'Department & Position', description: 'Work assignment' },
+                  { id: 2, title: 'Department & Role', description: 'Work assignment' },
                   { id: 3, title: 'Review', description: 'Confirm details' },
                 ]}
                 currentStep={wizardStep - 1}
@@ -516,11 +516,11 @@ export default function AdminStaffPage() {
                       {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Position / Function</label>
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Role / Position</label>
                       <Input
                         value={formData.position}
                         onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                        placeholder="e.g. Head Chef, Waiter, Room Attendant"
+                        placeholder="e.g. Head Chef, Manager, Admin"
                       />
                     </div>
                     <div>
@@ -562,7 +562,7 @@ export default function AdminStaffPage() {
                         </div>
                         {formData.position && (
                           <div className="flex justify-between py-2 border-b">
-                            <span className="text-gray-600">Position:</span>
+                            <span className="text-gray-600">Role / Position:</span>
                             <span className="font-medium text-gray-900">{formData.position}</span>
                           </div>
                         )}
@@ -715,11 +715,11 @@ export default function AdminStaffPage() {
                 {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
               </div>
               <div>
-                <label className="text-sm font-medium">Position / Function</label>
+                <label className="text-sm font-medium">Role / Position</label>
                 <Input
                   value={formData.position}
                   onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="e.g. Head Chef, Waiter"
+                  placeholder="e.g. Head Chef, Manager"
                 />
               </div>
               <div>

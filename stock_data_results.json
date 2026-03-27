@@ -1,0 +1,1577 @@
+{
+  "stock_categories (enum)": [
+    "food",
+    "beverage",
+    "linen",
+    "toiletries",
+    "cleaning_supplies",
+    "maintenance_items",
+    "office_supplies",
+    "kitchen_equipment",
+    "amenities",
+    "other"
+  ],
+  "found_tables": [
+    "store_item_batches",
+    "bar_order_items",
+    "simple_shop_items",
+    "store_credit_note_items",
+    "store_issue_items",
+    "store_grn_items",
+    "stock_transfer_items",
+    "inventory_count_items",
+    "simple_transfer_items",
+    "restaurant_menu_item_modifiers",
+    "v_low_stock_by_branch",
+    "v_expiring_items",
+    "stock_take_items",
+    "pos_transaction_items",
+    "inventory_items",
+    "store_stock_adjustments",
+    "restaurant_order_items",
+    "kitchen_stock",
+    "shift_transaction_items",
+    "store_stock_returns",
+    "bar_stock_records",
+    "stock_transfers",
+    "store_items",
+    "simple_items",
+    "bar_stock_logs",
+    "stock_request_sequences",
+    "requisition_items",
+    "stock_valuation_layers",
+    "in_transit_stock",
+    "kitchen_grn_items",
+    "store_requisition_items",
+    "v_daily_stock_out",
+    "restaurant_low_stock_items",
+    "stock_valuation_methods",
+    "store_stock_transfers",
+    "stock_takes",
+    "stock_take_audit_log",
+    "finance_invoice_items",
+    "restaurant_combo_items",
+    "store_transfer_items",
+    "store_stock_movements",
+    "restaurant_item_popularity",
+    "customer_invoice_items",
+    "store_supplier_invoice_items",
+    "bar_stock",
+    "quotation_items",
+    "store_count_items",
+    "kitchen_store_receipt_items",
+    "bar_stock_requests",
+    "restaurant_inventory_items",
+    "restaurant_purchase_order_items",
+    "kitchen_requisition_items",
+    "kitchen_portion_stock",
+    "stock_levels",
+    "restaurant_menu_items",
+    "v_low_stock_alerts",
+    "store_stock_issues",
+    "store_adjustment_items",
+    "stock_count_items",
+    "store_return_items",
+    "receipt_items",
+    "grn_items",
+    "stock_requests",
+    "store_po_items",
+    "dispatch_items",
+    "stock_counts",
+    "bar_stock_request_items",
+    "stock_history",
+    "recipe_items",
+    "store_item_suppliers",
+    "restaurant_menu_item_pricing",
+    "purchase_order_items",
+    "kitchen_store_issue_items",
+    "v_stock_count_variances",
+    "restaurant_item_station_routing",
+    "stock_request_items",
+    "branch_stock_movements",
+    "branch_stock",
+    "kitchen_stock_ledger",
+    "bar_tab_items",
+    "stock_out_records",
+    "staff_payroll_items",
+    "v_current_stock_levels"
+  ],
+  "samples": {
+    "store_item_batches": {
+      "columns": [
+        "id",
+        "item_id",
+        "batch_number",
+        "serial_numbers",
+        "quantity",
+        "remaining_quantity",
+        "manufacturing_date",
+        "expiry_date",
+        "received_date",
+        "supplier_id",
+        "purchase_order_id",
+        "unit_cost",
+        "storage_location_id",
+        "is_expired",
+        "is_quarantined",
+        "quarantine_reason",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "bar_order_items": {
+      "columns": [
+        "id",
+        "order_id",
+        "drink_id",
+        "drink_name",
+        "quantity",
+        "unit_price",
+        "total_price",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "simple_shop_items": {
+      "columns": [
+        "id",
+        "shop_user_id",
+        "item_sku",
+        "quantity",
+        "last_updated",
+        "branch_id",
+        "min_stock_level",
+        "max_stock_level",
+        "last_restocked",
+        "last_sold",
+        "total_sold",
+        "total_received",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "store_credit_note_items": {
+      "columns": [
+        "id",
+        "credit_note_id",
+        "item_id",
+        "description",
+        "quantity",
+        "unit_price",
+        "subtotal",
+        "vat_amount",
+        "total_amount"
+      ],
+      "data": []
+    },
+    "store_issue_items": {
+      "columns": [
+        "id",
+        "issue_id",
+        "item_id",
+        "batch_id",
+        "quantity_requested",
+        "quantity_approved",
+        "quantity_issued",
+        "unit_cost",
+        "total_value",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "store_grn_items": {
+      "columns": [
+        "id",
+        "grn_id",
+        "po_item_id",
+        "item_id",
+        "quantity_ordered",
+        "quantity_received",
+        "quantity_accepted",
+        "quantity_rejected",
+        "quantity_damaged",
+        "unit_price",
+        "total_value",
+        "batch_number",
+        "manufacturing_date",
+        "expiry_date",
+        "quality_status",
+        "rejection_reason",
+        "damage_reason",
+        "storage_location_id",
+        "bin_location",
+        "notes",
+        "created_at",
+        "condition_status",
+        "accepted_quantity",
+        "rejected_quantity",
+        "damaged_quantity",
+        "short_quantity",
+        "expired_quantity",
+        "damage_notes",
+        "expiry_date_found",
+        "quality_inspector_id",
+        "quality_inspection_date"
+      ],
+      "data": []
+    },
+    "stock_transfer_items": {
+      "columns": [
+        "id",
+        "transfer_id",
+        "item_id",
+        "quantity",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "inventory_count_items": {
+      "columns": [
+        "id",
+        "count_id",
+        "item_id",
+        "expected_quantity",
+        "actual_quantity",
+        "variance",
+        "notes",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "simple_transfer_items": {
+      "columns": [
+        "id",
+        "shop_user_id",
+        "item_sku",
+        "quantity",
+        "ordered",
+        "last_updated",
+        "created_at",
+        "branch_id",
+        "original_quantity",
+        "approved",
+        "approved_by",
+        "approved_at",
+        "request_notes",
+        "approval_notes",
+        "updated_at",
+        "submitted_at",
+        "completed_at"
+      ],
+      "data": []
+    },
+    "restaurant_menu_item_modifiers": {
+      "columns": [
+        "id",
+        "menu_item_id",
+        "modifier_id",
+        "is_required",
+        "max_selections"
+      ],
+      "data": []
+    },
+    "v_low_stock_by_branch": {
+      "columns": [
+        "branch_id",
+        "branch_name",
+        "branch_code",
+        "low_stock_count",
+        "out_of_stock_count"
+      ],
+      "data": [
+        [
+          "8",
+          "KAPSOIT",
+          "KST",
+          "0",
+          "0"
+        ],
+        [
+          "7",
+          "LITEIN",
+          "LIT",
+          "0",
+          "0"
+        ],
+        [
+          "9",
+          "GRILL",
+          "GRL",
+          "0",
+          "0"
+        ],
+        [
+          "10",
+          "GUESTHOUSE",
+          "GHS",
+          "0",
+          "0"
+        ],
+        [
+          "1",
+          "Kyogong",
+          "KYO",
+          "0",
+          "0"
+        ]
+      ]
+    },
+    "v_expiring_items": {
+      "columns": [
+        "id",
+        "item_sku",
+        "item_name",
+        "batch_number",
+        "expiry_date",
+        "quantity",
+        "unit",
+        "branch_name",
+        "days_until_expiry"
+      ],
+      "data": []
+    },
+    "stock_take_items": {
+      "columns": [
+        "id",
+        "stock_take_id",
+        "item_sku",
+        "system_quantity",
+        "counted_quantity",
+        "variance_reason",
+        "status",
+        "counted_at",
+        "created_at",
+        "unit_cost",
+        "notes",
+        "verified_at",
+        "variance",
+        "variance_value"
+      ],
+      "data": []
+    },
+    "pos_transaction_items": {
+      "columns": [
+        "id",
+        "transaction_id",
+        "product_id",
+        "qty",
+        "unit_price",
+        "discount_amount",
+        "tax_amount",
+        "line_total",
+        "created_at"
+      ],
+      "data": []
+    },
+    "inventory_items": {
+      "columns": [
+        "id",
+        "item_code",
+        "name",
+        "description",
+        "category",
+        "subcategory",
+        "unit",
+        "minimum_stock",
+        "maximum_stock",
+        "reorder_point",
+        "unit_cost",
+        "supplier_id",
+        "is_active",
+        "is_bar_item",
+        "is_sauna_item",
+        "is_room_item",
+        "par_stock",
+        "is_reusable",
+        "replacement_cycle",
+        "is_minibar_item",
+        "is_amenity",
+        "created_at",
+        "updated_at",
+        "has_expiry",
+        "expiry_alert_days"
+      ],
+      "data": []
+    },
+    "store_stock_adjustments": {
+      "columns": [
+        "id",
+        "adjustment_number",
+        "adjustment_date",
+        "reason",
+        "reason_description",
+        "status",
+        "requested_by_id",
+        "approved_by_id",
+        "approved_at",
+        "approval_notes",
+        "total_items",
+        "total_value_impact",
+        "supporting_documents",
+        "remarks",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "restaurant_order_items": {
+      "columns": [
+        "id",
+        "order_id",
+        "menu_item_id",
+        "quantity",
+        "unit_price",
+        "total_price",
+        "special_instructions",
+        "created_at",
+        "branch_id"
+      ],
+      "data": []
+    },
+    "kitchen_stock": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_sku",
+        "item_name",
+        "unit_of_measure",
+        "current_balance",
+        "reorder_level",
+        "last_updated",
+        "created_at"
+      ],
+      "data": []
+    },
+    "shift_transaction_items": {
+      "columns": [
+        "id",
+        "transaction_id",
+        "item_type",
+        "item_id",
+        "item_name",
+        "quantity",
+        "unit_price",
+        "total_price",
+        "service_staff_id",
+        "service_staff_name",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "store_stock_returns": {
+      "columns": [
+        "id",
+        "return_number",
+        "issue_id",
+        "department_id",
+        "return_date",
+        "reason",
+        "returned_by_id",
+        "received_by_id",
+        "total_items",
+        "total_value",
+        "remarks",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "bar_stock_records": {
+      "columns": [
+        "id",
+        "branch_id",
+        "inventory_item_id",
+        "drink_id",
+        "record_type",
+        "quantity",
+        "unit",
+        "recorded_by",
+        "recorded_at",
+        "reference_id",
+        "notes"
+      ],
+      "data": []
+    },
+    "stock_transfers": {
+      "columns": [
+        "id",
+        "transfer_number",
+        "from_branch",
+        "to_branch",
+        "status",
+        "requested_by",
+        "approved_by",
+        "notes",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "store_items": {
+      "columns": [
+        "id",
+        "item_code",
+        "name",
+        "description",
+        "category",
+        "sub_category",
+        "unit",
+        "current_stock",
+        "minimum_stock",
+        "maximum_stock",
+        "reorder_level",
+        "reorder_quantity",
+        "unit_cost",
+        "average_cost",
+        "last_purchase_cost",
+        "costing_method",
+        "storage_location_id",
+        "bin_location",
+        "barcode",
+        "qr_code",
+        "sku",
+        "hsn_code",
+        "is_perishable",
+        "shelf_life_days",
+        "track_serial_number",
+        "track_batch_number",
+        "track_expiry",
+        "is_active",
+        "is_discontinued",
+        "image_url",
+        "specifications",
+        "notes",
+        "created_by_id",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "simple_items": {
+      "columns": [
+        "sku",
+        "description",
+        "retail_price",
+        "quantity",
+        "last_updated",
+        "is_active",
+        "barcode",
+        "item_name",
+        "category",
+        "unit_of_measure",
+        "cost_price",
+        "supplier",
+        "reorder_level",
+        "image_url",
+        "category_code",
+        "product_code",
+        "is_auto_sku",
+        "is_master_item",
+        "created_by_branch_id",
+        "min_order_quantity",
+        "max_order_quantity",
+        "lead_time_days",
+        "is_perishable",
+        "shelf_life_days"
+      ],
+      "data": []
+    },
+    "bar_stock_logs": {
+      "columns": [
+        "id",
+        "stock_id",
+        "drink_id",
+        "branch_id",
+        "change_quantity",
+        "reason",
+        "notes",
+        "created_by",
+        "created_at"
+      ],
+      "data": []
+    },
+    "stock_request_sequences": {
+      "columns": [
+        "branch_code",
+        "sequence_date",
+        "current_number"
+      ],
+      "data": []
+    },
+    "requisition_items": {
+      "columns": [
+        "id",
+        "requisition_id",
+        "item_id",
+        "quantity",
+        "fulfilled_quantity",
+        "notes",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "stock_valuation_layers": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_id",
+        "transaction_date",
+        "transaction_type",
+        "quantity",
+        "unit_cost",
+        "remaining_quantity",
+        "reference_id",
+        "reference_type",
+        "created_at"
+      ],
+      "data": []
+    },
+    "in_transit_stock": {
+      "columns": [
+        "id",
+        "dispatch_id",
+        "item_sku",
+        "quantity",
+        "dispatched_at"
+      ],
+      "data": []
+    },
+    "kitchen_grn_items": {
+      "columns": [
+        "id",
+        "grn_id",
+        "item_sku",
+        "item_name",
+        "quantity",
+        "unit_of_measure",
+        "ledger_entry_id"
+      ],
+      "data": []
+    },
+    "store_requisition_items": {
+      "columns": [
+        "id",
+        "requisition_id",
+        "item_id",
+        "quantity_requested",
+        "quantity_approved",
+        "estimated_unit_cost",
+        "estimated_total_cost",
+        "specification",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "v_daily_stock_out": {
+      "columns": [
+        "date",
+        "branch_name",
+        "out_type",
+        "transaction_count",
+        "total_quantity",
+        "total_cost_value",
+        "total_retail_value"
+      ],
+      "data": []
+    },
+    "restaurant_low_stock_items": {
+      "columns": [
+        "id",
+        "name",
+        "description",
+        "unit",
+        "minimum_stock",
+        "current_stock",
+        "last_ordered_at",
+        "created_at",
+        "updated_at",
+        "branch_id",
+        "sku",
+        "category",
+        "supplier_id",
+        "reorder_level",
+        "reorder_quantity",
+        "unit_cost",
+        "storage_location",
+        "barcode",
+        "batch_tracking",
+        "expiry_tracking",
+        "supplier_name",
+        "supplier_email",
+        "supplier_phone"
+      ],
+      "data": []
+    },
+    "stock_valuation_methods": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_id",
+        "method",
+        "effective_from",
+        "is_active",
+        "created_at"
+      ],
+      "data": []
+    },
+    "store_stock_transfers": {
+      "columns": [
+        "id",
+        "transfer_number",
+        "from_location_id",
+        "to_location_id",
+        "transfer_date",
+        "expected_receipt_date",
+        "actual_receipt_date",
+        "status",
+        "initiated_by_id",
+        "approved_by_id",
+        "approved_at",
+        "dispatched_by_id",
+        "dispatched_at",
+        "received_by_id",
+        "received_at",
+        "total_items",
+        "total_value",
+        "vehicle_number",
+        "driver_name",
+        "remarks",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "stock_takes": {
+      "columns": [
+        "id",
+        "take_number",
+        "branch_id",
+        "take_type",
+        "status",
+        "total_items_counted",
+        "items_with_variance",
+        "started_by",
+        "completed_by",
+        "notes",
+        "started_at",
+        "completed_at",
+        "created_at",
+        "submitted_at",
+        "submitted_by",
+        "verified_at",
+        "notification_sent",
+        "notification_sent_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "stock_take_audit_log": {
+      "columns": [
+        "id",
+        "stock_take_id",
+        "action",
+        "previous_status",
+        "new_status",
+        "user_id",
+        "user_role",
+        "event_type",
+        "event_data",
+        "notification_id",
+        "notification_status",
+        "ip_address",
+        "user_agent",
+        "created_at"
+      ],
+      "data": []
+    },
+    "finance_invoice_items": {
+      "columns": [
+        "id",
+        "invoice_id",
+        "description",
+        "quantity",
+        "unit_price",
+        "total_price",
+        "created_at"
+      ],
+      "data": []
+    },
+    "restaurant_combo_items": {
+      "columns": [
+        "id",
+        "combo_id",
+        "menu_item_id",
+        "quantity"
+      ],
+      "data": []
+    },
+    "store_transfer_items": {
+      "columns": [
+        "id",
+        "transfer_id",
+        "item_id",
+        "batch_id",
+        "quantity_sent",
+        "quantity_received",
+        "quantity_damaged",
+        "unit_cost",
+        "total_value",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "store_stock_movements": {
+      "columns": [
+        "id",
+        "movement_number",
+        "item_id",
+        "batch_id",
+        "movement_type",
+        "movement_date",
+        "quantity",
+        "unit_cost",
+        "total_value",
+        "stock_before",
+        "stock_after",
+        "from_location_id",
+        "to_location_id",
+        "from_department_id",
+        "to_department_id",
+        "reference_type",
+        "reference_id",
+        "reference_number",
+        "notes",
+        "performed_by_id",
+        "created_at"
+      ],
+      "data": []
+    },
+    "restaurant_item_popularity": {
+      "columns": [
+        "id",
+        "name",
+        "category_id",
+        "times_ordered",
+        "total_quantity",
+        "total_revenue",
+        "average_price"
+      ],
+      "data": []
+    },
+    "customer_invoice_items": {
+      "columns": [
+        "id",
+        "invoice_id",
+        "item_description",
+        "quantity",
+        "unit_price",
+        "tax_rate",
+        "tax_amount",
+        "total_amount",
+        "created_at"
+      ],
+      "data": []
+    },
+    "store_supplier_invoice_items": {
+      "columns": [
+        "id",
+        "invoice_id",
+        "grn_item_id",
+        "po_item_id",
+        "item_id",
+        "description",
+        "quantity",
+        "unit_price",
+        "subtotal",
+        "vat_rate",
+        "vat_amount",
+        "total_amount",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "bar_stock": {
+      "columns": [
+        "id",
+        "drink_id",
+        "branch_id",
+        "quantity",
+        "min_stock",
+        "unit",
+        "cost_per_unit",
+        "last_restocked",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "quotation_items": {
+      "columns": [
+        "id",
+        "quotation_id",
+        "item_description",
+        "quantity",
+        "unit_price",
+        "tax_rate",
+        "tax_amount",
+        "total_amount",
+        "created_at"
+      ],
+      "data": []
+    },
+    "store_count_items": {
+      "columns": [
+        "id",
+        "count_id",
+        "item_id",
+        "batch_id",
+        "system_quantity",
+        "counted_quantity",
+        "variance_quantity",
+        "unit_cost",
+        "variance_value",
+        "counted_by_id",
+        "counted_at",
+        "verified_by_id",
+        "verified_at",
+        "notes",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "kitchen_store_receipt_items": {
+      "columns": [
+        "id",
+        "receipt_id",
+        "item_id",
+        "item_name",
+        "expected_quantity",
+        "received_quantity",
+        "unit_of_measure",
+        "expected_portions",
+        "status",
+        "remarks",
+        "created_at"
+      ],
+      "data": []
+    },
+    "bar_stock_requests": {
+      "columns": [
+        "id",
+        "request_number",
+        "bar_branch_id",
+        "store_branch_id",
+        "requested_by",
+        "status",
+        "priority",
+        "notes",
+        "requested_at",
+        "reviewed_by",
+        "reviewed_at",
+        "review_notes",
+        "fulfilled_by",
+        "fulfilled_at",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "restaurant_inventory_items": {
+      "columns": [
+        "id",
+        "name",
+        "description",
+        "unit",
+        "minimum_stock",
+        "current_stock",
+        "last_ordered_at",
+        "created_at",
+        "updated_at",
+        "branch_id",
+        "sku",
+        "category",
+        "supplier_id",
+        "reorder_level",
+        "reorder_quantity",
+        "unit_cost",
+        "storage_location",
+        "barcode",
+        "batch_tracking",
+        "expiry_tracking"
+      ],
+      "data": []
+    },
+    "restaurant_purchase_order_items": {
+      "columns": [
+        "id",
+        "purchase_order_id",
+        "inventory_item_id",
+        "quantity_ordered",
+        "quantity_received",
+        "unit_price",
+        "total_price",
+        "notes"
+      ],
+      "data": []
+    },
+    "kitchen_requisition_items": {
+      "columns": [
+        "id",
+        "requisition_id",
+        "item_sku",
+        "item_name",
+        "requested_quantity",
+        "approved_quantity",
+        "issued_quantity",
+        "unit_of_measure",
+        "notes"
+      ],
+      "data": []
+    },
+    "kitchen_portion_stock": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_sku",
+        "portion_name",
+        "expected_balance",
+        "last_updated",
+        "created_at"
+      ],
+      "data": []
+    },
+    "stock_levels": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_sku",
+        "quantity",
+        "reorder_level",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "restaurant_menu_items": {
+      "columns": [
+        "id",
+        "category_id",
+        "name",
+        "description",
+        "price",
+        "image_url",
+        "preparation_time",
+        "is_available",
+        "is_vegetarian",
+        "is_spicy",
+        "allergens",
+        "ingredients",
+        "created_at",
+        "updated_at",
+        "branch_id"
+      ],
+      "data": []
+    },
+    "v_low_stock_alerts": {
+      "columns": [
+        "id",
+        "item_sku",
+        "item_name",
+        "category",
+        "current_quantity",
+        "reorder_point",
+        "branch_id",
+        "branch_name",
+        "branch_code"
+      ],
+      "data": []
+    },
+    "store_stock_issues": {
+      "columns": [
+        "id",
+        "issue_number",
+        "department_id",
+        "requested_by_id",
+        "issue_date",
+        "required_date",
+        "issue_type",
+        "status",
+        "purpose",
+        "approved_by_id",
+        "approved_at",
+        "approval_notes",
+        "issued_by_id",
+        "issued_at",
+        "total_items",
+        "total_value",
+        "remarks",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "store_adjustment_items": {
+      "columns": [
+        "id",
+        "adjustment_id",
+        "item_id",
+        "batch_id",
+        "system_quantity",
+        "actual_quantity",
+        "variance_quantity",
+        "unit_cost",
+        "variance_value",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "stock_count_items": {
+      "columns": [
+        "id",
+        "stock_count_id",
+        "item_id",
+        "system_quantity",
+        "physical_quantity",
+        "variance",
+        "variance_percentage",
+        "unit_cost",
+        "variance_value",
+        "reason",
+        "photo_url",
+        "created_at"
+      ],
+      "data": []
+    },
+    "store_return_items": {
+      "columns": [
+        "id",
+        "return_id",
+        "item_id",
+        "batch_id",
+        "quantity_returned",
+        "unit_cost",
+        "total_value",
+        "condition",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "receipt_items": {
+      "columns": [
+        "id",
+        "receipt_id",
+        "item_name",
+        "item_sku",
+        "description",
+        "category",
+        "quantity",
+        "unit",
+        "unit_price",
+        "discount_percent",
+        "discount_amount",
+        "tax_amount",
+        "total_amount",
+        "menu_item_id",
+        "inventory_item_id",
+        "created_at"
+      ],
+      "data": []
+    },
+    "grn_items": {
+      "columns": [
+        "id",
+        "grn_id",
+        "po_item_id",
+        "item_id",
+        "quantity_ordered",
+        "quantity_received",
+        "quantity_rejected",
+        "rejection_reason",
+        "batch_number",
+        "expiry_date",
+        "manufacturing_date",
+        "unit_price",
+        "total_price",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "stock_requests": {
+      "columns": [
+        "id",
+        "request_number",
+        "requesting_branch_id",
+        "requested_by",
+        "request_type",
+        "priority",
+        "reason",
+        "needed_by_date",
+        "status",
+        "reviewed_by",
+        "reviewed_at",
+        "review_notes",
+        "approved_quantity_notes",
+        "created_at",
+        "updated_at",
+        "auditor_id",
+        "audited_at",
+        "audit_notes"
+      ],
+      "data": []
+    },
+    "store_po_items": {
+      "columns": [
+        "id",
+        "po_id",
+        "item_id",
+        "quantity_ordered",
+        "quantity_received",
+        "quantity_pending",
+        "quantity_rejected",
+        "unit_price",
+        "tax_amount",
+        "discount_amount",
+        "total_price",
+        "specification",
+        "notes",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "dispatch_items": {
+      "columns": [
+        "id",
+        "dispatch_id",
+        "item_sku",
+        "dispatched_quantity",
+        "received_quantity",
+        "damaged_quantity",
+        "missing_quantity",
+        "batch_number",
+        "expiry_date",
+        "bin_location",
+        "status",
+        "discrepancy_reason",
+        "created_at",
+        "unit_price",
+        "total_value",
+        "notes",
+        "received_at",
+        "received_by"
+      ],
+      "data": []
+    },
+    "stock_counts": {
+      "columns": [
+        "id",
+        "branch_id",
+        "count_date",
+        "count_type",
+        "status",
+        "counted_by",
+        "approved_by",
+        "approved_at",
+        "rejection_reason",
+        "notes",
+        "created_at",
+        "updated_at",
+        "verified_by",
+        "verified_at",
+        "audit_notes",
+        "created_by"
+      ],
+      "data": []
+    },
+    "bar_stock_request_items": {
+      "columns": [
+        "id",
+        "request_id",
+        "drink_id",
+        "item_name",
+        "requested_quantity",
+        "approved_quantity",
+        "fulfilled_quantity",
+        "unit",
+        "current_stock",
+        "min_stock",
+        "notes",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "stock_history": {
+      "columns": [
+        "id",
+        "item_sku",
+        "change_type",
+        "quantity_change",
+        "previous_quantity",
+        "new_quantity",
+        "reason",
+        "reference",
+        "notes",
+        "user_id",
+        "created_at"
+      ],
+      "data": []
+    },
+    "recipe_items": {
+      "columns": [
+        "id",
+        "recipe_id",
+        "item_sku",
+        "item_name",
+        "quantity_per_portion",
+        "unit_of_measure",
+        "unit_cost",
+        "total_cost",
+        "notes"
+      ],
+      "data": []
+    },
+    "store_item_suppliers": {
+      "columns": [
+        "id",
+        "item_id",
+        "supplier_id",
+        "is_preferred",
+        "supplier_item_code",
+        "lead_time_days",
+        "minimum_order_quantity",
+        "unit_price",
+        "last_supplied_at",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "restaurant_menu_item_pricing": {
+      "columns": [
+        "id",
+        "menu_item_id",
+        "pricing_tier_id",
+        "special_price"
+      ],
+      "data": []
+    },
+    "purchase_order_items": {
+      "columns": [
+        "id",
+        "po_id",
+        "item_id",
+        "quantity",
+        "unit_price",
+        "total_price",
+        "received_quantity",
+        "notes",
+        "created_at",
+        "updated_at",
+        "tax_amount",
+        "specification",
+        "quantity_pending",
+        "item_sku",
+        "ordered_quantity",
+        "unit_cost",
+        "total_cost",
+        "status"
+      ],
+      "data": []
+    },
+    "kitchen_store_issue_items": {
+      "columns": [
+        "id",
+        "issue_id",
+        "item_id",
+        "recipe_id",
+        "quantity_issued",
+        "unit",
+        "unit_cost",
+        "total_cost",
+        "expected_portions",
+        "created_at"
+      ],
+      "data": []
+    },
+    "v_stock_count_variances": {
+      "columns": [
+        "id",
+        "stock_take_id",
+        "item_sku",
+        "item_name",
+        "system_quantity",
+        "actual_quantity",
+        "variance",
+        "branch_id",
+        "branch_name",
+        "status",
+        "created_at"
+      ],
+      "data": []
+    },
+    "restaurant_item_station_routing": {
+      "columns": [
+        "id",
+        "menu_item_id",
+        "prep_station_id",
+        "preparation_sequence"
+      ],
+      "data": []
+    },
+    "stock_request_items": {
+      "columns": [
+        "id",
+        "request_id",
+        "item_sku",
+        "requested_quantity",
+        "approved_quantity",
+        "current_branch_stock",
+        "status",
+        "rejection_reason",
+        "created_at"
+      ],
+      "data": []
+    },
+    "branch_stock_movements": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_sku",
+        "movement_type",
+        "quantity",
+        "previous_stock",
+        "new_stock",
+        "reference_type",
+        "reference_id",
+        "reference_number",
+        "reason",
+        "notes",
+        "performed_by",
+        "approved_by",
+        "created_at",
+        "auditor_id",
+        "audited_at",
+        "audit_notes"
+      ],
+      "data": []
+    },
+    "branch_stock": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_sku",
+        "quantity",
+        "reserved_quantity",
+        "reorder_level",
+        "max_stock_level",
+        "bin_location",
+        "last_stock_in",
+        "last_stock_out",
+        "last_counted",
+        "created_at",
+        "updated_at"
+      ],
+      "data": []
+    },
+    "kitchen_stock_ledger": {
+      "columns": [
+        "id",
+        "branch_id",
+        "item_sku",
+        "item_name",
+        "transaction_date",
+        "transaction_type",
+        "reference_type",
+        "reference_id",
+        "opening_balance",
+        "quantity_in",
+        "quantity_out",
+        "closing_balance",
+        "unit_of_measure",
+        "shift",
+        "user_id",
+        "notes",
+        "created_at"
+      ],
+      "data": []
+    },
+    "bar_tab_items": {
+      "columns": [
+        "id",
+        "tab_id",
+        "drink_id",
+        "drink_name",
+        "quantity",
+        "unit_price",
+        "total_price",
+        "added_at"
+      ],
+      "data": []
+    },
+    "stock_out_records": {
+      "columns": [
+        "id",
+        "branch_id",
+        "shop_user_id",
+        "item_sku",
+        "quantity",
+        "previous_stock",
+        "new_stock",
+        "out_type",
+        "reason",
+        "receipt_number",
+        "recorded_by",
+        "created_at"
+      ],
+      "data": []
+    },
+    "staff_payroll_items": {
+      "columns": [
+        "id",
+        "payroll_id",
+        "category",
+        "amount",
+        "source_table",
+        "source_id",
+        "policy_id",
+        "approval_status",
+        "approved_by",
+        "approved_at",
+        "reference",
+        "created_at"
+      ],
+      "data": []
+    },
+    "v_current_stock_levels": {
+      "columns": [
+        "id",
+        "item_sku",
+        "item_name",
+        "category",
+        "unit",
+        "quantity",
+        "reorder_point",
+        "unit_cost",
+        "stock_value",
+        "branch_id",
+        "branch_name",
+        "last_updated"
+      ],
+      "data": []
+    }
+  }
+}

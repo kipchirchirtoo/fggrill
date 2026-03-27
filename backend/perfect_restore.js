@@ -62,6 +62,9 @@ async function perfectRestore() {
         console.log("-> Running import_kapsoit.js");
         execSync("node import_kapsoit.js", { stdio: 'inherit' });
 
+        console.log("-> Running import_mogogoshiek.js");
+        execSync("node import_mogogoshiek.js", { stdio: 'inherit' });
+
         console.log("✨ ALL TASKS COMPLETED SUCCESSFULLY!");
     } catch (e) {
         await client.query("ROLLBACK");

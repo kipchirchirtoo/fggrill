@@ -320,6 +320,12 @@ export function ConsolidatedNav() {
         active={pathname.includes('/dashboard/branch-accounting/bookings')}
       />
       <NavItem
+        href="/dashboard/admin/staff"
+        icon={Users}
+        label="Personnel Registry"
+        active={pathname === '/dashboard/admin/staff'}
+      />
+      <NavItem
         href="/dashboard/admin/docs"
         icon={BookOpen}
         label="Employee Docs"

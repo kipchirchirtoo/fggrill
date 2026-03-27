@@ -1,0 +1,43 @@
+Columns in staff_profiles:
+id: uuid
+user_id: uuid
+role: text
+department: text
+shift: text
+basic_salary: numeric
+start_date: date
+id_number: text
+emergency_contact: text
+address: text
+status: text
+created_at: timestamp with time zone
+updated_at: timestamp with time zone
+branch_id: integer
+national_id: text
+rfid_tag: text
+rest_day: integer
+hourly_base_rate: numeric
+kra_pin: text
+nssf_number: text
+nhif_number: text
+shif_number: text
+bank_name: text
+bank_branch: text
+account_number: text
+mpesa_number: text
+employment_type: text
+contract_expiry: date
+next_of_kin_name: text
+next_of_kin_phone: text
+next_of_kin_relationship: text
+supervisor_id: uuid
+archive_notes: text
+first_name: text
+last_name: text
+email: text
+phone: text
+position: text
+nssf_enabled: boolean
+shif_enabled: boolean
+housing_fund_enabled: boolean
+uniform_enabled: boolean

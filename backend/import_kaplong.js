@@ -138,13 +138,14 @@ async function run() {
             const nameParts = emp.name.split(' ');
             const firstName = nameParts[0] || 'Unknown';
             const lastName = nameParts.slice(1).join(' ') || '';
-            const safeIdNo = ('PENDING-' + crypto.randomBytes(4).toString('hex'));
+            const safeIdNo = emp.empNo || ('PENDING-' + crypto.randomBytes(4).toString('hex'));
+            const nationalId = emp.idNo || null;
             
             try {
-                await client.query("INSERT INTO staff_profiles (role, department, shift, basic_salary, start_date, id_number, phone, first_name, last_name, position, branch_id) VALUES ($1, $2, $3, $4, CURRENT_DATE, $5, $6, $7, $8, $9, $10)", 
+                await client.query("INSERT INTO staff_profiles (role, department, shift, basic_salary, start_date, id_number, national_id, phone, first_name, last_name, position, branch_id) VALUES ($1, $2, $3, $4, CURRENT_DATE, $5, $11, $6, $7, $8, $9, $10)", 
                 [
                     emp.role, emp.mapped_department, 'morning', emp.basic_salary,
-                    safeIdNo, emp.phone, firstName, lastName, emp.role, branchId
+                    safeIdNo, emp.phone, firstName, lastName, emp.role, branchId, nationalId
                 ]);
                 
                 insertedProfiles++;

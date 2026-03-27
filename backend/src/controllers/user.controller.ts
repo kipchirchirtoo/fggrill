@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -149,6 +150,10 @@ export const createUser = async (
     const userId = authData.user.id;
     // console.log('[DEBUG] Auth user created with ID:', userId);
 
+    // Hash password for local database fallback
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(userPassword, salt);
+
     // Step 2: Upsert public.users profile
     const profileData: Record<string, any> = {
       id: userId,
@@ -166,6 +171,7 @@ export const createUser = async (
       address: address || null,
       status: status || 'active',
       pos_pin: pos_pin || null,
+      password_hash: passwordHash,
       updated_at: new Date().toISOString()
     };
 
@@ -249,8 +255,17 @@ export const updateUser = async (
 
     if (error) throw error;
 
-    // Update password in Supabase Auth if provided
+    // Update password in local database fallback and Supabase Auth if provided
     if (password) {
+      // 1. Update hash in users table
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(password, salt);
+      await supabase
+        .from('users')
+        .update({ password_hash: passwordHash })
+        .eq('id', req.params.id);
+
+      // 2. Update in Supabase Auth
       const { error: authError } = await supabase.auth.admin.updateUserById(
         req.params.id,
         { password }

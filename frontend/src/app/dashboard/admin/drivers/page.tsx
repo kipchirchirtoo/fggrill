@@ -47,6 +47,10 @@ export default function AdminDriversPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [staff, setStaff] = useState<any[]>([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
+  const [staffSearchText, setStaffSearchText] = useState('');
+  const [showStaffResults, setShowStaffResults] = useState(false);
 
   const fetchDrivers = useCallback(async () => {
     setIsLoading(true);
@@ -79,7 +83,19 @@ export default function AdminDriversPage() {
     }
   }, []);
 
-  useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
+  const fetchStaff = useCallback(async () => {
+    setIsLoadingStaff(true);
+    try {
+      const res = await staffAPI.getStaff({ limit: 1000 });
+      if (res.success) setStaff(res.data || []);
+    } catch (error) { console.error('Error fetching staff:', error); }
+    finally { setIsLoadingStaff(false); }
+  }, []);
+
+  useEffect(() => { 
+    fetchDrivers();
+    fetchStaff();
+  }, [fetchDrivers, fetchStaff]);
 
   const resetForm = () => {
     setFormData({
@@ -92,6 +108,8 @@ export default function AdminDriversPage() {
       status: 'active'
     });
     setFormErrors({});
+    setStaffSearchText('');
+    setShowStaffResults(false);
   };
 
   const validateForm = (isEdit: boolean = false) => {
@@ -343,61 +361,120 @@ export default function AdminDriversPage() {
           if (!open) resetForm();
           setAddModalOpen(open);
         }}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Register New Driver</DialogTitle><DialogDescription>Drivers will be added to the system as staff members.</DialogDescription></DialogHeader>
-            <div className="space-y-4 mt-4">
+          <DialogContent className="max-w-md p-0 rounded-none border-none shadow-2xl">
+            <div className="p-6 border-b bg-white">
+              <DialogTitle className="text-xl font-bold text-stone-900 tracking-tight">Register New Driver</DialogTitle>
+              <DialogDescription className="text-stone-500 mt-1">Onboard a new vehicle operator to the system.</DialogDescription>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Searchable Staff Selection Input */}
+              <div className="bg-stone-50 p-4 border border-stone-200 rounded-none mb-2 relative">
+                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-3">Sync from Personnel (Optional)</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                  <Input
+                    placeholder="Type name to search staff..."
+                    value={staffSearchText}
+                    onChange={(e) => {
+                      setStaffSearchText(e.target.value);
+                      setShowStaffResults(true);
+                    }}
+                    onFocus={() => setShowStaffResults(true)}
+                    onBlur={() => setTimeout(() => setShowStaffResults(false), 200)}
+                    className="pl-10 pr-4 py-6 bg-white border-stone-200 rounded-none text-sm focus:ring-0 focus:border-stone-400"
+                  />
+                  
+                  {showStaffResults && (staffSearchText || staff.length > 0) && (
+                    <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-stone-200 shadow-xl max-h-60 overflow-y-auto">
+                      {staff
+                        .filter(s => 
+                          `${s.first_name} ${s.last_name}`.toLowerCase().includes(staffSearchText.toLowerCase())
+                        )
+                        .slice(0, 10)
+                        .map(member => (
+                          <button
+                            key={member.id}
+                            type="button"
+                            className="w-full text-left px-4 py-3 hover:bg-stone-50 border-b border-stone-100 last:border-0 flex flex-col gap-0.5"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                firstName: member.first_name || '',
+                                lastName: member.last_name || '',
+                                email: member.email || '',
+                                phone: member.phone || '',
+                                license_number: member.id_number || prev.license_number
+                              }));
+                              setStaffSearchText(`${member.first_name} ${member.last_name}`);
+                              setShowStaffResults(false);
+                              toast.success(`Linked to ${member.first_name}`);
+                            }}
+                          >
+                            <span className="font-bold text-sm text-stone-900">{member.first_name} {member.last_name}</span>
+                            <span className="text-[10px] text-stone-400 uppercase tracking-wider">{member.role || 'Staff Member'} • {member.department || 'No Dept'}</span>
+                          </button>
+                        ))}
+                      {staffSearchText && staff.filter(s => `${s.first_name} ${s.last_name}`.toLowerCase().includes(staffSearchText.toLowerCase())).length === 0 && (
+                        <div className="p-4 text-center text-xs text-stone-400 italic">No matching personnel found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-stone-400 mt-2 italic tracking-tight">Sync driver details from the existing personnel registry</p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">First Name *</label>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">First Name *</label>
                   <Input
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    className={formErrors.firstName ? 'border-red-500' : ''}
+                    className={`rounded-none border-stone-200 ${formErrors.firstName ? 'border-red-500' : ''}`}
                   />
-                  {formErrors.firstName && <p className="text-red-500 text-xs mt-1">{formErrors.firstName}</p>}
+                  {formErrors.firstName && <p className="text-red-500 text-[10px] font-bold uppercase mt-1">{formErrors.firstName}</p>}
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Last Name *</label>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Last Name *</label>
                   <Input
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                    className={formErrors.lastName ? 'border-red-500' : ''}
+                    className={`rounded-none border-stone-200 ${formErrors.lastName ? 'border-red-500' : ''}`}
                   />
-                  {formErrors.lastName && <p className="text-red-500 text-xs mt-1">{formErrors.lastName}</p>}
+                  {formErrors.lastName && <p className="text-red-500 text-[10px] font-bold uppercase mt-1">{formErrors.lastName}</p>}
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Email *</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Email *</label>
                 <Input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={formErrors.email ? 'border-red-500' : ''}
+                  className={`rounded-none border-stone-200 ${formErrors.email ? 'border-red-500' : ''}`}
                   placeholder="driver@example.com"
                 />
-                {formErrors.email && <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>}
+                {formErrors.email && <p className="text-red-500 text-[10px] font-bold uppercase mt-1">Required</p>}
               </div>
-              <div>
-                <label className="text-sm font-medium">Phone</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Phone</label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className={formErrors.phone ? 'border-red-500' : ''}
-                  placeholder="+1234567890"
+                  className={`rounded-none border-stone-200 ${formErrors.phone ? 'border-red-500' : ''}`}
+                  placeholder="+254..."
                 />
-                {formErrors.phone && <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>}
+                {formErrors.phone && <p className="text-red-500 text-[10px] font-bold uppercase mt-1">Invalid phone</p>}
               </div>
-              <div>
-                <label className="text-sm font-medium">License / ID Number</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">License / ID Number</label>
                 <Input
                   value={formData.license_number}
                   onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                  className="rounded-none border-stone-200"
                 />
               </div>
-              <div className="flex gap-3 pt-4 border-t">
-                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1" disabled={isSubmitting}>Cancel</IOSButton>
-                <IOSButton onClick={handleAddDriver} className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? 'Registering...' : 'Register Driver'}
+              <div className="flex gap-3 pt-6 border-t">
+                <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1 rounded-none border-stone-200 text-stone-600" disabled={isSubmitting}>Cancel</IOSButton>
+                <IOSButton onClick={handleAddDriver} className="flex-1 rounded-none bg-stone-900 hover:bg-stone-800" disabled={isSubmitting}>
+                  {isSubmitting ? 'Registering...' : 'Complete Registration'}
                 </IOSButton>
               </div>
             </div>
@@ -409,62 +486,69 @@ export default function AdminDriversPage() {
           if (!open) resetForm();
           setEditModalOpen(open);
         }}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Edit Driver Profile</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
+          <DialogContent className="max-w-md p-0 rounded-none border-none shadow-2xl">
+            <div className="p-6 border-b bg-white">
+              <DialogTitle className="text-xl font-bold text-stone-900 tracking-tight">Edit Driver Profile</DialogTitle>
+              <p className="text-sm text-stone-500 mt-1">Update vehicle operator credentials and status.</p>
+            </div>
+            <div className="p-6 space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">First Name *</label>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">First Name *</label>
                   <Input
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="rounded-none border-stone-200"
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Last Name *</label>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Last Name *</label>
                   <Input
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    className="rounded-none border-stone-200"
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Email *</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Email *</label>
                 <Input
                   value={formData.email}
                   readOnly
-                  className="bg-gray-50"
+                  className="bg-stone-50 rounded-none border-stone-200 text-stone-500"
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium">Phone</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Phone</label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="rounded-none border-stone-200"
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium">License / ID Number</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">License / ID Number</label>
                 <Input
                   value={formData.license_number}
                   onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                  className="rounded-none border-stone-200"
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium">Status</label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Status</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                  className="w-full p-2 border rounded-ios-lg bg-white"
+                  className="w-full p-2 border border-stone-200 rounded-none bg-white text-sm"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>
               <div className="flex gap-3 pt-4 border-t">
-                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1" disabled={isSubmitting}>Cancel</IOSButton>
-                <IOSButton onClick={handleUpdateDriver} className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? 'Updating...' : 'Update Driver'}
+                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1 rounded-none border-stone-200 text-stone-600" disabled={isSubmitting}>Cancel</IOSButton>
+                <IOSButton onClick={handleUpdateDriver} className="flex-1 rounded-none bg-stone-900 hover:bg-stone-800" disabled={isSubmitting}>
+                  {isSubmitting ? 'Updating...' : 'Save Changes'}
                 </IOSButton>
               </div>
             </div>
@@ -473,16 +557,19 @@ export default function AdminDriversPage() {
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Remove Driver</DialogTitle></DialogHeader>
-            <div className="py-4">
-              <p className="text-gray-700">Are you sure you want to remove this driver from the system? Their staff record will be deactivated.</p>
+          <DialogContent className="max-w-sm p-0 rounded-none border-none shadow-2xl">
+            <div className="p-6 border-b bg-white">
+              <DialogTitle className="text-xl font-bold text-red-600 tracking-tight">Confirm Removal</DialogTitle>
             </div>
-            <div className="flex gap-3">
-              <IOSButton variant="secondary" onClick={() => setConfirmDeleteOpen(false)} className="flex-1" disabled={isSubmitting}>Cancel</IOSButton>
-              <IOSButton onClick={handleConfirmDelete} className="flex-1 bg-red-500 hover:bg-red-600" disabled={isSubmitting}>
-                {isSubmitting ? 'Removing...' : 'Remove Driver'}
-              </IOSButton>
+            <div className="p-6 space-y-4">
+              <p className="text-stone-600 text-sm leading-relaxed">Are you sure you want to remove this driver from the system? Their staff record will be deactivated and access revoked.</p>
+              
+              <div className="flex gap-3 pt-4">
+                <IOSButton variant="secondary" onClick={() => setConfirmDeleteOpen(false)} className="flex-1 rounded-none border-stone-200 text-stone-600" disabled={isSubmitting}>Cancel</IOSButton>
+                <IOSButton onClick={handleConfirmDelete} className="flex-1 rounded-none bg-red-600 hover:bg-red-700 text-white" disabled={isSubmitting}>
+                  {isSubmitting ? 'Removing...' : 'Remove Permanently'}
+                </IOSButton>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

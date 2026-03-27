@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { userAPI, systemAPI } from '@/lib/api';
+import { userAPI, systemAPI, staffAPI } from '@/lib/api';
 import { Users, RefreshCw, Plus, Search, Edit2, Trash2, User, Mail, Building2, ChevronRight, ChevronLeft, ShieldCheck, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -109,6 +109,10 @@ export default function AdminUsersPage() {
     employeeId: '', department: '', shift: '', startDate: '', address: '',
     ec_name: '', ec_relationship: '', ec_phone: ''
   });
+  const [staff, setStaff] = useState<any[]>([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
+  const [staffSearchText, setStaffSearchText] = useState('');
+  const [showStaffResults, setShowStaffResults] = useState(false);
 
   // Get all available roles from the UserRole enum
   const availableRoles = useMemo(() => {
@@ -148,7 +152,19 @@ export default function AdminUsersPage() {
     finally { setIsLoading(false); }
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const fetchStaff = useCallback(async () => {
+    setIsLoadingStaff(true);
+    try {
+      const res = await staffAPI.getStaff({ limit: 1000 });
+      if (res.success) setStaff(res.data || []);
+    } catch (error) { console.error('Error fetching staff:', error); }
+    finally { setIsLoadingStaff(false); }
+  }, []);
+
+  useEffect(() => { 
+    fetchUsers();
+    fetchStaff();
+  }, [fetchUsers, fetchStaff]);
 
   // Auto-generate Employee ID when Add Modal opens
   useEffect(() => {
@@ -232,6 +248,8 @@ export default function AdminUsersPage() {
     });
     setFormErrors({});
     setWizardStep(1);
+    setStaffSearchText('');
+    setShowStaffResults(false);
   };
 
   const handleEditUser = (user: UserData) => {
@@ -600,8 +618,11 @@ export default function AdminUsersPage() {
           if (!open) resetForm();
           setAddModalOpen(open);
         }}>
-          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-            <DialogTitle className="text-xl font-semibold border-b pb-4">Add New User</DialogTitle>
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 rounded-none border-none shadow-2xl">
+            <div className="p-6 border-b bg-white">
+              <DialogTitle className="text-xl font-bold text-stone-900 tracking-tight">Create System Account</DialogTitle>
+              <p className="text-sm text-stone-500 mt-1">Configure access credentials and permissions</p>
+            </div>
 
             <div className="flex-1 overflow-y-auto px-1">
               {/* Wizard Step Indicator */}
@@ -623,53 +644,109 @@ export default function AdminUsersPage() {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="space-y-4 py-4"
+                    className="space-y-6 py-6"
                   >
+                    {/* Searchable Staff Selection Input */}
+                    <div className="bg-stone-50 p-4 border border-stone-200 rounded-none mb-6 relative">
+                      <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-3">Link to Existing Personnel (Optional)</label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                        <Input
+                          placeholder="Type name to search staff..."
+                          value={staffSearchText}
+                          onChange={(e) => {
+                            setStaffSearchText(e.target.value);
+                            setShowStaffResults(true);
+                          }}
+                          onFocus={() => setShowStaffResults(true)}
+                          onBlur={() => setTimeout(() => setShowStaffResults(false), 200)}
+                          className="pl-10 pr-4 py-6 bg-white border-stone-200 rounded-none text-sm focus:ring-0 focus:border-stone-400"
+                        />
+                        
+                        {showStaffResults && (staffSearchText || staff.length > 0) && (
+                          <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-stone-200 shadow-xl max-h-60 overflow-y-auto">
+                            {staff
+                              .filter(s => 
+                                `${s.first_name} ${s.last_name}`.toLowerCase().includes(staffSearchText.toLowerCase())
+                              )
+                              .slice(0, 10)
+                              .map(member => (
+                                <button
+                                  key={member.id}
+                                  type="button"
+                                  className="w-full text-left px-4 py-3 hover:bg-stone-50 border-b border-stone-100 last:border-0 flex flex-col gap-0.5"
+                                  onClick={() => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      first_name: member.first_name || '',
+                                      last_name: member.last_name || '',
+                                      email: member.email || '',
+                                      phone_number: member.phone || '',
+                                      employeeId: member.id_number || prev.employeeId
+                                    }));
+                                    setStaffSearchText(`${member.first_name} ${member.last_name}`);
+                                    setShowStaffResults(false);
+                                    toast.success(`Linked to ${member.first_name}`);
+                                  }}
+                                >
+                                  <span className="font-bold text-sm text-stone-900">{member.first_name} {member.last_name}</span>
+                                  <span className="text-[10px] text-stone-400 uppercase tracking-wider">{member.role || 'Staff Member'} • {member.department || 'No Dept'}</span>
+                                </button>
+                              ))}
+                            {staffSearchText && staff.filter(s => `${s.first_name} ${s.last_name}`.toLowerCase().includes(staffSearchText.toLowerCase())).length === 0 && (
+                              <div className="p-4 text-center text-xs text-stone-400 italic">No matching personnel found</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-stone-400 mt-2 italic">Search by name to auto-fill details from the personnel registry</p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">First Name <span className="text-red-500">*</span></label>
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">First Name <span className="text-red-500">*</span></label>
                         <Input
                           value={formData.first_name}
                           onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                          className={formErrors.first_name ? 'border-red-500' : ''}
-                          placeholder="Enter first name"
+                          className={`rounded-none border-stone-200 focus:border-stone-400 focus:ring-0 ${formErrors.first_name ? 'border-red-500' : ''}`}
+                          placeholder="e.g. John"
                         />
-                        {formErrors.first_name && <p className="text-red-500 text-xs mt-1">{formErrors.first_name}</p>}
+                        {formErrors.first_name && <p className="text-red-500 text-[10px] font-bold uppercase">{formErrors.first_name}</p>}
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">Last Name <span className="text-red-500">*</span></label>
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Last Name <span className="text-red-500">*</span></label>
                         <Input
                           value={formData.last_name}
                           onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                          className={formErrors.last_name ? 'border-red-500' : ''}
-                          placeholder="Enter last name"
+                          className={`rounded-none border-stone-200 focus:border-stone-400 focus:ring-0 ${formErrors.last_name ? 'border-red-500' : ''}`}
+                          placeholder="e.g. Doe"
                         />
-                        {formErrors.last_name && <p className="text-red-500 text-xs mt-1">{formErrors.last_name}</p>}
+                        {formErrors.last_name && <p className="text-red-500 text-[10px] font-bold uppercase">{formErrors.last_name}</p>}
                       </div>
                     </div>
 
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-2 block">Email Address <span className="text-red-500">*</span></label>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">Email Address <span className="text-red-500">*</span></label>
                       <Input
                         type="email"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className={formErrors.email ? 'border-red-500' : ''}
-                        placeholder="user@example.com"
+                        className={`rounded-none border-stone-200 focus:border-stone-400 focus:ring-0 ${formErrors.email ? 'border-red-500' : ''}`}
+                        placeholder="john.doe@famousgate.com"
                       />
-                      {formErrors.email && <p className="text-red-500 text-xs mt-1">Required</p>}
+                      {formErrors.email && <p className="text-red-500 text-[10px] font-bold uppercase">Required</p>}
                     </div>
 
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-2 block">Password <span className="text-red-500">*</span></label>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">System Password <span className="text-red-500">*</span></label>
                       <Input
                         type="password"
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className={formErrors.password ? 'border-red-500' : ''}
-                        placeholder="Minimum 6 characters"
+                        className={`rounded-none border-stone-200 focus:border-stone-400 focus:ring-0 ${formErrors.password ? 'border-red-500' : ''}`}
+                        placeholder="At least 6 characters"
                       />
-                      {formErrors.password && <p className="text-red-500 text-xs mt-1">Required</p>}
+                      {formErrors.password && <p className="text-red-500 text-[10px] font-bold uppercase">Required</p>}
                     </div>
                   </motion.div>
                 )}
@@ -767,12 +844,12 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Sticky Footer with Navigation */}
-            <div className="border-t bg-white p-4 flex gap-3 sticky bottom-0">
+            <div className="border-t bg-stone-50 p-6 flex gap-3 shrink-0">
               {wizardStep > 1 && (
                 <IOSButton
                   variant="secondary"
                   onClick={() => setWizardStep(prev => prev - 1)}
-                  className="flex-1"
+                  className="flex-1 rounded-none border-stone-200 text-stone-600"
                 >
                   Previous
                 </IOSButton>
@@ -796,17 +873,17 @@ export default function AdminUsersPage() {
                     setFormErrors({});
                     setWizardStep(prev => prev + 1);
                   }}
-                  className="flex-1"
+                  className="flex-1 rounded-none bg-stone-900 hover:bg-stone-800"
                 >
                   Next
                 </IOSButton>
               ) : (
                 <IOSButton
                   onClick={handleCreateUser}
-                  className="flex-1"
+                  className="flex-1 rounded-none bg-stone-900 hover:bg-stone-800"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Creating...' : 'Create User'}
+                  {isSubmitting ? 'Creating...' : 'Finalize Account'}
                 </IOSButton>
               )}
             </div>
