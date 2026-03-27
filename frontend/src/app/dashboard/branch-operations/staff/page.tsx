@@ -401,6 +401,13 @@ function BranchStaffManagementContent() {
                   <option value="security">Security</option>
                   <option value="maintenance">Maintenance</option>
                   <option value="management">Management</option>
+                  <option value="finance">Finance</option>
+                  <option value="administration">Administration</option>
+                  <option value="driver">Driver / Transport</option>
+                  <option value="logistics">Logistics</option>
+                  <option value="stores">Stores / Storekeeper</option>
+                  <option value="laundry">Laundry</option>
+                  <option value="it">IT</option>
                 </select>
               </div>
 
@@ -664,6 +671,11 @@ function BranchStaffManagementContent() {
                 <option value="management">Management</option>
                 <option value="finance">Finance</option>
                 <option value="administration">Administration</option>
+                <option value="driver">Driver / Transport</option>
+                <option value="logistics">Logistics</option>
+                <option value="stores">Stores / Storekeeper</option>
+                <option value="laundry">Laundry</option>
+                <option value="it">IT</option>
               </select>
             </div>
 
@@ -768,6 +780,7 @@ function BranchStaffManagementContent() {
                 className="w-full h-10 px-3 rounded-ios-lg border border-gray-200"
               >
                 <option value="">Select Department</option>
+                <option value="reception">Reception</option>
                 <option value="housekeeping">Housekeeping</option>
                 <option value="kitchen">Kitchen</option>
                 <option value="restaurant">Restaurant</option>
@@ -776,6 +789,12 @@ function BranchStaffManagementContent() {
                 <option value="maintenance">Maintenance</option>
                 <option value="management">Management</option>
                 <option value="finance">Finance</option>
+                <option value="administration">Administration</option>
+                <option value="driver">Driver / Transport</option>
+                <option value="logistics">Logistics</option>
+                <option value="stores">Stores / Storekeeper</option>
+                <option value="laundry">Laundry</option>
+                <option value="it">IT</option>
               </select>
             </div>
             <DialogFooter>

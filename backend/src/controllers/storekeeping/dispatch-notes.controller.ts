@@ -86,10 +86,28 @@ export const getDispatchNotes = async (
             .select('id, registration_number, model')
             .in('id', vehicleIds) : { data: [] };
 
-        const { data: drivers } = driverIds.length > 0 ? await supabase
+        const driversTableIds = driverIds.filter(id => !id.startsWith('staff-'));
+        const staffIds = driverIds.filter(id => id.startsWith('staff-')).map(id => id.replace('staff-', ''));
+
+        const { data: tableDrivers } = driversTableIds.length > 0 ? await supabase
             .from('drivers')
             .select('id, name, license_number, phone')
-            .in('id', driverIds) : { data: [] };
+            .in('id', driversTableIds) : { data: [] };
+
+        const { data: staffDrivers } = staffIds.length > 0 ? await supabase
+            .from('staff_profiles')
+            .select('id, first_name, last_name, phone')
+            .in('id', staffIds) : { data: [] };
+
+        const drivers = [
+            ...(tableDrivers || []),
+            ...(staffDrivers || []).map(s => ({
+                id: `staff-${s.id}`,
+                name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+                phone: s.phone,
+                license_number: null
+            }))
+        ];
 
         // Map data
         const enrichedDispatches = dispatches.map(dispatch => {
@@ -490,11 +508,21 @@ export const dispatchItems = async (
         }
 
         if (driver_id && !resolvedDriverName) {
-            const { data: driver } = await supabase.from('drivers')
-                .select('name, phone').eq('id', driver_id).single();
-            if (driver) {
-                resolvedDriverName = driver.name;
-                if (!resolvedDriverPhone) resolvedDriverPhone = driver.phone || '';
+            if (driver_id.startsWith('staff-')) {
+                const staffId = driver_id.replace('staff-', '');
+                const { data: staff } = await supabase.from('staff_profiles')
+                    .select('first_name, last_name, phone').eq('id', staffId).single();
+                if (staff) {
+                    resolvedDriverName = `${staff.first_name || ''} ${staff.last_name || ''}`.trim();
+                    if (!resolvedDriverPhone) resolvedDriverPhone = staff.phone || '';
+                }
+            } else {
+                const { data: driver } = await supabase.from('drivers')
+                    .select('name, phone').eq('id', driver_id).single();
+                if (driver) {
+                    resolvedDriverName = driver.name;
+                    if (!resolvedDriverPhone) resolvedDriverPhone = driver.phone || '';
+                }
             }
         }
 

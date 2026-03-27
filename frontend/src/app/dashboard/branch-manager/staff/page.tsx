@@ -40,6 +40,12 @@ const DEPARTMENTS = [
   { value: 'security', label: 'Security' },
   { value: 'bar_lounge', label: 'Bar & Lounge' },
   { value: 'administration', label: 'Administration' },
+  { value: 'driver', label: 'Driver / Transport' },
+  { value: 'logistics', label: 'Logistics' },
+  { value: 'stores', label: 'Stores / Storekeeper' },
+  { value: 'laundry', label: 'Laundry' },
+  { value: 'it', label: 'IT' },
+  { value: 'kitchen', label: 'Kitchen' },
   { value: 'general', label: 'General' },
 ];
 

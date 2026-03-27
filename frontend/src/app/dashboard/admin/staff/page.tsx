@@ -50,6 +50,11 @@ export default function AdminStaffPage() {
     { id: 'security', name: 'Security' },
     { id: 'bar_lounge', name: 'Bar & Lounge' },
     { id: 'administration', name: 'Administration' },
+    { id: 'driver', name: 'Driver / Transport' },
+    { id: 'logistics', name: 'Logistics' },
+    { id: 'stores', name: 'Stores / Storekeeper' },
+    { id: 'laundry', name: 'Laundry' },
+    { id: 'it', name: 'IT' },
     { id: 'general', name: 'General' },
   ]);
   const [formData, setFormData] = useState({

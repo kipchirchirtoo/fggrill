@@ -1085,14 +1085,29 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
  * Get central warehouse branch
  */
 export async function getCentralWarehouse() {
+  // Try to find branch explicitly marked as central warehouse
   const { data, error } = await supabase
     .from('branches')
     .select('*')
     .eq('is_central_warehouse', true)
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
-  return data;
+
+  if (data) return data;
+
+  // Fallback: use the main branch if no central warehouse is designated
+  logger.warn('No central warehouse found, falling back to is_main_branch=true');
+  const { data: mainBranch, error: mainError } = await supabase
+    .from('branches')
+    .select('*')
+    .eq('is_main_branch', true)
+    .order('id', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (mainError) throw mainError;
+  return mainBranch;
 }
 
 /**

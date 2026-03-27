@@ -80,13 +80,47 @@ export const deleteVehicle = async (req: Request, res: Response) => {
 
 export const getDrivers = async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
+    // 1. Fetch dedicated drivers table
+    const { data: driverRecords, error: driverError } = await supabase
       .from('drivers')
       .select('*')
       .order('name');
 
-    if (error) throw error;
-    res.json({ success: true, data });
+    if (driverError) throw driverError;
+
+    // 2. Fetch staff_profiles with department = 'driver'
+    const { data: staffDrivers, error: staffError } = await supabase
+      .from('staff_profiles')
+      .select('id, first_name, last_name, phone, position, status, id_number')
+      .eq('department', 'driver');
+
+    if (staffError) {
+      logger.warn('Could not fetch driver staff profiles:', staffError.message);
+    }
+
+    // 3. Map staff drivers to the Driver shape
+    const staffMapped = (staffDrivers || []).map((s: any) => ({
+      id: `staff-${s.id}`,
+      name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+      phone: s.phone || '',
+      license_number: null,
+      license_expiry: null,
+      status: s.status === 'active' ? 'active' : 'inactive',
+      source: 'staff',
+      position: s.position || 'Driver',
+      employee_id: s.id_number || null,
+    }));
+
+    // 4. Merge: drivers table first, then staff (deduplicate by phone)
+    const existingPhones = new Set((driverRecords || []).map((d: any) => d.phone).filter(Boolean));
+    const uniqueStaffDrivers = staffMapped.filter((s: any) => !s.phone || !existingPhones.has(s.phone));
+
+    const merged = [
+      ...(driverRecords || []).map((d: any) => ({ ...d, source: 'drivers_table' })),
+      ...uniqueStaffDrivers,
+    ];
+
+    res.json({ success: true, data: merged });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

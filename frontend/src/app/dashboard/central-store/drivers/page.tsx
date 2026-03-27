@@ -20,6 +20,9 @@ interface Driver {
   license_number?: string;
   license_expiry?: string;
   status: 'active' | 'inactive';
+  source?: 'staff' | 'drivers_table';
+  position?: string;
+  employee_id?: string;
 }
 
 export default function CentralDriversPage() {
@@ -154,11 +157,14 @@ export default function CentralDriversPage() {
                         <div>
                           <p className="font-bold">{driver.name}</p>
                           <p className="text-xs text-gray-400">{driver.phone}</p>
+                          {driver.position && <p className="text-xs text-gray-500">{driver.position}</p>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <IOSBadge className={`${status.bg} ${status.color}`}>{driver.status}</IOSBadge>
-                        {isManager && (
+                        {driver.source === 'staff' ? (
+                          <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">Staff Registry</span>
+                        ) : isManager && (
                           <div className="flex gap-1">
                             <button onClick={() => startEdit(driver)} className="p-1 hover:bg-stone-100 rounded text-stone-400 hover:text-[#007AFF] transition-colors"><Edit2 className="h-4 w-4" /></button>
                             <button onClick={() => handleDelete(driver.id)} className="p-1 hover:bg-red-50 rounded text-stone-400 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
@@ -167,10 +173,12 @@ export default function CentralDriversPage() {
                       </div>
                     </div>
                     <div className="space-y-1">
+                      {driver.employee_id && <p className="text-sm text-gray-500 flex items-center gap-2"><User className="h-3 w-3" /> EMP: {driver.employee_id}</p>}
                       {driver.license_number && <p className="text-sm text-gray-500 flex items-center gap-2"><Car className="h-3 w-3" /> License: {driver.license_number}</p>}
                       {driver.license_expiry && <p className="text-sm text-gray-500 flex items-center gap-2">Expiry: {new Date(driver.license_expiry).toLocaleDateString()}</p>}
                     </div>
                   </IOSCard>
+
                 );
               })}
             </div>

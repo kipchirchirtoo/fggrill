@@ -9,14 +9,27 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
       .from('branches')
       .select('id')
       .eq('is_central_warehouse', true)
-      .single();
+      .maybeSingle();
 
-    if (branchError || !centralBranch) {
+    let centralId: number | null = centralBranch?.id ?? null;
+
+    // Fallback: use the main branch if no central warehouse is designated
+    if (!centralId) {
+      const { data: mainBranch } = await supabase
+        .from('branches')
+        .select('id')
+        .eq('is_main_branch', true)
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      centralId = mainBranch?.id ?? null;
+    }
+
+    if (branchError || !centralId) {
       logger.error('Central warehouse not found');
       return res.status(500).json({ success: false, message: 'Central warehouse configuration missing' });
     }
 
-    const centralId = centralBranch.id;
 
     // 1. Get Inventory Summary (from branch_stock for central warehouse)
     const { data: inventoryData, error: inventoryError } = await supabase
