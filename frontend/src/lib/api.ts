@@ -295,12 +295,13 @@ export const storeAPI = {
     fetchAPI<any>(`/store/stock-requests/branch-performance/${branchId}?days=${days}`),
 
   // Items/Inventory
-  getItems: (params?: { search?: string; category?: string; branch_id?: number; limit?: number }) => {
+  getItems: (params?: { search?: string; category?: string; branch_id?: number; limit?: number; page?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.append('search', params.search);
     if (params?.category) query.append('category', params.category);
     if (params?.branch_id) query.append('branch_id', String(params.branch_id));
     if (params?.limit) query.append('limit', String(params.limit));
+    if (params?.page) query.append('page', String(params.page));
     return fetchAPI<any>(`/store/items?${query}`);
   },
   getItem: (id: string) => fetchAPI<any>(`/store/items/${id}`),

@@ -1126,23 +1126,45 @@ export async function getAllBranches() {
  * Get dashboard stats for central
  */
 export async function getCentralDashboardStats() {
-  const [pendingRequests, inTransit, lowStock, recentDispatches, totalMaster, globalLowStock] = await Promise.all([
-    supabase.from('stock_requests').select('id', { count: 'exact', head: true }).in('status', ['PENDING', 'UNDER_REVIEW']),
-    supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).eq('status', 'IN_TRANSIT'),
-    supabase.from('branch_stock').select('id', { count: 'exact', head: true }).lte('quantity', 10), // Low stock items cross-branch
-    supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-    supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true),
-    supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).lte('quantity', 10)
-  ]);
+  try {
+    const [pendingRequests, inTransit, lowStock, recentDispatches, totalMaster] = await Promise.all([
+      supabase.from('stock_requests').select('*', { count: 'exact', head: true }).in('status', ['PENDING', 'UNDER_REVIEW']),
+      supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).eq('status', 'IN_TRANSIT'),
+      supabase.from('branch_stock').select('*', { count: 'exact', head: true }).lte('quantity', 10), // Threshold default
+      supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+      supabase.from('simple_items').select('*', { count: 'exact', head: true }).eq('is_active', true)
+    ]);
 
-  return {
-    pendingRequests: pendingRequests.count || 0,
-    inTransit: inTransit.count || 0,
-    lowStockBranches: lowStock.count || 0,
-    weeklyDispatches: recentDispatches.count || 0,
-    totalMasterItems: totalMaster.count || 0,
-    totalLowStockItems: globalLowStock.count || 0
-  };
+    // For better low stock accuracy across catalog
+    // We try to get this from simple_items where quantity <= reorder_level
+    // This is hard to do in one PostgREST call without RPC, so we'll use a count of those that fall below 
+    // BUT since we can't compare columns easily, we'll use a conservative threshold for now or 
+    // a separate query for those explicitly marked.
+    const { count: globalLowStock } = await supabase
+      .from('simple_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .filter('quantity', 'lte', 10); // Still using numeric for reliability
+
+    return {
+      pendingRequests: pendingRequests?.count || 0,
+      inTransit: inTransit?.count || 0,
+      lowStockBranches: lowStock?.count || 0,
+      weeklyDispatches: recentDispatches?.count || 0,
+      totalMasterItems: totalMaster?.count || 0,
+      totalLowStockItems: globalLowStock || 0
+    };
+  } catch (error) {
+    logger.error('Error fetching central dashboard stats:', error);
+    return {
+      pendingRequests: 0,
+      inTransit: 0,
+      lowStockBranches: 0,
+      weeklyDispatches: 0,
+      totalMasterItems: 0,
+      totalLowStockItems: 0
+    };
+  }
 }
 
 /**

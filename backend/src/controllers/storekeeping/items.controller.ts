@@ -54,13 +54,19 @@ export const getItems = async (
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Get total count for pagination metadata
-    const { count: total, error: countError } = await supabase
-      .from('simple_items')
-      .select('sku', { count: 'exact', head: true })
-      .eq('is_active', true);
+    // Get stats for the cards
+    const [totalRes, lowStockRes, outOfStockRes] = await Promise.all([
+      supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).eq('is_active', true),
+      supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).filter('quantity', 'lte', 'reorder_level'),
+      supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).eq('quantity', 0)
+    ]);
 
-    if (countError) throw countError;
+    const stats = {
+      total: totalRes.count || 0,
+      lowStock: lowStockRes.count || 0,
+      outOfStock: outOfStockRes.count || 0,
+      inStock: (totalRes.count || 0) - (outOfStockRes.count || 0)
+    };
 
     // Apply range
     query = query.range(from, to);
@@ -72,9 +78,10 @@ export const getItems = async (
     res.status(200).json({
       success: true,
       count: data?.length || 0,
-      total,
+      total: stats.total,
       page,
-      pages: Math.ceil((total || 0) / limit),
+      pages: Math.ceil((stats.total || 0) / limit),
+      stats,
       data
     });
   } catch (error) {

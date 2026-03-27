@@ -9,6 +9,14 @@ import {
   downloadPayslipsZip,
   downloadSummaryPDF
 } from '../controllers/payroll.controller';
+import {
+  createCreditBill,
+  getCreditBills,
+  updateCreditBillStatus,
+  triggerPendingBillsMigration
+} from '../controllers/credit-bills.controller';
+import { getLoans, createLoan, approveLoan } from '../controllers/loans.controller';
+import { getAdvances, createAdvance, approveAdvance } from '../controllers/advances.controller';
 import { getPayrollSummary } from '../controllers/payroll-simple.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -75,6 +83,69 @@ router.get(
   '/run/:runId/summary-pdf',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
   downloadSummaryPDF
+);
+
+// Credit Bills (Deductions from staff)
+router.post(
+  '/credit-bills',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.CASHIER, UserRole.AUDITOR]),
+  createCreditBill
+);
+
+router.get(
+  '/credit-bills',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getCreditBills
+);
+
+router.patch(
+  '/credit-bills/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  updateCreditBillStatus
+);
+
+router.post(
+  '/credit-bills/migrate-pending',
+  authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  triggerPendingBillsMigration
+);
+
+// Staff Loans
+router.get(
+  '/loans',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.HR_MANAGER]),
+  getLoans
+);
+
+router.post(
+  '/loans',
+  authorize([UserRole.SUPER_ADMIN, UserRole.HR_MANAGER, UserRole.ACCOUNTANT]),
+  createLoan
+);
+
+router.patch(
+  '/loans/:id/approve',
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT]),
+  approveLoan
+);
+
+// Staff Advances
+router.get(
+  '/advances',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.HR_MANAGER]),
+  getAdvances
+);
+
+router.post(
+  '/advances',
+  authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.CASHIER, UserRole.ACCOUNTANT]),
+  createAdvance
+);
+
+router.patch(
+  '/advances/:id/approve',
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  approveAdvance
 );
 
 export default router;

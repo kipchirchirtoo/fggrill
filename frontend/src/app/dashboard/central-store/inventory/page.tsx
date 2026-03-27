@@ -26,15 +26,28 @@ export default function InventoryPage() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [formData, setFormData] = useState({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '' });
+  const [globalStats, setGlobalStats] = useState({ total: 0, inStock: 0, lowStock: 0, outOfStock: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const fetchItems = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await storeAPI.getItems();
-      if (response.success) setItems(response.data || []);
+      const response = await storeAPI.getItems({ 
+        page: currentPage, 
+        limit: 50,
+        search: searchQuery 
+      });
+      if (response.success) {
+        setItems(response.data || []);
+        setTotalPages(response.pages || 1);
+        if (response.stats) {
+          setGlobalStats(response.stats);
+        }
+      }
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
-  }, []);
+  }, [currentPage, searchQuery]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -136,19 +149,19 @@ export default function InventoryPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Total SKU</p>
-              <p className="text-2xl font-semibold text-stone-900 mt-1">{items.length}</p>
+              <p className="text-2xl font-semibold text-stone-900 mt-1">{globalStats.total}</p>
             </div>
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">In Stock</p>
-              <p className="text-2xl font-semibold text-stone-900 mt-1">{items.filter(i => i.quantity > 0).length}</p>
+              <p className="text-2xl font-semibold text-stone-900 mt-1">{globalStats.inStock}</p>
             </div>
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-stone-400">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Low Stock</p>
-              <p className="text-2xl font-semibold text-amber-600 mt-1">{items.filter(i => i.quantity <= i.reorder_level).length}</p>
+              <p className="text-2xl font-semibold text-amber-600 mt-1">{globalStats.lowStock}</p>
             </div>
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Out of Stock</p>
-              <p className="text-2xl font-semibold text-stone-300 mt-1">{items.filter(i => i.quantity === 0).length}</p>
+              <p className="text-2xl font-semibold text-stone-300 mt-1">{globalStats.outOfStock}</p>
             </div>
           </div>
 
@@ -183,10 +196,10 @@ export default function InventoryPage() {
                     Array(5).fill(0).map((_, i) => (
                       <tr key={`skeleton-${i}`}><td colSpan={5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
                     ))
-                  ) : filteredItems.length === 0 ? (
+                  ) : items.length === 0 ? (
                     <tr><td colSpan={5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
                   ) : (
-                    filteredItems.map((item, idx) => {
+                    items.map((item, idx) => {
                       const isLow = item.quantity <= item.reorder_level;
                       return (
                         <tr key={item.id ?? item.sku ?? idx} className="hover:bg-stone-50/50 transition-colors">
@@ -231,6 +244,31 @@ export default function InventoryPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination UI */}
+            {!isLoading && totalPages > 1 && (
+              <div className="p-4 border-t border-stone-100 flex items-center justify-between bg-stone-50/30">
+                <p className="text-[12px] text-stone-500">
+                  Showing page <span className="font-medium">{currentPage}</span> of <span className="font-medium">{totalPages}</span>
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className="h-8 px-3 text-[12px] border border-stone-200 rounded md hover:bg-white disabled:opacity-50 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    className="h-8 px-3 text-[12px] bg-stone-900 text-white rounded md hover:bg-black disabled:opacity-50 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

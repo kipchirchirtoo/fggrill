@@ -795,31 +795,44 @@ export const getCentralDashboard = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    let central = null;
+    try {
+      central = await BranchInventoryService.getCentralWarehouse();
+    } catch (e) {
+      logger.warn('Central warehouse not found in branches table');
+    }
+    
     const stats = await BranchInventoryService.getCentralDashboardStats();
-    const central = await BranchInventoryService.getCentralWarehouse();
     const branches = await BranchInventoryService.getAllBranches();
 
-    // Get central stock
+    // Get central stock or just some recent items if no warehouse
     let centralStock: any[] = [];
-    if (central) {
+    try {
       const { data } = await supabase
         .from('simple_items')
         .select('*')
         .eq('is_active', true)
-        .order('quantity', { ascending: true })
-        .limit(20);
+        .order('last_updated', { ascending: false })
+        .limit(10);
       centralStock = data || [];
+    } catch (e) {
+      logger.error('Error fetching recent items for dashboard:', e);
     }
 
     res.status(200).json({
       success: true,
+      count: centralStock.length,
       data: {
         stats,
         centralWarehouse: central,
-        branches: branches?.filter(b => !b.is_central_warehouse),
-        totalItems: stats.totalMasterItems || centralStock.length,
-        lowStockCount: stats.totalLowStockItems || centralStock.filter(i => (i.quantity || 0) <= (i.reorder_level || 10)).length,
-        lowStockItems: centralStock.filter(i => (i.quantity || 0) <= (i.reorder_level || 10))
+        branches: branches?.filter(b => !b.is_central_warehouse) || [],
+        totalItems: stats.totalMasterItems || 0,
+        lowStockItems: stats.totalLowStockItems || 0,
+        // Compat with frontend expectations
+        totalMasterItems: stats.totalMasterItems || 0,
+        inTransit: stats.inTransit || 0,
+        lowStockCount: stats.totalLowStockItems || 0,
+        recentItems: centralStock
       }
     });
   } catch (error) {
