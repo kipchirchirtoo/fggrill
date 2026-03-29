@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 // @desc    Get attendance records
 // @route   GET /api/attendance
@@ -19,8 +20,11 @@ export const getAttendance = async (
             .from('staff_attendance')
             .select('*, user:users(id, first_name, last_name, role)');
 
-        if (branchId) {
-            query = query.eq('branch_id', branchId);
+        query = applyBranchFilter(query, req);
+
+        // Optional query override (if allowed)
+        if (req.query.branch_id) {
+            query = query.eq('branch_id', req.query.branch_id);
         }
         if (userId) {
             query = query.eq('user_id', userId);

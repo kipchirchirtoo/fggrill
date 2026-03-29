@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { API_URL } from '@/lib/config';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from "@/components/ui/minimal/button";
@@ -58,7 +60,16 @@ interface StoreItem {
 }
 
 export default function PurchaseOrdersPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PurchaseOrdersContent />
+    </Suspense>
+  );
+}
+
+function PurchaseOrdersContent() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<StoreItem[]>([]);
@@ -81,7 +92,15 @@ export default function PurchaseOrdersPage() {
 
   useEffect(() => {
     fetchData();
-  }, [statusFilter]);
+    
+    // Check for supplier_id in URL to auto-open creation
+    const supplierId = searchParams.get('supplier_id');
+    const autoCreate = searchParams.get('auto_create');
+    if (supplierId && autoCreate) {
+      setFormData(prev => ({ ...prev, supplier_id: supplierId }));
+      setIsCreateModalOpen(true);
+    }
+  }, [statusFilter, searchParams]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -158,6 +177,9 @@ export default function PurchaseOrdersPage() {
       if (response.ok) {
         toast.success('Order approved');
         fetchData();
+      } else {
+        const err = await response.json().catch(() => ({}));
+        toast.error(err.error || err.message || 'Failed to approve order');
       }
     } catch (error) {
       toast.error('Failed to approve order');
@@ -174,6 +196,9 @@ export default function PurchaseOrdersPage() {
       if (response.ok) {
         toast.success('Order received - stock updated');
         fetchData();
+      } else {
+        const err = await response.json().catch(() => ({}));
+        toast.error(err.error || err.message || 'Failed to receive order');
       }
     } catch (error) {
       toast.error('Failed to receive order');

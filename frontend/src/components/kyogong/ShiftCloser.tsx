@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import { kyogongAPI } from '@/lib/api/kyogong';
 import { toast } from 'sonner';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
-import { API_URL } from '@/lib/config';
 
 interface ShiftCloserProps {
     shift: any;
@@ -36,30 +36,21 @@ export function ShiftCloser({ shift, onShiftClosed }: ShiftCloserProps) {
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/api/kyogong/shifts/${shift.id}/close`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    closing_cash_counted: parseFloat(closingCash),
-                    closing_petty_cash: closingPettyCash ? parseFloat(closingPettyCash) : undefined,
-                    variance_reason: varianceReason || undefined
-                })
+            const res = await kyogongAPI.closeShift(shift.id, {
+                closing_cash_counted: parseFloat(closingCash),
+                closing_petty_cash: closingPettyCash ? parseFloat(closingPettyCash) : undefined,
+                variance_reason: varianceReason || undefined
             });
 
-            const data = await res.json();
-            if (data.success) {
+            if (res.success) {
                 toast.success('Shift closed! Submitted for review.');
                 onShiftClosed();
             } else {
-                if (data.data?.variance !== undefined) {
+                if (res.data?.variance !== undefined) {
                     setShowVarianceField(true);
-                    toast.warning(data.error || 'Variance explanation required');
+                    toast.warning(res.error || 'Variance explanation required');
                 } else {
-                    toast.error(data.error || 'Failed to close shift');
+                    toast.error(res.error || 'Failed to close shift');
                 }
             }
         } catch (error) {

@@ -14,7 +14,8 @@ import {
   XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { StockAudit, StockAuditItem, Branch } from '@/types/inventory.types';
+import { api } from '@/lib/api';
+import type { StockAudit, StockAuditItem, Branch } from '@/lib/api/types';
 
 
 export default function AuditPage() {
@@ -31,22 +32,14 @@ export default function AuditPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const headers = {
-          'Authorization': `Bearer ${token}`
-        };
-
+        setIsLoading(true);
         // Fetch audits
-        const auditsResponse = await fetch(`${API_URL}/api/inventory/audits`, { headers });
-        if (!auditsResponse.ok) throw new Error('Failed to fetch audits');
-        const auditsData = await auditsResponse.json();
-        setAudits(auditsData.data);
+        const auditsRes = await api.audit.getAuditLogs({ category: 'inventory' });
+        if (auditsRes.success) setAudits(auditsRes.data as any);
 
         // Fetch branches
-        const branchesResponse = await fetch(`${API_URL}/api/branches`, { headers });
-        if (!branchesResponse.ok) throw new Error('Failed to fetch branches');
-        const branchesData = await branchesResponse.json();
-        setBranches(branchesData.data);
+        const branchesRes = await api.system.getBranches();
+        if (branchesRes.success) setBranches(branchesRes.data);
 
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');

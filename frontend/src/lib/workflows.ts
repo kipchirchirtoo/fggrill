@@ -6,21 +6,13 @@ import {
   notifyStockTransfer
 } from './notifications';
 
-import { API_URL } from './config';
+import { apiClient } from './api/core';
 
 // Automated workflow for purchase orders
 export const handlePurchaseOrderWorkflow = async (orderId: string, action: 'create' | 'approve' | 'reject' | 'receive') => {
   try {
-    const response = await fetch(`${API_URL}/api/purchase-orders/${orderId}/${action}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) throw new Error(`Failed to ${action} purchase order`);
-
-    const order = await response.json();
+    const res = await apiClient.post<any>(`/purchase-orders/${orderId}/${action}`);
+    const order = res.data;
 
     switch (action) {
       case 'create':
@@ -47,16 +39,8 @@ export const handlePurchaseOrderWorkflow = async (orderId: string, action: 'crea
 // Automated workflow for requisitions
 export const handleRequisitionWorkflow = async (requisitionId: string, action: 'create' | 'approve' | 'reject' | 'fulfill') => {
   try {
-    const response = await fetch(`${API_URL}/api/requisitions/${requisitionId}/${action}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) throw new Error(`Failed to ${action} requisition`);
-
-    const requisition = await response.json();
+    const res = await apiClient.post<any>(`/requisitions/${requisitionId}/${action}`);
+    const requisition = res.data;
 
     switch (action) {
       case 'create':
@@ -82,16 +66,8 @@ export const handleRequisitionWorkflow = async (requisitionId: string, action: '
 // Automated workflow for stock transfers
 export const handleStockTransferWorkflow = async (transferId: string, action: 'create' | 'approve' | 'receive') => {
   try {
-    const response = await fetch(`${API_URL}/api/transfers/${transferId}/${action}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) throw new Error(`Failed to ${action} transfer`);
-
-    const transfer = await response.json();
+    const res = await apiClient.post<any>(`/transfers/${transferId}/${action}`);
+    const transfer = res.data;
 
     switch (action) {
       case 'create':
@@ -117,15 +93,8 @@ export const handleStockTransferWorkflow = async (transferId: string, action: 'c
 // Automated stock monitoring
 export const monitorStockLevels = async () => {
   try {
-    const response = await fetch(`${API_URL}/api/inventory/low-stock`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) throw new Error('Failed to check stock levels');
-
-    const lowStockItems = await response.json();
+    const res = await apiClient.get<any[]>('/inventory/low-stock');
+    const lowStockItems = res.data;
 
     if (lowStockItems.length > 0) {
       await notifyLowStock(lowStockItems);
@@ -142,14 +111,7 @@ export const monitorStockLevels = async () => {
 // Helper functions
 const sendPurchaseOrderEmail = async (order: any) => {
   try {
-    await fetch(`${API_URL}/api/emails/purchase-order`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(order)
-    });
+    await apiClient.post('/emails/purchase-order', order);
   } catch (error) {
     console.error('Error sending PO email:', error);
     throw error;
@@ -158,14 +120,7 @@ const sendPurchaseOrderEmail = async (order: any) => {
 
 const updateStockLevels = async (items: any[]) => {
   try {
-    await fetch(`${API_URL}/api/inventory/update-stock`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify({ items })
-    });
+    await apiClient.post('/inventory/update-stock', { items });
   } catch (error) {
     console.error('Error updating stock levels:', error);
     throw error;
@@ -174,18 +129,8 @@ const updateStockLevels = async (items: any[]) => {
 
 const checkAndCreatePurchaseOrders = async (requisition: any) => {
   try {
-    const response = await fetch(`${API_URL}/api/inventory/check-stock`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(requisition.items)
-    });
-
-    if (!response.ok) throw new Error('Failed to check stock availability');
-
-    const { itemsToOrder } = await response.json();
+    const res = await apiClient.post<any>('/inventory/check-stock', requisition.items);
+    const { itemsToOrder } = res.data;
 
     if (itemsToOrder.length > 0) {
       await autoGeneratePurchaseOrders(itemsToOrder);
@@ -198,14 +143,7 @@ const checkAndCreatePurchaseOrders = async (requisition: any) => {
 
 const autoGeneratePurchaseOrders = async (items: any[]) => {
   try {
-    await fetch(`${API_URL}/api/purchase-orders/auto-generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify({ items })
-    });
+    await apiClient.post('/purchase-orders/auto-generate', { items });
   } catch (error) {
     console.error('Error auto-generating POs:', error);
     throw error;
@@ -214,14 +152,7 @@ const autoGeneratePurchaseOrders = async (items: any[]) => {
 
 const fulfillRequisition = async (requisition: any) => {
   try {
-    await fetch(`${API_URL}/api/inventory/fulfill-requisition`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(requisition)
-    });
+    await apiClient.post('/inventory/fulfill-requisition', requisition);
   } catch (error) {
     console.error('Error fulfilling requisition:', error);
     throw error;
@@ -230,14 +161,7 @@ const fulfillRequisition = async (requisition: any) => {
 
 const updateSourceBranchStock = async (transfer: any) => {
   try {
-    await fetch(`${API_URL}/api/inventory/update-source-stock`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(transfer)
-    });
+    await apiClient.post('/inventory/update-source-stock', transfer);
   } catch (error) {
     console.error('Error updating source branch stock:', error);
     throw error;
@@ -246,14 +170,7 @@ const updateSourceBranchStock = async (transfer: any) => {
 
 const updateDestinationBranchStock = async (transfer: any) => {
   try {
-    await fetch(`${API_URL}/api/inventory/update-destination-stock`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(transfer)
-    });
+    await apiClient.post('/inventory/update-destination-stock', transfer);
   } catch (error) {
     console.error('Error updating destination branch stock:', error);
     throw error;

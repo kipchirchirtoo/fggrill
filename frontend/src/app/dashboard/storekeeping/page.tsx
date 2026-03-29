@@ -16,6 +16,7 @@ import {
   Plus, Eye, Car, User, Users, FileText, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
@@ -85,20 +86,17 @@ export default function StorekeepingDashboard() {
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = { 'Authorization': `Bearer ${token}` };
-      const branchQuery = effectiveBranchId ? `?branch_id=${effectiveBranchId}` : '';
+      const branchId = effectiveBranchId || undefined;
 
-      // Fetch all data in parallel with branch filter
+      // Fetch all data in parallel using the api client
       const [itemsRes, branchesRes, statsRes] = await Promise.all([
-        fetch(`${API_URL}/api/store/items${branchQuery}`, { headers }),
-        fetch(`${API_URL}/api/store/branches`, { headers }),
-        fetch(`${API_URL}/api/inventory/stats/overview${branchQuery}`, { headers })
+        api.store.getItems(branchId),
+        api.store.getBranches(),
+        api.inventory.getStats(branchId)
       ]);
 
-      if (itemsRes.ok) {
-        const data = await itemsRes.json();
-        const items = data.data || [];
+      if (itemsRes.success) {
+        const items = itemsRes.data || [];
         const lowStock = items.filter((i: any) => (i.quantity || 0) <= (i.reorder_level || 10));
         setLowStockItems(lowStock.slice(0, 5));
         setStats(prev => ({
@@ -109,19 +107,18 @@ export default function StorekeepingDashboard() {
         }));
       }
 
-      if (branchesRes.ok) {
-        const data = await branchesRes.json();
-        setBranches(data.data || []);
-        setStats(prev => ({ ...prev, branches: (data.data || []).length }));
+      if (branchesRes.success) {
+        setBranches(branchesRes.data || []);
+        setStats(prev => ({ ...prev, branches: (branchesRes.data || []).length }));
       }
 
-      if (statsRes.ok) {
-        const data = await statsRes.json();
-        if (data.data) {
+      if (statsRes.success) {
+        const data = statsRes.data;
+        if (data) {
           setStats(prev => ({
             ...prev,
-            totalItems: data.data.totalItems || prev.totalItems,
-            lowStockItems: data.data.lowStockCount || prev.lowStockItems
+            totalItems: (data as any).totalItems || prev.totalItems,
+            lowStockItems: (data as any).lowStockCount || prev.lowStockItems
           }));
         }
       }

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 export const createAdvance = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -19,7 +20,8 @@ export const createAdvance = async (req: Request, res: Response, next: NextFunct
                 advance_date: advance_date || new Date().toISOString().split('T')[0],
                 month_to_deduct: Number(month_to_deduct),
                 year_to_deduct: Number(year_to_deduct),
-                status: 'pending'
+                status: 'pending',
+                branch_id: (req as any).user?.branch_id
             })
             .select()
             .single();
@@ -40,6 +42,8 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
             .from('staff_advances')
             .select('*')
             .order('created_at', { ascending: false });
+
+        query = applyBranchFilter(query, req);
 
         if (staff_id) query = query.eq('staff_id', staff_id);
         if (status) query = query.eq('status', status);

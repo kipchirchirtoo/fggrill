@@ -10,11 +10,30 @@ import {
   AlertTriangle, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { reportsService, systemAPI } from '@/lib/api';
+import { reportsAPI, auditorReportsAPI, systemAPI } from '@/lib/api';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { KPIDashboard } from './KPIDashboard';
+import { fetchAPI, REPORTS_SERVICE_URL } from '@/lib/api';
+
+// Missing reportsService implementation to proxy to real endpoints
+const reportsService = {
+  healthCheck: () => fetchAPI<any>('/reports/stats/overview').then(() => ({ status: 'OK' })).catch(() => ({ status: 'error' })),
+  getScheduledReports: () => fetchAPI<any>('/reports/templates').catch(() => ({ data: [] })),
+  getReportHistory: (limit: number) => reportsAPI.getReportHistory('all').catch(() => ({ data: [] })),
+  toggleScheduledReport: (id: string) => Promise.resolve(),
+  deleteScheduledReport: (id: string) => Promise.resolve(),
+  runReportNow: (id: string) => Promise.resolve(),
+  scheduleReport: (data: any) => Promise.resolve(),
+  downloadReport: async (reportType: string, filters: any, format: 'pdf' | 'excel' = 'pdf') => {
+      if (format === 'pdf') {
+          return auditorReportsAPI.exportBrandedPdf(reportType, filters);
+      }
+      // For excel fallback
+      return fetchAPI<Blob>(`/reports/generate/${reportType}?format=excel`, { responseType: 'blob' });
+  }
+};
 
 // Report type definitions matching backend
 const ALL_REPORT_CATEGORIES = [

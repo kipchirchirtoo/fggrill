@@ -4,6 +4,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import notificationService from '../../services/notification.service';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
+import { isGlobalRole } from '../../utils/branchIsolation';
 
 // @desc    Get all stock requests
 // @route   GET /api/stock-requests
@@ -67,26 +68,16 @@ export const getStockRequests = async (
         let branchId = queryBranchId;
         const status = req.query.status as string;
 
-        // Allow central roles to fetch all requests (branchId is optional)
-        const isCentralRole = [
-            'super_admin',
-            'general_manager',
-            'central_storekeeper',
-            'central_operations_manager',
-            'auditor'
-        ].includes((req.user?.role || '').toLowerCase());
+        // Use standard global role check
+        const isCentralRole = isGlobalRole(req.user?.role);
 
-        if (branchId === null) {
-            if (!isCentralRole) {
-                // Non-central roles must use their assigned branch
-                branchId = req.user?.branch_id || null;
-
-                if (!branchId) {
-                    res.status(400).json({ success: false, message: 'Branch ID required' });
-                    return;
-                }
+        // Strict branch isolation: override any query parameter if not a central role
+        if (!isCentralRole) {
+            branchId = req.user?.branch_id || null;
+            if (!branchId) {
+                res.status(400).json({ success: false, message: 'Branch ID required' });
+                return;
             }
-            // Central roles keep branchId as null to fetch all
         }
 
         const data = await BranchInventoryService.getRequests(branchId, status);

@@ -40,6 +40,8 @@ interface StockValuationProps {
   onBranchChange: (branch: Branch) => void;
 }
 
+import { apiClient } from '@/lib/api/core';
+
 export function StockValuation({ branch, onBranchChange }: StockValuationProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [items, setItems] = useState<StockItem[]>([]);
@@ -57,18 +59,11 @@ export function StockValuation({ branch, onBranchChange }: StockValuationProps) 
 
   const fetchStockValuation = async () => {
     try {
-      const response = await fetch(
-        `${API_URL}/api/inventory/valuation?branch=${branch}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-      );
+      const res = await apiClient.get<any>(`/inventory/valuation?branch=${branch}`);
 
-      if (!response.ok) throw new Error('Failed to fetch stock valuation');
+      if (!res.success) throw new Error(res.error || res.message || 'Failed to fetch stock valuation');
 
-      const data = await response.json();
+      const data = res.data;
       setItems(data.items);
       
       // Calculate totals

@@ -22,9 +22,10 @@ import {
     Printer,
     Eye,
     DollarSign,
-    Users
+    Users,
+    Plus
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, conferenceAPI, accountingAPI } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -60,6 +61,7 @@ function BookingsManagementContent() {
     const [activeTab, setActiveTab] = useState('hotel');
     const [hotelBookings, setHotelBookings] = useState<any[]>([]);
     const [restaurantBookings, setRestaurantBookings] = useState<any[]>([]);
+    const [conferenceBookings, setConferenceBookings] = useState<any[]>([]);
     const [invoices, setInvoices] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -80,6 +82,11 @@ function BookingsManagementContent() {
                 const response = await api.restaurant.getRestaurantReservations();
                 if (response.success) {
                     setRestaurantBookings(response.data);
+                }
+            } else if (activeTab === 'conference') {
+                const response = await conferenceAPI.getBookings();
+                if (response.success) {
+                    setConferenceBookings(response.data);
                 }
             } else if (activeTab === 'invoices') {
                 const response = await api.accounting.getInvoices();
@@ -153,6 +160,14 @@ function BookingsManagementContent() {
         const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
         return matchesSearch && matchesStatus;
     });
+    
+    const filteredConferenceBookings = conferenceBookings.filter(b => {
+        const searchStr = searchQuery.toLowerCase();
+        const guestName = (b.customer_name || '').toLowerCase();
+        const matchesSearch = guestName.includes(searchStr);
+        const matchesStatus = statusFilter === 'all' || b.booking_status === statusFilter;
+        return matchesSearch && matchesStatus;
+    });
 
     const filteredInvoices = invoices.filter(inv => {
         const searchStr = searchQuery.toLowerCase();
@@ -181,6 +196,10 @@ function BookingsManagementContent() {
                         <TabsTrigger value="restaurant" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                             <Utensils className="w-4 h-4 mr-2" />
                             Restaurant
+                        </TabsTrigger>
+                        <TabsTrigger value="conference" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                            <Users className="w-4 h-4 mr-2" />
+                            Conference
                         </TabsTrigger>
                         <TabsTrigger value="invoices" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                             <FileText className="w-4 h-4 mr-2" />
@@ -218,6 +237,18 @@ function BookingsManagementContent() {
                         loading={loading}
                         onConfirm={handleConfirm}
                         onCancel={handleCancel}
+                        onInvoiceGenerated={fetchData}
+                    />
+                </TabsContent>
+
+                <TabsContent value="conference" className="mt-0">
+                    <BookingList
+                        type="conference"
+                        records={filteredConferenceBookings}
+                        loading={loading}
+                        onConfirm={handleConfirm}
+                        onCancel={handleCancel}
+                        onInvoiceGenerated={fetchData}
                     />
                 </TabsContent>
 
@@ -232,19 +263,67 @@ function BookingsManagementContent() {
     );
 }
 
-function BookingList({ type, records, loading, onConfirm, onCancel }: {
-    type: 'hotel' | 'restaurant',
+function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGenerated }: {
+    type: 'hotel' | 'restaurant' | 'conference',
     records: any[],
     loading: boolean,
     onConfirm: (id: string) => void,
-    onCancel: (id: string) => void
+    onCancel: (id: string) => void,
+    onInvoiceGenerated?: () => void
 }) {
     const [selectedBooking, setSelectedBooking] = useState<any>(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [isInvoicing, setIsInvoicing] = useState(false);
 
     const handleViewDetails = (record: any) => {
         setSelectedBooking(record);
         setShowDetailsModal(true);
+    };
+
+    const handleGenerateInvoice = async (record: any) => {
+        if (!confirm('Are you sure you want to generate an invoice for this booking?')) return;
+        
+        setIsInvoicing(true);
+        try {
+            const invoiceData = {
+                customer_id: record.customer_id || record.guest_id, // Map from booking
+                customer_name: record.customer_name || record.guest_name,
+                customer_email: record.customer_email || record.guest_email || record.email,
+                invoice_date: new Date().toISOString().split('T')[0],
+                due_date: new Date().toISOString().split('T')[0],
+                subtotal: record.total_amount || 0,
+                tax_amount: 0,
+                reference: `Booking Ref: ${record.booking_number || record.reservation_number || 'N/A'}`,
+                notes: `Generated from ${type} booking.`,
+                items: [
+                    {
+                        description: `${type.toUpperCase()} Booking - ${record.room_number || record.table_number || record.conference_hall_id || 'N/A'}`,
+                        quantity: 1,
+                        unit_price: record.total_amount || 0,
+                        total: record.total_amount || 0
+                    }
+                ],
+                type: type === 'conference' ? 'CONFERENCE' : 'GENERAL',
+                hotel_booking_id: type === 'hotel' ? record.id : null,
+                restaurant_reservation_id: type === 'restaurant' ? record.id : null,
+                conference_hall_id: type === 'conference' ? record.conference_hall_id : null,
+                conference_start_date: type === 'conference' ? record.start_date : null,
+                conference_end_date: type === 'conference' ? record.end_date : null
+            };
+
+            const res = await accountingAPI.createInvoice(invoiceData);
+            if (res.success) {
+                toast.success('Invoice generated successfully');
+                if (onInvoiceGenerated) onInvoiceGenerated();
+            } else {
+                toast.error(res.message || 'Failed to generate invoice');
+            }
+        } catch (error) {
+            console.error('Error generating invoice:', error);
+            toast.error('Failed to generate invoice');
+        } finally {
+            setIsInvoicing(false);
+        }
     };
 
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
@@ -274,44 +353,72 @@ function BookingList({ type, records, loading, onConfirm, onCancel }: {
                                     <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                         {type === 'hotel' ? record.guest_name : (record.guest_name || record.customer_name)}
                                     </p>
-                                    <div className="flex items-center text-xs text-slate-500 mt-0.5">
-                                        <Phone className="w-3 h-3 mr-1" />
-                                        {record.guest_phone || record.phone || 'N/A'}
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <div className="flex items-center text-xs text-slate-500">
+                                            <Phone className="w-3 h-3 mr-1" />
+                                            {record.guest_phone || record.customer_phone || record.phone || 'N/A'}
+                                        </div>
+                                        {record.invoice_id && (
+                                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-indigo-50 text-indigo-700 border-indigo-200">
+                                                Invoiced
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div>
                                     <p className="text-xs text-slate-500 uppercase font-semibold">
-                                        {type === 'hotel' ? 'Room' : 'Table/Guests'}
+                                        {type === 'hotel' ? 'Room' : type === 'restaurant' ? 'Table/Guests' : 'Hall'}
                                     </p>
                                     <p className="text-sm">
-                                        {type === 'hotel' ? record.room_number : `${record.table_number || 'TBD'} (${record.party_size || record.number_of_guests || record.guests} guests)`}
+                                        {type === 'hotel' 
+                                            ? record.room_number 
+                                            : type === 'restaurant' 
+                                                ? `${record.table_number || 'TBD'} (${record.party_size || record.guests} guests)`
+                                                : (record.conference_hall?.name || 'Hall' )}
                                     </p>
                                 </div>
                                 <div>
                                     <p className="text-xs text-slate-500 uppercase font-semibold">
-                                        {type === 'hotel' ? 'Check-in' : 'Date/Time'}
+                                        {type === 'hotel' ? 'Check-in' : type === 'restaurant' ? 'Date/Time' : 'Start Date'}
                                     </p>
                                     <p className="text-sm">
                                         {type === 'hotel'
-                                            ? format(new Date(record.check_in), 'MMM dd, yyyy')
-                                            : `${format(new Date(record.reservation_date), 'MMM dd, yyyy')} ${record.reservation_time || ''}`}
+                                            ? (record.check_in_date ? format(new Date(record.check_in_date), 'MMM dd, yyyy') : 'N/A')
+                                            : type === 'restaurant'
+                                                ? `${format(new Date(record.reservation_date), 'MMM dd, yyyy')} ${record.reservation_time || ''}`
+                                                : (record.start_date ? format(new Date(record.start_date), 'MMM dd, yyyy HH:mm') : 'N/A')}
                                     </p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-500 uppercase font-semibold">Amount</p>
+                                    <p className="text-sm font-medium">KES {(record.total_amount || 0).toLocaleString()}</p>
                                 </div>
                                 <div className="hidden md:block">
                                     <p className="text-xs text-slate-500 uppercase font-semibold">Status</p>
                                     <Badge
                                         variant="secondary"
-                                        className={getStatusStyles(record.status)}
+                                        className={getStatusStyles(record.status || record.booking_status)}
                                     >
-                                        {record.status}
+                                        {record.status || record.booking_status}
                                     </Badge>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-2 justify-end">
+                                {!record.invoice_id && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleGenerateInvoice(record)}
+                                        disabled={isInvoicing}
+                                        className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                                    >
+                                        <Plus className="w-4 h-4 mr-1" /> Invoice
+                                    </Button>
+                                )}
                                 <Button
                                     size="sm"
                                     variant="outline"
@@ -349,8 +456,8 @@ function BookingList({ type, records, loading, onConfirm, onCancel }: {
             <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader className="flex-shrink-0">
-                        <DialogTitle className="text-2xl font-bold">
-                            {type === 'hotel' ? 'Hotel Booking Details' : 'Restaurant Reservation Details'}
+                        <DialogTitle className="text-2xl font-bold uppercase">
+                            {type} Booking Details
                         </DialogTitle>
                         <DialogDescription>
                             Complete information about this booking
@@ -368,19 +475,19 @@ function BookingList({ type, records, loading, onConfirm, onCancel }: {
                                 <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase font-semibold">Name</p>
-                                        <p className="text-sm font-medium">{selectedBooking.guest_name || 'N/A'}</p>
+                                        <p className="text-sm font-medium">{selectedBooking.guest_name || selectedBooking.customer_name || 'N/A'}</p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase font-semibold">Phone</p>
-                                        <p className="text-sm">{selectedBooking.guest_phone || selectedBooking.phone || 'N/A'}</p>
+                                        <p className="text-sm">{selectedBooking.guest_phone || selectedBooking.customer_phone || selectedBooking.phone || 'N/A'}</p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase font-semibold">Email</p>
-                                        <p className="text-sm">{selectedBooking.guest_email || selectedBooking.email || 'N/A'}</p>
+                                        <p className="text-sm">{selectedBooking.guest_email || selectedBooking.customer_email || selectedBooking.email || 'N/A'}</p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase font-semibold">ID Number</p>
-                                        <p className="text-sm">{selectedBooking.id_number || 'N/A'}</p>
+                                        <p className="text-sm">{selectedBooking.id_number || selectedBooking.customer_id_number || 'N/A'}</p>
                                     </div>
                                 </div>
                             </div>
@@ -613,7 +720,24 @@ function InvoiceList({ records, loading }: { records: any[], loading: boolean })
                             <td className="px-6 py-4 font-medium text-indigo-600 dark:text-indigo-400">{inv.invoice_number}</td>
                             <td className="px-6 py-4">
                                 <div className="font-medium text-slate-900 dark:text-slate-100">{inv.customer?.customer_name || 'N/A'}</div>
-                                <div className="text-xs text-slate-500">{inv.customer?.email}</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <div className="text-xs text-slate-500">{inv.customer?.email}</div>
+                                    {inv.hotel_booking_id && (
+                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-blue-50 text-blue-700 border-blue-200">
+                                            Hotel
+                                        </Badge>
+                                    )}
+                                    {inv.restaurant_reservation_id && (
+                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-orange-50 text-orange-700 border-orange-200">
+                                            Restaurant
+                                        </Badge>
+                                    )}
+                                    {inv.type === 'CONFERENCE' && (
+                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-purple-50 text-purple-700 border-purple-200">
+                                            Conference
+                                        </Badge>
+                                    )}
+                                </div>
                             </td>
                             <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{inv.invoice_date ? format(new Date(inv.invoice_date), 'MMM dd, yyyy') : 'N/A'}</td>
                             <td className="px-6 py-4 text-right font-medium text-slate-900 dark:text-slate-100">KES {(inv.total_amount || 0).toLocaleString()}</td>

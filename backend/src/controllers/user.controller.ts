@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 // @desc    Get all users
 // @route   GET /api/users
@@ -13,13 +14,16 @@ export const getUsers = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('users')
       .select(`
         *,
         branch:branches!users_branch_id_fkey(id, name, code)
-      `)
-      .order('created_at', { ascending: false });
+      `);
+
+    query = applyBranchFilter(query, req);
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
 
@@ -359,17 +363,22 @@ export const getUserStats = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { count: totalUsers, error: countError } = await supabase
+    let countQuery = supabase
       .from('users')
-      .select('*', { count: 'exact' })
-      .limit(0);
+      .select('*', { count: 'exact', head: true });
+      
+    countQuery = applyBranchFilter(countQuery, req);
+    const { count: totalUsers, error: countError } = await countQuery;
 
     if (countError) throw countError;
 
-    const { data: activeUsers, error: activeError } = await supabase
+    let activeQuery = supabase
       .from('users')
-      .select('*')
+      .select('id')
       .eq('status', 'active');
+      
+    activeQuery = applyBranchFilter(activeQuery, req);
+    const { data: activeUsers, error: activeError } = await activeQuery;
 
     if (activeError) throw activeError;
 

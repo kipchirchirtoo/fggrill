@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as Icons from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import { api } from '@/lib/api';
+import { StaffMember, Room, Booking, Product, InventoryItem } from '@/lib/api/types';
 
 // Context for global state management
 const ERPContext = createContext();
@@ -42,7 +44,7 @@ const formatCurrency = (amount) => {
 };
 
 const calculateTotalRevenue = (products) => {
-  return products.reduce((total, product) => total + (product.price * (100 - product.stock)), 0);
+  return products.reduce((total, product) => total + ((product.unit_price || product.price || 0) * (100 - (product.current_stock || product.stock || 0))), 0);
 };
 
 // Main App Component
@@ -51,19 +53,51 @@ export default function ERPApp() {
     user: null,
     currentModule: 'login',
     cart: [],
-    products: MOCK_PRODUCTS,
-    employees: MOCK_EMPLOYEES,
+    products: [],
+    employees: [],
     bookings: [],
     notifications: [],
+    isLoading: true
   });
 
-  const login = (username, password) => {
-    const user = MOCK_USERS.find(u => u.username === username && u.password === password);
-    if (user) {
-      setState(prev => ({ ...prev, user, currentModule: 'dashboard' }));
-      toast.success('Login successful!');
-    } else {
-      toast.error('Invalid credentials!');
+  const fetchData = useCallback(async () => {
+    try {
+      const [productsRes, staffRes, bookingsRes] = await Promise.all([
+        api.inventory.getItems(),
+        api.staff.getStaff(),
+        api.bookings.getBookings()
+      ]);
+
+      setState(prev => ({
+        ...prev,
+        products: productsRes.success ? productsRes.data as any : [],
+        employees: staffRes.success ? staffRes.data : [],
+        bookings: bookingsRes.success ? bookingsRes.data : [],
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Fetch error:', error);
+      setState(prev => ({ ...prev, isLoading: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (state.user) {
+      fetchData();
+    }
+  }, [state.user, fetchData]);
+
+  const login = async (username, password) => {
+    try {
+      const res = await api.auth.login({ username, password });
+      if (res.success) {
+        setState(prev => ({ ...prev, user: res.data.user, currentModule: 'dashboard' }));
+        toast.success('Login successful!');
+      } else {
+        toast.error('Invalid credentials!');
+      }
+    } catch (err) {
+      toast.error('Login failed');
     }
   };
 
@@ -172,8 +206,11 @@ function DashboardModule() {
 
   const totalRevenue = calculateTotalRevenue(products);
   const totalEmployees = employees.length;
-  const averagePerformance = employees.reduce((sum, emp) => sum + emp.performance, 0) / totalEmployees;
-  const totalInventoryValue = products.reduce((sum, product) => sum + (product.price * product.stock), 0);
+  // Mock performance/attendance since it's not in the base StaffMember type yet
+  const averagePerformance = employees.length > 0
+    ? employees.reduce((sum, emp) => sum + ((emp as any).performance || 90), 0) / totalEmployees
+    : 0;
+  const totalInventoryValue = products.reduce((sum, product) => sum + ((product.unit_price || 0) * (product.current_stock || 0)), 0);
 
   const DashboardCard = ({ title, value, icon: Icon }) => (
     <div className="rounded-ios-lg bg-white p-6 shadow-md">
@@ -220,14 +257,14 @@ function DashboardModule() {
                 <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Low Stock Alerts</h3>
                 <div className="space-y-4">
                   {products
-                    .filter(product => product.stock < 30)
+                    .filter(product => (product.current_stock || product.stock || 0) < 30)
                     .map(product => (
                       <div key={product.id} className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
-                          <span className="text-2xl">{product.image}</span>
-                          <span>{product.name}</span>
+                          <span className="text-2xl">{product.image || '📦'}</span>
+                          <span>{product.name || product.item_name}</span>
                         </div>
-                        <span className="font-semibold font-sf-pro-display text-red-500">{product.stock} left</span>
+                        <span className="font-semibold font-sf-pro-display text-red-500">{product.current_stock || product.stock} left</span>
                       </div>
                     ))}
                 </div>
@@ -236,19 +273,19 @@ function DashboardModule() {
                 <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Top Performers</h3>
                 <div className="space-y-4">
                   {[...employees]
-                    .sort((a, b) => b.performance - a.performance)
+                    .sort((a, b) => ((b as any).performance || 90) - ((a as any).performance || 90))
                     .slice(0, 5)
                     .map(employee => (
                       <div key={employee.id} className="flex items-center justify-between">
-                        <span>{employee.name}</span>
+                        <span>{employee.first_name} {employee.last_name}</span>
                         <div className="flex items-center space-x-2">
                           <div className="h-2 w-24 rounded-full bg-slate-200">
                             <div
                               className="h-2 rounded-full bg-green-500"
-                              style={{ width: `${employee.performance}%` }}
+                              style={{ width: `${(employee as any).performance || 90}%` }}
                             />
                           </div>
-                          <span className="text-sm text-slate-600">{employee.performance}%</span>
+                          <span className="text-sm text-slate-600">{(employee as any).performance || 90}%</span>
                         </div>
                       </div>
                     ))}
@@ -283,17 +320,17 @@ function DashboardModule() {
                 {employees.map(employee => (
                   <div key={employee.id} className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">{employee.name}</p>
+                      <p className="font-medium">{employee.first_name} {employee.last_name}</p>
                       <p className="text-sm text-slate-600">{employee.role}</p>
                     </div>
                     <div className="flex items-center space-x-4">
                       <div>
                         <p className="text-sm text-slate-600">Attendance</p>
-                        <p className="font-medium">{employee.attendance}%</p>
+                        <p className="font-medium">{(employee as any).attendance || 100}%</p>
                       </div>
                       <div>
                         <p className="text-sm text-slate-600">Performance</p>
-                        <p className="font-medium">{employee.performance}%</p>
+                        <p className="font-medium">{(employee as any).performance || 90}%</p>
                       </div>
                     </div>
                   </div>
@@ -395,14 +432,15 @@ function POSModule() {
   const TAX_RATE = 0.1; // 10% tax
 
   const addToCart = (product) => {
-    if (product.stock === 0) {
+    const stock = product.current_stock || product.stock || 0;
+    if (stock === 0) {
       toast.error('Product out of stock!');
       return;
     }
 
     const existingItem = cart.find(item => item.id === product.id);
     if (existingItem) {
-      if (existingItem.quantity >= product.stock) {
+      if (existingItem.quantity >= stock) {
         toast.error('Not enough stock!');
         return;
       }
@@ -417,7 +455,7 @@ function POSModule() {
     } else {
       setState(prev => ({
         ...prev,
-        cart: [...prev.cart, { ...product, quantity: 1 }]
+        cart: [...prev.cart, { ...product, quantity: 1, price: product.unit_price || product.price }]
       }));
     }
     toast.success(`Added ${product.name} to cart`);
@@ -581,28 +619,32 @@ function POSModule() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map(product => (
-            <div
-              key={product.id}
-              className={`rounded-ios-lg bg-white p-4 shadow-md transition-colors ${product.stock === 0 ? 'opacity-50' : ''}`}
-            >
-              <div className="mb-4 text-center text-4xl">{product.image}</div>
-              <div className="mb-4 text-center">
-                <h3 className="font-semibold font-sf-pro-display">{product.name}</h3>
-                <p className="text-lg font-bold text-indigo-600">{formatCurrency(product.price)}</p>
-                <p className={`text-sm ${product.stock < 10 ? 'text-red-500' : 'text-slate-500'}`}>
-                  {product.stock} in stock
-                </p>
-              </div>
-              <button
-                onClick={() => addToCart(product)}
-                disabled={product.stock === 0}
-                className="w-full rounded-ios-lg bg-indigo-600 py-2 text-white transition-colors hover:bg-indigo-700 disabled:bg-slate-300"
+          {products.map(product => {
+            const stock = product.current_stock || product.stock || 0;
+            const price = product.unit_price || product.price || 0;
+            return (
+              <div
+                key={product.id}
+                className={`rounded-ios-lg bg-white p-4 shadow-md transition-colors ${stock === 0 ? 'opacity-50' : ''}`}
               >
-                Add to Cart
-              </button>
-            </div>
-          ))}
+                <div className="mb-4 text-center text-4xl">{product.image || '🍔'}</div>
+                <div className="mb-4 text-center">
+                  <h3 className="font-semibold font-sf-pro-display">{product.name || product.item_name}</h3>
+                  <p className="text-lg font-bold text-indigo-600">{formatCurrency(price)}</p>
+                  <p className={`text-sm ${stock < 10 ? 'text-red-500' : 'text-slate-500'}`}>
+                    {stock} in stock
+                  </p>
+                </div>
+                <button
+                  onClick={() => addToCart(product)}
+                  disabled={stock === 0}
+                  className="w-full rounded-ios-lg bg-indigo-600 py-2 text-white transition-colors hover:bg-indigo-700 disabled:bg-slate-300"
+                >
+                  Add to Cart
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -699,7 +741,7 @@ function InventoryModule() {
   const filteredProducts = products
     .filter(product =>
       (selectedCategory === 'all' || product.category === selectedCategory) &&
-      product.name.toLowerCase().includes(searchTerm.toLowerCase())
+      (product.name || product.item_name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
   const handleAddProduct = (newProduct) => {
@@ -734,8 +776,8 @@ function InventoryModule() {
     const [formData, setFormData] = useState(
       product || {
         name: '',
-        price: '',
-        stock: '',
+        unit_price: '',
+        current_stock: '',
         category: '',
         image: '🍽️'
       }
@@ -745,8 +787,8 @@ function InventoryModule() {
       e.preventDefault();
       onSubmit({
         ...formData,
-        price: parseFloat(formData.price),
-        stock: parseInt(formData.stock, 10)
+        unit_price: parseFloat(formData.unit_price || formData.price || '0'),
+        current_stock: parseInt(formData.current_stock || formData.stock || '0', 10)
       });
     };
 
@@ -777,8 +819,8 @@ function InventoryModule() {
               <input
                 type="number"
                 step="0.01"
-                value={formData.price}
-                onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                value={formData.unit_price || formData.price || ''}
+                onChange={e => setFormData(prev => ({ ...prev, unit_price: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
               />
@@ -787,8 +829,8 @@ function InventoryModule() {
               <label className="block text-sm font-medium text-slate-700">Stock</label>
               <input
                 type="number"
-                value={formData.stock}
-                onChange={e => setFormData(prev => ({ ...prev, stock: e.target.value }))}
+                value={formData.current_stock || formData.stock || ''}
+                onChange={e => setFormData(prev => ({ ...prev, current_stock: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
               />
@@ -807,7 +849,7 @@ function InventoryModule() {
               <label className="block text-sm font-medium text-slate-700">Emoji</label>
               <input
                 type="text"
-                value={formData.image}
+                value={formData.image || '🍽️'}
                 onChange={e => setFormData(prev => ({ ...prev, image: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
@@ -894,25 +936,25 @@ function InventoryModule() {
                 <tr key={product.id} className="hover:bg-slate-50">
                   <td className="p-4">
                     <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{product.image}</span>
-                      <span className="font-medium">{product.name}</span>
+                      <span className="text-2xl">{product.image || '📦'}</span>
+                      <span className="font-medium">{product.name || product.item_name}</span>
                     </div>
                   </td>
                   <td className="p-4">{product.category}</td>
-                  <td className="p-4">{formatCurrency(product.price)}</td>
-                  <td className="p-4">{product.stock}</td>
+                  <td className="p-4">{formatCurrency(product.unit_price || product.price || 0)}</td>
+                  <td className="p-4">{product.current_stock || product.stock || 0}</td>
                   <td className="p-4">
                     <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold font-sf-pro-display ${product.stock === 0
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold font-sf-pro-display ${(product.current_stock || product.stock) === 0
                         ? 'bg-red-100 text-red-700'
-                        : product.stock < 10
+                        : (product.current_stock || product.stock) < 10
                           ? 'bg-yellow-100 text-yellow-700'
                           : 'bg-green-100 text-green-700'
                         }`}
                     >
-                      {product.stock === 0
+                      {(product.current_stock || product.stock) === 0
                         ? 'Out of Stock'
-                        : product.stock < 10
+                        : (product.current_stock || product.stock) < 10
                           ? 'Low Stock'
                           : 'In Stock'}
                     </span>
@@ -971,12 +1013,12 @@ function HRModule() {
   const BENEFITS_RATE = 0.1; // 10% benefits
 
   const filteredEmployees = employees.filter(employee =>
-    employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.role.toLowerCase().includes(searchTerm.toLowerCase())
+    `${employee.first_name} ${employee.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (employee.role || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const calculatePayroll = (employee) => {
-    const grossPay = employee.salary;
+    const grossPay = employee.base_salary || employee.salary || 0;
     const taxDeduction = grossPay * TAX_RATE;
     const benefits = grossPay * BENEFITS_RATE;
     const netPay = grossPay - taxDeduction - benefits;
@@ -1011,7 +1053,7 @@ function HRModule() {
           </div>
 
           <div className="mb-6 text-center">
-            <h2 className="text-xl font-bold">{selectedEmployee.name}</h2>
+            <h2 className="text-xl font-bold">{selectedEmployee.first_name} {selectedEmployee.last_name}</h2>
             <p className="text-sm text-slate-600">{selectedEmployee.role}</p>
           </div>
 
@@ -1074,7 +1116,7 @@ function HRModule() {
           >
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold font-sf-pro-display">{employee.name}</h3>
+                <h3 className="text-lg font-semibold font-sf-pro-display">{employee.first_name} {employee.last_name}</h3>
                 <p className="text-sm text-slate-600">{employee.role}</p>
               </div>
               <button
@@ -1091,7 +1133,7 @@ function HRModule() {
             <div className="mb-4 grid grid-cols-2 gap-4">
               <div className="rounded-ios-lg bg-slate-50 p-3">
                 <p className="text-sm text-slate-600">Base Salary</p>
-                <p className="font-bold">{formatCurrency(employee.salary)}</p>
+                <p className="font-bold">{formatCurrency(employee.base_salary || employee.salary || 0)}</p>
               </div>
               <div className="rounded-ios-lg bg-slate-50 p-3">
                 <p className="text-sm text-slate-600">Status</p>
@@ -1103,17 +1145,17 @@ function HRModule() {
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-sm font-medium">Performance</span>
-                  <span className="text-sm text-slate-600">{employee.performance}%</span>
+                  <span className="text-sm text-slate-600">{(employee as any).performance || 90}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-slate-200">
                   <div
-                    className={`h-2 rounded-full ${employee.performance >= 90
+                    className={`h-2 rounded-full ${((employee as any).performance || 90) >= 90
                       ? 'bg-green-500'
-                      : employee.performance >= 70
+                      : ((employee as any).performance || 90) >= 70
                         ? 'bg-yellow-500'
                         : 'bg-red-500'
                       }`}
-                    style={{ width: `${employee.performance}%` }}
+                    style={{ width: `${(employee as any).performance || 90}%` }}
                   />
                 </div>
               </div>
@@ -1121,12 +1163,12 @@ function HRModule() {
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-sm font-medium">Attendance</span>
-                  <span className="text-sm text-slate-600">{employee.attendance}%</span>
+                  <span className="text-sm text-slate-600">{(employee as any).attendance || 100}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-slate-200">
                   <div
                     className="h-2 rounded-full bg-blue-500"
-                    style={{ width: `${employee.attendance}%` }}
+                    style={{ width: `${(employee as any).attendance || 100}%` }}
                   />
                 </div>
               </div>
@@ -1294,7 +1336,7 @@ function EmployeeModule() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Employee Portal</h2>
-          <p className="text-slate-600">Welcome back, {user.name}</p>
+          <p className="text-slate-600">Welcome back, {user.full_name || user.name}</p>
         </div>
         <button
           onClick={handleClockInOut}
@@ -1354,12 +1396,12 @@ function EmployeeModule() {
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm font-medium">Overall Rating</span>
-                <span className="text-sm text-slate-600">{user.performance}%</span>
+                <span className="text-sm text-slate-600">{(user as any).performance || 90}%</span>
               </div>
               <div className="h-2 rounded-full bg-slate-200">
                 <div
-                  className={`h-2 rounded-full ${user.performance >= 90 ? 'bg-green-500' : user.performance >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${user.performance}%` }}
+                  className={`h-2 rounded-full ${((user as any).performance || 90) >= 90 ? 'bg-green-500' : ((user as any).performance || 90) >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                  style={{ width: `${(user as any).performance || 90}%` }}
                 />
               </div>
             </div>
@@ -1367,12 +1409,12 @@ function EmployeeModule() {
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm font-medium">Attendance</span>
-                <span className="text-sm text-slate-600">{user.attendance}%</span>
+                <span className="text-sm text-slate-600">{(user as any).attendance || 100}%</span>
               </div>
               <div className="h-2 rounded-full bg-slate-200">
                 <div
                   className="h-2 rounded-full bg-blue-500"
-                  style={{ width: `${user.attendance}%` }}
+                  style={{ width: `${(user as any).attendance || 100}%` }}
                 />
               </div>
             </div>
@@ -1454,28 +1496,13 @@ function EmployeeModule() {
 // Booking Module
 function BookingModule() {
   const { state, setState } = useContext(ERPContext);
+  const { bookings: stateBookings } = state;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookings, setBookings] = useState([
-    {
-      id: 1,
-      customerName: 'Alice Johnson',
-      date: '2025-11-23',
-      time: '18:00',
-      guests: 4,
-      status: 'Confirmed',
-      notes: 'Birthday celebration'
-    },
-    {
-      id: 2,
-      customerName: 'Bob Smith',
-      date: '2025-11-23',
-      time: '19:30',
-      guests: 2,
-      status: 'Pending',
-      notes: 'Window seat preferred'
-    }
-  ]);
+  const [localBookings, setLocalBookings] = useState<any[]>([]);
+
+  // Sync state bookings with local display
+  const displayBookings = [...(stateBookings || []), ...localBookings];
 
   const timeSlots = [
     '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
@@ -1485,14 +1512,14 @@ function BookingModule() {
   ];
 
   const isTimeSlotAvailable = (date, time) => {
-    const existingBooking = bookings.find(
-      booking => booking.date === date && booking.time === time
+    const existingBooking = displayBookings.find(
+      booking => (booking.check_in_date || booking.date) === date && booking.time === time
     );
     return !existingBooking;
   };
 
   const handleStatusChange = (bookingId, newStatus) => {
-    setBookings(prev =>
+    setLocalBookings(prev =>
       prev.map(booking =>
         booking.id === bookingId
           ? { ...booking, status: newStatus }
@@ -1520,12 +1547,16 @@ function BookingModule() {
       }
 
       const newBooking = {
-        id: Date.now(),
-        ...formData,
-        status: 'Pending'
-      };
+        id: Date.now().toString(),
+        guest_name: formData.customerName,
+        check_in_date: formData.date,
+        check_out_date: formData.date,
+        time: formData.time,
+        guests: formData.guests,
+        status: 'pending'
+      } as any;
 
-      setBookings(prev => [...prev, newBooking]);
+      setLocalBookings(prev => [...prev, newBooking]);
       setShowBookingModal(false);
       toast.success('Booking created successfully!');
     };
@@ -1701,35 +1732,35 @@ function BookingModule() {
         {/* Bookings List */}
         <div className="lg:col-span-2">
           <div className="space-y-4">
-            {bookings
-              .filter(booking => booking.date === selectedDate.toISOString().split('T')[0])
-              .sort((a, b) => a.time.localeCompare(b.time))
-              .map(booking => (
+            {displayBookings
+              .filter((booking: any) => (booking.check_in_date || booking.date) === selectedDate.toISOString().split('T')[0])
+              .sort((a: any, b: any) => (a.time || '').localeCompare(b.time || ''))
+              .map((booking: any) => (
                 <div
                   key={booking.id}
                   className="rounded-ios-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold font-sf-pro-display">{booking.customerName}</h3>
+                      <h3 className="text-lg font-semibold font-sf-pro-display">{booking.guest_name || booking.customerName}</h3>
                       <p className="text-sm text-slate-600">
-                        {booking.time} · {booking.guests} guests
+                        {booking.time} · {booking.guests || 2} guests
                       </p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <select
                         value={booking.status}
                         onChange={e => handleStatusChange(booking.id, e.target.value)}
-                        className={`rounded-full px-3 py-1 text-sm font-medium ${booking.status === 'Confirmed'
+                        className={`rounded-full px-3 py-1 text-sm font-medium ${booking.status?.toLowerCase() === 'confirmed'
                           ? 'bg-green-100 text-green-700'
-                          : booking.status === 'Cancelled'
+                          : booking.status?.toLowerCase() === 'cancelled'
                             ? 'bg-red-100 text-red-700'
                             : 'bg-yellow-100 text-yellow-700'
                           }`}
                       >
-                        <option value="Pending">Pending</option>
-                        <option value="Confirmed">Confirmed</option>
-                        <option value="Cancelled">Cancelled</option>
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="cancelled">Cancelled</option>
                       </select>
                     </div>
                   </div>

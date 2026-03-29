@@ -100,7 +100,7 @@ export const getDrivers = async (req: Request, res: Response) => {
 
     // 3. Map staff drivers to the Driver shape
     const staffMapped = (staffDrivers || []).map((s: any) => ({
-      id: `staff-${s.id}`,
+      id: s.id,
       name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
       phone: s.phone || '',
       license_number: null,
@@ -128,15 +128,31 @@ export const getDrivers = async (req: Request, res: Response) => {
 
 export const createDriver = async (req: Request, res: Response) => {
   try {
-    const { name, phone, license_number, license_expiry, status } = req.body;
+    const { name, phone, license_number, branch_id, vehicle_id } = req.body;
 
-    if (!name || !phone) {
-      return res.status(400).json({ success: false, message: 'Name and phone are required' });
+    // Check if a staff member already exists with this name/phone to prevent double record
+    const { data: existingStaff } = await supabase
+      .from('staff_profiles')
+      .select('id')
+      .or(`phone.eq.${phone},id_number.eq.${license_number}`) // license_number often matches id_number
+      .maybeSingle();
+
+    if (existingStaff) {
+       // Just update them to be a driver instead of creating a new driver record
+       await supabase.from('staff_profiles').update({ department: 'driver' }).eq('id', existingStaff.id);
+       return res.json({ success: true, data: existingStaff, message: 'Existing staff updated to driver' });
     }
 
     const { data, error } = await supabase
       .from('drivers')
-      .insert([{ name, phone, license_number, license_expiry, status }])
+      .insert({
+        name,
+        phone,
+        license_number,
+        branch_id,
+        vehicle_id,
+        status: 'ACTIVE'
+      })
       .select()
       .single();
 
@@ -202,7 +218,14 @@ export const getSupplier = async (req: Request, res: Response) => {
       .single();
 
     if (error) throw error;
-    res.json({ success: true, data });
+    
+    // Map status to uppercase for frontend compatibility
+    const enrichedData = data ? {
+      ...data,
+      status: (data.status || 'active').toUpperCase() === 'BLACKLISTED' ? 'BLOCKED' : (data.status || 'active').toUpperCase()
+    } : null;
+
+    res.json({ success: true, data: enrichedData });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -210,13 +233,71 @@ export const getSupplier = async (req: Request, res: Response) => {
 
 export const getSuppliers = async (req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
+    const { status, category, search, scope } = req.query;
+    const user = (req as any).user;
+    const userBranchId = user?.branch_id || user?.branchId;
+    const isCentral = !userBranchId || user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER || user?.role === UserRole.CENTRAL_STOREKEEPER;
+
+    logger.debug('SUPPLIER_DEBUG_START', { 
+      email: user?.email, 
+      role: user?.role, 
+      branch_id: user?.branch_id, 
+      branchId: user?.branchId, 
+      isCentral, 
+      scope 
+    });
+
+    let query = supabase
       .from('store_suppliers')
       .select('*')
       .order('name');
 
+    // 1. Apply Scoping Filters
+    if (!isCentral) {
+      const branchId = Number(userBranchId);
+      
+      if (scope === 'branch') {
+        query = query.eq('branch_id', branchId);
+      } else if (scope === 'global') {
+        query = query.is('branch_id', null);
+      } else {
+        // Default: see own branch OR global
+        query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+      }
+    }
+
+    // 2. Apply Status Filter
+    if (status) {
+      const statusStr = String(status).toLowerCase();
+      query = query.eq('status', statusStr === 'active' ? 'active' : (statusStr === 'blocked' ? 'blacklisted' : statusStr));
+    }
+
+    // 3. Apply Search Filter
+    if (search) {
+      const searchStr = String(search);
+      query = query.or(`name.ilike.%${searchStr}%,supplier_code.ilike.%${searchStr}%,contact_person.ilike.%${searchStr}%`);
+    }
+
+    logger.debug('Supplier Scoping:', { 
+      userEmail: user?.email, 
+      userRole: user?.role, 
+      userBranchId, 
+      isCentral, 
+      scope,
+      appliedBranchId: !isCentral ? Number(userBranchId) : null
+    });
+
+    const { data, error } = await query;
+
     if (error) throw error;
-    res.json({ success: true, data });
+
+    // Map status to uppercase for frontend compatibility
+    const enrichedData = (data || []).map((s: any) => ({
+      ...s,
+      status: (s.status || 'active').toUpperCase() === 'BLACKLISTED' ? 'BLOCKED' : (s.status || 'active').toUpperCase()
+    }));
+
+    res.json({ success: true, data: enrichedData });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -228,7 +309,12 @@ export const createSupplier = async (req: Request, res: Response) => {
       address_line1, address_line2, city, state, country, postal_code,
       tax_id, vat_number, registration_number, payment_terms, credit_limit,
       bank_name, bank_account_number, bank_branch, lead_time_days,
-      status, is_preferred, notes } = req.body;
+      status, is_preferred, notes, branch_id } = req.body;
+    
+    const user = (req as any).user;
+    const userBranchId = user?.branch_id || user?.branchId;
+    const isCentral = !userBranchId || user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER || user?.role === UserRole.CENTRAL_STOREKEEPER;
+
 
     if (!name) {
       return res.status(400).json({ success: false, message: 'Supplier name is required' });
@@ -254,11 +340,23 @@ export const createSupplier = async (req: Request, res: Response) => {
 
     let finalStatus = status;
     if (status && !validStatus.includes(status)) {
-      // Map common potentially invalid values to valid ones
-      if (status.toLowerCase() === 'active') finalStatus = 'active';
-      else if (status.toLowerCase() === 'inactive') finalStatus = 'inactive';
-      else finalStatus = 'active'; // Default
+      // Map common potentially invalid values from frontend (UPPERCASE) to valid ones (lowercase)
+      const lowerStatus = status.toLowerCase();
+      if (lowerStatus === 'active') finalStatus = 'active';
+      else if (lowerStatus === 'inactive') finalStatus = 'inactive';
+      else if (lowerStatus === 'blocked') finalStatus = 'blacklisted';
+      else finalStatus = 'active';
+      logger.info('Supplier status mapping applied', { original: status, mapped: finalStatus });
+    } else if (!status) {
+      finalStatus = 'active';
     }
+
+    // Auto-inject branch_id for branch users if not provided
+    let finalBranchId = branch_id;
+    if (!isCentral && !finalBranchId) {
+      finalBranchId = userBranchId;
+    }
+
 
     let finalPaymentTerms = payment_terms;
     if (payment_terms && !validPaymentTerms.includes(payment_terms)) {
@@ -292,8 +390,9 @@ export const createSupplier = async (req: Request, res: Response) => {
         bank_branch,
         lead_time_days,
         status: finalStatus,
-        is_preferred,
+        is_preferred: is_preferred || false,
         notes,
+        branch_id: finalBranchId,
         created_at: new Date().toISOString()
       }])
       .select()
@@ -303,7 +402,14 @@ export const createSupplier = async (req: Request, res: Response) => {
       logger.error('Error creating supplier:', error);
       throw error;
     }
-    res.status(201).json({ success: true, data });
+
+    // Map status to uppercase for frontend
+    const enrichedData = {
+      ...data,
+      status: (data.status || 'active').toUpperCase() === 'BLACKLISTED' ? 'BLOCKED' : (data.status || 'active').toUpperCase()
+    };
+
+    res.status(201).json({ success: true, data: enrichedData });
   } catch (error: any) {
     logger.error('Create Supplier Exception:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -348,9 +454,11 @@ export const updateSupplier = async (req: Request, res: Response) => {
     const validPaymentTerms = ['cash', 'credit_7_days', 'credit_15_days', 'credit_30_days', 'credit_45_days', 'credit_60_days', 'credit_90_days', 'advance_payment'];
 
     if (updateData.status && !validStatus.includes(updateData.status)) {
-      if (updateData.status.toLowerCase() === 'active') updateData.status = 'active';
-      else if (updateData.status.toLowerCase() === 'inactive') updateData.status = 'inactive';
-      else delete updateData.status; // Ignore invalid status to avoid error
+      const lowerStatus = updateData.status.toLowerCase();
+      if (lowerStatus === 'active') updateData.status = 'active';
+      else if (lowerStatus === 'inactive') updateData.status = 'inactive';
+      else if (lowerStatus === 'blocked') updateData.status = 'blacklisted';
+      else delete updateData.status; // Ignore invalid status
     }
 
     if (updateData.payment_terms && !validPaymentTerms.includes(updateData.payment_terms)) {
@@ -391,7 +499,13 @@ export const updateSupplier = async (req: Request, res: Response) => {
       }
     }
 
-    res.json({ success: true, data });
+    // Map status to uppercase for frontend
+    const enrichedData = {
+      ...data,
+      status: (data.status || 'active').toUpperCase() === 'BLACKLISTED' ? 'BLOCKED' : (data.status || 'active').toUpperCase()
+    };
+
+    res.json({ success: true, data: enrichedData });
   } catch (error: any) {
     logger.error('Update Supplier Exception:', error);
     res.status(500).json({ success: false, message: error.message });

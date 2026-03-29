@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { api } from '@/lib/api';
+import { kyogongAPI } from '@/lib/api/kyogong';
 import { toast } from 'sonner';
 import { Loader2, DollarSign, Store } from 'lucide-react';
-import { API_URL } from '@/lib/config';
 
 interface SalesPoint {
     id: number;
@@ -38,22 +37,14 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
         setIsLoadingPoints(true);
         setLoadError(false);
         try {
-            const token = localStorage.getItem('token');
-            if (!token || token === 'offline-bridge-token') {
-                setIsLoadingPoints(false);
-                return;
-            }
-            const res = await fetch(`${API_URL}/api/kyogong/sales-points?is_active=true`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const data = await res.json();
+            const res = await kyogongAPI.getSalesPoints({ is_active: true });
 
-            if (data.success) {
-                setSalesPoints(data.data);
+            if (res.success) {
+                setSalesPoints(res.data);
 
                 // Auto-select by salesPointCode prop first (most specific)
                 if (salesPointCode) {
-                    const point = data.data.find((p: any) => p.code === salesPointCode);
+                    const point = res.data.find((p: any) => p.code === salesPointCode);
                     if (point) {
                         setSelectedPointId(point.id.toString());
                         return;
@@ -61,23 +52,23 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
                 }
 
                 // Pre-select if only one
-                if (data.data.length === 1) {
-                    setSelectedPointId(data.data[0].id.toString());
+                if (res.data.length === 1) {
+                    setSelectedPointId(res.data[0].id.toString());
                     return;
                 }
 
                 // Intelligent pre-selection based on Role
                 if (user?.role?.includes('spa')) {
-                    const point = data.data.find((p: any) => p.code === 'SPA');
+                    const point = res.data.find((p: any) => p.code === 'SPA');
                     if (point) setSelectedPointId(point.id.toString());
                 } else if (user?.role?.includes('sports_bar')) {
-                    const point = data.data.find((p: any) => p.code === 'SPORTS_BAR');
+                    const point = res.data.find((p: any) => p.code === 'SPORTS_BAR');
                     if (point) setSelectedPointId(point.id.toString());
                 } else if (user?.role?.includes('executive_bar')) {
-                    const point = data.data.find((p: any) => p.code === 'EXEC_BAR');
+                    const point = res.data.find((p: any) => p.code === 'EXEC_BAR');
                     if (point) setSelectedPointId(point.id.toString());
                 } else if (user?.role?.includes('reception')) {
-                    const point = data.data.find((p: any) => p.code === 'RECEPTION');
+                    const point = res.data.find((p: any) => p.code === 'RECEPTION');
                     if (point) setSelectedPointId(point.id.toString());
                 }
             } else {
@@ -102,26 +93,17 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/api/kyogong/shifts/open`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    sales_point_id: parseInt(selectedPointId),
-                    opening_cash_float: parseFloat(openingFloat),
-                    opening_petty_cash: openingPettyCash ? parseFloat(openingPettyCash) : 0
-                })
+            const res = await kyogongAPI.openShift({
+                sales_point_id: parseInt(selectedPointId),
+                opening_cash_float: parseFloat(openingFloat),
+                opening_petty_cash: openingPettyCash ? parseFloat(openingPettyCash) : 0
             });
-            const data = await res.json();
 
-            if (data.success) {
+            if (res.success) {
                 toast.success('Shift opened successfully');
-                onShiftOpened(data.data);
+                onShiftOpened(res.data);
             } else {
-                toast.error(data.error || 'Failed to open shift');
+                toast.error(res.error || 'Failed to open shift');
             }
         } catch (error) {
             console.error('Open shift error:', error);

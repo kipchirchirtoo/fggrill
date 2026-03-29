@@ -27,6 +27,8 @@ interface AddItemModalProps {
 // Flow states: SCAN -> (FOUND | CREATE)
 type EntryState = 'SCAN' | 'SEARCHING' | 'FOUND' | 'CREATE';
 
+import { apiClient } from '@/lib/api/core';
+
 
 // Category codes for SKU generation
 const CATEGORY_OPTIONS = [
@@ -169,16 +171,10 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
     setEntryState('SEARCHING');
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${encodeURIComponent(cleanCode)}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const res = await apiClient.get<any>(`/store/items/${encodeURIComponent(cleanCode)}`);
 
-      if (response.ok) {
-        const { data } = await response.json();
+      if (res.success) {
+        const data = res.data;
 
         // FOUND: Item exists - auto-fill and go to quantity entry
         setExistingItem(data);
@@ -340,31 +336,20 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
       return;
     }
 
-    setIsLoading(true);
-    const token = localStorage.getItem('token');
-
     try {
       if (entryState === 'FOUND' && existingItem) {
         // FOUND MODE: Use dedicated add-stock endpoint
-        const response = await fetch(`${API_URL}/api/store/items/${encodeURIComponent(existingItem.sku)}/add-stock`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            quantity: formData.quantity,
-            notes: formData.notes,
-            reference: formData.notes
-          })
+        const res = await apiClient.post<any>(`/store/items/${encodeURIComponent(existingItem.sku)}/add-stock`, {
+          quantity: formData.quantity,
+          notes: formData.notes,
+          reference: formData.notes
         });
 
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.message || 'Failed to add stock');
+        if (!res.success) {
+          throw new Error(res.error || res.message || 'Failed to add stock');
         }
 
-        const result = await response.json();
+        const result = res.data;
         const orderNum = result.orderNumber || result.data?.orderNumber;
 
         toast.success(
@@ -382,24 +367,16 @@ export function AddItemModal({ isOpen, onClose, onSubmit }: AddItemModalProps) {
         // Don't send SKU - let backend generate it
         const { sku: _sku, ...dataWithoutSku } = formData;
 
-        const response = await fetch(`${API_URL}/api/store/items`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            ...dataWithoutSku,
-            description: formData.description || formData.item_name
-          })
+        const res = await apiClient.post<any>('/store/items', {
+          ...dataWithoutSku,
+          description: formData.description || formData.item_name
         });
 
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.message || 'Failed to create item');
+        if (!res.success) {
+          throw new Error(res.error || res.message || 'Failed to create item');
         }
 
-        const result = await response.json();
+        const result = res.data;
         const newSku = result.data?.sku;
         const orderNum = result.data?.orderNumber;
 

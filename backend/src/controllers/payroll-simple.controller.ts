@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { emailService } from '../services/email.service';
 import archiver from 'archiver';
 import { generatePayslipPDF } from '../utils/pdfGenerator';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 /**
  * Core payroll engine for a single staff member.
@@ -334,6 +335,8 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
             .select('*')
             .order('generated_at', { ascending: false });
 
+        query = applyBranchFilter(query, req, 'staff_profiles');
+
         if (month) query = query.eq('month', String(month));
         if (year) query = query.eq('year', Number(year));
         if (staff_id) query = query.eq('staff_id', staff_id);
@@ -412,6 +415,8 @@ export const getPayrollSummary = async (req: Request, res: Response, next: NextF
         let query = supabase
             .from('staff_payroll')
             .select('*, staff:staff_profiles!inner(branch_id)');
+
+        query = applyBranchFilter(query, req, 'staff');
 
         if (month) query = query.eq('month', String(month));
         if (year) query = query.eq('year', Number(year));
@@ -677,6 +682,8 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             `)
             .order('created_at', { ascending: false });
 
+        creditBillsQuery = applyBranchFilter(creditBillsQuery, req);
+
         if (status === 'pending_accountant' || status === 'pending_auditor') {
             creditBillsQuery = creditBillsQuery.eq('status', 'pending');
         } else if (status === 'approved') {
@@ -695,6 +702,8 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
                 )
             `)
             .order('created_at', { ascending: false });
+
+        advancesQuery = applyBranchFilter(advancesQuery, req);
 
         if (status === 'pending_accountant') {
             advancesQuery = advancesQuery.eq('status', 'pending');
@@ -716,6 +725,8 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
                 )
             `)
             .order('created_at', { ascending: false });
+
+        loansQuery = applyBranchFilter(loansQuery, req);
 
         if (status === 'pending_accountant') {
             loansQuery = loansQuery.eq('status', 'pending_approval');

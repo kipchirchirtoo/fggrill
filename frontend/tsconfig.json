@@ -37,6 +37,11 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "backup_*",
+    "dashboard_backup_*",
+    "**/*.bak",
+    "out",
+    ".next"
   ]
 }

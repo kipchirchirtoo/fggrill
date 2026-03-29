@@ -4,38 +4,66 @@ import { supabase } from '../config/database';
 // Get all suppliers
 export const getSuppliers = async (req: Request, res: Response) => {
   try {
-    const { status, category, search } = req.query;
+    const { status, category, search, scope } = req.query;
+    const rowBranchId = req.user?.branch_id || req.user?.branchId || req.headers['x-branch-id'] || req.query.branchId;
+    const userBranchId = rowBranchId ? Number(rowBranchId) : null;
+    const isCentral = !userBranchId || req.user?.role === 'super_admin' || req.user?.role === 'central_storekeeper';
 
     let query = supabase
       .from('suppliers')
       .select('*, supplier_products(count)')
       .order('name', { ascending: true });
 
-    if (status) {
-      query = query.eq('status', status);
+    // 1. Apply Scoping Filters
+    if (!isCentral) {
+      const branchId = Number(userBranchId);
+      if (isNaN(branchId)) {
+        console.error('Invalid branch_id encountered:', userBranchId);
+        return res.status(400).json({ success: false, message: 'Invalid branch context' });
+      }
+      
+      if (scope === 'branch') {
+        query = query.eq('branch_id', branchId);
+      } else if (scope === 'global') {
+        query = query.is('branch_id', null);
+      } else {
+        // Default: see own branch OR global
+        query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+      }
     }
 
+    // 2. Apply Status Filter
+    if (status) {
+      query = query.eq('status', String(status).toLowerCase());
+    }
+
+    // 3. Apply Category Filter
     if (category) {
       query = query.eq('category', category);
     }
 
+    // 4. Apply Search Filter
     if (search) {
-      query = query.or(`name.ilike.%${search}%,supplier_code.ilike.%${search}%,contact_person.ilike.%${search}%`);
+      const searchStr = String(search);
+      query = query.or(`name.ilike.%${searchStr}%,supplier_code.ilike.%${searchStr}%,contact_person.ilike.%${searchStr}%`);
     }
 
     const { data, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase query error:', error);
+      throw error;
+    }
 
     res.status(200).json({
       success: true,
-      data
+      data: data || []
     });
   } catch (error: any) {
-    console.error('Error fetching suppliers:', error);
+    console.error('Error in getSuppliers:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch suppliers'
+      message: 'Internal server error occurred while fetching suppliers'
     });
   }
 };
@@ -44,12 +72,21 @@ export const getSuppliers = async (req: Request, res: Response) => {
 export const getSupplierById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const rawBranchId = req.user?.branch_id || req.user?.branchId || req.headers['x-branch-id'] || req.query.branchId;
+    const userBranchId = rawBranchId ? Number(rawBranchId) : null;
+    const isCentral = !userBranchId || req.user?.role === 'super_admin' || req.user?.role === 'central_storekeeper';
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('suppliers')
       .select('*, supplier_products(*)')
-      .eq('id', id)
-      .single();
+      .eq('id', id);
+
+    // Branch scoping for single fetch
+    if (!isCentral) {
+      query = query.or(`branch_id.eq.${userBranchId},branch_id.is.null`);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) throw error;
 
@@ -77,6 +114,13 @@ export const getSupplierById = async (req: Request, res: Response) => {
 export const createSupplier = async (req: Request, res: Response) => {
   try {
     const supplierData = req.body;
+    const rawBranchId = req.user?.branch_id || req.user?.branchId || req.headers['x-branch-id'] || req.query.branchId;
+    const userBranchId = rawBranchId ? Number(rawBranchId) : null;
+
+    // Auto-inject branch_id for branch users
+    if (userBranchId && !req.user?.is_central) {
+      supplierData.branch_id = userBranchId;
+    }
 
     // Generate supplier code if not provided
     if (!supplierData.supplier_code) {

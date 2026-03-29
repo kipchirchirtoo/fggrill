@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 // @desc    Get all rooms
 // @route   GET /api/rooms
@@ -16,9 +17,10 @@ export const getRooms = async (
       .from('rooms')
       .select('*, type:room_types!type_id(*), guest:guests!current_guest(*)');
 
-    const branchId = req.user?.branch_id || req.query.branch_id;
-    if (branchId) {
-      query = query.eq('branch_id', branchId);
+    query = applyBranchFilter(query, req);
+    const isGlobal = isGlobalRole(req.user?.role);
+    if (isGlobal && req.query.branch_id) {
+      query = query.eq('branch_id', req.query.branch_id as string);
     }
     if (req.query.status) {
       query = query.eq('status', req.query.status as string);

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { restaurantAPI, financeAPI } from '@/lib/api';
+import { restaurantAPI, systemAPI } from '@/lib/api';
 import { Utensils, RefreshCw, Plus, Search, Edit2, Trash2, DollarSign, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -42,7 +42,7 @@ export default function AdminMenuPage() {
 
       // Fetch branches if user is super admin
       if (user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) {
-        promises.push(financeAPI.getBranches());
+        promises.push(systemAPI.getBranches());
       }
 
       const results = await Promise.all(promises);

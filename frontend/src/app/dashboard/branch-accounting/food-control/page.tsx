@@ -23,6 +23,11 @@ import { api, kitchenAPI } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { 
+    KitchenWastage, 
+    KitchenUsage, 
+    Invoice 
+} from '@/lib/api/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { Input } from '@/components/ui/input';
@@ -55,13 +60,13 @@ function FoodControlReviewContent() {
     const { activeBranchId } = useBranch();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('wastage');
-    const [wastageRecords, setWastageRecords] = useState<any[]>([]);
-    const [usageEntries, setUsageEntries] = useState<any[]>([]);
+    const [wastageRecords, setWastageRecords] = useState<KitchenWastage[]>([]);
+    const [usageEntries, setUsageEntries] = useState<KitchenUsage[]>([]);
     const [selectedItem, setSelectedItem] = useState<any>(null);
     const [reviewNotes, setReviewNotes] = useState('');
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [invoices, setInvoices] = useState<any[]>([]);
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
 
     useEffect(() => {
         if (activeBranchId) {
@@ -128,7 +133,7 @@ function FoodControlReviewContent() {
         activeTab === 'wastage' ? wastageRecords :
             activeTab === 'usage' ? usageEntries :
                 invoices
-    ).filter(item => {
+    ).filter((item: any) => {
         const searchStr = searchQuery.toLowerCase();
 
         if (activeTab === 'invoices') {
@@ -189,7 +194,7 @@ function FoodControlReviewContent() {
 
                 <TabsContent value="wastage" className="mt-0">
                     <WastageList
-                        records={filteredRecords}
+                        records={filteredRecords as KitchenWastage[]}
                         loading={loading}
                         onReview={(item) => {
                             setSelectedItem(item);
@@ -200,7 +205,7 @@ function FoodControlReviewContent() {
 
                 <TabsContent value="usage" className="mt-0">
                     <UsageList
-                        records={filteredRecords}
+                        records={filteredRecords as KitchenUsage[]}
                         loading={loading}
                         onReview={(item) => {
                             setSelectedItem(item);
@@ -211,7 +216,7 @@ function FoodControlReviewContent() {
 
                 <TabsContent value="invoices" className="mt-0">
                     <InvoiceList
-                        records={filteredRecords}
+                        records={filteredRecords as Invoice[]}
                         loading={loading}
                     />
                 </TabsContent>
@@ -290,7 +295,7 @@ function FoodControlReviewContent() {
     );
 }
 
-function WastageList({ records, loading, onReview }: { records: any[], loading: boolean, onReview: (item: any) => void }) {
+function WastageList({ records, loading, onReview }: { records: KitchenWastage[], loading: boolean, onReview: (item: KitchenWastage) => void }) {
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
     if (records.length === 0) return (
         <Card className="border-dashed">
@@ -339,7 +344,7 @@ function WastageList({ records, loading, onReview }: { records: any[], loading: 
     );
 }
 
-function UsageList({ records, loading, onReview }: { records: any[], loading: boolean, onReview: (item: any) => void }) {
+function UsageList({ records, loading, onReview }: { records: KitchenUsage[], loading: boolean, onReview: (item: KitchenUsage) => void }) {
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
     if (records.length === 0) return (
         <Card className="border-dashed">
@@ -387,7 +392,7 @@ function UsageList({ records, loading, onReview }: { records: any[], loading: bo
         </div>
     );
 }
-function InvoiceList({ records, loading }: { records: any[], loading: boolean }) {
+function InvoiceList({ records, loading }: { records: Invoice[], loading: boolean }) {
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
     if (records.length === 0) return (
         <Card className="border-dashed">

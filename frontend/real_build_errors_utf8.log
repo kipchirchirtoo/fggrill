@@ -1,0 +1,982 @@
+﻿src/app/components/ErpApp.tsx(9,20): error TS2554: Expected 1 arguments, but got 0.
+src/app/components/ErpApp.tsx(37,25): error TS7006: Parameter 'amount' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(44,32): error TS7006: Parameter 'products' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(45,27): error TS7006: Parameter 'total' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(45,34): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(60,18): error TS7006: Parameter 'username' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(60,28): error TS7006: Parameter 'password' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(63,16): error TS2345: Argument of type '(prev: { user: null; currentModule: string; cart: never[]; products: { id: number; name: string; price: number; stock: number; image: string; category: string; }[]; employees: { id: number; name: string; role: string; salary: number; attendance: number; performance: number; }[]; bookings: never[]; notifications: nev...' is not assignable to parameter of type 'SetStateAction<{ user: null; currentModule: string; cart: never[]; products: { id: number; name: string; price: number; stock: number; image: string; category: string; }[]; employees: { id: number; name: string; role: string; salary: number; attendance: number; performance: number; }[]; bookings: never[]; notificati...'.
+  Type '(prev: { user: null; currentModule: string; cart: never[]; products: { id: number; name: string; price: number; stock: number; image: string; category: string; }[]; employees: { id: number; name: string; role: string; salary: number; attendance: number; performance: number; }[]; bookings: never[]; notifications: nev...' is not assignable to type '(prevState: { user: null; currentModule: string; cart: never[]; products: { id: number; name: string; price: number; stock: number; image: string; category: string; }[]; employees: { id: number; name: string; role: string; salary: number; attendance: number; performance: number; }[]; bookings: never[]; notifications...'.
+    Call signature return types '{ user: { id: number; username: string; password: string; role: string; name: string; }; currentModule: string; cart: never[]; products: { id: number; name: string; price: number; stock: number; image: string; category: string; }[]; employees: { ...; }[]; bookings: never[]; notifications: never[]; }' and '{ user: null; currentModule: string; cart: never[]; products: { id: number; name: string; price: number; stock: number; image: string; category: string; }[]; employees: { id: number; name: string; role: string; salary: number; attendance: number; performance: number; }[]; bookings: never[]; notifications: never[]; }' are incompatible.
+      The types of 'user' are incompatible between these types.
+        Type '{ id: number; username: string; password: string; role: string; name: string; }' is not assignable to type 'null'.
+src/app/components/ErpApp.tsx(93,22): error TS7031: Binding element 'logout' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(94,11): error TS2339: Property 'state' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(94,18): error TS2339: Property 'setState' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(97,28): error TS7006: Parameter 'role' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(105,12): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ 'Super Admin': string[]; 'HR Manager': string[]; 'Store Manager': string[]; Cashier: string[]; Employee: string[]; }'.
+src/app/components/ErpApp.tsx(136,39): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(170,11): error TS2339: Property 'state' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(175,48): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(175,53): error TS7006: Parameter 'emp' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(176,48): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(176,53): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(178,28): error TS7031: Binding element 'title' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(178,35): error TS7031: Binding element 'value' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(178,48): error TS7031: Binding element 'Icon' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(223,29): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(224,26): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(276,41): error TS7006: Parameter 'emp' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(283,32): error TS7006: Parameter 'employee' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(391,11): error TS2339: Property 'state' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(391,18): error TS2339: Property 'setState' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(397,22): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(403,36): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(409,16): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(411,29): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(418,16): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(426,27): error TS7006: Parameter 'productId' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(427,14): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(429,30): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(434,27): error TS7006: Parameter 'productId' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(434,38): error TS7006: Parameter 'delta' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(435,28): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(436,35): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(448,14): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(450,27): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(459,14): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(464,35): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(464,40): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(487,14): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(489,35): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(490,36): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(498,23): error TS2345: Argument of type '{ id: number; items: any; subtotal: any; tax: number; total: any; date: string; }' is not assignable to parameter of type 'SetStateAction<null>'.
+  Type '{ id: number; items: any; subtotal: any; tax: number; total: any; date: string; }' provides no match for the signature '(prevState: null): null'.
+src/app/components/ErpApp.tsx(522,84): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(523,59): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(526,12): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(526,37): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(539,35): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(543,35): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(547,35): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(584,25): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(626,22): error TS7006: Parameter 'item' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(690,11): error TS2339: Property 'state' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(690,18): error TS2339: Property 'setState' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(697,54): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(700,13): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(705,29): error TS7006: Parameter 'newProduct' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(706,14): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(714,32): error TS7006: Parameter 'updatedProduct' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(715,14): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(717,35): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(725,32): error TS7006: Parameter 'productId' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(726,14): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(728,38): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(733,26): error TS7031: Binding element 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(733,35): error TS7031: Binding element 'onSubmit' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(733,45): error TS7031: Binding element 'onCancel' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(744,27): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(770,44): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(781,44): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(791,44): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(801,44): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(811,44): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(872,21): error TS2322: Type 'unknown' is not assignable to type 'Key | null | undefined'.
+src/app/components/ErpApp.tsx(872,36): error TS2322: Type 'unknown' is not assignable to type 'string | number | readonly string[] | undefined'.
+src/app/components/ErpApp.tsx(873,16): error TS18046: 'category' is of type 'unknown'.
+src/app/components/ErpApp.tsx(873,51): error TS18046: 'category' is of type 'unknown'.
+src/app/components/ErpApp.tsx(893,37): error TS7006: Parameter 'product' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(945,12): error TS2741: Property 'product' is missing in type '{ onSubmit: (newProduct: any) => void; onCancel: () => void; }' but required in type '{ product: any; onSubmit: any; onCancel: any; }'.
+src/app/components/ErpApp.tsx(964,11): error TS2339: Property 'state' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(964,18): error TS2339: Property 'setState' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(973,46): error TS7006: Parameter 'employee' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(978,29): error TS7006: Parameter 'employee' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1014,48): error TS18047: 'selectedEmployee' is possibly 'null'.
+src/app/components/ErpApp.tsx(1015,52): error TS18047: 'selectedEmployee' is possibly 'null'.
+src/app/components/ErpApp.tsx(1070,32): error TS7006: Parameter 'employee' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1159,11): error TS2339: Property 'state' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(1159,18): error TS2339: Property 'setState' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(1172,22): error TS2345: Argument of type 'Date' is not assignable to parameter of type 'SetStateAction<null>'.
+  Type 'Date' provides no match for the signature '(prevState: null): null'.
+src/app/components/ErpApp.tsx(1189,27): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1333,38): error TS2339: Property 'toLocaleTimeString' does not exist on type 'never'.
+src/app/components/ErpApp.tsx(1415,30): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/app/components/ErpApp.tsx(1415,58): error TS2363: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/app/components/ErpApp.tsx(1456,11): error TS2339: Property 'state' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(1456,18): error TS2339: Property 'setState' does not exist on type 'unknown'.
+src/app/components/ErpApp.tsx(1487,32): error TS7006: Parameter 'date' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1487,38): error TS7006: Parameter 'time' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1494,31): error TS7006: Parameter 'bookingId' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1494,42): error TS7006: Parameter 'newStatus' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1514,27): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1752,22): error TS7031: Binding element 'login' implicitly has an 'any' type.
+src/app/components/ErpApp.tsx(1755,25): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/dashboard/admin/audit/page.tsx(26,37): error TS2345: Argument of type 'AuditLog[]' is not assignable to parameter of type 'SetStateAction<AuditLog[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").AuditLog[]' is not assignable to type 'AuditLog[]'.
+    Type 'AuditLog' is missing the following properties from type 'AuditLog': user_name, created_at, severity
+src/app/dashboard/admin/bar/menu/page.tsx(54,56): error TS2554: Expected 0-2 arguments, but got 3.
+src/app/dashboard/admin/bar/menu/page.tsx(55,49): error TS2554: Expected 0-1 arguments, but got 2.
+src/app/dashboard/admin/bar/menu/page.tsx(92,26): error TS2339: Property 'createDrink' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/admin/bar/menu/page.tsx(124,26): error TS2339: Property 'updateDrink' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/admin/bar/menu/page.tsx(141,26): error TS2339: Property 'deleteDrink' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/admin/channels/page.tsx(11,10): error TS2614: Module '"@/lib/api"' has no exported member 'channelManagerAPI'. Did you mean to use 'import channelManagerAPI from "@/lib/api"' instead?
+src/app/dashboard/admin/checkin/page.tsx(27,41): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Arrival[]>'.
+  Type 'Booking[]' is not assignable to type 'Arrival[]'.
+    Type 'Booking' is missing the following properties from type 'Arrival': room_number, check_in
+src/app/dashboard/admin/docs/page.tsx(7,10): error TS2724: '"@/lib/api"' has no exported member named 'reportAPI'. Did you mean 'reportsAPI'?
+src/app/dashboard/admin/drivers/page.tsx(73,22): error TS2345: Argument of type '{ id: any; firstName: any; lastName: any; name: string; email: any; phone: any; license_number: any; status: string; employeeId: any; }[]' is not assignable to parameter of type 'SetStateAction<Driver[]>'.
+  Type '{ id: any; firstName: any; lastName: any; name: string; email: any; phone: any; license_number: any; status: string; employeeId: any; }[]' is not assignable to type 'Driver[]'.
+    Type '{ id: any; firstName: any; lastName: any; name: string; email: any; phone: any; license_number: any; status: string; employeeId: any; }' is not assignable to type 'Driver'.
+      Types of property 'status' are incompatible.
+        Type 'string' is not assignable to type '"active" | "inactive"'.
+src/app/dashboard/admin/drivers/page.tsx(165,82): error TS2339: Property 'generatedPassword' does not exist on type 'StaffMember'.
+src/app/dashboard/admin/finance/budgets/page.tsx(33,41): error TS2339: Property 'getBudgets' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/admin/finance/budgets/page.tsx(47,24): error TS2339: Property 'createBudget' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/admin/finance/budgets/page.tsx(66,24): error TS2339: Property 'updateBudget' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/admin/finance/budgets/page.tsx(80,24): error TS2339: Property 'deleteBudget' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/admin/finance/expenses/page.tsx(67,24): error TS2339: Property 'updateExpense' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/admin/finance/expenses/page.tsx(81,24): error TS2339: Property 'deleteExpense' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/admin/finance/expenses/page.tsx(92,24): error TS2339: Property 'approveExpense' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/admin/guests/page.tsx(48,22): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/admin/guests/page.tsx(67,22): error TS2339: Property 'updateGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/admin/guests/page.tsx(81,22): error TS2339: Property 'deleteGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/admin/housekeeping/page.tsx(25,25): error TS2339: Property 'getStaff' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/admin/hr-payroll/page.tsx(30,83): error TS2339: Property 'totalNetPay' does not exist on type 'any[]'.
+src/app/dashboard/admin/hr-payroll/page.tsx(30,122): error TS2339: Property 'totalAmount' does not exist on type 'any[]'.
+src/app/dashboard/admin/id-cards/page.tsx(208,43): error TS2339: Property 'preview' does not exist on type '{ generate: (data: any, photo?: File | undefined) => Promise<Blob>; }'.
+src/app/dashboard/admin/maintenance/page.tsx(9,10): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/app/dashboard/admin/rates/page.tsx(7,10): error TS2614: Module '"@/lib/api"' has no exported member 'ratePlansAPI'. Did you mean to use 'import ratePlansAPI from "@/lib/api"' instead?
+src/app/dashboard/admin/reservations/page.tsx(35,41): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Booking[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Booking[]' is not assignable to type 'Booking[]'.
+    Type 'Booking' is missing the following properties from type 'Booking': room_number, check_in, check_out
+src/app/dashboard/admin/restaurant/menu/page.tsx(39,65): error TS2554: Expected 0-3 arguments, but got 4.
+src/app/dashboard/admin/restaurant/menu/page.tsx(40,23): error TS2551: Property 'getCategories' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'getMenuCategories'?
+src/app/dashboard/admin/restaurant/pos-control/page.tsx(26,44): error TS2339: Property 'getTerminals' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/admin/rooms/page.tsx(44,38): error TS2345: Argument of type 'Room[]' is not assignable to parameter of type 'SetStateAction<Room[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Room[]' is not assignable to type 'Room[]'.
+    Type 'Room' is missing the following properties from type 'Room': room_type, floor, price
+src/app/dashboard/admin/rooms/page.tsx(57,22): error TS2339: Property 'createRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/admin/rooms/page.tsx(76,22): error TS2339: Property 'updateRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/admin/rooms/page.tsx(90,22): error TS2339: Property 'deleteRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/admin/staff/attendance/page.tsx(26,39): error TS2339: Property 'getAttendance' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/admin/staff/page.tsx(87,38): error TS2345: Argument of type 'StaffMember[]' is not assignable to parameter of type 'SetStateAction<Staff[]>'.
+  Type 'StaffMember[]' is not assignable to type 'Staff[]'.
+    Property 'role' is missing in type 'StaffMember' but required in type 'Staff'.
+src/app/dashboard/admin/system/branches/page.tsx(35,41): error TS2345: Argument of type 'Branch[]' is not assignable to parameter of type 'SetStateAction<Branch[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Branch[]' is not assignable to type 'Branch[]'.
+    Type 'Branch' is missing the following properties from type 'Branch': is_central, status
+src/app/dashboard/admin/system/branches/page.tsx(67,23): error TS2339: Property 'updateBranch' does not exist on type '{ getBranches: () => Promise<ApiResponse<Branch[]>>; createBranch: (data: any) => Promise<ApiResponse<Branch>>; getDepartments: () => Promise<...>; createDepartment: (data: any) => Promise<...>; getRoles: () => Promise<...>; getRolePermissions: (roleId: string) => Promise<...>; getSystemUsers: () => Promise<...>; }'.
+src/app/dashboard/admin/system/branches/page.tsx(81,23): error TS2339: Property 'deleteBranch' does not exist on type '{ getBranches: () => Promise<ApiResponse<Branch[]>>; createBranch: (data: any) => Promise<ApiResponse<Branch>>; getDepartments: () => Promise<...>; createDepartment: (data: any) => Promise<...>; getRoles: () => Promise<...>; getRolePermissions: (roleId: string) => Promise<...>; getSystemUsers: () => Promise<...>; }'.
+src/app/dashboard/admin/system/departments/page.tsx(35,44): error TS2345: Argument of type 'Department[]' is not assignable to parameter of type 'SetStateAction<Department[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Department[]' is not assignable to type 'Department[]'.
+    Type 'Department' is missing the following properties from type 'Department': staff_count, status
+src/app/dashboard/admin/system/departments/page.tsx(67,23): error TS2551: Property 'updateDepartment' does not exist on type '{ getBranches: () => Promise<ApiResponse<Branch[]>>; createBranch: (data: any) => Promise<ApiResponse<Branch>>; getDepartments: () => Promise<...>; createDepartment: (data: any) => Promise<...>; getRoles: () => Promise<...>; getRolePermissions: (roleId: string) => Promise<...>; getSystemUsers: () => Promise<...>; }'. Did you mean 'createDepartment'?
+src/app/dashboard/admin/system/departments/page.tsx(81,23): error TS2551: Property 'deleteDepartment' does not exist on type '{ getBranches: () => Promise<ApiResponse<Branch[]>>; createBranch: (data: any) => Promise<ApiResponse<Branch>>; getDepartments: () => Promise<...>; createDepartment: (data: any) => Promise<...>; getRoles: () => Promise<...>; getRolePermissions: (roleId: string) => Promise<...>; getSystemUsers: () => Promise<...>; }'. Did you mean 'getDepartments'?
+src/app/dashboard/admin/system/roles/migration/page.tsx(59,39): error TS2339: Property 'getRoleMigrations' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/admin/system/roles/migration/page.tsx(92,39): error TS2339: Property 'executeRoleMigration' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/admin/system/roles/migration/page.tsx(115,39): error TS2339: Property 'revertRoleMigration' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/admin/users/page.tsx(149,38): error TS2345: Argument of type 'User[]' is not assignable to parameter of type 'SetStateAction<UserData[]>'.
+  Type 'User[]' is not assignable to type 'UserData[]'.
+    Type 'User' is missing the following properties from type 'UserData': first_name, last_name, status
+src/app/dashboard/admin/wastage/page.tsx(69,23): error TS2339: Property 'getWastageRecords' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/admin/wastage/page.tsx(71,23): error TS2339: Property 'getWastageSummary' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/auditor/bar-stock/page.tsx(32,40): error TS2339: Property 'getBarStockAudits' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/bar-stock/page.tsx(55,40): error TS2339: Property 'verifyBarStockTake' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/financial-verification/[branchId]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/auditor/financial-verification/[branchId]/PageContent.tsx(33,40): error TS2339: Property 'verifyFinances' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/financial-verification/logs/[logId]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/auditor/financial-verification/logs/[logId]/PageContent.tsx(36,40): error TS2339: Property 'verifyFinances' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/financial-verification/logs/page.tsx(43,38): error TS2339: Property 'getAuditTrail' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/financial-verification/logs/page.tsx(49,38): error TS2339: Property 'verifyFinances' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/financial-verification/page.tsx(30,40): error TS2339: Property 'verifyFinances' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/invoices/[id]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/auditor/invoices/[id]/PageContent.tsx(30,47): error TS2339: Property 'getSupplierInvoiceById' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/auditor/invoices/page.tsx(49,29): error TS2345: Argument of type 'Invoice[]' is not assignable to parameter of type 'SetStateAction<Invoice[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Invoice[]' is not assignable to type 'Invoice[]'.
+    Property 'balance' is missing in type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Invoice' but required in type 'Invoice'.
+src/app/dashboard/auditor/invoices/page.tsx(79,44): error TS2339: Property 'flagItem' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/kitchen-requisitions/page.tsx(242,89): error TS2551: Property 'requested_at' does not exist on type 'Requisition'. Did you mean 'request_date'?
+src/app/dashboard/auditor/kitchen-requisitions/page.tsx(325,117): error TS2551: Property 'requested_at' does not exist on type 'Requisition'. Did you mean 'request_date'?
+src/app/dashboard/auditor/kitchen-usage/page.tsx(47,28): error TS2345: Argument of type 'KitchenUsage[]' is not assignable to parameter of type 'SetStateAction<UsageEntry[]>'.
+  Type 'KitchenUsage[]' is not assignable to type 'UsageEntry[]'.
+    Type 'KitchenUsage' is missing the following properties from type 'UsageEntry': usage_date, branch_id
+src/app/dashboard/auditor/kitchen-wastage/page.tsx(48,28): error TS2345: Argument of type 'KitchenWastage[]' is not assignable to parameter of type 'SetStateAction<WastageEntry[]>'.
+  Type 'KitchenWastage[]' is not assignable to type 'WastageEntry[]'.
+    Type 'KitchenWastage' is missing the following properties from type 'WastageEntry': wastage_date, branch_id
+src/app/dashboard/auditor/ledger/page.tsx(51,48): error TS2339: Property 'getLedger' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/auditor/ledger/page.tsx(72,48): error TS2339: Property 'updateLedgerStatus' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/auditor/orders/page.tsx(34,40): error TS2339: Property 'verifyBranchOrders' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/orders/page.tsx(60,40): error TS2339: Property 'verifyBranchOrders' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/page.tsx(43,26): error TS2339: Property 'verifyRevenue' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/purchases/page.tsx(195,97): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/auditor/purchases/page.tsx(202,94): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/auditor/purchases/page.tsx(306,131): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/auditor/purchases/page.tsx(307,145): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/auditor/revenue-oversight/details/[id]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/auditor/revenue-oversight/details/[id]/PageContent.tsx(46,40): error TS2339: Property 'getAnomalyDetail' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/revenue-oversight/details/[id]/PageContent.tsx(87,36): error TS2339: Property 'ok' does not exist on type 'ApiResponse<any>'.
+src/app/dashboard/auditor/revenue-oversight/details/[id]/PageContent.tsx(106,40): error TS2339: Property 'clearAnomaly' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/revenue-oversight/page.tsx(37,40): error TS2339: Property 'verifyRevenue' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/auditor/sales/[branchId]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/auditor/search/page.tsx(43,22): error TS2678: Type '"restaurant_order"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(49,22): error TS2678: Type '"customer"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(55,22): error TS2678: Type '"mpesa_transaction"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(56,22): error TS2678: Type '"payment_transaction"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(62,22): error TS2678: Type '"payment_receipt"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(68,22): error TS2678: Type '"reservation"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(69,22): error TS2678: Type '"room_booking"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(75,22): error TS2678: Type '"bill_payment"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(81,22): error TS2678: Type '"restaurant_bill"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(82,22): error TS2678: Type '"invoice"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(87,22): error TS2678: Type '"supplier"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(88,22): error TS2678: Type '"supplier_invoice"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(93,22): error TS2678: Type '"stock_take"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(94,22): error TS2678: Type '"inventory"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(99,22): error TS2678: Type '"purchase_order"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(100,22): error TS2678: Type '"purchase"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(105,22): error TS2678: Type '"shift"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(106,22): error TS2678: Type '"cashier_shift"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(111,22): error TS2678: Type '"kitchen_requisition"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(112,22): error TS2678: Type '"requisition"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(117,22): error TS2678: Type '"wastage"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(118,22): error TS2678: Type '"kitchen_wastage"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(123,22): error TS2678: Type '"sold_item"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(124,22): error TS2678: Type '"menu_item"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(129,22): error TS2678: Type '"ledger_entry"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(130,22): error TS2678: Type '"accounting"' is not comparable to type '"payment" | "booking" | "order" | "staff" | "bill" | "guest" | "transaction" | "receipt"'.
+src/app/dashboard/auditor/search/page.tsx(161,46): error TS2339: Property 'universalSearch' does not exist on type '{ globalSearch: (query: string, modules?: string[] | undefined) => Promise<ApiResponse<any[]>>; }'.
+src/app/dashboard/auditor/sold-items/page.tsx(33,40): error TS2551: Property 'verifySoldItems' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'. Did you mean 'verifySales'?
+src/app/dashboard/auditor/staff-audit/page.tsx(102,32): error TS2339: Property 'summary' does not exist on type 'ApiResponse<any>'.
+src/app/dashboard/auditor/stock/page.tsx(121,28): error TS2339: Property 'exportStockLedger' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/app/dashboard/bar/cashier/page.tsx(94,49): error TS2339: Property 'getBranchFinancials' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/bar/cashier/page.tsx(615,90): error TS2872: This kind of expression is always truthy.
+src/app/dashboard/bar/inventory/morning-count/page.tsx(45,53): error TS2339: Property 'getStock' does not exist on type '{ getBarInventory: (params?: any) => Promise<ApiResponse<any[]>>; syncFromMaster: () => Promise<ApiResponse<void>>; }'.
+src/app/dashboard/bar/inventory/morning-count/page.tsx(88,48): error TS2339: Property 'submitStockTake' does not exist on type '{ getBarInventory: (params?: any) => Promise<ApiResponse<any[]>>; syncFromMaster: () => Promise<ApiResponse<void>>; }'.
+src/app/dashboard/bar/inventory/morning-count/page.tsx(156,42): error TS18046: 'items' is of type 'unknown'.
+src/app/dashboard/bar/inventory/page.tsx(54,34): error TS2339: Property 'getStock' does not exist on type '{ getBarInventory: (params?: any) => Promise<ApiResponse<any[]>>; syncFromMaster: () => Promise<ApiResponse<void>>; }'.
+src/app/dashboard/bar/inventory/page.tsx(55,34): error TS2339: Property 'getConsumptionReport' does not exist on type '{ getBarInventory: (params?: any) => Promise<ApiResponse<any[]>>; syncFromMaster: () => Promise<ApiResponse<void>>; }'.
+src/app/dashboard/bar/inventory/page.tsx(86,63): error TS2554: Expected 0 arguments, but got 1.
+src/app/dashboard/bar/inventory/page.tsx(118,48): error TS2339: Property 'submitStockTake' does not exist on type '{ getBarInventory: (params?: any) => Promise<ApiResponse<any[]>>; syncFromMaster: () => Promise<ApiResponse<void>>; }'.
+src/app/dashboard/bar/orders/page.tsx(52,76): error TS2554: Expected 0-1 arguments, but got 2.
+src/app/dashboard/bar/orders/page.tsx(68,20): error TS2339: Property 'updateOrderStatus' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/bar/tabs/page.tsx(90,20): error TS2339: Property 'updateTab' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/bar/tabs/page.tsx(104,20): error TS2339: Property 'deleteTab' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-accounting/banking/page.tsx(46,46): error TS2554: Expected 0 arguments, but got 1.
+src/app/dashboard/branch-accounting/bookings/page.tsx(110,47): error TS2339: Property 'updateBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/app/dashboard/branch-accounting/bookings/page.tsx(112,49): error TS2551: Property 'confirmRestaurantReservation' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'createRestaurantReservation'?
+src/app/dashboard/branch-accounting/bookings/page.tsx(131,47): error TS2339: Property 'cancelBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/app/dashboard/branch-accounting/bookings/page.tsx(133,49): error TS2551: Property 'cancelRestaurantReservation' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'createRestaurantReservation'?
+src/app/dashboard/branch-accounting/financials/page.tsx(66,47): error TS2339: Property 'getFinancialOverview' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/branch-accounting/logbooks/page.tsx(64,36): error TS2339: Property 'getPendingLogbooks' does not exist on type '{ getStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getSummary: (params?: any) => Promise<ApiResponse<any>>; ... 20 more ...; saveLogbook: (data: any) => Promise<...>; }'.
+src/app/dashboard/branch-accounting/logbooks/page.tsx(89,45): error TS2339: Property 'auditShift' does not exist on type '{ getSalesPoints: (params?: any) => Promise<ApiResponse<SalesPoint[]>>; getSalesPointDetails: (id: string) => Promise<ApiResponse<SalesPoint>>; ... 20 more ...; updateDynamicService: (id: string | number, data: any) => Promise<...>; }'.
+src/app/dashboard/branch-accounting/logbooks/page.tsx(91,45): error TS2339: Property 'auditLogbook' does not exist on type '{ getStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getSummary: (params?: any) => Promise<ApiResponse<any>>; ... 20 more ...; saveLogbook: (data: any) => Promise<...>; }'.
+src/app/dashboard/branch-accounting/payments/page.old.tsx(30,46): error TS2339: Property 'universalSearch' does not exist on type '{ globalSearch: (query: string, modules?: string[] | undefined) => Promise<ApiResponse<any[]>>; }'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(159,26): error TS2345: Argument of type 'InventoryItem[]' is not assignable to parameter of type 'SetStateAction<StoreItem[]>'.
+  Type 'InventoryItem[]' is not assignable to type 'StoreItem[]'.
+    Type 'InventoryItem' is not assignable to type 'StoreItem'.
+      Types of property 'description' are incompatible.
+        Type 'string | undefined' is not assignable to type 'string'.
+          Type 'undefined' is not assignable to type 'string'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(453,105): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(460,102): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(505,84): error TS2339: Property 'supplier' does not exist on type 'Invoice'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(505,106): error TS2551: Property 'other_supplier_name' does not exist on type 'Invoice'. Did you mean 'supplier_name'?
+src/app/dashboard/branch-accounting/purchases/page.tsx(787,81): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(794,78): error TS2345: Argument of type 'PurchaseOrder' is not assignable to parameter of type 'PurchaseOrderData'.
+  Types of property 'created_by' are incompatible.
+    Type 'string | undefined' is not assignable to type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; } | undefined'.
+      Type 'string' has no properties in common with type '{ id?: string | undefined; full_name?: string | undefined; name?: string | undefined; email?: string | undefined; }'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(1003,97): error TS2339: Property 'supplier' does not exist on type 'Invoice'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(1003,127): error TS2551: Property 'other_supplier_name' does not exist on type 'Invoice'. Did you mean 'supplier_name'?
+src/app/dashboard/branch-accounting/purchases/page.tsx(1038,135): error TS2339: Property 'item' does not exist on type 'InvoiceItem'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(1042,128): error TS2339: Property 'total_amount' does not exist on type 'InvoiceItem'.
+src/app/dashboard/branch-accounting/purchases/page.tsx(1050,75): error TS2551: Property 'subtotal' does not exist on type 'Invoice'. Did you mean 'sub_total'?
+src/app/dashboard/branch-accounting/purchases/page.tsx(1062,141): error TS2339: Property 'total_amount' does not exist on type 'InvoiceItem'.
+src/app/dashboard/branch-manager/arrivals/page.tsx(56,21): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Arrival[]>'.
+  Type 'Booking[]' is not assignable to type 'Arrival[]'.
+    Type 'Booking' is missing the following properties from type 'Arrival': room_number, check_in, check_out, nights
+src/app/dashboard/branch-manager/arrivals/page.tsx(213,26): error TS2304: Cannot find name 'Calendar'.
+src/app/dashboard/branch-manager/attendance/page.tsx(55,18): error TS2339: Property 'getAttendance' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/branch-manager/attendance/page.tsx(56,32): error TS2339: Property 'analyze' does not exist on type '{ getStats: (params?: any) => Promise<ApiResponse<any>>; }'.
+src/app/dashboard/branch-manager/bar-menu/page.tsx(150,22): error TS2339: Property 'updateDrink' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/bar-menu/page.tsx(156,34): error TS2339: Property 'createDrink' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/bar-menu/page.tsx(171,26): error TS2339: Property 'uploadDrinkImage' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/bar-menu/page.tsx(197,20): error TS2339: Property 'deleteDrink' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/bar-menu/page.tsx(214,22): error TS2339: Property 'updateCategory' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/bar-menu/page.tsx(217,22): error TS2339: Property 'createCategory' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/bar-menu/page.tsx(233,20): error TS2339: Property 'deleteCategory' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/checkin/page.tsx(58,44): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/branch-manager/checkin/page.tsx(71,49): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/app/dashboard/branch-manager/departures/page.tsx(56,23): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Departure[]>'.
+  Type 'Booking[]' is not assignable to type 'Departure[]'.
+    Type 'Booking' is missing the following properties from type 'Departure': room_number, check_in, check_out
+src/app/dashboard/branch-manager/guests/[id]/PageContent.tsx(283,59): error TS2322: Type '"success" | "default" | "primary" | "warning" | "danger"' is not assignable to type '"success" | "primary" | "secondary" | "warning" | "danger" | "info" | "purple" | "pink" | "indigo" | "custom" | null | undefined'.
+  Type '"default"' is not assignable to type '"success" | "primary" | "secondary" | "warning" | "danger" | "info" | "purple" | "pink" | "indigo" | "custom" | null | undefined'.
+src/app/dashboard/branch-manager/guests/page.tsx(50,75): error TS2554: Expected 0-1 arguments, but got 3.
+src/app/dashboard/branch-manager/guests/page.tsx(75,39): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/branch-manager/guests/page.tsx(103,39): error TS2339: Property 'updateGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/branch-manager/guests/page.tsx(123,39): error TS2339: Property 'deleteGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/branch-manager/housekeeping/page.tsx(56,50): error TS2345: Argument of type '{ status: string; }' is not assignable to parameter of type 'string'.
+src/app/dashboard/branch-manager/maintenance/page.tsx(11,10): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/app/dashboard/branch-manager/menu/page.tsx(89,23): error TS2551: Property 'getCategories' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'getMenuCategories'?
+src/app/dashboard/branch-manager/menu/page.tsx(197,33): error TS2339: Property 'uploadMenuItemImage' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/branch-manager/menu/page.tsx(236,29): error TS2339: Property 'updateCategory' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/branch-manager/menu/page.tsx(239,29): error TS2339: Property 'createCategory' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/branch-manager/menu/page.tsx(252,27): error TS2339: Property 'deleteCategory' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/branch-manager/reservations/[id]/PageContent.tsx(111,42): error TS2339: Property 'cancelBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/app/dashboard/branch-manager/reservations/new/page.tsx(87,11): error TS2554: Expected 1 arguments, but got 4.
+src/app/dashboard/branch-manager/reservations/new/page.tsx(167,42): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/app/dashboard/branch-manager/reservations/page.tsx(55,23): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Booking[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Booking[]' is not assignable to type 'Booking[]'.
+    Type 'Booking' is missing the following properties from type 'Booking': room_number, check_in, check_out, total, nights
+src/app/dashboard/branch-manager/reservations/page.tsx(72,25): error TS2339: Property 'cancelBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/app/dashboard/branch-manager/restaurant/page.tsx(37,33): error TS2559: Type 'number' has no properties in common with type '{ branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; }'.
+src/app/dashboard/branch-manager/rooms/page.tsx(52,38): error TS2345: Argument of type 'Room[]' is not assignable to parameter of type 'SetStateAction<Room[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Room[]' is not assignable to type 'Room[]'.
+    Type 'Room' is missing the following properties from type 'Room': room_type, floor, price
+src/app/dashboard/branch-manager/rooms/page.tsx(64,39): error TS2339: Property 'deleteRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/branch-manager/sold-items/page.tsx(10,13): error TS2339: Property 'branch' does not exist on type 'AuthContextType'.
+src/app/dashboard/branch-manager/staff/page.tsx(123,39): error TS2339: Property 'getAttendance' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/branch-manager/staff/page.tsx(141,39): error TS2339: Property 'clockIn' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/branch-manager/staff/page.tsx(157,39): error TS2339: Property 'clockOut' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/branch-manager/wastage/page.tsx(70,20): error TS2339: Property 'getWastageRecords' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/app/dashboard/branch-manager/wastage/page.tsx(71,20): error TS2339: Property 'getWastageSummary' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/app/dashboard/branch-operations/communications/announcements/page.tsx(71,67): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/communications/messages/page.tsx(86,62): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/communications/messages/page.tsx(101,59): error TS2345: Argument of type 'number | null' is not assignable to parameter of type '{ department?: string | undefined; status?: string | undefined; } | undefined'.
+  Type 'null' is not assignable to type '{ department?: string | undefined; status?: string | undefined; } | undefined'.
+src/app/dashboard/branch-operations/communications/notifications/page.tsx(61,67): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/communications/page.tsx(75,68): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/communications/page.tsx(158,7): error TS2322: Type '{ children: Element[]; title: string; subtitle: string; actions: Element; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; }'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & { children: ReactNode; }'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-detail-dialog.tsx(52,20): error TS2339: Property 'success' does not exist on type 'BudgetDetail'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-detail-dialog.tsx(52,40): error TS2339: Property 'data' does not exist on type 'BudgetDetail'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-detail-dialog.tsx(53,34): error TS2339: Property 'data' does not exist on type 'BudgetDetail'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-detail-dialog.tsx(82,11): error TS18046: 'response' is of type 'unknown'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-detail-dialog.tsx(87,21): error TS18046: 'response' is of type 'unknown'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-forecast-tab.tsx(35,79): error TS2339: Property 'data' does not exist on type 'Budget[] & Record<"success", unknown>'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-forecast-tab.tsx(36,62): error TS2339: Property 'data' does not exist on type 'Budget[] & Record<"success", unknown>'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-forecast-tab.tsx(37,23): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'SetStateAction<string[]>'.
+  Type 'unknown[]' is not assignable to type 'string[]'.
+    Type 'unknown' is not assignable to type 'string'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-form-dialog.tsx(122,20): error TS2339: Property 'success' does not exist on type 'Budget'.
+src/app/dashboard/branch-operations/financials/budget/components/budget-form-dialog.tsx(127,30): error TS2339: Property 'message' does not exist on type 'Budget'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(64,20): error TS2339: Property 'success' does not exist on type 'Budget[]'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(64,54): error TS2339: Property 'data' does not exist on type 'Budget[]'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(65,29): error TS2339: Property 'data' does not exist on type 'Budget[]'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(78,27): error TS2339: Property 'success' does not exist on type 'BudgetSummary'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(78,54): error TS2339: Property 'data' does not exist on type 'BudgetSummary'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(79,36): error TS2339: Property 'data' does not exist on type 'BudgetSummary'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(216,16): error TS2339: Property 'FINANCE' does not exist on type 'typeof UserRole'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(566,17): error TS2322: Type 'number | null' is not assignable to type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(573,17): error TS2322: Type 'number | null' is not assignable to type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(584,9): error TS2322: Type 'number | null' is not assignable to type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/financials/budget/page.tsx(594,11): error TS2322: Type 'number | null' is not assignable to type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/financials/expenses/page.tsx(100,9): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/financials/expenses/page.tsx(157,11): error TS18048: 'valA' is possibly 'undefined'.
+src/app/dashboard/branch-operations/financials/expenses/page.tsx(157,18): error TS18048: 'valB' is possibly 'undefined'.
+src/app/dashboard/branch-operations/financials/expenses/page.tsx(158,11): error TS18048: 'valA' is possibly 'undefined'.
+src/app/dashboard/branch-operations/financials/expenses/page.tsx(158,18): error TS18048: 'valB' is possibly 'undefined'.
+src/app/dashboard/branch-operations/financials/expenses/page.tsx(230,7): error TS2322: Type '{ children: Element[]; title: string; subtitle: string; actions: Element; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; }'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & { children: ReactNode; }'.
+src/app/dashboard/branch-operations/financials/page.tsx(72,86): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/staff/attendance/page.tsx(125,64): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type '{ department?: string | undefined; status?: string | undefined; } | undefined'.
+  Type 'number' has no properties in common with type '{ department?: string | undefined; status?: string | undefined; }'.
+src/app/dashboard/branch-operations/staff/attendance/page.tsx(228,7): error TS2322: Type '{ children: Element[]; title: string; subtitle: string; actions: Element; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; }'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & { children: ReactNode; }'.
+src/app/dashboard/branch-operations/staff/schedule/page.tsx(95,64): error TS2345: Argument of type 'number | null' is not assignable to parameter of type '{ department?: string | undefined; status?: string | undefined; } | undefined'.
+  Type 'null' is not assignable to type '{ department?: string | undefined; status?: string | undefined; } | undefined'.
+src/app/dashboard/branch-operations/staff/schedule/page.tsx(103,74): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/staff/schedule/page.tsx(117,10): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/app/dashboard/branch-operations/staff/schedule/page.tsx(196,7): error TS2322: Type '{ children: Element[]; title: string; subtitle: string; actions: Element; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; }'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & { children: ReactNode; }'.
+src/app/dashboard/branch-store/receive/page.tsx(385,49): error TS2322: Type '"blue"' is not assignable to type '"success" | "primary" | "secondary" | "warning" | "danger" | "info" | "purple" | "pink" | "indigo" | "custom" | null | undefined'.
+src/app/dashboard/branch-store/receive/page.tsx(451,31): error TS2322: Type '{ children: string; size: "lg"; onClick: () => Promise<void>; isLoading: boolean; className: string; leftIcon: Element; }' is not assignable to type 'IntrinsicAttributes & IOSButtonProps & RefAttributes<HTMLButtonElement>'.
+  Property 'isLoading' does not exist on type 'IntrinsicAttributes & IOSButtonProps & RefAttributes<HTMLButtonElement>'. Did you mean 'loading'?
+src/app/dashboard/branch-store/requests/[id]/client-page.tsx(47,57): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: StockRequest, index: number, obj: StockRequest[]) => value is StockRequest, thisArg?: any): StockRequest | undefined', gave the following error.
+    Argument of type '(r: StockRequest) => boolean' is not assignable to parameter of type '(value: StockRequest, index: number, obj: StockRequest[]) => value is StockRequest'.
+      Types of parameters 'r' and 'value' are incompatible.
+        Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' is not assignable to type 'StockRequest'.
+          Types of property 'request_type' are incompatible.
+            Type 'string | undefined' is not assignable to type 'string'.
+              Type 'undefined' is not assignable to type 'string'.
+  Overload 2 of 2, '(predicate: (value: StockRequest, index: number, obj: StockRequest[]) => unknown, thisArg?: any): StockRequest | undefined', gave the following error.
+    Argument of type '(r: StockRequest) => boolean' is not assignable to parameter of type '(value: StockRequest, index: number, obj: StockRequest[]) => unknown'.
+      Types of parameters 'r' and 'value' are incompatible.
+        Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' is not assignable to type 'StockRequest'.
+          Types of property 'request_type' are incompatible.
+            Type 'string | undefined' is not assignable to type 'string'.
+              Type 'undefined' is not assignable to type 'string'.
+src/app/dashboard/branch-store/requests/[id]/client-page.tsx(49,32): error TS2345: Argument of type 'StockRequest' is not assignable to parameter of type 'SetStateAction<StockRequest | null>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' is not assignable to type 'StockRequest'.
+    Types of property 'request_type' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/app/dashboard/branch-store/stock/page.tsx(84,20): error TS2345: Argument of type 'InventoryItem[]' is not assignable to parameter of type 'SetStateAction<CatalogItem[]>'.
+  Type 'InventoryItem[]' is not assignable to type 'CatalogItem[]'.
+    Type 'InventoryItem' is missing the following properties from type 'CatalogItem': item_name, unit_of_measure
+src/app/dashboard/branch-store/stock/page.tsx(147,31): error TS2339: Property 'exportComprehensiveStockAudit' does not exist on type '{ exportAuditorReport: (reportId: string, params?: any) => Promise<ApiResponse<Blob>>; exportExceptionSummary: (params?: any) => Promise<ApiResponse<Blob>>; ... 11 more ...; exportBrandedPdf: (reportType: string, params: any) => Promise<...>; }'.
+src/app/dashboard/central-store/bar-items/page.tsx(36,52): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: InventoryItem, index: number, array: InventoryItem[]) => value is InventoryItem, thisArg?: any): InventoryItem[]', gave the following error.
+    Argument of type '(item: Item) => boolean' is not assignable to parameter of type '(value: InventoryItem, index: number, array: InventoryItem[]) => value is InventoryItem'.
+      Types of parameters 'item' and 'value' are incompatible.
+        Type 'InventoryItem' is missing the following properties from type 'Item': item_name, quantity, unit_of_measure
+  Overload 2 of 2, '(predicate: (value: InventoryItem, index: number, array: InventoryItem[]) => unknown, thisArg?: any): InventoryItem[]', gave the following error.
+    Argument of type '(item: Item) => boolean' is not assignable to parameter of type '(value: InventoryItem, index: number, array: InventoryItem[]) => unknown'.
+      Types of parameters 'item' and 'value' are incompatible.
+        Type 'InventoryItem' is missing the following properties from type 'Item': item_name, quantity, unit_of_measure
+src/app/dashboard/central-store/bar-items/page.tsx(73,26): error TS2345: Argument of type 'InventoryItem[]' is not assignable to parameter of type 'SetStateAction<Item[]>'.
+  Type 'InventoryItem[]' is not assignable to type 'Item[]'.
+    Type 'InventoryItem' is missing the following properties from type 'Item': item_name, quantity, unit_of_measure
+src/app/dashboard/central-store/foodstuffs/page.tsx(23,44): error TS2345: Argument of type 'InventoryItem[]' is not assignable to parameter of type 'SetStateAction<Item[]>'.
+  Type 'InventoryItem[]' is not assignable to type 'Item[]'.
+    Type 'InventoryItem' is missing the following properties from type 'Item': item_name, quantity, unit_of_measure
+src/app/dashboard/central-store/inventory/page.tsx(42,18): error TS2345: Argument of type 'InventoryItem[]' is not assignable to parameter of type 'SetStateAction<Item[]>'.
+  Type 'InventoryItem[]' is not assignable to type 'Item[]'.
+    Type 'InventoryItem' is missing the following properties from type 'Item': item_name, quantity, unit_of_measure
+src/app/dashboard/central-store/inventory/page.tsx(43,32): error TS2339: Property 'pages' does not exist on type 'ApiResponse<InventoryItem[]>'.
+src/app/dashboard/central-store/inventory/page.tsx(44,22): error TS2339: Property 'stats' does not exist on type 'ApiResponse<InventoryItem[]>'.
+src/app/dashboard/central-store/inventory/page.tsx(45,35): error TS2339: Property 'stats' does not exist on type 'ApiResponse<InventoryItem[]>'.
+src/app/dashboard/central-store/packing/page.tsx(36,38): error TS2322: Type '(StockRequest | StockRequest)[]' is not assignable to type 'StockRequest[]'.
+  Type 'StockRequest | StockRequest' is not assignable to type 'StockRequest'.
+    Type 'StockRequest' is missing the following properties from type 'StockRequest': branch_name, to_branch_id
+src/app/dashboard/central-store/packing/page.tsx(37,37): error TS2322: Type '(StockRequest | StockRequest)[]' is not assignable to type 'StockRequest[]'.
+  Type 'StockRequest | StockRequest' is not assignable to type 'StockRequest'.
+    Type 'StockRequest' is missing the following properties from type 'StockRequest': branch_name, to_branch_id
+src/app/dashboard/central-store/packing/page.tsx(40,59): error TS2345: Argument of type 'StockRequest[]' is not assignable to parameter of type 'SetStateAction<StockRequest[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest[]' is not assignable to type 'StockRequest[]'.
+    Type 'StockRequest' is missing the following properties from type 'StockRequest': branch_name, to_branch_id
+src/app/dashboard/central-store/requests/[id]/client-page.tsx(54,57): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: StockRequest, index: number, obj: StockRequest[]) => value is StockRequest, thisArg?: any): StockRequest | undefined', gave the following error.
+    Argument of type '(r: StockRequest) => boolean' is not assignable to parameter of type '(value: StockRequest, index: number, obj: StockRequest[]) => value is StockRequest'.
+      Types of parameters 'r' and 'value' are incompatible.
+        Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' is not assignable to type 'StockRequest'.
+          Types of property 'request_type' are incompatible.
+            Type 'string | undefined' is not assignable to type 'string'.
+              Type 'undefined' is not assignable to type 'string'.
+  Overload 2 of 2, '(predicate: (value: StockRequest, index: number, obj: StockRequest[]) => unknown, thisArg?: any): StockRequest | undefined', gave the following error.
+    Argument of type '(r: StockRequest) => boolean' is not assignable to parameter of type '(value: StockRequest, index: number, obj: StockRequest[]) => unknown'.
+      Types of parameters 'r' and 'value' are incompatible.
+        Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' is not assignable to type 'StockRequest'.
+          Types of property 'request_type' are incompatible.
+            Type 'string | undefined' is not assignable to type 'string'.
+              Type 'undefined' is not assignable to type 'string'.
+src/app/dashboard/central-store/requests/[id]/client-page.tsx(56,32): error TS2345: Argument of type 'StockRequest' is not assignable to parameter of type 'SetStateAction<StockRequest | null>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' is not assignable to type 'StockRequest'.
+    Types of property 'request_type' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/app/dashboard/central-store/requests/page.tsx(78,29): error TS2345: Argument of type 'StockRequest[]' is not assignable to parameter of type 'SetStateAction<StockRequest[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest[]' is not assignable to type 'StockRequest[]'.
+    Property 'branch_name' is missing in type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' but required in type 'StockRequest'.
+src/app/dashboard/central-store/stationery/page.tsx(24,44): error TS2345: Argument of type 'InventoryItem[]' is not assignable to parameter of type 'SetStateAction<Item[]>'.
+  Type 'InventoryItem[]' is not assignable to type 'Item[]'.
+    Type 'InventoryItem' is missing the following properties from type 'Item': item_name, quantity, unit_of_measure
+src/app/dashboard/central-store/suppliers/[id]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/central-store/suppliers/[id]/PageContent.tsx(292,19): error TS2304: Cannot find name 'accountingAPI'.
+src/app/dashboard/central-store/suppliers/reports/page.tsx(147,28): error TS2339: Property 'exportProcurementIntelligencePDF' does not exist on type '{ getSuppliers: (params?: { status?: string | undefined; category?: string | undefined; search?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 27 more ...; exportVATReportPDF: (filters: any) => Promise<...>; }'.
+src/app/dashboard/gm/branches/page.tsx(27,41): error TS2345: Argument of type 'Branch[]' is not assignable to parameter of type 'SetStateAction<Branch[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Branch[]' is not assignable to type 'Branch[]'.
+    Type 'Branch' is missing the following properties from type 'Branch': is_central, staff_count, room_count, occupancy_rate, and 2 more.
+src/app/dashboard/gm/compare/page.tsx(25,41): error TS2339: Property 'getRevenueByBranch' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/app/dashboard/gm/leave-requests/page.tsx(34,41): error TS2345: Argument of type 'LeaveRequest[]' is not assignable to parameter of type 'SetStateAction<LeaveRequest[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").LeaveRequest[]' is not assignable to type 'LeaveRequest[]'.
+    Type 'LeaveRequest' is missing the following properties from type 'LeaveRequest': employee_name, employee_id, leave_type, days
+src/app/dashboard/gm/page.tsx(106,25): error TS2339: Property 'trend' does not exist on type '{ label: string; value: string; icon: LucideIcon; }'.
+src/app/dashboard/gm/page.tsx(108,29): error TS2339: Property 'trend' does not exist on type '{ label: string; value: string; icon: LucideIcon; }'.
+src/app/dashboard/gm/page.tsx(109,38): error TS2339: Property 'trend' does not exist on type '{ label: string; value: string; icon: LucideIcon; }'.
+src/app/dashboard/gm/reservations/page.tsx(36,41): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Booking[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Booking[]' is not assignable to type 'Booking[]'.
+    Type 'Booking' is missing the following properties from type 'Booking': room_number, check_in, check_out, total
+src/app/dashboard/gm/staff/page.tsx(28,38): error TS2345: Argument of type 'StaffMember[]' is not assignable to parameter of type 'SetStateAction<Staff[]>'.
+  Type 'StaffMember[]' is not assignable to type 'Staff[]'.
+    Property 'role' is missing in type 'StaffMember' but required in type 'Staff'.
+src/app/dashboard/housekeeping/inspections/page.tsx(83,25): error TS2339: Property 'getInspections' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/inspections/page.tsx(84,25): error TS2339: Property 'getInspectionQueue' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/inspections/page.tsx(125,29): error TS2339: Property 'submitInspection' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/lost-found/page.tsx(124,46): error TS2339: Property 'updateLostFoundStatus' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/page.tsx(92,34): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/app/dashboard/housekeeping/page.tsx(120,54): error TS2345: Argument of type '{ status: string; }' is not assignable to parameter of type 'string'.
+src/app/dashboard/housekeeping/page.tsx(130,54): error TS2345: Argument of type '{ status: string; }' is not assignable to parameter of type 'string'.
+src/app/dashboard/housekeeping/reports/page.tsx(48,25): error TS2339: Property 'getDailyReport' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/reports/page.tsx(49,25): error TS2339: Property 'getStaffPerformanceReport' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/reports/page.tsx(50,25): error TS2339: Property 'getInspectionStats' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/rooms/page.tsx(79,46): error TS2339: Property 'getStaff' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/rooms/page.tsx(102,54): error TS2345: Argument of type '{ status: string; }' is not assignable to parameter of type 'string'.
+src/app/dashboard/housekeeping/rooms/page.tsx(113,29): error TS2339: Property 'assignRoomAttendant' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/scheduling/page.tsx(51,25): error TS2339: Property 'getStaff' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/scheduling/page.tsx(52,25): error TS2339: Property 'getSchedules' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/staff/page.tsx(68,46): error TS2339: Property 'getStaff' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/staff/page.tsx(85,46): error TS2339: Property 'createStaff' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/tasks/page.tsx(109,46): error TS2339: Property 'getStaff' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/tasks/page.tsx(148,54): error TS2345: Argument of type '{ status: string; }' is not assignable to parameter of type 'string'.
+src/app/dashboard/housekeeping/tasks/page.tsx(159,48): error TS2345: Argument of type '{ assignedTo: string; }' is not assignable to parameter of type 'string'.
+src/app/dashboard/housekeeping/tasks/page.tsx(185,29): error TS2339: Property 'updateTask' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/housekeeping/tasks/page.tsx(200,29): error TS2339: Property 'deleteTask' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/hr/attendance/[id]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/hr/attendance/[id]/PageContent.tsx(43,26): error TS2339: Property 'getAttendance' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/hr/attendance/[id]/PageContent.tsx(44,26): error TS2339: Property 'getAttendanceSummary' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/hr/attendance/page.tsx(71,45): error TS2339: Property 'getAttendanceReports' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/hr/attendance/page.tsx(108,45): error TS2339: Property 'approveAttendance' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/hr/leave/page.tsx(45,47): error TS2345: Argument of type 'LeaveRequest[]' is not assignable to parameter of type 'SetStateAction<LeaveRequest[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").LeaveRequest[]' is not assignable to type 'LeaveRequest[]'.
+    Type 'LeaveRequest' is missing the following properties from type 'LeaveRequest': employee_name, employee_id, leave_type, days
+src/app/dashboard/hr/leave/page.tsx(73,51): error TS2554: Expected 1 arguments, but got 2.
+src/app/dashboard/hr/page.tsx(51,26): error TS2339: Property 'getAttendance' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/hr/page.tsx(56,91): error TS2339: Property 'totalGrossPay' does not exist on type 'any[]'.
+src/app/dashboard/hr/payroll/page.tsx(189,30): error TS2339: Property 'records' does not exist on type 'PayrollRecord[]'.
+src/app/dashboard/hr/payroll/page.tsx(190,30): error TS2339: Property 'run' does not exist on type 'PayrollRecord[]'.
+src/app/dashboard/hr/payroll/page.tsx(190,47): error TS2339: Property 'summary' does not exist on type 'PayrollRecord[]'.
+src/app/dashboard/hr/performance/page.tsx(56,30): error TS2339: Property 'exportReport' does not exist on type '{ getReports: (params?: any) => Promise<ApiResponse<ReportTemplate[]>>; getReport: (id: string) => Promise<ApiResponse<ReportTemplate>>; ... 19 more ...; generateAIReport: (prompt: string, context?: any) => Promise<...>; }'.
+src/app/dashboard/hr/policies/page.tsx(135,41): error TS2339: Property 'updatePolicy' does not exist on type '{ getPolicies: () => Promise<ApiResponse<any[]>>; createPolicy: (data: any) => Promise<ApiResponse<any>>; }'.
+src/app/dashboard/hr/policies/page.tsx(155,45): error TS2339: Property 'deletePolicy' does not exist on type '{ getPolicies: () => Promise<ApiResponse<any[]>>; createPolicy: (data: any) => Promise<ApiResponse<any>>; }'.
+src/app/dashboard/hr/staff-attendance/page.tsx(53,44): error TS2345: Argument of type 'StaffMember[]' is not assignable to parameter of type 'SetStateAction<Staff[]>'.
+  Type 'StaffMember[]' is not assignable to type 'Staff[]'.
+    Property 'role' is missing in type 'StaffMember' but required in type 'Staff'.
+src/app/dashboard/hr/terminal/page.tsx(57,56): error TS2339: Property 'clockIn' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/hr/terminal/page.tsx(57,75): error TS2339: Property 'clockOut' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/inventory/audit/page.tsx(40,47): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/inventory/audit/page.tsx(46,49): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/inventory/central-store/page.tsx(45,46): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/inventory/central-store/page.tsx(51,46): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/inventory/central-store/page.tsx(57,50): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/inventory/central-store/page.tsx(63,49): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(105,48): error TS2339: Property 'getPortionStock' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(118,48): error TS2339: Property 'getDailyVariance' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(129,48): error TS2339: Property 'getVarianceReasons' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(141,29): error TS2339: Property 'getYieldReport' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(146,29): error TS2339: Property 'getLossReport' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(172,31): error TS2339: Property 'submitVarianceReason' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(189,31): error TS2339: Property 'approveVariance' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(204,48): error TS2339: Property 'getFoodControls' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(287,52): error TS2339: Property 'createFoodControl' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(294,52): error TS2339: Property 'updateFoodControl' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/food-controls/page.tsx(311,48): error TS2339: Property 'deleteFoodControl' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/recipes/page.tsx(49,32): error TS2339: Property 'success' does not exist on type 'any[]'.
+src/app/dashboard/kitchen-operations/recipes/page.tsx(50,43): error TS2339: Property 'data' does not exist on type 'any[]'.
+src/app/dashboard/kitchen-operations/requisitions/page.tsx(56,32): error TS2339: Property 'success' does not exist on type 'any[]'.
+src/app/dashboard/kitchen-operations/requisitions/page.tsx(57,48): error TS2339: Property 'data' does not exist on type 'any[]'.
+src/app/dashboard/kitchen-operations/requisitions/page.tsx(233,95): error TS2551: Property 'getRequisition' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'. Did you mean 'getRequisitions'?
+src/app/dashboard/kitchen-operations/stock/[sku]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/kitchen-operations/stock/[sku]/PageContent.tsx(50,48): error TS2339: Property 'getStockLedger' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/stock/page.tsx(107,48): error TS2339: Property 'getStockLedger' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/stock/page.tsx(122,48): error TS2339: Property 'getLedger' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/stock/page.tsx(156,48): error TS2339: Property 'createLedgerEntry' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/stock/page.tsx(180,31): error TS2339: Property 'updateLedgerStatus' does not exist on type '{ getDashboardStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getKitchenStock: (params?: any) => Promise<ApiResponse<any[]>>; ... 11 more ...; reviewWastage: (id: string, notes: string) => Promise<...>; }'.
+src/app/dashboard/kitchen-operations/usage/page.tsx(56,32): error TS2339: Property 'success' does not exist on type 'KitchenUsage[]'.
+src/app/dashboard/kitchen-operations/usage/page.tsx(57,48): error TS2339: Property 'data' does not exist on type 'KitchenUsage[]'.
+src/app/dashboard/kitchen-operations/usage/page.tsx(78,32): error TS2339: Property 'success' does not exist on type 'never'.
+src/app/dashboard/kitchen-operations/wastage/page.tsx(57,32): error TS2339: Property 'success' does not exist on type 'KitchenWastage[]'.
+src/app/dashboard/kitchen-operations/wastage/page.tsx(58,50): error TS2339: Property 'data' does not exist on type 'KitchenWastage[]'.
+src/app/dashboard/kitchen-operations/wastage/page.tsx(79,32): error TS2339: Property 'success' does not exist on type 'never'.
+src/app/dashboard/kitchen/wastage-tab.tsx(94,23): error TS2339: Property 'getWastageItems' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/kitchen/wastage-tab.tsx(95,20): error TS2339: Property 'getWastageRecords' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/app/dashboard/kitchen/wastage-tab.tsx(96,20): error TS2339: Property 'getWastageSummary' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/app/dashboard/kitchen/wastage-tab.tsx(143,24): error TS2339: Property 'createWastageRecord' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/app/dashboard/kitchen/wastage-tab.tsx(203,24): error TS2339: Property 'updateWastageRecord' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/app/dashboard/kitchen/wastage-tab.tsx(229,24): error TS2339: Property 'deleteWastageRecord' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/app/dashboard/maintenance/assets/page.tsx(12,10): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/app/dashboard/maintenance/orders/page.tsx(12,10): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/app/dashboard/maintenance/page.tsx(8,10): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/app/dashboard/maintenance/schedule/page.tsx(11,10): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/app/dashboard/manager/reports/page.tsx(20,44): error TS2339: Property 'branches' does not exist on type 'ApiResponse<Branch[]>'.
+src/app/dashboard/pos-kitchen/page.tsx(208,23): error TS2551: Property 'getMyOrders' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'getOrders'?
+src/app/dashboard/pos-kitchen/pos-tab.tsx(104,23): error TS2551: Property 'getCategories' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'getMenuCategories'?
+src/app/dashboard/pos-kitchen/pos-tab.tsx(105,18): error TS2339: Property 'getWaiters' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/pos-kitchen/wastage-tab.tsx(90,23): error TS2339: Property 'getWastageItems' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/pos-kitchen/wastage-tab.tsx(91,23): error TS2339: Property 'getWastageRecords' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/pos-kitchen/wastage-tab.tsx(135,27): error TS2339: Property 'createWastageRecord' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/pos-kitchen/wastage-tab.tsx(195,27): error TS2339: Property 'updateWastageRecord' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/pos-kitchen/wastage-tab.tsx(221,27): error TS2339: Property 'deleteWastageRecord' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/app/dashboard/profile/page.tsx(41,22): error TS2339: Property 'updateProfile' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/app/dashboard/reception/checkin/page.tsx(77,22): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reception/checkin/page.tsx(351,22): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reception/checkin/page.tsx(581,21): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Booking[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Booking[]' is not assignable to type 'Booking[]'.
+    Type 'Booking' is missing the following properties from type 'Booking': confirmation_number, room_number, room_type, guest_id, and 8 more.
+src/app/dashboard/reception/guests/[id]/page.tsx(13,25): error TS2322: Type '{ params: any; }' is not assignable to type 'IntrinsicAttributes'.
+  Property 'params' does not exist on type 'IntrinsicAttributes'.
+src/app/dashboard/reception/guests/[id]/PageContent.tsx(12,20): error TS2614: Module '"@/lib/api"' has no exported member 'guestLoyaltyAPI'. Did you mean to use 'import guestLoyaltyAPI from "@/lib/api"' instead?
+src/app/dashboard/reception/guests/[id]/PageContent.tsx(12,37): error TS2614: Module '"@/lib/api"' has no exported member 'documentsAPI'. Did you mean to use 'import documentsAPI from "@/lib/api"' instead?
+src/app/dashboard/reception/guests/page.tsx(121,24): error TS2339: Property 'updateGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/reception/guests/page.tsx(124,24): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/reception/guests/page.tsx(441,75): error TS2554: Expected 0-1 arguments, but got 2.
+src/app/dashboard/reception/guests/page.tsx(488,22): error TS2339: Property 'deleteGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/reception/guests/page.tsx(576,19): error TS2322: Type '"default" | "outline"' is not assignable to type '"success" | "link" | "primary" | "secondary" | "destructive" | "outline" | "ghost" | null | undefined'.
+  Type '"default"' is not assignable to type '"success" | "link" | "primary" | "secondary" | "destructive" | "outline" | "ghost" | null | undefined'.
+src/app/dashboard/reception/guests/page.tsx(584,19): error TS2322: Type '"default" | "outline"' is not assignable to type '"success" | "link" | "primary" | "secondary" | "destructive" | "outline" | "ghost" | null | undefined'.
+  Type '"default"' is not assignable to type '"success" | "link" | "primary" | "secondary" | "destructive" | "outline" | "ghost" | null | undefined'.
+src/app/dashboard/reception/guests/page.tsx(593,19): error TS2322: Type '"default" | "outline"' is not assignable to type '"success" | "link" | "primary" | "secondary" | "destructive" | "outline" | "ghost" | null | undefined'.
+  Type '"default"' is not assignable to type '"success" | "link" | "primary" | "secondary" | "destructive" | "outline" | "ghost" | null | undefined'.
+src/app/dashboard/reception/housekeeping/page.tsx(54,40): error TS2339: Property 'tasks' does not exist on type 'any[]'.
+src/app/dashboard/reception/housekeeping/page.tsx(54,58): error TS2339: Property 'tasks' does not exist on type 'ApiResponse<any[]>'.
+src/app/dashboard/reception/housekeeping/page.tsx(58,58): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'number | undefined'.
+  Type 'string' is not assignable to type 'number'.
+src/app/dashboard/reception/housekeeping/page.tsx(60,40): error TS2339: Property 'rooms' does not exist on type 'any[]'.
+src/app/dashboard/reception/housekeeping/page.tsx(60,58): error TS2339: Property 'rooms' does not exist on type 'ApiResponse<any[]>'.
+src/app/dashboard/reception/housekeeping/page.tsx(76,29): error TS2339: Property 'createGuestRequest' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/app/dashboard/reception/page.tsx(153,20): error TS2339: Property 'getPayments' does not exist on type '{ getStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getSummary: (params?: any) => Promise<ApiResponse<any>>; ... 20 more ...; saveLogbook: (data: any) => Promise<...>; }'.
+src/app/dashboard/reception/page.tsx(157,100): error TS2339: Property 'rooms' does not exist on type 'ApiResponse<Room[]>'.
+src/app/dashboard/reception/reservations/page.tsx(12,43): error TS2614: Module '"@/lib/api"' has no exported member 'ratePlansAPI'. Did you mean to use 'import ratePlansAPI from "@/lib/api"' instead?
+src/app/dashboard/reception/reservations/page.tsx(12,57): error TS2614: Module '"@/lib/api"' has no exported member 'pricingAPI'. Did you mean to use 'import pricingAPI from "@/lib/api"' instead?
+src/app/dashboard/reception/reservations/page.tsx(230,69): error TS2554: Expected 1 arguments, but got 3.
+src/app/dashboard/reception/reservations/page.tsx(232,27): error TS2345: Argument of type 'Room[]' is not assignable to parameter of type 'SetStateAction<Room[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Room[]' is not assignable to type 'Room[]'.
+    Type 'Room' is missing the following properties from type 'Room': room_type, max_occupancy
+src/app/dashboard/reception/reservations/page.tsx(239,61): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: Room, index: number, array: Room[]) => value is Room, thisArg?: any): Room[]', gave the following error.
+    Argument of type '(r: Room) => boolean' is not assignable to parameter of type '(value: Room, index: number, array: Room[]) => value is Room'.
+      Types of parameters 'r' and 'value' are incompatible.
+        Type 'Room' is missing the following properties from type 'Room': room_type, max_occupancy
+  Overload 2 of 2, '(predicate: (value: Room, index: number, array: Room[]) => unknown, thisArg?: any): Room[]', gave the following error.
+    Argument of type '(r: Room) => boolean' is not assignable to parameter of type '(value: Room, index: number, array: Room[]) => unknown'.
+      Types of parameters 'r' and 'value' are incompatible.
+        Type 'Room' is missing the following properties from type 'Room': room_type, max_occupancy
+src/app/dashboard/reception/reservations/page.tsx(240,27): error TS2345: Argument of type 'Room[]' is not assignable to parameter of type 'SetStateAction<Room[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Room[]' is not assignable to type 'Room[]'.
+    Type 'Room' is missing the following properties from type 'Room': room_type, max_occupancy
+src/app/dashboard/reception/reservations/page.tsx(252,62): error TS2554: Expected 0-1 arguments, but got 2.
+src/app/dashboard/reception/reservations/page.tsx(270,39): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/reception/reservations/page.tsx(305,42): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/app/dashboard/reception/reservations/page.tsx(307,24): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reception/reservations/page.tsx(341,40): error TS7006: Parameter 'res' implicitly has an 'any' type.
+src/app/dashboard/reception/reservations/page.tsx(544,37): error TS2304: Cannot find name 'initialData'.
+src/app/dashboard/reception/reservations/page.tsx(544,73): error TS2304: Cannot find name 'initialData'.
+src/app/dashboard/reception/reservations/page.tsx(544,113): error TS2304: Cannot find name 'initialData'.
+src/app/dashboard/reception/reservations/page.tsx(741,42): error TS2339: Property 'updateBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/app/dashboard/reception/reservations/page.tsx(872,23): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Booking[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Booking[]' is not assignable to type 'Booking[]'.
+    Type 'Booking' is missing the following properties from type 'Booking': confirmation_number, room_number, room_type, guest_id, and 18 more.
+src/app/dashboard/reception/reservations/page.tsx(873,65): error TS2339: Property 'data' does not exist on type 'never'.
+src/app/dashboard/reception/reservations/page.tsx(875,37): error TS2339: Property 'data' does not exist on type 'never'.
+src/app/dashboard/reception/reservations/page.tsx(932,25): error TS2339: Property 'cancelBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/app/dashboard/reception/reservations/page.tsx(934,24): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reception/rooms/page.tsx(125,62): error TS2554: Expected 0-1 arguments, but got 2.
+src/app/dashboard/reception/rooms/page.tsx(143,39): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/app/dashboard/reception/rooms/page.tsx(179,42): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/app/dashboard/reception/rooms/page.tsx(182,24): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reception/rooms/page.tsx(588,18): error TS2345: Argument of type 'Room[]' is not assignable to parameter of type 'SetStateAction<Room[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Room[]' is not assignable to type 'Room[]'.
+    Type 'Room' is missing the following properties from type 'Room': room_type, floor, max_occupancy, amenities
+src/app/dashboard/reception/rooms/page.tsx(633,22): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reception/rooms/page.tsx(645,47): error TS2339: Property 'getRoomBookings' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reception/rooms/page.tsx(652,22): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/app/dashboard/reports/analytics/page.tsx(15,22): error TS2614: Module '"@/lib/api"' has no exported member 'pricingAPI'. Did you mean to use 'import pricingAPI from "@/lib/api"' instead?
+src/app/dashboard/reports/analytics/page.tsx(118,28): error TS2339: Property 'exportReport' does not exist on type '{ getReports: (params?: any) => Promise<ApiResponse<ReportTemplate[]>>; getReport: (id: string) => Promise<ApiResponse<ReportTemplate>>; ... 19 more ...; generateAIReport: (prompt: string, context?: any) => Promise<...>; }'.
+src/app/dashboard/reports/revenue/page.tsx(7,10): error TS2724: '"@/lib/api"' has no exported member named 'reportAPI'. Did you mean 'reportsAPI'?
+src/app/dashboard/storekeeping/branch/page.tsx(152,40): error TS2554: Expected 0 arguments, but got 1.
+src/app/dashboard/storekeeping/drivers/page.tsx(58,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/drivers/page.tsx(80,14): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/drivers/page.tsx(81,14): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/drivers/page.tsx(101,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/grn/page.tsx(96,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/grn/page.tsx(97,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/grn/page.tsx(98,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/grn/page.tsx(123,39): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/grn/page.tsx(160,39): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/inventory/page.tsx(531,46): error TS2339: Property 'quantity' does not exist on type 'Item'.
+src/app/dashboard/storekeeping/inventory/page.tsx(531,70): error TS2339: Property 'reorder_level' does not exist on type 'Item'.
+src/app/dashboard/storekeeping/inventory/page.tsx(773,37): error TS2339: Property 'item_name' does not exist on type 'Partial<Item>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(774,65): error TS2353: Object literal may only specify known properties, and 'item_name' does not exist in type 'SetStateAction<Partial<Item>>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(801,37): error TS2339: Property 'unit_of_measure' does not exist on type 'Partial<Item>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(802,65): error TS2353: Object literal may only specify known properties, and 'unit_of_measure' does not exist in type 'SetStateAction<Partial<Item>>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(814,37): error TS2339: Property 'quantity' does not exist on type 'Partial<Item>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(815,65): error TS2353: Object literal may only specify known properties, and 'quantity' does not exist in type 'SetStateAction<Partial<Item>>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(832,37): error TS2339: Property 'retail_price' does not exist on type 'Partial<Item>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(833,65): error TS2353: Object literal may only specify known properties, and 'retail_price' does not exist in type 'SetStateAction<Partial<Item>>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(841,37): error TS2339: Property 'reorder_level' does not exist on type 'Partial<Item>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(842,65): error TS2353: Object literal may only specify known properties, and 'reorder_level' does not exist in type 'SetStateAction<Partial<Item>>'.
+src/app/dashboard/storekeeping/inventory/page.tsx(874,72): error TS2339: Property 'item_name' does not exist on type 'Item'.
+src/app/dashboard/storekeeping/page.tsx(94,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/page.tsx(95,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/page.tsx(96,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/stock-takes/page.tsx(95,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/stock-takes/page.tsx(96,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/stock-takes/page.tsx(150,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/stock-takes/page.tsx(179,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/stock-takes/page.tsx(210,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/stock-takes/page.tsx(243,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/suppliers/page.tsx(62,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/suppliers/page.tsx(84,14): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/suppliers/page.tsx(85,14): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/suppliers/page.tsx(105,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/vehicles/page.tsx(61,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/vehicles/page.tsx(79,14): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/vehicles/page.tsx(80,14): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/vehicles/page.tsx(100,34): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/wastage/page.tsx(108,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/wastage/page.tsx(109,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/wastage/page.tsx(110,18): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/wastage/page.tsx(194,39): error TS2304: Cannot find name 'API_URL'.
+src/app/dashboard/storekeeping/wastage/page.tsx(249,39): error TS2304: Cannot find name 'API_URL'.
+src/app/portal/employee/page.tsx(559,49): error TS2339: Property 'updateTask' does not exist on type '{ getDashboard: () => Promise<ApiResponse<any>>; getProfile: () => Promise<ApiResponse<any>>; updateProfile: (data: any) => Promise<ApiResponse<any>>; ... 12 more ...; getPerformance: () => Promise<...>; }'.
+src/components/accounting/AgingAnalysisDashboard.tsx(31,51): error TS2339: Property 'getAgingAnalysis' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/AuditLogViewer.tsx(13,36): error TS2339: Property 'getAuditTrail' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/components/accounting/AuditorApprovalPanel.tsx(46,29): error TS2345: Argument of type 'StockRequest[]' is not assignable to parameter of type 'SetStateAction<StockRequest[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest[]' is not assignable to type 'StockRequest[]'.
+    Property 'branch_name' is missing in type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").StockRequest' but required in type 'StockRequest'.
+src/components/accounting/ChartOfAccounts.tsx(14,41): error TS2339: Property 'getChartOfAccounts' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/FinancialReports.tsx(30,43): error TS2339: Property 'getProfitAndLoss' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/FinancialReports.tsx(32,43): error TS2339: Property 'getFinancialStatements' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/FinancialReports.tsx(34,43): error TS2339: Property 'getFinancialStatements' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/FinancialReports.tsx(36,43): error TS2339: Property 'getTrialBalance' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/FinancialReports.tsx(42,43): error TS2339: Property 'getTrialBalance' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/InvoiceWizard.tsx(129,31): error TS2339: Property 'downloadBrandedPdf' does not exist on type '{ getReports: (params?: any) => Promise<ApiResponse<ReportTemplate[]>>; getReport: (id: string) => Promise<ApiResponse<ReportTemplate>>; ... 19 more ...; generateAIReport: (prompt: string, context?: any) => Promise<...>; }'.
+src/components/accounting/JournalEntryForm.tsx(32,45): error TS2339: Property 'getChartOfAccounts' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/JournalEntryForm.tsx(78,45): error TS2339: Property 'createComprehensiveJournal' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/NewDepositModal.tsx(68,45): error TS2551: Property 'createDeposit' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'. Did you mean 'createBankDeposit'?
+src/components/accounting/PeriodManagement.tsx(34,51): error TS2339: Property 'getFiscalPeriods' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/accounting/PeriodManagement.tsx(63,51): error TS2339: Property 'closePeriod' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/analytics/sold-items-analytics.tsx(30,40): error TS2339: Property 'getSoldItemsAnalytics' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/components/attendance/YearlyAttendanceHeatmap.tsx(58,45): error TS2339: Property 'getAttendance' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/components/auditor/CashierLogbookVerification.tsx(56,43): error TS2339: Property 'auditLogbook' does not exist on type '{ getStats: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getSummary: (params?: any) => Promise<ApiResponse<any>>; ... 20 more ...; saveLogbook: (data: any) => Promise<...>; }'.
+src/components/auditor/DailyLogVerification.tsx(32,40): error TS2339: Property 'getDailyLogsStatus' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/components/auditor/DailyLogVerification.tsx(56,40): error TS2339: Property 'verifyDailyLog' does not exist on type '{ getAuditLogs: (params?: any) => Promise<ApiResponse<AuditLog[]>>; getConsumptionVariances: (params: any) => Promise<ApiResponse<any[]>>; ... 7 more ...; getStaffAudit: (params: { ...; }) => Promise<...>; }'.
+src/components/bar/PoolTokenModal.tsx(36,43): error TS2339: Property 'recordPoolTokens' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/checkin/ModernCheckIn.tsx(129,23): error TS2352: Conversion of type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Booking' to type 'Booking' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'Booking' is missing the following properties from type 'Booking': guest, adults, children, amount_paid
+src/components/checkin/ModernCheckIn.tsx(154,50): error TS2339: Property 'bookings' does not exist on type 'ApiResponse<Booking[]>'.
+src/components/checkin/ModernCheckIn.tsx(169,24): error TS2345: Argument of type 'Booking[]' is not assignable to parameter of type 'SetStateAction<Booking[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").Booking[]' is not assignable to type 'Booking[]'.
+    Type 'Booking' is missing the following properties from type 'Booking': guest, adults, children, amount_paid
+src/components/checkin/ModernCheckIn.tsx(180,30): error TS2339: Property 'rooms' does not exist on type 'ApiResponse<Room[]>'.
+src/components/checkin/ModernCheckIn.tsx(276,22): error TS2339: Property 'updateRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/communication/DepartmentCommunication.tsx(11,27): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/components/communication/DepartmentCommunication.tsx(135,43): error TS2339: Property 'getGuestRequests' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/components/communication/DepartmentCommunication.tsx(181,31): error TS2339: Property 'createGuestRequest' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/components/dashboard/auditor/reconciliation/VoidBillsContent.tsx(27,55): error TS2339: Property 'auditor' does not exist on type '{ getCreditBills: (params?: any) => Promise<ApiResponse<ApiResponse<any[]>>>; createCreditBill: (data: any) => Promise<ApiResponse<ApiResponse<any>>>; ... 7 more ...; approveAdvance: (id: string) => Promise<...>; }'.
+src/components/dashboard/auditor/reconciliation/VoidBillsContent.tsx(53,55): error TS2339: Property 'auditor' does not exist on type '{ getCreditBills: (params?: any) => Promise<ApiResponse<ApiResponse<any[]>>>; createCreditBill: (data: any) => Promise<ApiResponse<ApiResponse<any>>>; ... 7 more ...; approveAdvance: (id: string) => Promise<...>; }'.
+src/components/dashboard/auditor/reconciliation/VoidBillsContent.tsx(143,46): error TS2304: Cannot find name 'Calendar'.
+src/components/dashboard/branch/BusinessMpesaContent.tsx(39,42): error TS2339: Property 'getBranchFinancials' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/components/dashboard/branch/CreateInvoiceModal.tsx(54,59): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/components/dashboard/branch/CreateInvoiceModal.tsx(89,37): error TS2339: Property 'available' does not exist on type 'ApiResponse<any>'.
+src/components/dashboard/branch/CreateInvoiceModal.tsx(90,27): error TS2339: Property 'available' does not exist on type 'ApiResponse<any>'.
+src/components/dashboard/branch/DailyAccountantLog.tsx(68,47): error TS2339: Property 'getDailyLogs' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/components/dashboard/branch/DailyAccountantLog.tsx(114,47): error TS2339: Property 'saveDailyLog' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/components/employee/portal/IDCardWidget.tsx(72,27): error TS2339: Property 'updateDetails' does not exist on type '{ login: (data: any) => Promise<ApiResponse<AuthResponse>>; logout: () => Promise<ApiResponse<void>>; posLogin: (pin: string) => Promise<...>; getMe: () => Promise<...>; updatePassword: (data: any) => Promise<...>; }'.
+src/components/employee/portal/IDCardWidget.tsx(106,43): error TS2339: Property 'preview' does not exist on type '{ generate: (data: any, photo?: File | undefined) => Promise<Blob>; }'.
+src/components/finance/AccountingTab.tsx(37,50): error TS2339: Property 'getChartOfAccounts' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getAccounts: (params?: any) => Promise<ApiResponse<any[]>>; createAccount: (data: any) => Promise<...>; ... 20 more ...; postJournalEntry: (id: string) => Promise<...>; }'.
+src/components/finance/BudgetTracking.tsx(177,59): error TS2339: Property 'expenses' does not exist on type 'ApiResponse<any[]>'.
+src/components/finance/ReportsTab.tsx(11,98): error TS2304: Cannot find name 'Scale'.
+src/components/guests/GuestManagement.tsx(98,52): error TS2339: Property 'guests' does not exist on type 'ApiResponse<any[]>'.
+src/components/guests/GuestManagement.tsx(113,50): error TS2339: Property 'bookings' does not exist on type 'ApiResponse<Booking[]>'.
+src/components/guests/GuestManagement.tsx(159,24): error TS2339: Property 'updateGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/guests/GuestManagement.tsx(162,24): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/guests/GuestManagement.tsx(176,22): error TS2339: Property 'deleteGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/guests/GuestManagement.tsx(186,22): error TS2339: Property 'updateGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/hr/LeaveManagement.tsx(124,54): error TS2339: Property 'requests' does not exist on type 'ApiResponse<LeaveRequest[]>'.
+src/components/hr/LeaveManagement.tsx(241,22): error TS2551: Property 'createLeaveRequest' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'. Did you mean 'getLeaveRequests'?
+src/components/inventory/BatchTracking.tsx(131,48): error TS2345: Argument of type '(prev: Batch) => { manufacturingDate: Date | undefined; batchNumber: string; quantity: number; expiryDate: Date | null; costPrice: number; }' is not assignable to parameter of type 'SetStateAction<Batch>'.
+  Type '(prev: Batch) => { manufacturingDate: Date | undefined; batchNumber: string; quantity: number; expiryDate: Date | null; costPrice: number; }' is not assignable to type '(prevState: Batch) => Batch'.
+    Call signature return types '{ manufacturingDate: Date | undefined; batchNumber: string; quantity: number; expiryDate: Date | null; costPrice: number; }' and 'Batch' are incompatible.
+      The types of 'manufacturingDate' are incompatible between these types.
+        Type 'Date | undefined' is not assignable to type 'Date | null'.
+          Type 'undefined' is not assignable to type 'Date | null'.
+src/components/inventory/BatchTracking.tsx(158,48): error TS2345: Argument of type '(prev: Batch) => { expiryDate: Date | undefined; batchNumber: string; quantity: number; manufacturingDate: Date | null; costPrice: number; }' is not assignable to parameter of type 'SetStateAction<Batch>'.
+  Type '(prev: Batch) => { expiryDate: Date | undefined; batchNumber: string; quantity: number; manufacturingDate: Date | null; costPrice: number; }' is not assignable to type '(prevState: Batch) => Batch'.
+    Call signature return types '{ expiryDate: Date | undefined; batchNumber: string; quantity: number; manufacturingDate: Date | null; costPrice: number; }' and 'Batch' are incompatible.
+      The types of 'expiryDate' are incompatible between these types.
+        Type 'Date | undefined' is not assignable to type 'Date | null'.
+          Type 'undefined' is not assignable to type 'Date | null'.
+src/components/kitchen/KitchenInventory.tsx(265,24): error TS2339: Property 'createWastageRecord' does not exist on type '{ getRecords: (params?: { from_date?: string | undefined; to_date?: string | undefined; reason?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; createRecord: (data: any) => Promise<...>; getSummary: (period?: string) => Promise<...>; }'.
+src/components/kyogong/SaleForm.tsx(46,22): error TS2304: Cannot find name 'useAuth'.
+src/components/kyogong/SaleForm.tsx(47,30): error TS2304: Cannot find name 'useBranch'.
+src/components/kyogong/SaleForm.tsx(63,42): error TS2345: Argument of type 'DynamicService[]' is not assignable to parameter of type 'SetStateAction<DynamicService[]>'.
+  Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").DynamicService[]' is not assignable to type 'DynamicService[]'.
+    Type 'import("C:/Users/user/Desktop/fggrill/frontend/src/lib/api/types").DynamicService' is not assignable to type 'DynamicService'.
+      Types of property 'price_per_hour' are incompatible.
+        Type 'number | undefined' is not assignable to type 'number'.
+          Type 'undefined' is not assignable to type 'number'.
+src/components/maintenance/MaintenanceScheduler.tsx(11,10): error TS2724: '"@/lib/api"' has no exported member named 'maintenanceAPI'. Did you mean 'attendanceAPI'?
+src/components/maintenance/MaintenanceScheduler.tsx(305,22): error TS2552: Cannot find name 'user'. Did you mean 'User'?
+src/components/modals/AttendanceModal.tsx(164,51): error TS2322: Type '"secondary"' is not assignable to type '"filled" | "outline" | "pill" | "light" | null | undefined'.
+src/components/modals/AttendanceModal.tsx(168,51): error TS2322: Type '"success"' is not assignable to type '"filled" | "outline" | "pill" | "light" | null | undefined'.
+src/components/modals/BarModals.tsx(42,56): error TS2339: Property 'getStock' does not exist on type '{ getBarInventory: (params?: any) => Promise<ApiResponse<any[]>>; syncFromMaster: () => Promise<ApiResponse<void>>; }'.
+src/components/modals/BarModals.tsx(66,40): error TS2339: Property 'create' does not exist on type '{ getRequests: (params?: any) => Promise<ApiResponse<any>>; createRequest: (data: any) => Promise<ApiResponse<any>>; }'.
+src/components/modals/BookingModals.tsx(59,40): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/modals/BookingModals.tsx(76,82): error TS2554: Expected 1 arguments, but got 3.
+src/components/modals/BookingModals.tsx(84,27): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/components/modals/BookingModals.tsx(95,27): error TS2339: Property 'updateBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/components/modals/CashierModals.tsx(690,63): error TS2554: Expected 1 arguments, but got 2.
+src/components/modals/CashierModals.tsx(691,63): error TS2554: Expected 1 arguments, but got 2.
+src/components/modals/CheckInModal.tsx(89,29): error TS2339: Property 'guest' does not exist on type 'Booking'.
+src/components/modals/CheckInModal.tsx(89,62): error TS2339: Property 'guest' does not exist on type 'Booking'.
+src/components/modals/CheckInModal.tsx(90,27): error TS2339: Property 'room' does not exist on type 'Booking'.
+src/components/modals/CheckOutModal.tsx(11,23): error TS2614: Module '"@/lib/api"' has no exported member 'folioAPI'. Did you mean to use 'import folioAPI from "@/lib/api"' instead?
+src/components/modals/CheckOutModal.tsx(110,29): error TS2339: Property 'guest' does not exist on type 'Booking'.
+src/components/modals/CheckOutModal.tsx(110,62): error TS2339: Property 'guest' does not exist on type 'Booking'.
+src/components/modals/CheckOutModal.tsx(111,27): error TS2339: Property 'room' does not exist on type 'Booking'.
+src/components/modals/DocumentUploadModal.tsx(7,10): error TS2614: Module '"@/lib/api"' has no exported member 'documentsAPI'. Did you mean to use 'import documentsAPI from "@/lib/api"' instead?
+src/components/modals/FinanceModals.tsx(11,22): error TS2614: Module '"@/lib/api"' has no exported member 'folioAPI'. Did you mean to use 'import folioAPI from "@/lib/api"' instead?
+src/components/modals/FinanceModals.tsx(314,24): error TS2339: Property 'processPayment' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/components/modals/FinanceModals.tsx(455,24): error TS2339: Property 'createInvoice' does not exist on type '{ getDashboard: (params?: any) => Promise<ApiResponse<any>>; getTransactions: (params?: any) => Promise<ApiResponse<Transaction[]>>; ... 6 more ...; getBranches: () => Promise<...>; }'.
+src/components/modals/GuestModals.tsx(57,24): error TS2339: Property 'updateGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/modals/GuestModals.tsx(59,24): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/modals/HousekeepingModals.tsx(308,46): error TS2339: Property 'getRoomsForInspection' does not exist on type '{ getDashboard: (branchId?: number | undefined) => Promise<ApiResponse<any>>; getRoomGrid: (branchId?: number | undefined) => Promise<ApiResponse<any[]>>; ... 9 more ...; createLostFoundItem: (data: any) => Promise<...>; }'.
+src/components/modals/InventoryModals.tsx(520,26): error TS2339: Property 'createTransfer' does not exist on type '{ getItems: (params?: any) => Promise<ApiResponse<InventoryItem[]>>; getItem: (id: string) => Promise<ApiResponse<InventoryItem>>; ... 4 more ...; getLowStock: (params?: any) => Promise<...>; }'.
+src/components/modals/InventoryModals.tsx(656,26): error TS2339: Property 'createRequest' does not exist on type '{ getItems: (params?: any) => Promise<ApiResponse<InventoryItem[]>>; getItem: (id: string) => Promise<ApiResponse<InventoryItem>>; ... 4 more ...; getLowStock: (params?: any) => Promise<...>; }'.
+src/components/modals/NotificationModal.tsx(49,26): error TS2345: Argument of type 'SystemNotification[]' is not assignable to parameter of type 'SetStateAction<Notification[]>'.
+  Type 'SystemNotification[]' is not assignable to type 'Notification[]'.
+    Property 'category' is missing in type 'SystemNotification' but required in type 'Notification'.
+src/components/modals/NotificationModal.tsx(112,47): error TS2551: Property 'clearMyNotifications' does not exist on type '{ getNotifications: (params?: any) => Promise<ApiResponse<SystemNotification[]>>; getUnreadCount: () => Promise<ApiResponse<{ count: number; }>>; ... 5 more ...; notifyBranch: (data: any) => Promise<...>; }'. Did you mean 'clearNotifications'?
+src/components/modals/PaymentModal.tsx(10,10): error TS2614: Module '"@/lib/api"' has no exported member 'paymentsAPI'. Did you mean to use 'import paymentsAPI from "@/lib/api"' instead?
+src/components/modals/PaymentModal.tsx(10,23): error TS2614: Module '"@/lib/api"' has no exported member 'folioAPI'. Did you mean to use 'import folioAPI from "@/lib/api"' instead?
+src/components/modals/RatePlanModal.tsx(7,10): error TS2614: Module '"@/lib/api"' has no exported member 'ratePlansAPI'. Did you mean to use 'import ratePlansAPI from "@/lib/api"' instead?
+src/components/modals/RecordPaymentModal.tsx(38,60): error TS2339: Property 'createPayment' does not exist on type '{ getPayments: (params?: any) => Promise<ApiResponse<PaymentVerification[]>>; getPaymentStats: (params?: any) => Promise<ApiResponse<PaymentStats>>; getPaymentById: (id: string) => Promise<...>; verifyByAccountant: (id: string, notes?: string | undefined) => Promise<...>; verifyByAuditor: (id: string, status: string...'.
+src/components/modals/RecordPaymentModal.tsx(68,13): error TS2322: Type '{ children: Element; isOpen: true; onClose: () => void; title: string; icon: Element; }' is not assignable to type 'IntrinsicAttributes & IOSModalProps & RefAttributes<HTMLDivElement>'.
+  Property 'icon' does not exist on type 'IntrinsicAttributes & IOSModalProps & RefAttributes<HTMLDivElement>'.
+src/components/modals/ReportModals.tsx(44,28): error TS2339: Property 'downloadReport' does not exist on type '{ getReports: (params?: any) => Promise<ApiResponse<ReportTemplate[]>>; getReport: (id: string) => Promise<ApiResponse<ReportTemplate>>; ... 19 more ...; generateAIReport: (prompt: string, context?: any) => Promise<...>; }'.
+src/components/modals/ReservationModal.tsx(61,39): error TS2339: Property 'types' does not exist on type 'ApiResponse<any[]>'.
+src/components/modals/ReservationModal.tsx(112,9): error TS2554: Expected 1 arguments, but got 3.
+src/components/modals/ReservationModal.tsx(164,44): error TS2339: Property 'createGuest' does not exist on type '{ getGuests: (params?: any) => Promise<ApiResponse<any[]>>; getGuest: (id: string) => Promise<ApiResponse<any>>; create: (data: any) => Promise<...>; update: (id: string, data: any) => Promise<...>; getHistory: (guestId: string) => Promise<...>; }'.
+src/components/modals/ReservationModal.tsx(177,25): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/components/modals/ReservationModals.tsx(49,27): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/components/modals/ReservationModals.tsx(51,27): error TS2339: Property 'updateBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/components/modals/ReservationModals.tsx(274,25): error TS2339: Property 'cancelBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/components/modals/RestaurantModals.tsx(260,39): error TS2339: Property 'items' does not exist on type 'ApiResponse<any>'.
+src/components/modals/RoomModals.tsx(55,24): error TS2339: Property 'updateRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/modals/RoomModals.tsx(57,24): error TS2339: Property 'createRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/modals/RoomModals.tsx(274,41): error TS2339: Property 'getRoomBookings' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/modals/RoomModals.tsx(279,41): error TS2339: Property 'getRoomMaintenance' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/modals/RoomModals.tsx(284,41): error TS2339: Property 'getRoomReviews' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/modals/RoomModals.tsx(403,36): error TS2339: Property 'updateRoomStatus' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/modals/RoomModals.tsx(418,38): error TS2339: Property 'deleteRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/modals/RoomServiceModal.tsx(52,47): error TS2339: Property 'items' does not exist on type 'ApiResponse<any>'.
+src/components/modals/RoomServiceModal.tsx(119,27): error TS2339: Property 'createRoomServiceOrder' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'.
+src/components/modals/StaffModals.tsx(76,51): error TS2339: Property 'branches' does not exist on type 'ApiResponse<Branch[]> | { data: never[]; }'.
+  Property 'branches' does not exist on type 'ApiResponse<Branch[]>'.
+src/components/modals/StaffModals.tsx(442,22): error TS2339: Property 'createSchedule' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/components/modals/StaffModals.tsx(575,22): error TS2339: Property 'processPayroll' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'.
+src/components/modals/StaffModals.tsx(723,22): error TS2551: Property 'submitPerformanceReview' does not exist on type '{ getStaff: (params?: any) => Promise<ApiResponse<StaffMember[]>>; getStaffMember: (id: string) => Promise<ApiResponse<StaffMember>>; ... 18 more ...; simplePayroll: { ...; }; }'. Did you mean 'getPerformanceReviews'?
+src/components/pos/UnifiedPOS.tsx(147,35): error TS2339: Property 'updateOrderStatus' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; } | { ...; }'.
+  Property 'updateOrderStatus' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/pos/UnifiedPOS.tsx(213,35): error TS2551: Property 'getCategories' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'getMenuCategories'?
+src/components/pos/UnifiedPOS.tsx(220,79): error TS2554: Expected 0-2 arguments, but got 3.
+src/components/pos/UnifiedPOS.tsx(221,72): error TS2554: Expected 0-1 arguments, but got 2.
+src/components/pos/UnifiedPOS.tsx(236,43): error TS2551: Property 'getMyOrders' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 18 more ...; createRestaurantReservation: (data: any) => Promise<...>; }'. Did you mean 'getOrders'?
+src/components/pos/UnifiedPOS.tsx(322,61): error TS2551: Property 'first_name' does not exist on type 'User'. Did you mean 'firstName'?
+src/components/pos/UnifiedPOS.tsx(323,59): error TS2551: Property 'last_name' does not exist on type 'User'. Did you mean 'lastName'?
+src/components/pos/UnifiedPOS.tsx(421,91): error TS2551: Property 'first_name' does not exist on type 'User'. Did you mean 'firstName'?
+src/components/pos/UnifiedPOS.tsx(421,135): error TS2551: Property 'last_name' does not exist on type 'User'. Did you mean 'lastName'?
+src/components/pos/UnifiedPOS.tsx(621,46): error TS2339: Property 'addToTab' does not exist on type '{ getOrders: (params?: { branchId?: number | undefined; status?: string | undefined; from_date?: string | undefined; to_date?: string | undefined; } | undefined) => Promise<ApiResponse<any>>; ... 8 more ...; getLowStockItems: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/reports/KPIDashboard.tsx(76,45): error TS2339: Property 'getKPIDashboard' does not exist on type '{ getReports: (params?: any) => Promise<ApiResponse<ReportTemplate[]>>; getReport: (id: string) => Promise<ApiResponse<ReportTemplate>>; ... 19 more ...; generateAIReport: (prompt: string, context?: any) => Promise<...>; }'.
+src/components/reports/KPIDashboard.tsx(110,28): error TS2339: Property 'downloadReport' does not exist on type '{ getReports: (params?: any) => Promise<ApiResponse<ReportTemplate[]>>; getReport: (id: string) => Promise<ApiResponse<ReportTemplate>>; ... 19 more ...; generateAIReport: (prompt: string, context?: any) => Promise<...>; }'.
+src/components/reports/KPIDashboard.tsx(432,53): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+src/components/reports/KPIDashboard.tsx(432,60): error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/components/reports/KPIDashboard.tsx(445,45): error TS7006: Parameter 'stream' implicitly has an 'any' type.
+src/components/reports/ReportsPageComponent.tsx(217,42): error TS2339: Property 'branches' does not exist on type 'ApiResponse<Branch[]>'.
+src/components/reservations/ReservationManagement.tsx(141,54): error TS2339: Property 'bookings' does not exist on type 'ApiResponse<Booking[]>'.
+src/components/reservations/ReservationManagement.tsx(194,47): error TS2339: Property 'room_types' does not exist on type 'ApiResponse<any[]>'.
+src/components/reservations/ReservationManagement.tsx(203,69): error TS2554: Expected 1 arguments, but got 2.
+src/components/reservations/ReservationManagement.tsx(204,45): error TS2339: Property 'rooms' does not exist on type 'ApiResponse<Room[]>'.
+src/components/reservations/ReservationManagement.tsx(210,25): error TS2345: Argument of type 'Room[]' is not assignable to parameter of type 'SetStateAction<AvailableRoom[]>'.
+  Type 'Room[]' is not assignable to type 'AvailableRoom[]'.
+    Type 'Room' is missing the following properties from type 'AvailableRoom': type, floor
+src/components/reservations/ReservationManagement.tsx(354,27): error TS2339: Property 'updateBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/components/reservations/ReservationManagement.tsx(357,27): error TS2551: Property 'createBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'. Did you mean 'getBooking'?
+src/components/reservations/ReservationManagement.tsx(375,25): error TS2339: Property 'cancelBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/components/reservations/ReservationManagement.tsx(385,25): error TS2339: Property 'updateBooking' does not exist on type '{ getBookings: (params?: any) => Promise<ApiResponse<Booking[]>>; getBooking: (id: string) => Promise<ApiResponse<Booking>>; ... 10 more ...; addCharge: (bookingId: string, data: any) => Promise<...>; }'.
+src/components/rooms/AddRoomModal.tsx(75,39): error TS2339: Property 'createRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/rooms/AddRoomWizard.tsx(193,41): error TS2339: Property 'updateRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/rooms/AddRoomWizard.tsx(218,41): error TS2339: Property 'createRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/rooms/AddRoomWizard.tsx(225,30): error TS2339: Property 'updateRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/rooms/EditRoomModal.tsx(88,39): error TS2339: Property 'updateRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/rooms/RoomGrid.tsx(138,34): error TS2339: Property 'rooms' does not exist on type 'ApiResponse<Room[]>'.
+src/components/rooms/RoomGrid.tsx(224,22): error TS2339: Property 'updateRoom' does not exist on type '{ getRooms: (params?: any) => Promise<ApiResponse<Room[]>>; getRoom: (id: string) => Promise<ApiResponse<Room>>; create: (data: any) => Promise<...>; ... 4 more ...; getHousekeeping: (branchId?: number | undefined) => Promise<...>; }'.
+src/components/store/DepartmentStoreRequest.tsx(100,52): error TS2339: Property 'items' does not exist on type 'ApiResponse<any[]>'.
+src/components/store/DepartmentStoreRequest.tsx(125,16): error TS2345: Argument of type '{ id: any; sku: any; name: any; category: any; unit: any; quantity: any; min_level: any; status: string; }[]' is not assignable to parameter of type 'SetStateAction<StoreItem[]>'.
+  Type '{ id: any; sku: any; name: any; category: any; unit: any; quantity: any; min_level: any; status: string; }[]' is not assignable to type 'StoreItem[]'.
+    Type '{ id: any; sku: any; name: any; category: any; unit: any; quantity: any; min_level: any; status: string; }' is not assignable to type 'StoreItem'.
+      Types of property 'status' are incompatible.
+        Type 'string' is not assignable to type '"low" | "critical" | "sufficient"'.
+src/components/store/DepartmentStoreRequest.tsx(137,50): error TS2339: Property 'requests' does not exist on type 'ApiResponse<StockRequest[]>'.
+src/components/store/DepartmentStoreRequest.tsx(138,21): error TS2345: Argument of type 'StockRequest[]' is not assignable to parameter of type 'SetStateAction<StoreRequest[]>'.
+  Type 'StockRequest[]' is not assignable to type 'StoreRequest[]'.
+    Type 'StockRequest' is not assignable to type 'StoreRequest'.
+      Types of property 'items_count' are incompatible.
+        Type 'number | undefined' is not assignable to type 'number'.
+          Type 'undefined' is not assignable to type 'number'.
+src/components/storekeeping/AddItemModal.tsx(173,39): error TS2304: Cannot find name 'API_URL'.
+src/components/storekeeping/AddItemModal.tsx(349,41): error TS2304: Cannot find name 'API_URL'.
+src/components/storekeeping/AddItemModal.tsx(385,41): error TS2304: Cannot find name 'API_URL'.
+src/components/storekeeping/ImportModal.tsx(44,39): error TS2304: Cannot find name 'API_URL'.
+src/components/storekeeping/ViewItemModal.tsx(44,39): error TS2304: Cannot find name 'API_URL'.
+src/components/theme-provider.tsx(5,41): error TS2307: Cannot find module 'next-themes/dist/types' or its corresponding type declarations.
+src/lib/auth-context.tsx(113,34): error TS2339: Property 'first_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(114,33): error TS2339: Property 'last_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(117,36): error TS2339: Property 'branch_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(118,35): error TS2339: Property 'is_central' does not exist on type 'User'.
+src/lib/auth-context.tsx(119,35): error TS2339: Property 'department' does not exist on type 'User'.
+src/lib/auth-context.tsx(121,35): error TS2339: Property 'employee_id' does not exist on type 'User'.
+src/lib/auth-context.tsx(122,34): error TS2339: Property 'start_date' does not exist on type 'User'.
+src/lib/auth-context.tsx(123,37): error TS2339: Property 'profile_photo' does not exist on type 'User'.
+src/lib/auth-context.tsx(124,33): error TS2339: Property 'id_number' does not exist on type 'User'.
+src/lib/auth-context.tsx(125,36): error TS2339: Property 'phone_number' does not exist on type 'User'.
+src/lib/auth-context.tsx(166,30): error TS2339: Property 'first_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(167,29): error TS2339: Property 'last_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(170,32): error TS2339: Property 'branch_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(171,31): error TS2339: Property 'is_central' does not exist on type 'User'.
+src/lib/auth-context.tsx(172,31): error TS2339: Property 'department' does not exist on type 'User'.
+src/lib/auth-context.tsx(173,31): error TS2339: Property 'employee_id' does not exist on type 'User'.
+src/lib/auth-context.tsx(174,30): error TS2339: Property 'start_date' does not exist on type 'User'.
+src/lib/auth-context.tsx(175,33): error TS2339: Property 'profile_photo' does not exist on type 'User'.
+src/lib/auth-context.tsx(176,29): error TS2339: Property 'id_number' does not exist on type 'User'.
+src/lib/auth-context.tsx(177,32): error TS2339: Property 'phone_number' does not exist on type 'User'.
+src/lib/auth-context.tsx(219,30): error TS2339: Property 'first_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(219,52): error TS2339: Property 'firstName' does not exist on type 'User'.
+src/lib/auth-context.tsx(220,29): error TS2339: Property 'last_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(220,50): error TS2339: Property 'lastName' does not exist on type 'User'.
+src/lib/auth-context.tsx(223,32): error TS2339: Property 'branch_name' does not exist on type 'User'.
+src/lib/auth-context.tsx(224,31): error TS2339: Property 'is_central' does not exist on type 'User'.
+src/lib/auth-context.tsx(227,31): error TS2339: Property 'department' does not exist on type 'User'.
+src/lib/push-notifications.ts(54,17): error TS2353: Object literal may only specify known properties, and 'vibrate' does not exist in type 'NotificationOptions'.
+src/lib/supplier-folio-pdf.ts(105,49): error TS2353: Object literal may only specify known properties, and 'width' does not exist in type 'Partial<Styles>'.
+src/lib/supplier-folio-pdf.ts(105,86): error TS2353: Object literal may only specify known properties, and 'width' does not exist in type 'Partial<Styles>'.
+src/lib/supplier-folio-pdf.ts(123,49): error TS2353: Object literal may only specify known properties, and 'width' does not exist in type 'Partial<Styles>'.
+src/lib/supplier-folio-pdf.ts(123,86): error TS2353: Object literal may only specify known properties, and 'width' does not exist in type 'Partial<Styles>'.
+src/lib/supplier-folio-pdf.ts(141,49): error TS2353: Object literal may only specify known properties, and 'width' does not exist in type 'Partial<Styles>'.
+src/lib/supplier-folio-pdf.ts(141,86): error TS2353: Object literal may only specify known properties, and 'width' does not exist in type 'Partial<Styles>'.

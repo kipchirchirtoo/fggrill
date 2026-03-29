@@ -716,6 +716,147 @@ export const exportComplianceAudit = async (req: Request, res: Response, next: N
   } catch (e) { next(e); }
 };
 
+// ── 10. Unified Stock Movement Report ─────────────────────────────────────────
+export const exportStockMovement = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { branch_ids, start_date, end_date, branch_name = 'All Branches' } = req.query as any;
+    const start = (start_date || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]) + 'T00:00:00';
+    const end = (end_date || new Date().toISOString().split('T')[0]) + 'T23:59:59';
+
+    // 1. Central Store Movements (GRNs, Adjustments)
+    let csmQ = supabase.from('stock_movements').select('created_at, item_sku, movement_type, quantity, reference_number, notes, created_by, branch_id').gte('created_at', start).lte('created_at', end);
+    if (branch_ids && branch_ids !== 'all') {
+         csmQ = branchFilter(csmQ, branch_ids);
+    }
+
+    // 2. Inter-Branch Transfers (Dispatch, Receiving)
+    let trnQ = supabase.from('inventory_transfers').select('id, transfer_number, from_branch_id, to_branch_id, status, created_at, created_by, from_branch:branches!from_branch_id(name), to_branch:branches!to_branch_id(name)').in('status', ['COMPLETED', 'SHIPPED', 'DELIVERED']).gte('created_at', start).lte('created_at', end);
+    if (branch_ids && branch_ids !== 'all') {
+        const ids = branch_ids.split(',').map(Number).filter(Boolean);
+        trnQ = trnQ.or(`from_branch_id.in.(${ids.join(',')}),to_branch_id.in.(${ids.join(',')})`);
+    }
+
+    // 3. Branch Stock Movements (Consumption, Wastage)
+    let bsmQ = supabase.from('branch_stock_movements').select('created_at, item_sku, movement_type, quantity, reference_id, notes, created_by, branch_id, branch:branches(name)').gte('created_at', start).lte('created_at', end);
+    if (branch_ids && branch_ids !== 'all') {
+         bsmQ = branchFilter(bsmQ, branch_ids);
+    }
+
+    const [{ data: centralMovs }, { data: transfers }, { data: branchMovs }] = await Promise.all([csmQ, trnQ, bsmQ]);
+
+    // Fetch transfer items
+    const transferIds = (transfers || []).map((t: any) => t.id);
+    const { data: transferItems } = transferIds.length ? await supabase.from('inventory_transfer_items').select('transfer_id, item_sku, transferred_quantity').in('transfer_id', transferIds) : { data: [] };
+    const itemsByTransfer: Record<string, any[]> = {};
+    (transferItems || []).forEach((ti: any) => { if (!itemsByTransfer[ti.transfer_id]) itemsByTransfer[ti.transfer_id] = []; itemsByTransfer[ti.transfer_id].push(ti); });
+
+    // Collect SKUs & Users
+    const allSkus = [...new Set([
+        ...(centralMovs || []).map((m: any) => m.item_sku),
+        ...(branchMovs || []).map((m: any) => m.item_sku),
+        ...(transferItems || []).map((ti: any) => ti.item_sku)
+    ].filter(Boolean))];
+
+    const allUsers = [...new Set([
+        ...(centralMovs || []).map((m: any) => m.created_by),
+        ...(branchMovs || []).map((m: any) => m.created_by),
+        ...(transfers || []).map((m: any) => m.created_by)
+    ].filter(Boolean))];
+
+    const { data: items } = allSkus.length ? await supabase.from('simple_items').select('sku, item_name, unit_of_measure, category').in('sku', allSkus as string[]) : { data: [] };
+    const itemMap: Record<string, any> = Object.fromEntries((items || []).map((i: any) => [i.sku, i]));
+
+    const { data: users } = allUsers.length ? await supabase.from('users').select('id, first_name, last_name').in('id', allUsers as string[]) : { data: [] };
+    const userMap: Record<string, string> = Object.fromEntries((users || []).map((u: any) => [u.id, `${u.first_name} ${u.last_name}`]));
+
+    // Build unified timeline
+    type TimelineEvent = { date: Date; type: string; item: any; qty: number; from: string; to: string; ref: string; user: string; notes: string };
+    const timeline: TimelineEvent[] = [];
+
+    (centralMovs || []).forEach((m: any) => {
+        timeline.push({
+            date: new Date(m.created_at),
+            type: m.movement_type === 'RECEIVE' ? 'GRN (Stock In)' : m.movement_type === 'DISPATCH' ? 'Central Dispatch' : m.movement_type,
+            item: itemMap[m.item_sku] || { item_name: m.item_sku },
+            qty: Number(m.quantity),
+            from: ['RECEIVE', 'ADJUST_UP'].includes(m.movement_type) ? 'Supplier' : 'Central Store',
+            to: ['DISPATCH'].includes(m.movement_type) ? (m.branch_id ? `Branch ${m.branch_id}` : 'External') : 'Central Store',
+            ref: m.reference_number || 'N/A',
+            user: userMap[m.created_by] || 'System',
+            notes: m.notes || ''
+        });
+    });
+
+    (branchMovs || []).forEach((m: any) => {
+        timeline.push({
+            date: new Date(m.created_at),
+            type: m.movement_type === 'RECEIVE' ? 'Branch Receive' : m.movement_type === 'WAITRER_ISSUE' || m.movement_type === 'USAGE' ? 'Consumption' : m.movement_type,
+            item: itemMap[m.item_sku] || { item_name: m.item_sku },
+            qty: Number(m.quantity),
+            from: m.branch?.name || `Branch ${m.branch_id}`,
+            to: ['RECEIVE'].includes(m.movement_type) ? (m.branch?.name || `Branch ${m.branch_id}`) : 'Consumed/Lost',
+            ref: m.reference_id || 'N/A',
+            user: userMap[m.created_by] || 'System',
+            notes: m.notes || ''
+        });
+    });
+
+    (transfers || []).forEach((t: any) => {
+        const tItems = itemsByTransfer[t.id] || [];
+        tItems.forEach((ti: any) => {
+            timeline.push({
+                date: new Date(t.created_at),
+                type: 'Inter-Branch Transfer',
+                item: itemMap[ti.item_sku] || { item_name: ti.item_sku },
+                qty: Number(ti.transferred_quantity),
+                from: t.from_branch?.name || 'Central Store',
+                to: t.to_branch?.name || 'Unknown',
+                ref: t.transfer_number || 'N/A',
+                user: userMap[t.created_by] || 'System',
+                notes: `Status: ${t.status}`
+            });
+        });
+    });
+
+    // Sort descending by date
+    timeline.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Stock Movement', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1 } });
+    ws.columns = [
+      { key: 'n', width: 6 }, { key: 'date', width: 18 }, { key: 'type', width: 22 },
+      { key: 'item', width: 30 }, { key: 'qty', width: 12 }, { key: 'from', width: 20 },
+      { key: 'to', width: 20 }, { key: 'ref', width: 20 }, { key: 'user', width: 20 }, { key: 'notes', width: 30 }
+    ];
+    applyTitleBlock(ws, 'UNIFIED STOCK MOVEMENT REPORT', `Branch: ${branch_name}  |  Period: ${start_date} → ${end_date}  |  Generated: ${new Date().toLocaleString()}`, 10);
+    applyHeaderRow(ws, ['#', 'Date & Time', 'Movement Type', 'Item Details', 'Quantity', 'Source (From)', 'Destination (To)', 'Reference', 'Performed By', 'Notes'], 4);
+    ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 4, activeCell: 'A5' }];
+
+    timeline.forEach((ev: TimelineEvent, i: number) => {
+      const row = ws.addRow([
+        i + 1, ev.date.toLocaleString(), ev.type,
+        `${ev.item.item_name} ${ev.item.unit_of_measure ? '('+ev.item.unit_of_measure+')' : ''}`,
+        ev.qty, ev.from, ev.to, ev.ref, ev.user, ev.notes
+      ]);
+      row.height = 20;
+      row.eachCell((cell: any, col: number) => {
+        styleDataCell(cell, i % 2 === 0, col === 5 ? 'right' : 'center');
+        if (col === 5) cell.numFmt = '#,##0.00';
+        if (col === 4 || col === 10) cell.alignment = { horizontal: 'left', wrapText: true };
+      });
+    });
+
+    if (timeline.length === 0) {
+      const row = ws.addRow(['', 'No movements recorded in the selected period', '', '', '', '', '', '', '', '']);
+      row.height = 22;
+      ws.mergeCells(`B${row.number}:J${row.number}`);
+      row.getCell(2).alignment = { horizontal: 'center' };
+    }
+
+    await sendWorkbook(res, wb, `stock_movement_${new Date().toISOString().split('T')[0]}.xlsx`);
+  } catch (e) { next(e); }
+};
+
 // ── Legacy exports kept for backward compat ───────────────────────────────────
 export const getBranchPerformanceReport = exportRevenueReconciliation;
 export const getStockUsageReport = exportStockVarianceReport;

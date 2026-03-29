@@ -23,8 +23,8 @@ interface InvoiceData {
     due_date: string;
     status: string;
     total_amount: number;
-    vat_amount: number;
-    subtotal: number;
+    vat_amount?: number;
+    subtotal?: number;
     reference?: string;
     supplier_name?: string;
     other_supplier_name?: string;

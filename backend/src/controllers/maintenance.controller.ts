@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 // @desc    Get all maintenance tasks
 // @route   GET /api/maintenance/tasks
@@ -17,7 +18,9 @@ export const getTasks = async (
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (req.query.branch_id) {
+    query = applyBranchFilter(query, req);
+    const isGlobal = isGlobalRole(req.user?.role);
+    if (isGlobal && req.query.branch_id) {
       query = query.eq('branch_id', req.query.branch_id);
     }
 

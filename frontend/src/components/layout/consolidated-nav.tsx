@@ -929,6 +929,12 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-store/receive'}
         />
         <NavItem
+          href="/dashboard/branch-store/suppliers"
+          icon={Store}
+          label="Branch Suppliers"
+          active={pathname === '/dashboard/branch-store/suppliers'}
+        />
+        <NavItem
           href="/dashboard/branch-store/stock-takes"
           icon={ClipboardList}
           label="Stock Takes"
@@ -1396,6 +1402,9 @@ export function ConsolidatedNav() {
           {branchOperationsNav}
           <hr className="my-4 border-stone-100" />
           {facilitiesNav}
+          <hr className="my-4 border-stone-100" />
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Branch Store Ops</p>
+          {branchStoreNav}
           <hr className="my-4 border-stone-100" />
           <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Kitchen Ops</p>
           {kitchenOperationsNav}

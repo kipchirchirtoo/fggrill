@@ -91,7 +91,7 @@ export const protect = async (
           return;
         }
       } catch (jwtError: any) {
-        logger.info('Auth Middleware - Custom JWT verification skipped or failed, trying Supabase auth', {
+        logger.debug('Auth Middleware - Custom JWT verification skipped or failed, trying Supabase auth', {
           error: jwtError.message,
           tokenPrefix: token.substring(0, 10)
         });

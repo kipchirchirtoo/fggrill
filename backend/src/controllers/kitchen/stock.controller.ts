@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import { applyBranchFilter, isGlobalRole } from '../../utils/branchIsolation';
 
 /**
  * Get current kitchen stock for a branch
@@ -8,18 +9,17 @@ import { supabase } from '../../config/supabase';
 export const getKitchenStock = async (req: Request, res: Response) => {
     try {
         const { branch_id, low_stock } = req.query;
-        const userBranchId = (req as any).user?.branch_id;
-        const effectiveBranchId = branch_id || userBranchId;
-
-        if (!effectiveBranchId) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
-
+        
         let query = supabase
             .from('kitchen_stock')
             .select('*')
-            .eq('branch_id', effectiveBranchId)
             .order('item_name');
+
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
 
         if (low_stock === 'true') {
             query = query.filter('current_balance', 'lte', 'reorder_level');
@@ -43,19 +43,18 @@ export const getKitchenStock = async (req: Request, res: Response) => {
 export const getKitchenLedger = async (req: Request, res: Response) => {
     try {
         const { branch_id, item_sku, start_date, end_date, transaction_type, limit = 100 } = req.query;
-        const userBranchId = (req as any).user?.branch_id;
-        const effectiveBranchId = branch_id || userBranchId;
-
-        if (!effectiveBranchId) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
 
         let query = supabase
             .from('kitchen_stock_ledger')
             .select('*')
-            .eq('branch_id', effectiveBranchId)
             .order('transaction_date', { ascending: false })
             .limit(Number(limit));
+
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
 
         if (item_sku) {
             query = query.eq('item_sku', item_sku);
@@ -92,20 +91,21 @@ export const getItemHistory = async (req: Request, res: Response) => {
     try {
         const { sku } = req.params;
         const { branch_id } = req.query;
-        const userBranchId = (req as any).user?.branch_id;
-        const effectiveBranchId = branch_id || userBranchId;
 
-        if (!effectiveBranchId) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
-
-        const { data, error } = await supabase
+        let query = supabase
             .from('kitchen_stock_ledger')
             .select('*')
-            .eq('branch_id', effectiveBranchId)
             .eq('item_sku', sku)
             .order('transaction_date', { ascending: false })
             .limit(50);
+
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -194,7 +194,8 @@ export const getKitchenDashboardStats = async (req: Request, res: Response) => {
     try {
         const { branch_id } = req.query;
         const userBranchId = (req as any).user?.branch_id;
-        const effectiveBranchId = branch_id || userBranchId;
+        const isGlobal = isGlobalRole((req as any).user?.role);
+        const effectiveBranchId = isGlobal && branch_id ? branch_id : userBranchId;
 
         if (!effectiveBranchId) {
             return res.status(400).json({ success: false, message: 'Branch ID is required' });

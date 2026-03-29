@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { kyogongAPI } from '@/lib/api/kyogong';
 import { toast } from 'sonner';
 import { X, Loader2, PlusCircle, MinusCircle } from 'lucide-react';
-import { API_URL } from '@/lib/config';
 
 interface PettyCashModalProps {
     shift: any;
@@ -39,32 +39,23 @@ export function PettyCashModal({ shift, onClose, onSaved }: PettyCashModalProps)
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/api/kyogong/petty-cash`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    shift_id: shift.id,
-                    amount: parseFloat(amount),
-                    transaction_type: txType,
-                    purpose_category: category,
-                    purpose_description: description,
-                    paid_to_name: paidToName || undefined,
-                    receipt_number: receiptNo || undefined,
-                    authorizer_name: authorizerName || undefined,
-                })
+            const res = await kyogongAPI.recordPettyCash({
+                shift_id: shift.id,
+                amount: parseFloat(amount),
+                transaction_type: txType,
+                purpose_category: category,
+                purpose_description: description,
+                paid_to_name: paidToName || undefined,
+                receipt_number: receiptNo || undefined,
+                authorizer_name: authorizerName || undefined,
             });
 
-            const data = await res.json();
-            if (data.success) {
+            if (res.success) {
                 toast.success('Petty cash recorded');
                 onSaved();
                 onClose();
             } else {
-                toast.error(data.error || 'Failed to record petty cash');
+                toast.error(res.error || 'Failed to record petty cash');
             }
         } catch {
             toast.error('Error recording petty cash');

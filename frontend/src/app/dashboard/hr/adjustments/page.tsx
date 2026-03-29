@@ -63,7 +63,7 @@ export default function PayrollAdjustmentsPage() {
     // Load all staff once
     useEffect(() => {
         setLoadingStaff(true);
-        staffAPI.getAll().then(res => {
+        staffAPI.getStaff().then(res => {
             if (res.success) setStaffList(res.data || []);
         }).finally(() => setLoadingStaff(false));
     }, []);

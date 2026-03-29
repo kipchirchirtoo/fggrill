@@ -6,7 +6,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { storeAPI } from '@/lib/api';
+import { storeAPI, InventoryItem } from '@/lib/api';
 import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight, ShoppingCart } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -15,15 +15,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
 
-interface Item { id: string; sku: string; item_name: string; category: string; quantity: number; reorder_level: number; unit_of_measure: string; cost_price: number; }
-
 export default function InventoryPage() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [formData, setFormData] = useState({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '' });
   const [globalStats, setGlobalStats] = useState({ total: 0, inStock: 0, lowStock: 0, outOfStock: 0 });
@@ -54,9 +52,9 @@ export default function InventoryPage() {
   const handleCreateOrUpdate = async () => {
     setIsActionLoading(true);
     try {
-      const payload = { ...formData, quantity: isEdit ? selectedItem?.quantity : 0 };
+      const payload = { ...formData, quantity: isEdit ? (selectedItem?.quantity || 0) : 0 };
       const response = isEdit && selectedItem
-        ? await storeAPI.updateItem(selectedItem.sku, payload)
+        ? await storeAPI.updateItem(selectedItem.id, payload)
         : await storeAPI.createItem(payload);
 
       if (response.success) {
@@ -78,16 +76,16 @@ export default function InventoryPage() {
     } catch (error) { toast.error('Failed to delete item'); }
   };
 
-  const openEditModal = (item: Item) => {
+  const openEditModal = (item: InventoryItem) => {
     setIsEdit(true);
     setSelectedItem(item);
     setFormData({
-      item_name: item.item_name,
-      category: item.category,
-      unit_of_measure: item.unit_of_measure,
-      reorder_level: item.reorder_level,
-      cost_price: item.cost_price,
-      sku: item.sku
+      item_name: item.item_name || '',
+      category: item.category || '',
+      unit_of_measure: item.unit_of_measure || '',
+      reorder_level: item.reorder_level || 0,
+      cost_price: item.cost_price || 0,
+      sku: item.sku || ''
     });
     setModalOpen(true);
   };
@@ -200,11 +198,11 @@ export default function InventoryPage() {
                     <tr><td colSpan={5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
                   ) : (
                     items.map((item, idx) => {
-                      const isLow = item.quantity <= item.reorder_level;
+                      const isLow = (item.quantity ?? 0) <= (item.reorder_level ?? 0);
                       return (
                         <tr key={item.id ?? item.sku ?? idx} className="hover:bg-stone-50/50 transition-colors">
                           <td className="p-4">
-                            <p className="font-medium text-stone-900">{item.item_name}</p>
+                            <p className="font-medium text-stone-900">{item.item_name || item.name}</p>
                             <p className="text-[11px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{item.sku}</p>
                           </td>
                           <td className="p-4">
@@ -212,13 +210,13 @@ export default function InventoryPage() {
                           </td>
                           <td className="p-4 text-center">
                             <div className="flex flex-col items-center">
-                              <p className={`font-semibold ${isLow ? 'text-amber-600' : 'text-stone-900'}`}>{item.quantity} {item.unit_of_measure}</p>
-                              <p className="text-[10px] text-stone-400 mt-0.5">Min: {item.reorder_level}</p>
+                              <p className={`font-semibold ${isLow ? 'text-amber-600' : 'text-stone-900'}`}>{item.quantity ?? 0} {item.unit_of_measure || item.unit}</p>
+                              <p className="text-[10px] text-stone-400 mt-0.5">Min: {item.reorder_level ?? 0}</p>
                             </div>
                           </td>
                           <td className="p-4 text-right">
-                            <p className="font-medium text-stone-900">KES {formatNumber(item.cost_price)}</p>
-                            <p className="text-[10px] text-stone-400 mt-0.5">Per {item.unit_of_measure}</p>
+                            <p className="font-medium text-stone-900">KES {formatNumber(item.cost_price || 0)}</p>
+                            <p className="text-[10px] text-stone-400 mt-0.5">Per {item.unit_of_measure || item.unit}</p>
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1">

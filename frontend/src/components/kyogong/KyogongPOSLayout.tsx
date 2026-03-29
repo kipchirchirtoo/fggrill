@@ -7,8 +7,9 @@ import { ShiftOpener } from './ShiftOpener';
 import { ShiftCloser } from './ShiftCloser';
 import { SaleForm } from './SaleForm';
 import { PettyCashModal } from './PettyCashModal';
+import { kyogongAPI } from '@/lib/api/kyogong';
+import { cashierAPI } from '@/lib/api/bar';
 import { toast } from 'sonner';
-import { API_URL } from '@/lib/config';
 import {
     Clock, DollarSign, TrendingUp, BarChart3,
     Receipt, Wallet, X, AlertCircle, Loader2,
@@ -50,19 +51,10 @@ export function KyogongPOSLayout({
     const fetchCurrentShift = async () => {
         setShiftLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            if (!token || token === 'offline-bridge-token') {
-                setActiveShift(null);
-                setShiftLoading(false);
-                return;
-            }
-            const res = await fetch(`${API_URL}/api/kyogong/shifts/current`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const data = await res.json();
-            if (data.success && data.data) {
-                setActiveShift(data.data);
-                fetchTransactions(data.data.id);
+            const res = await kyogongAPI.getCurrentShift();
+            if (res.success && res.data) {
+                setActiveShift(res.data);
+                fetchTransactions(res.data.id);
             } else {
                 setActiveShift(null);
             }
@@ -75,13 +67,8 @@ export function KyogongPOSLayout({
 
     const fetchTransactions = async (shiftId: string) => {
         try {
-            const token = localStorage.getItem('token');
-            if (!token || token === 'offline-bridge-token') return;
-            const res = await fetch(`${API_URL}/api/kyogong/shifts/${shiftId}/transactions`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const data = await res.json();
-            if (data.success) setTransactions(data.data || []);
+            const res = await kyogongAPI.getShiftTransactions(shiftId);
+            if (res.success) setTransactions(res.data || []);
         } catch { /* silent */ }
     };
 

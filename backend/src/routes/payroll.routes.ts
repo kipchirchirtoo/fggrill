@@ -119,13 +119,13 @@ router.get(
 
 router.post(
   '/loans',
-  authorize([UserRole.SUPER_ADMIN, UserRole.HR_MANAGER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.HR_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   createLoan
 );
 
 router.patch(
   '/loans/:id/approve',
-  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   approveLoan
 );
 
@@ -138,13 +138,13 @@ router.get(
 
 router.post(
   '/advances',
-  authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.CASHIER, UserRole.ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.CASHIER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   createAdvance
 );
 
 router.patch(
   '/advances/:id/approve',
-  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER]),
   approveAdvance
 );
 

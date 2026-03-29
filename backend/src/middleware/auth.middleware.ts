@@ -73,33 +73,44 @@ export const protect = async (
 export const authorize = (...roles: string[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!req.user?.id) {
+        return res.status(401).json({ success: false, message: 'Not authorized' });
+      }
+
       const { data: profile, error } = await supabase
         .from('users')
-        .select('role')
-        .eq('id', req.user?.id)
+        .select('*')
+        .eq('id', req.user.id)
         .single();
 
       if (error || !profile) {
-        res.status(401).json({
+        return res.status(401).json({
           success: false,
-          message: 'Not authorized to access this route'
+          message: 'User profile not found'
         });
-        return;
       }
 
       if (!roles.includes(profile.role)) {
-        res.status(403).json({
+        return res.status(403).json({
           success: false,
-          message: 'Not authorized to access this route'
+          message: 'Not authorized for this role'
         });
-        return;
       }
+
+      // Populate req.user with profile data including branch_id
+      req.user = {
+        ...req.user,
+        ...profile,
+        branch_id: profile.branch_id,
+        branchId: profile.branch_id,
+        is_central: !profile.branch_id
+      };
 
       next();
     } catch (error) {
       res.status(401).json({
         success: false,
-        message: 'Not authorized to access this route'
+        message: 'Authorization error'
       });
     }
   };

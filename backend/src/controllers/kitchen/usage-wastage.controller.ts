@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { createLedgerEntry } from './stock.controller';
+import { applyBranchFilter } from '../../utils/branchIsolation';
 
 /**
  * Record manual usage
@@ -66,16 +67,6 @@ export const recordUsage = async (req: Request, res: Response) => {
 export const getUsageEntries = async (req: Request, res: Response) => {
     try {
         const { branch_id, start_date, end_date, usage_type } = req.query;
-        const userBranchId = (req as any).user?.branch_id;
-        const userRole = (req as any).user?.role;
-        const effectiveBranchId = branch_id || userBranchId;
-
-        // Auditors/Admins can view all if no branch specified
-        const canViewAll = userRole?.toLowerCase() === 'auditor' || userRole?.toLowerCase() === 'super_admin' || userRole?.toLowerCase() === 'general_manager';
-
-        if (!effectiveBranchId && !canViewAll) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
 
         let query = supabase
             .from('kitchen_usage')
@@ -85,8 +76,10 @@ export const getUsageEntries = async (req: Request, res: Response) => {
             `)
             .order('created_at', { ascending: false });
 
-        if (effectiveBranchId) {
-            query = query.eq('branch_id', effectiveBranchId);
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
         }
 
         if (usage_type) {
@@ -177,16 +170,6 @@ export const recordWastage = async (req: Request, res: Response) => {
 export const getWastageRecords = async (req: Request, res: Response) => {
     try {
         const { branch_id, start_date, end_date, reason } = req.query;
-        const userBranchId = (req as any).user?.branch_id;
-        const userRole = (req as any).user?.role;
-        const effectiveBranchId = branch_id || userBranchId;
-
-        // Auditors/Admins can view all if no branch specified
-        const canViewAll = userRole?.toLowerCase() === 'auditor' || userRole?.toLowerCase() === 'super_admin' || userRole?.toLowerCase() === 'general_manager';
-
-        if (!effectiveBranchId && !canViewAll) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
 
         let query = supabase
             .from('kitchen_wastage')
@@ -196,8 +179,10 @@ export const getWastageRecords = async (req: Request, res: Response) => {
             `)
             .order('created_at', { ascending: false });
 
-        if (effectiveBranchId) {
-            query = query.eq('branch_id', effectiveBranchId);
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
         }
 
         if (reason) {

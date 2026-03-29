@@ -20,7 +20,14 @@ export function BillDetailsModal({ bill, onClose, onUpdate, isAuditor = false }:
 
         setIsLoading(true);
         try {
-            const res = await api.staff.simplePayroll.updateCreditBillStatus(bill.id, 'paid');
+            // Safety check for simplePayroll API
+            const payrollApi = api.staff?.simplePayroll;
+            if (!payrollApi || typeof payrollApi.updateCreditBillStatus !== 'function') {
+                toast.error('Update feature is currently unavailable');
+                return;
+            }
+
+            const res = await payrollApi.updateCreditBillStatus(bill.id, 'paid');
             if (res.success) {
                 toast.success('Bill marked as paid successfully');
                 onUpdate();

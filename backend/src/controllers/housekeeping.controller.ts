@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 // @desc    Get all housekeeping tasks with filters and pagination
 // @route   GET /api/housekeeping/tasks
@@ -19,13 +20,16 @@ export const getTasks = async (
       .from('housekeeping_tasks')
       .select(`
         *,
-        room:rooms(*),
+        room:rooms!inner(*),
         assigned_to:staff_profiles!assigned_to(id, user:users!user_id(first_name, last_name)),
         completed_by:staff_profiles!completed_by(id, user:users!user_id(first_name, last_name)),
         verified_by:staff_profiles!verified_by(id, user:users!user_id(first_name, last_name))
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
+
+    // Add branch isolation
+    query = applyBranchFilter(query, req, 'room.branch_id');
 
     // Add filters
     if (req.query.status) {
@@ -391,15 +395,18 @@ export const getStaffWorkload = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Get all housekeeping staff
-    const { data: staff, error: staffError } = await supabase
+    // Get all housekeeping staff securely
+    let query = supabase
       .from('staff_profiles')
       .select(`
         id,
-        user:users!user_id(first_name, last_name),
+        user:users!inner(first_name, last_name, branch_id),
         tasks:housekeeping_tasks!assigned_to(*)
       `)
       .eq('department', 'housekeeping');
+
+    query = applyBranchFilter(query, req, 'user.branch_id');
+    const { data: staff, error: staffError } = await query;
 
     if (staffError) {
       throw staffError;

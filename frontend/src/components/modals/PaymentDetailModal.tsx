@@ -5,9 +5,10 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { X, CheckCircle, AlertTriangle, User, Calendar, CreditCard, FileText, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentsVerificationAPI } from '@/lib/api';
+import { PaymentVerification } from '@/lib/api/types';
 
 interface PaymentDetailModalProps {
-  payment: any;
+  payment: PaymentVerification;
   onClose: () => void;
   onVerified?: () => void;
   userRole: string;
@@ -112,7 +113,9 @@ export function PaymentDetailModal({ payment, onClose, onVerified, userRole }: P
             </div>
             <div className="text-right">
               <div className="text-sm text-gray-500">Amount</div>
-              <div className="text-2xl font-bold text-gray-900">KES {parseFloat(payment.amount).toLocaleString()}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                KES {typeof payment.amount === 'string' ? parseFloat(payment.amount).toLocaleString() : payment.amount.toLocaleString()}
+              </div>
             </div>
           </div>
 
@@ -151,10 +154,13 @@ export function PaymentDetailModal({ payment, onClose, onVerified, userRole }: P
             <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
               <User className="h-5 w-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
-                <div className="font-medium text-gray-900">Recorded by {payment.recorded_by_user?.full_name}</div>
+                <div className="font-medium text-gray-900">Recorded by {payment.recorded_by_user?.full_name || 'System'}</div>
                 <div className="text-sm text-gray-500">{new Date(payment.recorded_at).toLocaleString()}</div>
                 {payment.recorder_notes && (
                   <div className="text-sm text-gray-600 mt-1 italic">{payment.recorder_notes}</div>
+                )}
+                {payment.notes && !payment.recorder_notes && (
+                  <div className="text-sm text-gray-600 mt-1 italic">{payment.notes}</div>
                 )}
               </div>
             </div>
@@ -164,8 +170,10 @@ export function PaymentDetailModal({ payment, onClose, onVerified, userRole }: P
               <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
                 <CheckCircle className="h-5 w-5 text-blue-600 mt-0.5" />
                 <div className="flex-1">
-                  <div className="font-medium text-gray-900">Verified by {payment.accountant_verified_by_user?.full_name}</div>
-                  <div className="text-sm text-gray-500">{new Date(payment.accountant_verified_at).toLocaleString()}</div>
+                  <div className="font-medium text-gray-900">Verified by {payment.accountant_verified_by_user?.full_name || 'Accountant'}</div>
+                  <div className="text-sm text-gray-500">
+                    {payment.accountant_verified_at ? new Date(payment.accountant_verified_at as string).toLocaleString() : ''}
+                  </div>
                   {payment.accountant_notes && (
                     <div className="text-sm text-gray-600 mt-1 italic">{payment.accountant_notes}</div>
                   )}
@@ -183,9 +191,11 @@ export function PaymentDetailModal({ payment, onClose, onVerified, userRole }: P
                 )}
                 <div className="flex-1">
                   <div className="font-medium text-gray-900">
-                    {payment.auditor_status === 'approved' ? 'Approved' : 'Flagged'} by {payment.auditor_verified_by_user?.full_name}
+                    {(payment.auditor_status === 'approved' ? 'Approved' : 'Flagged')} by {payment.auditor_verified_by_user?.full_name || 'Auditor'}
                   </div>
-                  <div className="text-sm text-gray-500">{new Date(payment.auditor_verified_at).toLocaleString()}</div>
+                  <div className="text-sm text-gray-500">
+                    {payment.auditor_verified_at ? new Date(payment.auditor_verified_at as string).toLocaleString() : ''}
+                  </div>
                   {payment.auditor_notes && (
                     <div className="text-sm text-gray-600 mt-1 italic">{payment.auditor_notes}</div>
                   )}

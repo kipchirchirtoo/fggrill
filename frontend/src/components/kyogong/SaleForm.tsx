@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Loader2, X as XIcon, ShoppingCart, CheckCircle, Printer, Banknote, Smartphone, CreditCard } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
-import { useBranch } from '@/lib/branch-context';
-import { API_URL } from '@/lib/config';
+import { kyogongAPI } from '@/lib/api/kyogong';
 import CashPaymentModal from './CashPaymentModal';
 
 interface DynamicService {
@@ -58,13 +56,11 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
 
     const fetchServices = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const query = serviceType ? `?service_type=${serviceType}&is_active=true` : '?is_active=true';
-            const res = await fetch(`${API_URL}/api/kyogong/dynamic-services${query}`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await kyogongAPI.getDynamicServices({ 
+                service_type: serviceType, 
+                is_active: true 
             });
-            const data = await res.json();
-            if (data.success) setServices(data.data);
+            if (res.success) setServices(res.data);
         } catch { /* silently fail */ }
     };
 
@@ -95,58 +91,62 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
             : i).filter(i => i.quantity > 0));
     };
 
-    const handleSubmit = async (e?: React.FormEvent) => {
+    const handleSubmit = async (e?: React.FormEvent, isBill = false, method?: string) => {
         if (e) e.preventDefault();
         if (cart.length === 0) { toast.error('Add at least one service'); return; }
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/api/kyogong/shifts/${shift.id}/transactions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                    service_category: serviceType || 'general',
-                    items: cart.map(i => ({
-                        item_type: i.item_type,
-                        item_id: i.item_id.toString(),
-                        item_name: i.item_name,
-                        quantity: i.quantity,
-                        unit_price: i.unit_price,
-                    })),
-                    customer_name: customerName || undefined,
-                    customer_phone: customerPhone || undefined,
-                    payment_method: paymentMethod,
-                    cash_amount: paymentMethod === 'CASH' ? cashAmount : 0,
-                    mpesa_amount: paymentMethod === 'MPESA' ? total : 0,
-                    card_amount: paymentMethod === 'CARD' ? total : 0
-                })
+            const res = await kyogongAPI.createTransaction(shift.id, {
+                service_category: serviceType || 'general',
+                items: cart.map(i => ({
+                    item_type: i.item_type,
+                    item_id: i.item_id.toString(),
+                    item_name: i.item_name,
+                    quantity: i.quantity,
+                    unit_price: i.unit_price,
+                })),
+                customer_name: customerName || undefined,
+                customer_phone: customerPhone || undefined,
+                payment_method: isBill ? 'BILL' : paymentMethod,
+                cash_amount: !isBill && paymentMethod === 'CASH' ? cashAmount : 0,
+                mpesa_amount: !isBill && paymentMethod === 'MPESA' ? total : 0,
+                card_amount: !isBill && paymentMethod === 'CARD' ? total : 0
             });
-            const data = await res.json();
-            if (data.success) {
+
+            if (res.success) {
+                if (isBill) {
+                    toast.success('Bill created! Redirecting to cashier...');
+                    onTransactionCreated(res.data);
+                    const billNumber = res.data.transaction_number || res.data.id;
+                    window.location.href = `/dashboard/cashier?billId=${billNumber}&method=${method}&source=kyogong`;
+                    return;
+                }
+
                 toast.success(paymentMethod === 'CASH' ? 'Cash payment processed!' : 'Bill generated successfully!');
                 setSubmitted(true);
-                onTransactionCreated(data.data);
+                onTransactionCreated(res.data);
                 setCart([]);
                 setCustomerName('');
                 setCustomerPhone('');
                 setCashAmount(0);
                 setChangeAmount(0);
-                setLastTransaction(data.data);
+                setLastTransaction(res.data);
 
                 // Auto-print bill
                 setTimeout(() => {
-                    handlePrintReceipt(data.data);
+                    handlePrintReceipt(res.data);
                 }, 100);
 
-                setTimeout(() => setSubmitted(false), 8000); // Extended timeout to 8s
+                setTimeout(() => setSubmitted(false), 8000); 
             } else {
-                toast.error(data.error || 'Failed to record sale');
+                toast.error(res.error || 'Failed to record sale');
             }
         } catch {
             toast.error('Failed to record sale');
         } finally {
             setIsSubmitting(false);
+            if (isBill) setShowPaymentPicker(false);
         }
     };
 
@@ -513,47 +513,7 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                                     <button
                                         key={method}
                                         disabled={isSubmitting}
-                                        onClick={async () => {
-                                            if (cart.length === 0) { toast.error('Add at least one service'); return; }
-                                            setIsSubmitting(true);
-                                            try {
-                                                const token = localStorage.getItem('token');
-                                                const res = await fetch(`${API_URL}/api/kyogong/shifts/${shift.id}/transactions`, {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                                                    body: JSON.stringify({
-                                                        service_category: serviceType || 'general',
-                                                        items: cart.map(i => ({
-                                                            item_type: i.item_type,
-                                                            item_id: i.item_id.toString(),
-                                                            item_name: i.item_name,
-                                                            quantity: i.quantity,
-                                                            unit_price: i.unit_price,
-                                                        })),
-                                                        customer_name: customerName || undefined,
-                                                        customer_phone: customerPhone || undefined,
-                                                        payment_method: 'BILL',
-                                                        cash_amount: 0,
-                                                        mpesa_amount: 0,
-                                                        card_amount: 0
-                                                    })
-                                                });
-                                                const data = await res.json();
-                                                if (data.success) {
-                                                    toast.success('Bill created! Redirecting to cashier...');
-                                                    onTransactionCreated(data.data);
-                                                    const billNumber = data.data.transaction_number || data.data.id;
-                                                    window.location.href = `/dashboard/cashier?billId=${billNumber}&method=${method}&source=kyogong`;
-                                                } else {
-                                                    toast.error(data.error || 'Failed to create bill');
-                                                }
-                                            } catch {
-                                                toast.error('Failed to create bill');
-                                            } finally {
-                                                setIsSubmitting(false);
-                                                setShowPaymentPicker(false);
-                                            }
-                                        }}
+                                        onClick={() => handleSubmit(undefined, true, method)}
                                         className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-60 ${color}`}
                                     >
                                         <Icon className="w-5 h-5" />

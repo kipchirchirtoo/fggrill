@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { financeAPI } from '@/lib/api';
+import { systemAPI } from '@/lib/api';
 import { Building2, RefreshCw, ChevronDown } from 'lucide-react';
 
 interface Branch {
@@ -23,7 +23,7 @@ export function BranchSelector({ selectedBranch, onBranchChange, className }: Br
     const fetchBranches = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await financeAPI.getBranches();
+            const response = await systemAPI.getBranches();
             // console.log('Fetched branches:', response.data);
             if (response.success && Array.isArray(response.data)) {
                 setBranches(response.data);

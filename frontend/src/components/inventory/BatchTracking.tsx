@@ -27,6 +27,8 @@ interface Batch {
   costPrice: number;
 }
 
+import { apiClient } from '@/lib/api/core';
+
 export function BatchTracking({ itemId, branch, onBatchAdded }: BatchTrackingProps) {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -43,24 +45,17 @@ export function BatchTracking({ itemId, branch, onBatchAdded }: BatchTrackingPro
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/inventory/batches`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          itemId,
-          branch,
-          batchNumber: batch.batchNumber,
-          quantity: batch.quantity,
-          manufacturingDate: batch.manufacturingDate,
-          expiryDate: batch.expiryDate,
-          costPrice: batch.costPrice
-        })
+      const res = await apiClient.post<any>('/inventory/batches', {
+        itemId,
+        branch,
+        batchNumber: batch.batchNumber,
+        quantity: batch.quantity,
+        manufacturingDate: batch.manufacturingDate,
+        expiryDate: batch.expiryDate,
+        costPrice: batch.costPrice
       });
 
-      if (!response.ok) throw new Error('Failed to add batch');
+      if (!res.success) throw new Error(res.error || res.message || 'Failed to add batch');
 
       toast.success('Batch added successfully');
       onBatchAdded?.();
@@ -128,7 +123,7 @@ export function BatchTracking({ itemId, branch, onBatchAdded }: BatchTrackingPro
                 <Calendar
                   mode="single"
                   selected={batch.manufacturingDate || undefined}
-                  onSelect={(date) => setBatch(prev => ({ ...prev, manufacturingDate: date }))}
+                  onSelect={(date) => setBatch(prev => ({ ...prev, manufacturingDate: date || null }))}
                   initialFocus
                 />
               </PopoverContent>
@@ -155,7 +150,7 @@ export function BatchTracking({ itemId, branch, onBatchAdded }: BatchTrackingPro
                 <Calendar
                   mode="single"
                   selected={batch.expiryDate || undefined}
-                  onSelect={(date) => setBatch(prev => ({ ...prev, expiryDate: date }))}
+                  onSelect={(date) => setBatch(prev => ({ ...prev, expiryDate: date || null }))}
                   initialFocus
                 />
               </PopoverContent>

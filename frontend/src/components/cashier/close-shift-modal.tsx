@@ -276,7 +276,7 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                         <div className="p-2 bg-slate-50 rounded-lg w-fit mb-3 shadow-sm border border-slate-100">
                             <Clock className="h-5 w-5 text-slate-400" />
                         </div>
-                        <h2 className="text-lg font-black text-slate-900 tracking-tight mb-1">Shift {currentShift?.shift_number}</h2>
+                        <DialogTitle className="text-lg font-black text-slate-900 tracking-tight mb-1">Shift {currentShift?.shift_number}</DialogTitle>
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 opacity-60">
                             {currentShift?.shift_start && new Date(currentShift.shift_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>

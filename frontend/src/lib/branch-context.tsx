@@ -3,18 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
-// Branch interface
-export interface Branch {
-  id: number;
-  name: string;
-  code: string;
-  location: string;
-  is_main_branch: boolean;
-  branch_type?: string;
-  status?: string;
-  number_of_rooms?: number;
-  settings?: Record<string, any>;
-}
+import { Branch } from '@/lib/api/types';
 
 // Branch context interface
 interface BranchContextType {
@@ -32,9 +21,10 @@ interface BranchContextType {
 // Create branch context
 const BranchContext = createContext<BranchContextType | undefined>(undefined);
 
-// API URL
-import { API_URL } from '@/lib/config';
+// API Access
+import { systemAPI } from '@/lib/api';
 
+// Branch Provider Component
 // Branch Provider Component
 export function BranchProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -51,6 +41,17 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         ? { id: 0, name: 'All Branches', code: 'ALL', location: 'Multiple Locations', is_main_branch: false } as Branch
         : null
   ), [activeBranchId, branches]);
+
+  // Helper to check if user can access all branches
+  const canAccessAllBranches = React.useCallback((u: any): boolean => {
+    return ['super_admin', 'general_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager', 'hr_manager', 'facilities_manager'].includes(u?.role);
+  }, []);
+
+  // Check if a branch is available for the user
+  const isBranchAvailable = React.useCallback((branchId: number): boolean => {
+    if (branchId === 0) return canAccessAllBranches(user);
+    return userBranches.some(branch => branch.id === branchId);
+  }, [user, userBranches, canAccessAllBranches]);
 
   // Set initial active branch
   useEffect(() => {
@@ -70,18 +71,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         setActiveBranchId(userBranches[0].id);
       }
     }
-  }, [branches, user, userBranches, activeBranchId]);
-
-  // Helper to check if user can access all branches
-  const canAccessAllBranches = (u: any): boolean => {
-    return ['super_admin', 'general_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager', 'hr_manager', 'facilities_manager'].includes(u?.role);
-  };
-
-  // Check if a branch is available for the user
-  const isBranchAvailable = React.useCallback((branchId: number): boolean => {
-    if (branchId === 0) return canAccessAllBranches(user);
-    return userBranches.some(branch => branch.id === branchId);
-  }, [user, userBranches]);
+  }, [branches, user, userBranches, activeBranchId, canAccessAllBranches, isBranchAvailable]);
 
   // Set active branch
   const setActiveBranch = React.useCallback((branchId: number) => {
@@ -103,18 +93,11 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      // Fetch all branches using centralized API
+      const res = await systemAPI.getBranches();
 
-      // Fetch all branches from API
-      const branchesResponse = await fetch(`${API_URL}/api/system/branches`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (branchesResponse.ok) {
-        const data = await branchesResponse.json();
-        const allBranches = data.data || [];
+      if (res.success) {
+        const allBranches = res.data || [];
         setBranches(allBranches);
 
         // Store branches for potential offline/demo use
@@ -124,7 +107,7 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         let accessibleBranches: Branch[] = [];
 
         // Super admins, general managers, and central ops have access to all branches
-        if (['super_admin', 'general_manager', 'central_storekeeper', 'accountant', 'auditor', 'branch_operations_manager'].includes(user.role)) {
+        if (canAccessAllBranches(user)) {
           accessibleBranches = allBranches;
         } else if (user.branch_id) {
           // Branch-specific users only see their assigned branch
@@ -148,7 +131,6 @@ export function BranchProvider({ children }: { children: ReactNode }) {
         const cachedUserBranches = localStorage.getItem('userBranches');
 
         if (cachedBranches && cachedUserBranches) {
-          // console.log('Using cached branch data after API error');
           const allBranches = JSON.parse(cachedBranches);
           const accessibleBranches = JSON.parse(cachedUserBranches);
 
@@ -162,11 +144,10 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
       setBranches([]);
       setUserBranches([]);
-      // console.warn('Failed to load branch data. Please check network connection.');
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, canAccessAllBranches]);
 
   // Check if user has access to branch
   const hasAccessToBranch = React.useCallback((branchId: number): boolean => {

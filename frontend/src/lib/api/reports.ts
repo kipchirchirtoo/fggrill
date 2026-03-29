@@ -1,0 +1,148 @@
+import { fetchAPI, fetchPythonAPI, buildQuery, REPORTS_SERVICE_URL, PYTHON_SERVICE_URL } from './core';
+import { 
+  ApiResponse, 
+  ReportTemplate, 
+  AuditLog 
+} from './types';
+
+// =====================================
+// REPORTS API (Node & Python)
+// =====================================
+
+const reportsBase = {
+  getReports: (params?: any) => fetchAPI<ReportTemplate[]>(`/reports${buildQuery(params)}`),
+  getReport: (id: string | number) => fetchAPI<ReportTemplate>(`/reports/${id}`),
+  createReport: (data: any) => fetchAPI<ReportTemplate>('/reports', { method: 'POST', body: JSON.stringify(data) }),
+  updateReport: (id: string | number, data: any) => fetchAPI<ReportTemplate>(`/reports/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteReport: (id: string | number) => fetchAPI<void>(`/reports/${id}`, { method: 'DELETE' }),
+  
+  generateReport: (id: string | number, data: any) => fetchAPI<any>(`/reports/${id}/generate`, { method: 'POST', body: JSON.stringify(data) }),
+  scheduleReport: (id: string | number, data: any) => fetchAPI<void>(`/reports/${id}/schedule`, { method: 'POST', body: JSON.stringify(data) }),
+  sendReport: (id: string | number, emails: string[]) => fetchAPI<void>(`/reports/${id}/send`, { method: 'POST', body: JSON.stringify({ emails }) }),
+  getReportHistory: (id: string | number) => fetchAPI<any[]>(`/reports/${id}/history`),
+  
+  // Specific Report Types
+  getDashboardReport: (params?: any) => fetchAPI<any>(`/reports/dashboard${buildQuery(params)}`),
+  getOccupancyReport: (params?: any) => fetchAPI<any>(`/reports/occupancy${buildQuery(params)}`),
+  getRevenueReport:   (params?: any) => fetchAPI<any>(`/reports/revenue${buildQuery(params)}`),
+  getInventoryReport: (params?: any) => fetchAPI<any>(`/reports/inventory${buildQuery(params)}`),
+  getHousekeepingReport: (params?: any) => fetchAPI<any>(`/reports/housekeeping${buildQuery(params)}`),
+  getMaintenanceReport: (params?: any) => fetchAPI<any>(`/reports/maintenance${buildQuery(params)}`),
+  getConferenceReport: (params?: any) => fetchAPI<any>(`/reports/conference${buildQuery(params)}`),
+  
+  // Analytics & Stats
+  getStats: () => fetchAPI<any>('/reports/stats/overview'),
+
+  // Python Service Endpoints
+  getReportData: async (reportType: string, filters: any = {}) => {
+    const result = await fetchAPI<any>(`/reports/data?type=${reportType}${buildQuery(filters).replace('?', '&')}`, {}, REPORTS_SERVICE_URL);
+    return result.data;
+  },
+  
+  exportPdf: async (reportType: string, filters: any = {}) => {
+    const result = await fetchAPI<Blob>('/reports/generate/branded-pdf', {
+      method: 'POST',
+      body: JSON.stringify({ reportType, filters, useRealData: true }),
+      responseType: 'blob'
+    }, REPORTS_SERVICE_URL);
+    return result.data;
+  },
+};
+
+export const reportsAPI = {
+  ...reportsBase,
+  // Type-safe aliases
+  exportReport: (reportId: string | number, params?: any) => reportsBase.exportPdf(String(reportId), params),
+  downloadReport: (reportId: string | number, params?: any) => reportsBase.exportPdf(String(reportId), params),
+};
+
+// =====================================
+// AUDIT & COMPLIANCE API
+// =====================================
+
+export const auditAPI = {
+  // Appended for UI Compatibility
+  getDailyLogsStatus: (params?: any) => fetchAPI<any>('/auditor/daily-logs/status', { method: 'GET' }),
+  verifyDailyLog: (id: any, data?: any) => fetchAPI<any>(`/auditor/daily-logs/${id}/verify`, { method: 'POST', body: JSON.stringify(data) }),
+  getRoleMigrations: (params?: any) => fetchAPI<any[]>('/system/roles/migration', { method: 'GET' }),
+  executeRoleMigration: (data: any) => fetchAPI<any>('/system/roles/migration/execute', { method: 'POST', body: JSON.stringify(data) }),
+  revertRoleMigration: (id: any) => fetchAPI<any>(`/system/roles/migration/${id}/revert`, { method: 'POST' }),
+  getSoldItemsAnalytics: (params?: any) => fetchAPI<any>('/analytics/sold-items', { method: 'GET' }),
+  downloadBrandedPdf: (reportId: any, params?: any) => fetchAPI<Blob>(`/reports/${reportId}/pdf-branded`, { method: 'GET' }),
+
+  getAuditLogs: (params?: any) => fetchAPI<AuditLog[]>(`/audit/logs${buildQuery(params)}`),
+  
+  // Operational Audit
+  getConsumptionVariances: (params: any) => fetchAPI<any[]>(`/auditor/consumption/variances${buildQuery(params)}`),
+  getWatchlist: (params?: any) => fetchAPI<any[]>(`/auditor/watchlist${buildQuery(params)}`),
+  
+  // Approvals
+  getPendingApprovals: (branchId?: number) => fetchAPI<any[]>(`/auditor/approvals/pending${buildQuery({ branch_id: branchId })}`),
+  approveRequest: (id: string, type: string, notes?: string) =>
+    fetchAPI<void>('/auditor/approvals/approve', { method: 'POST', body: JSON.stringify({ id, type, notes }) }),
+  
+  // Verification
+  verifySales: (params: any) => fetchAPI<any>(`/auditor/verify/sales${buildQuery(params)}`),
+  verifyStockLevels: (params: any) => fetchAPI<any>(`/auditor/verify/stock-levels${buildQuery(params)}`),
+  createException: (data: any) => fetchAPI<any>('/auditor/exceptions', { method: 'POST', body: JSON.stringify(data) }),
+  verifyAnomaly: (data: any) => fetchAPI<any>('/auditor/verify/clear', { method: 'POST', body: JSON.stringify(data) }),
+  
+  // Staff Audit
+  getStaffAudit: (params: { 
+    branch_id?: string | number; 
+    staff_id?: string; 
+    start_date?: string; 
+    end_date?: string; 
+  }) => fetchAPI<any>(`/auditor/staff-audit${buildQuery(params)}`),
+
+  // Aliases and Extensions for Legacy Compliance
+  getAuditTrail: (params?: any) => auditAPI.getAuditLogs(params),
+  verifyFinances: (params?: any) => fetchAPI<any>(`/auditor/verify/finances${buildQuery(params)}`),
+  getAnomalyDetail: (id: string) => fetchAPI<any>(`/auditor/anomalies/${id}`),
+  clearAnomaly: (id: string, notes: string) => fetchAPI<void>(`/auditor/anomalies/${id}/clear`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  verifyRevenue: (params?: any) => fetchAPI<any>(`/auditor/verify/revenue${buildQuery(params)}`),
+  verifyBranchOrders: (params?: any) => fetchAPI<any>(`/auditor/verify/orders${buildQuery(params)}`),
+  verifySoldItems: (params?: any) => fetchAPI<any>(`/auditor/verify/sold-items${buildQuery(params)}`),
+  getBarStockAudits: (params?: any) => fetchAPI<any[]>(`/auditor/bar/stock-audits${buildQuery(params)}`),
+  verifyBarStockTake: (id: string, status: string) => fetchAPI<void>(`/auditor/bar/stock-audits/${id}/verify`, { method: 'POST', body: JSON.stringify({ status }) }),
+  flagItem: (type: string, id: string, reason: string) => fetchAPI<void>('/auditor/flag', { method: 'POST', body: JSON.stringify({ type, id, reason }) }),
+  exportStockLedger: (params?: any) => fetchAPI<Blob>('/auditor/export/stock-ledger', { method: 'POST', body: JSON.stringify(params), responseType: 'blob' }),
+};
+
+export const auditorReportsAPI = {
+  // Export Endpoints (Returning Blobs for Excel/PDF)
+  exportAuditorReport: (reportId: string, params?: any) => 
+    fetchAPI<Blob>(`/reports/auditor/export/${reportId}${buildQuery(params)}`, { responseType: 'blob' }),
+
+  exportExceptionSummary:      (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/exception_summary${buildQuery(params)}`, { responseType: 'blob' }),
+  exportComplianceAudit:       (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/compliance_audit${buildQuery(params)}`, { responseType: 'blob' }),
+  exportVoidAnalytics:         (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/void_analytics${buildQuery(params)}`, { responseType: 'blob' }),
+  exportRevenueReconciliation: (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/revenue_reconciliation${buildQuery(params)}`, { responseType: 'blob' }),
+  exportLeakageReport:         (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/leakage_report${buildQuery(params)}`, { responseType: 'blob' }),
+  exportExpenditureAudit:      (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/expenditure_audit${buildQuery(params)}`, { responseType: 'blob' }),
+  exportVarianceReport:        (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/variance_report${buildQuery(params)}`, { responseType: 'blob' }),
+  exportConsumptionAudit:      (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/consumption_audit${buildQuery(params)}`, { responseType: 'blob' }),
+  exportGrnAudit:              (params?: any) => fetchAPI<Blob>(`/auditor-reports/export/grn_audit${buildQuery(params)}`, { responseType: 'blob' }),
+
+  // Branded PDF Export
+  exportBrandedPdf: async (reportType: string, params: any) => {
+    const result = await fetchAPI<Blob>(`/reports/auditor/export/${reportType}${buildQuery(params)}`, {
+      responseType: 'blob'
+    }, PYTHON_SERVICE_URL);
+    
+    if (result.success && result.data && typeof window !== 'undefined') {
+      const url = window.URL.createObjectURL(result.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportType}_${Date.now()}.pdf`;
+      a.click();
+      return true;
+    }
+    return false;
+  },
+
+  // Specialized Reports
+  getBranchPerformance: (params: any) => fetchAPI<any>(`/auditor-reports/performance${buildQuery(params)}`),
+  getStockUsage:        (params: any) => fetchAPI<any>(`/auditor-reports/stock-usage${buildQuery(params)}`),
+  getEmployeeCredit:    (params: any) => fetchAPI<any>(`/auditor-reports/employee-credit${buildQuery(params)}`),
+};

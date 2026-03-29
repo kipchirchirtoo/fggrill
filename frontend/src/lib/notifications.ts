@@ -56,23 +56,12 @@ export interface NotificationSubscriber {
   notificationTypes: string[];
 }
 
-import { API_URL } from './config';
+import { apiClient } from './api/core';
 
 export async function sendNotification(notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) {
   try {
-    const response = await fetch(`${API_URL}/api/notifications`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(notification)
-    });
-
-    if (!response.ok) throw new Error('Failed to send notification');
-
-    const data = await response.json();
-    return data;
+    const res = await apiClient.post<any>('/notifications', notification);
+    return res.data;
   } catch (error) {
     console.error('Error sending notification:', error);
     throw error;
@@ -81,16 +70,8 @@ export async function sendNotification(notification: Omit<Notification, 'id' | '
 
 export async function getNotifications(userId: string) {
   try {
-    const response = await fetch(`${API_URL}/api/notifications/user/${userId}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) throw new Error('Failed to fetch notifications');
-
-    const data = await response.json();
-    return data;
+    const res = await apiClient.get<any>(`/notifications/user/${userId}`);
+    return res.data;
   } catch (error) {
     console.error('Error fetching notifications:', error);
     throw error;
@@ -169,17 +150,8 @@ export function getRoleDisplayName(role: string): string {
 
 export async function markNotificationAsRead(notificationId: string) {
   try {
-    const response = await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) throw new Error('Failed to mark notification as read');
-
-    const data = await response.json();
-    return data;
+    const res = await apiClient.patch<any>(`/notifications/${notificationId}/read`);
+    return res.data;
   } catch (error) {
     console.error('Error marking notification as read:', error);
     throw error;

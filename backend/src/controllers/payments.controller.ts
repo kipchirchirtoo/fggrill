@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 export class PaymentsController {
   // Get all payments for a branch with filters (includes banking, payments, pos_transactions)
@@ -20,8 +21,9 @@ export class PaymentsController {
 
       // ── 1. payment_verifications ────────────────────────────────────────
       let pvQuery = supabase.from('payment_verifications').select('*').order('recorded_at', { ascending: false });
+      pvQuery = applyBranchFilter(pvQuery, req);
       if (branch_id) pvQuery = pvQuery.eq('branch_id', branch_id);
-      if (status)    pvQuery = pvQuery.eq('status', status);
+      // Status filter is applied later for consistency with other sources
       if (payment_method) pvQuery = pvQuery.eq('payment_method', payment_method);
       if (start_date) pvQuery = pvQuery.gte('recorded_at', start_date as string);
       if (endOfDay)   pvQuery = pvQuery.lte('recorded_at', endOfDay);
@@ -32,141 +34,149 @@ export class PaymentsController {
         console.error('Error fetching payment_verifications:', pvError);
         return res.status(500).json({ success: false, message: 'Failed to fetch payments', error: pvError.message });
       }
-      const pvRecords = (pvData || []).map((p: any) => ({ ...p, _source: 'payment_verification' }));
+      const pvRecords = (pvData || []).map((p: any) => ({ 
+        ...p, 
+        _source: 'payment_verification',
+        status: (p.status || 'pending').toLowerCase() // Normalize status
+      }));
 
       // ── 2. banking_transactions ─────────────────────────────────────────
-      let bankingRecords: any[] = [];
-      if (!status) { // banking has no status filter equivalent
-        let btQuery = supabase.from('banking_transactions').select('*').order('transaction_date', { ascending: false });
-        if (branch_id) btQuery = btQuery.eq('branch_id', branch_id);
-        if (start_date) btQuery = btQuery.gte('transaction_date', start_date as string);
-        if (end_date)   btQuery = btQuery.lte('transaction_date', end_date as string);
-        if (itemsLimit) btQuery = btQuery.limit(itemsLimit);
-        const { data: btData } = await btQuery;
-        bankingRecords = (btData || []).map((bt: any) => ({
-          id: bt.id,
-          branch_id: bt.branch_id,
-          amount: bt.amount,
-          payment_method: bt.payment_method || bt.transaction_type,
-          reference_number: bt.reference_number,
-          customer_name: bt.purpose_description || bt.bank_name,
-          recorded_by: bt.recorded_by,
-          recorded_at: bt.created_at || bt.transaction_date,
-          recorder_notes: bt.notes,
-          status: bt.status?.toLowerCase() === 'approved' ? 'auditor_verified'
-                : bt.status?.toLowerCase() === 'rejected' ? 'flagged' : 'pending',
-          _source: 'banking',
-          _banking_type: bt.transaction_type,
-          _bank_name: bt.bank_name,
-          _transaction_date: bt.transaction_date,
-          accountant_verified_by: bt.approved_by,
-          accountant_verified_at: bt.approved_at,
-        }));
-      }
+      let btQuery = supabase.from('banking_transactions').select('*').order('transaction_date', { ascending: false });
+      btQuery = applyBranchFilter(btQuery, req);
+      if (branch_id) btQuery = btQuery.eq('branch_id', branch_id);
+      if (start_date) btQuery = btQuery.gte('transaction_date', start_date as string);
+      if (endOfDay)   btQuery = btQuery.lte('transaction_date', endOfDay); // Use endOfDay for consistency
+      if (itemsLimit) btQuery = btQuery.limit(itemsLimit);
+
+      const { data: btData } = await btQuery;
+      let bankingRecords = (btData || []).map((bt: any) => ({
+        id: bt.id,
+        branch_id: bt.branch_id,
+        amount: bt.amount,
+        payment_method: bt.payment_method || bt.transaction_type,
+        reference_number: bt.reference_number,
+        customer_name: bt.purpose_description || bt.bank_name,
+        recorded_by: bt.recorded_by,
+        recorded_at: bt.created_at || bt.transaction_date,
+        recorder_notes: bt.notes,
+        status: bt.status?.toLowerCase() === 'approved' ? 'auditor_verified'
+              : bt.status?.toLowerCase() === 'rejected' ? 'flagged' : 'pending',
+        _source: 'banking',
+        _banking_type: bt.transaction_type,
+        _bank_name: bt.bank_name,
+        _transaction_date: bt.transaction_date,
+        accountant_verified_by: bt.approved_by,
+        accountant_verified_at: bt.approved_at,
+      }));
 
       // ── 3. payments table (branch inferred via related orders) ──────────
       let rawPayments: any[] = [];
-      if (!status) {
-        let payQuery = supabase.from('payments').select('*').order('created_at', { ascending: false });
-        if (start_date) payQuery = payQuery.gte('created_at', `${start_date}T00:00:00`);
-        if (end_date)   payQuery = payQuery.lte('created_at', `${end_date}T23:59:59`);
-        if (itemsLimit) payQuery = payQuery.limit(itemsLimit);
-        const { data: payData } = await payQuery;
+      let payQuery = supabase.from('payments').select('*').order('created_at', { ascending: false });
+      if (start_date) payQuery = payQuery.gte('created_at', `${start_date}T00:00:00`);
+      if (endOfDay)   payQuery = payQuery.lte('created_at', endOfDay);
+      if (itemsLimit) payQuery = payQuery.limit(itemsLimit);
+      const { data: payData } = await payQuery;
 
-        if (payData && payData.length > 0) {
-          // Collect related IDs for branch inference
-          const bookingIds   = [...new Set(payData.map((p: any) => p.booking_id).filter(Boolean))];
-          const restOrderIds = [...new Set(payData.map((p: any) => p.restaurant_order_id).filter(Boolean))];
-          const barOrderIds  = [...new Set(payData.map((p: any) => p.bar_order_id).filter(Boolean))];
-          const posIds       = [...new Set(payData.map((p: any) => p.pos_transaction_id).filter(Boolean))];
+      if (payData && payData.length > 0) {
+        const bookingIds   = [...new Set(payData.map((p: any) => p.booking_id).filter(Boolean))];
+        const restOrderIds = [...new Set(payData.map((p: any) => p.restaurant_order_id).filter(Boolean))];
+        const barOrderIds  = [...new Set(payData.map((p: any) => p.bar_order_id).filter(Boolean))];
+        const posIds       = [...new Set(payData.map((p: any) => p.pos_transaction_id).filter(Boolean))];
 
-          const [
-            { data: bookings },
-            { data: restOrders },
-            { data: barOrders },
-            { data: posTxns }
-          ] = await Promise.all([
-            bookingIds.length   ? supabase.from('reservations').select('id, branch_id').in('id', bookingIds) : { data: [] },
-            restOrderIds.length ? supabase.from('restaurant_orders').select('id, branch_id').in('id', restOrderIds) : { data: [] },
-            barOrderIds.length  ? supabase.from('bar_orders').select('id, branch_id').in('id', barOrderIds) : { data: [] },
-            posIds.length       ? supabase.from('pos_transactions').select('id, branch_id').in('id', posIds) : { data: [] },
-          ]);
+        const [
+          { data: bookings },
+          { data: restOrders },
+          { data: barOrders },
+          { data: posTxns }
+        ] = await Promise.all([
+          bookingIds.length   ? supabase.from('reservations').select('id, branch_id').in('id', bookingIds) : { data: [] },
+          restOrderIds.length ? supabase.from('restaurant_orders').select('id, branch_id').in('id', restOrderIds) : { data: [] },
+          barOrderIds.length  ? supabase.from('bar_orders').select('id, branch_id').in('id', barOrderIds) : { data: [] },
+          posIds.length       ? supabase.from('pos_transactions').select('id, branch_id').in('id', posIds) : { data: [] },
+        ]);
 
-          const bookingMap   = Object.fromEntries((bookings || []).map((b: any) => [b.id, b]));
-          const restOrderMap = Object.fromEntries((restOrders || []).map((o: any) => [o.id, o]));
-          const barOrderMap  = Object.fromEntries((barOrders || []).map((o: any) => [o.id, o]));
-          const posMap       = Object.fromEntries((posTxns || []).map((p: any) => [p.id, p]));
+        const bookingMap   = Object.fromEntries((bookings || []).map((b: any) => [b.id, b]));
+        const restOrderMap = Object.fromEntries((restOrders || []).map((o: any) => [o.id, o]));
+        const barOrderMap  = Object.fromEntries((barOrders || []).map((o: any) => [o.id, o]));
+        const posMap       = Object.fromEntries((posTxns || []).map((p: any) => [p.id, p]));
 
-          // payments table has no cashier_id — look it up via cashier_shift_transactions → cashier_shift_logs
-          const paymentIds = payData.map((p: any) => p.id);
-          const { data: shiftTxns } = await supabase
-            .from('cashier_shift_transactions')
-            .select('transaction_id, shift_id')
-            .in('transaction_id', paymentIds);
+        const paymentIds = payData.map((p: any) => p.id);
+        const { data: shiftTxns } = await supabase
+          .from('cashier_shift_transactions')
+          .select('transaction_id, shift_id')
+          .in('transaction_id', paymentIds);
 
-          let cashierByPaymentId: Record<string, string> = {};
-          if (shiftTxns && shiftTxns.length > 0) {
-            const shiftIds = [...new Set(shiftTxns.map((st: any) => st.shift_id))];
-            const { data: shifts } = await supabase
-              .from('cashier_shift_logs')
-              .select('id, cashier_id')
-              .in('id', shiftIds);
-            const shiftCashierMap = Object.fromEntries((shifts || []).map((s: any) => [s.id, s.cashier_id]));
-            shiftTxns.forEach((st: any) => {
-              if (shiftCashierMap[st.shift_id]) {
-                cashierByPaymentId[st.transaction_id] = shiftCashierMap[st.shift_id];
-              }
-            });
-          }
-
-          rawPayments = payData
-            .map((p: any) => {
-              let inferredBranchId: any = null;
-              if (p.booking_id && bookingMap[p.booking_id])               inferredBranchId = bookingMap[p.booking_id].branch_id;
-              else if (p.restaurant_order_id && restOrderMap[p.restaurant_order_id]) inferredBranchId = restOrderMap[p.restaurant_order_id].branch_id;
-              else if (p.bar_order_id && barOrderMap[p.bar_order_id])     inferredBranchId = barOrderMap[p.bar_order_id].branch_id;
-              else if (p.pos_transaction_id && posMap[p.pos_transaction_id]) inferredBranchId = posMap[p.pos_transaction_id].branch_id;
-              return {
-                ...p,
-                branch_id: inferredBranchId,
-                _source: 'payment',
-                recorded_at: p.recorded_at || p.created_at,
-                // Try: recorded_by → cashier_id column → shift lookup result → metadata.cashier_id
-                recorded_by: p.recorded_by || p.cashier_id || cashierByPaymentId[p.id] || p.metadata?.cashier_id || null,
-                reference_number: p.reference_number || p.reference,
-                customer_name: p.customer_name || p.notes,
-              };
-            })
-            .filter((p: any) => !branch_id || String(p.branch_id) === String(branch_id));
+        let cashierByPaymentId: Record<string, string> = {};
+        if (shiftTxns && shiftTxns.length > 0) {
+          const shiftIds = [...new Set(shiftTxns.map((st: any) => st.shift_id))];
+          const { data: shifts } = await supabase
+            .from('cashier_shift_logs')
+            .select('id, cashier_id')
+            .in('id', shiftIds);
+          const shiftCashierMap = Object.fromEntries((shifts || []).map((s: any) => [s.id, s.cashier_id]));
+          shiftTxns.forEach((st: any) => {
+            if (shiftCashierMap[st.shift_id]) {
+              cashierByPaymentId[st.transaction_id] = shiftCashierMap[st.shift_id];
+            }
+          });
         }
+
+        rawPayments = payData
+          .map((p: any) => {
+            let inferredBranchId: any = null;
+            if (p.booking_id && bookingMap[p.booking_id])               inferredBranchId = bookingMap[p.booking_id].branch_id;
+            else if (p.restaurant_order_id && restOrderMap[p.restaurant_order_id]) inferredBranchId = restOrderMap[p.restaurant_order_id].branch_id;
+            else if (p.bar_order_id && barOrderMap[p.bar_order_id])     inferredBranchId = barOrderMap[p.bar_order_id].branch_id;
+            else if (p.pos_transaction_id && posMap[p.pos_transaction_id]) inferredBranchId = posMap[p.pos_transaction_id].branch_id;
+            return {
+              ...p,
+              branch_id: inferredBranchId,
+              _source: 'payment',
+              recorded_at: p.recorded_at || p.created_at,
+              status: 'auditor_verified',
+              recorded_by: p.recorded_by || p.cashier_id || cashierByPaymentId[p.id] || p.metadata?.cashier_id || null,
+              reference_number: p.reference_number || p.reference,
+              customer_name: p.customer_name || p.notes,
+            };
+          })
+          .filter((p: any) => {
+            const isGlobal = isGlobalRole(req.user?.role);
+            const targetBranch = isGlobal && branch_id ? String(branch_id) : String(req.user?.branch_id);
+            if (targetBranch && targetBranch !== 'undefined' && targetBranch !== 'null') {
+              if (String(p.branch_id) !== targetBranch) return false;
+            }
+            return true;
+          });
       }
 
       // ── 4. pos_transactions ─────────────────────────────────────────────
-      let posRecords: any[] = [];
-      if (!status) {
-        let posQuery = supabase.from('pos_transactions').select('*').order('created_at', { ascending: false });
-        if (branch_id) posQuery = posQuery.eq('branch_id', branch_id);
-        if (start_date) posQuery = posQuery.gte('created_at', `${start_date}T00:00:00`);
-        if (end_date)   posQuery = posQuery.lte('created_at', `${end_date}T23:59:59`);
-        if (itemsLimit) posQuery = posQuery.limit(itemsLimit);
-        const { data: posData } = await posQuery;
-        posRecords = (posData || []).map((pos: any) => ({
-          id: pos.id,
-          branch_id: pos.branch_id,
-          amount: pos.amount,
-          payment_method: pos.payment_method,
-          reference_number: pos.transaction_ref,
-          customer_name: pos.customer_name,
-          recorded_by: pos.cashier_id,
-          recorded_at: pos.created_at || pos.transaction_date,
-          status: pos.status || 'completed',
-          _source: 'pos',
-          _transaction_date: pos.transaction_date || pos.created_at,
-        }));
-      }
+      let posQuery = supabase.from('pos_transactions').select('*').order('created_at', { ascending: false });
+      posQuery = applyBranchFilter(posQuery, req);
+      if (branch_id) posQuery = posQuery.eq('branch_id', branch_id);
+      if (start_date) posQuery = posQuery.gte('created_at', `${start_date}T00:00:00`);
+      if (endOfDay)   posQuery = posQuery.lte('created_at', endOfDay);
+      if (itemsLimit) posQuery = posQuery.limit(itemsLimit);
+      const { data: posData } = await posQuery;
+      let posRecords = (posData || []).map((pos: any) => ({
+        id: pos.id,
+        branch_id: pos.branch_id,
+        amount: pos.amount,
+        payment_method: pos.payment_method,
+        reference_number: pos.transaction_ref,
+        customer_name: pos.customer_name,
+        recorded_by: pos.cashier_id,
+        recorded_at: pos.created_at || pos.transaction_date,
+        status: 'auditor_verified', // Unified complete state
+        _source: 'pos',
+        _transaction_date: pos.transaction_date || pos.created_at,
+      }));
 
-      // ── 5. Merge all sources ────────────────────────────────────────────
+      // ── 5. Merge all sources and filter by status locally ────────────────
       let allPayments = [...pvRecords, ...bankingRecords, ...rawPayments, ...posRecords];
+
+      if (status) {
+        allPayments = allPayments.filter(p => p.status === (status as string).toLowerCase());
+      }
 
       // Sort combined results by date descending
       allPayments.sort((a: any, b: any) =>
@@ -395,7 +405,8 @@ export class PaymentsController {
       }
 
       // Use user's branch if not specified
-      const finalBranchId = branch_id || userBranchId;
+      const isGlobal = isGlobalRole(req.user?.role);
+      const finalBranchId = isGlobal && branch_id ? branch_id : userBranchId;
 
       if (!finalBranchId) {
         return res.status(400).json({ success: false, message: 'Branch ID is required' });
@@ -554,6 +565,7 @@ export class PaymentsController {
 
       // payment_verifications
       let pvQuery = supabase.from('payment_verifications').select('amount, status, payment_method');
+      pvQuery = applyBranchFilter(pvQuery, req);
       if (branch_id) pvQuery = pvQuery.eq('branch_id', branch_id);
       if (start_date) pvQuery = pvQuery.gte('recorded_at', start_date as string);
       if (end_date)   pvQuery = pvQuery.lte('recorded_at', `${end_date}T23:59:59.999Z`);
@@ -562,6 +574,7 @@ export class PaymentsController {
 
       // banking_transactions
       let btQuery = supabase.from('banking_transactions').select('amount, status');
+      btQuery = applyBranchFilter(btQuery, req);
       if (branch_id) btQuery = btQuery.eq('branch_id', branch_id);
       if (start_date) btQuery = btQuery.gte('transaction_date', start_date as string);
       if (end_date)   btQuery = btQuery.lte('transaction_date', end_date as string);
@@ -569,6 +582,7 @@ export class PaymentsController {
 
       // pos_transactions
       let posQuery = supabase.from('pos_transactions').select('amount, status');
+      posQuery = applyBranchFilter(posQuery, req);
       if (branch_id) posQuery = posQuery.eq('branch_id', branch_id);
       if (start_date) posQuery = posQuery.gte('created_at', `${start_date}T00:00:00`);
       if (end_date)   posQuery = posQuery.lte('created_at', `${end_date}T23:59:59`);
@@ -583,7 +597,11 @@ export class PaymentsController {
         if (end_date)   payQuery = payQuery.lte('created_at', `${end_date}T23:59:59`);
         const { data: payData } = await payQuery;
 
-        if (payData && payData.length > 0 && branch_id) {
+        if (payData && payData.length > 0) {
+          const isGlobal = isGlobalRole(req.user?.role);
+          const targetBranch = isGlobal && branch_id ? String(branch_id) : String(req.user?.branch_id);
+          const hasTargetBranch = targetBranch && targetBranch !== 'undefined' && targetBranch !== 'null';
+
           const bookingIds   = [...new Set(payData.map((p: any) => p.booking_id).filter(Boolean))];
           const restOrderIds = [...new Set(payData.map((p: any) => p.restaurant_order_id).filter(Boolean))];
           const barOrderIds  = [...new Set(payData.map((p: any) => p.bar_order_id).filter(Boolean))];
@@ -603,7 +621,8 @@ export class PaymentsController {
 
           const filtered = payData.filter((p: any) => {
             const bid = p.booking_id ? bMap[p.booking_id] : (p.restaurant_order_id ? rMap[p.restaurant_order_id] : (p.bar_order_id ? aMap[p.bar_order_id] : (p.pos_transaction_id ? pMap[p.pos_transaction_id] : null)));
-            return String(bid) === String(branch_id);
+            if (!hasTargetBranch) return true;
+            return String(bid) === targetBranch;
           });
           payCount = filtered.length;
           payTotal = filtered.reduce((sum: number, p: any) => sum + parseFloat(p.amount || 0), 0);
@@ -618,7 +637,7 @@ export class PaymentsController {
         amount: b.amount,
         status: b.status?.toLowerCase() === 'approved' ? 'auditor_verified' : b.status?.toLowerCase() === 'rejected' ? 'flagged' : 'pending'
       }));
-      const pos = (posData || []).map((p: any) => ({ amount: p.amount, status: p.status || 'completed' }));
+      const pos = (posData || []).map((p: any) => ({ amount: p.amount, status: 'auditor_verified' }));
 
       const all = [...pv, ...bt, ...pos];
 
@@ -627,7 +646,7 @@ export class PaymentsController {
         total_amount: all.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0) + payTotal,
         pending: all.filter(p => p.status === 'pending').length,
         accountant_verified: pv.filter(p => p.status === 'accountant_verified').length,
-        auditor_verified: all.filter(p => p.status === 'auditor_verified').length,
+        auditor_verified: all.filter(p => p.status === 'auditor_verified').length + payCount,
         flagged: all.filter(p => p.status === 'flagged').length,
         banking_total: (btData || []).reduce((sum: number, b: any) => sum + parseFloat(b.amount || 0), 0),
         pos_total: (posData || []).reduce((sum: number, p: any) => sum + parseFloat(p.amount || 0), 0),

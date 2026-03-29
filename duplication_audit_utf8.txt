@@ -1,0 +1,26 @@
+--- AUDITING EMPLOYEE DUPLICATES ---
+Total staff records found: 373
+
+--- SPECIFIC CASES ---
+Chris Kigen: 1 records found
+  - ID: 3062b9ae-a04b-4a21-8f8d-eac36f8e52f3, BranchID: 1, StaffID: FGH008, NatID: N/A, Updated: 2026-03-27T15:28:09.919583+00:00
+Festus Rider: 1 records found
+  - ID: 6dd8d12d-f607-4797-bdea-5098c8c7cf51, BranchID: 1, StaffID: FGH081, NatID: N/A, Updated: 2026-03-27T15:23:13.268783+00:00
+Felix Yegon: 1 records found
+  - ID: 50b3aa31-7e66-4722-add0-50054955a7e4, BranchID: 1, StaffID: FGH073, NatID: N/A, Updated: 2026-03-27T15:22:16.342184+00:00
+
+--- DUPLICATES BY NATIONAL ID ---
+National ID: N/A (3 records)
+  - CHRIS KIGEN (ID: 3062b9ae-a04b-4a21-8f8d-eac36f8e52f3)
+  - FESTUS RIDER (ID: 6dd8d12d-f607-4797-bdea-5098c8c7cf51)
+  - FELIX YEGON (ID: 50b3aa31-7e66-4722-add0-50054955a7e4)
+Total duplicate National IDs: 1
+
+--- DUPLICATES BY EMAIL ---
+Total duplicate Emails: 0
+
+--- DUPLICATES BY PHONE ---
+Total duplicate Phones: 0
+
+--- SUMMARY ---
+Duplicates exist if any of the above counts are > 0.

@@ -14,6 +14,7 @@ import {
   getBranchPerformanceReport,
   getStockUsageReport,
   getEmployeeCreditReport,
+  exportStockMovement,
 } from '../controllers/auditor-reports.controller';
 
 const router = express.Router();
@@ -30,6 +31,7 @@ router.get('/export/expenditure_audit',       exportExpenditureAudit);
 router.get('/export/variance_report',         exportStockVarianceReport);
 router.get('/export/consumption_audit',       exportConsumptionAnalytics);
 router.get('/export/grn_audit',               exportGrnAudit);
+router.get('/export/stock_movement',          exportStockMovement);
 
 // Legacy routes
 router.get('/performance',     getBranchPerformanceReport);

@@ -1,0 +1,162 @@
+import { fetchAPI, buildQuery, API_URL } from './core';
+import { 
+  ApiResponse, 
+  StaffMember, 
+  AttendanceRecord, 
+  LeaveRequest, 
+  PayrollRecord,
+  Role
+} from './types';
+
+// =====================================
+// STAFF / HR API
+// =====================================
+
+// =====================================
+// ATTENDANCE API
+// =====================================
+
+// ─── Attendance ─────────────────────────────────────────────────────────────
+
+const attendanceBase = {
+  getAttendance: (params?: any) => fetchAPI<AttendanceRecord[]>(`/staff/attendance${buildQuery(params)}`),
+  clockIn:  () => fetchAPI<AttendanceRecord>('/staff/attendance/clock-in',  { method: 'POST' }),
+  clockOut: () => fetchAPI<AttendanceRecord>('/staff/attendance/clock-out', { method: 'POST' }),
+  getSummary: (staffId?: string | number) => fetchAPI<any>(`/staff/attendance/summary${buildQuery({ staff_id: staffId })}`),
+  updateAttendance: (id: string | number, data: any) => fetchAPI<AttendanceRecord>(`/staff/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  approveAttendance: (id: string | number) => fetchAPI<void>(`/staff/attendance/${id}/approve`, { method: 'PUT' }),
+  confirmAttendance: () => fetchAPI<void>('/staff/attendance/confirm', { method: 'POST' }),
+  getReports: (params?: any) => fetchAPI<any[]>(`/staff/attendance/reports${buildQuery(params)}`),
+};
+
+export const attendanceAPI = {
+  ...attendanceBase,
+};
+
+// ─── Payroll ──────────────────────────────────────────────────────────────
+
+const payrollBase = {
+  getSummary: (params?: any) => fetchAPI<any>(`/payroll/summary${buildQuery(params)}`),
+  getDraft:   (params: { month: number; year: number; branch_id?: number }) => fetchAPI<any>(`/payroll/draft${buildQuery(params)}`),
+  approveDraft: (data: any) => fetchAPI<any>('/payroll/approve', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Adjustments (Loans, Advances, etc.)
+  createAdjustment: (data: any) => fetchAPI<any>('/payroll-adjustments', { method: 'POST', body: JSON.stringify(data) }),
+  getAdjustments:   (params: any) => fetchAPI<any>(`/payroll-adjustments${buildQuery(params)}`),
+  voidAdjustment:   (id: string | number)   => fetchAPI<void>(`/payroll-adjustments/${id}/void`, { method: 'PATCH' }),
+};
+
+export const payrollAPI = {
+  ...payrollBase,
+  downloadPayslipsZip: (runId: string | number) => {
+    window.location.href = `${API_URL}/api/payroll/run/${runId}/payslips-zip`;
+  },
+};
+
+export const payrollPoliciesAPI = {
+  getPolicies: () => fetchAPI<any[]>('/payroll-policies'),
+  createPolicy: (data: any) => fetchAPI<any>('/payroll-policies', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// ─── Shifts & Schedules ────────────────────────────────────────────────────
+
+const shiftsBase = {
+  getShifts: (params?: any) => fetchAPI<any[]>(`/staff/schedules${buildQuery(params)}`),
+  create: (data: any)   => fetchAPI<any>('/staff/schedules', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string | number, data: any) => fetchAPI<any>(`/staff/schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+};
+
+export const shiftsAPI = {
+  ...shiftsBase,
+};
+
+// ─── Staff Directory ───────────────────────────────────────────────────────
+
+const staffBase = {
+  getStaff: async (params?: any): Promise<ApiResponse<StaffMember[]>> => {
+    // Legacy Electron Support
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        const query: any = {};
+        if (typeof params === 'number') query.branch_id = params;
+        else if (params) {
+          if (params.branchId) query.branch_id = params.branchId;
+          if (params.role) query.role = params.role;
+        }
+        const rows = await (window as any).electronAPI.db.get('cached_pins', query);
+        if (rows) {
+          const staff = rows.map((r: any) => (typeof r.user_data === 'string' ? JSON.parse(r.user_data) : r.user_data));
+          return { success: true, data: staff };
+        }
+      } catch (e) {}
+    }
+    return fetchAPI<StaffMember[]>(`/staff${buildQuery(params)}`);
+  },
+
+  getStaffMember: (id: string | number) => fetchAPI<StaffMember>(`/staff/${id}`),
+  createStaffMember: (data: any) => fetchAPI<StaffMember>('/staff', { method: 'POST', body: JSON.stringify(data) }),
+  updateStaffMember: (id: string | number, data: any) => fetchAPI<StaffMember>(`/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteStaffMember: (id: string | number) => fetchAPI<void>(`/staff/${id}/archive`, { method: 'POST' }),
+  
+  // Leave & Performance
+  getLeaveRequests: (params?: any) => fetchAPI<LeaveRequest[]>(`/staff/leave${buildQuery(params)}`),
+  submitLeaveRequest: (data: any) => fetchAPI<LeaveRequest>('/staff/leave', { method: 'POST', body: JSON.stringify(data) }),
+  approveLeaveRequest: (id: string | number) => fetchAPI<void>(`/staff/leave/${id}/approve`, { method: 'PUT' }),
+  rejectLeaveRequest: (id: string | number) => fetchAPI<void>(`/staff/leave/${id}/reject`, { method: 'PUT' }),
+  
+  getPerformanceReviews: (staffId?: string | number) => fetchAPI<any[]>(`/staff/performance${buildQuery({ staff_id: staffId })}`),
+  submitPerformanceReview: (data: any) => fetchAPI<any>('/staff/performance', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export const staffAPI = {
+  // Appended for UI Compatibility
+  getStaffHistory: (id: any) => fetchAPI<any[]>(`/staff/${id}/history`),
+  getStaffDocuments: (id: any) => fetchAPI<any[]>(`/staff/${id}/documents`),
+  archiveStaff: (id: any) => fetchAPI<void>(`/staff/${id}/archive`),
+  uploadStaffDocument: (id: any, file: any) => fetchAPI<any>(`/staff/${id}/documents`, { method: 'POST' }),
+  clockIn: (data?: any) => fetchAPI<any>('/staff/attendance/clock-in', { method: 'POST', body: JSON.stringify(data) }),
+  clockOut: (data?: any) => fetchAPI<any>('/staff/attendance/clock-out', { method: 'POST', body: JSON.stringify(data) }),
+  getStaffByIdentifier: (data: any) => fetchAPI<any>(`/staff/identifier/${data}`),
+  getAttendance: (params?: any) => fetchAPI<any[]>(`/staff/attendance`, { method: 'GET' }),
+  getAttendanceReports: (params?: any) => fetchAPI<any[]>(`/staff/attendance/reports`, { method: 'GET' }),
+  approveAttendance: (id: any) => fetchAPI<void>(`/staff/attendance/${id}/approve`, { method: 'PUT' }),
+  getRoles: () => fetchAPI<any[]>('/system/roles'),
+  updateLeaveRequest: (id: any, data: any) => fetchAPI<any>(`/staff/leave/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  simplePayroll: simplePayrollAPI,
+
+  ...staffBase,
+  
+  // Compatibility Aliases
+  getAll: (params?: any) => staffBase.getStaff(params),
+  getStaffMembers: (params?: any) => staffBase.getStaff(params),
+  updateProfile: (id: string | number, data: any) => staffBase.updateStaffMember(id, data),
+  
+  // Leave Aliases
+  createLeaveRequest: (data: any) => staffBase.submitLeaveRequest(data),
+  
+  // Performance Aliases
+  createPerformanceReview: (data: any) => staffBase.submitPerformanceReview(data),
+  
+  // Payroll Aliases
+  processPayroll: (data: any) => payrollBase.getDraft(data),
+  
+  // Schedule Aliases
+  createSchedule: (data: any) => shiftsBase.create(data),
+
+  // Sub-modules
+  attendance: attendanceAPI,
+  payroll: payrollAPI,
+  shifts: shiftsAPI,
+};
+
+// ─── Simple Payroll ──────────────────────────────────────────────────────────
+
+export const simplePayrollAPI = {
+  getCreditBills: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/credit-bills${buildQuery(params)}`),
+  createCreditBill: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
+  updateCreditBillStatus: (id: string | number, status: string) => fetchAPI<ApiResponse<void>>(`/payroll/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ is_paid: status === 'paid' }) }),
+  getLoans: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/loans${buildQuery(params)}`),
+  createLoan: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/loans', { method: 'POST', body: JSON.stringify(data) }),
+  getAdvances: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/advances${buildQuery(params)}`),
+  createAdvance: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/advances', { method: 'POST', body: JSON.stringify(data) }),
+};

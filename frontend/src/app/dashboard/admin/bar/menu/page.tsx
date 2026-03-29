@@ -6,7 +6,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { barAPI, financeAPI } from '@/lib/api';
+import { barAPI, systemAPI } from '@/lib/api';
 import { Beer, RefreshCw, Plus, Search, Edit2, Trash2, DollarSign, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -56,7 +56,7 @@ export default function AdminBarMenuPage() {
             ];
 
             if (user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) {
-                promises.push(financeAPI.getBranches());
+                promises.push(systemAPI.getBranches());
             }
 
             const results = await Promise.all(promises);

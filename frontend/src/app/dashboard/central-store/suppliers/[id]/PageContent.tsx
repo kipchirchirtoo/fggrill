@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { procurementAPI, storeAPI, accountingAPI } from '@/lib/api';
+import { procurementAPI, storeAPI } from '@/lib/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -149,17 +149,133 @@ export default function SupplierDetailPage() {
                 toast.error('Please select both start and end dates');
                 return;
             }
+            if (!supplier) {
+                toast.error('Supplier data not loaded');
+                return;
+            }
 
-            toast.info('Generating supplier statement...');
-            const result = await accountingAPI.exportSupplierStatement({
-                supplier_id: id as string,
-                start_date: exportDates.start_date,
-                end_date: exportDates.end_date
+            toast.info('Generating statement...');
+
+            // Dynamic import keeps jsPDF out of the initial bundle
+            const jsPDFModule = await import('jspdf');
+            const jsPDF = jsPDFModule.default;
+            const autoTableModule = await import('jspdf-autotable');
+            const autoTable = autoTableModule.default;
+
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const start = new Date(exportDates.start_date);
+            const end = new Date(exportDates.end_date);
+
+            // ── Header ──────────────────────────────────────────────
+            doc.setFillColor(30, 41, 59); // slate-800
+            doc.rect(0, 0, pageW, 28, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text('FAMOUS GATES HOTELS', 14, 11);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('SUPPLIER ACCOUNT STATEMENT', 14, 18);
+            doc.setFontSize(8);
+            doc.text(`Period: ${start.toLocaleDateString()} – ${end.toLocaleDateString()}`, 14, 24);
+            doc.text(`Generated: ${new Date().toLocaleString()}`, pageW - 14, 24, { align: 'right' });
+
+            // ── Supplier Info ───────────────────────────────────────
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text(supplier.name, 14, 36);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            const infoLines: string[] = [];
+            if (supplier.supplier_code) infoLines.push(`Code: ${supplier.supplier_code}`);
+            if (supplier.contact_person) infoLines.push(`Contact: ${supplier.contact_person}`);
+            if (supplier.phone) infoLines.push(`Phone: ${supplier.phone}`);
+            if (supplier.email) infoLines.push(`Email: ${supplier.email}`);
+            if ((supplier as any).tax_id || supplier.supplier_pin) infoLines.push(`KRA PIN: ${(supplier as any).tax_id || supplier.supplier_pin}`);
+            doc.text(infoLines.join('   |   '), 14, 42);
+
+            // ── Summary Row ─────────────────────────────────────────
+            const totalInvoiced = invoices.reduce((s: number, inv: any) => s + (parseFloat(inv.total_amount) || 0), 0);
+            const totalPaid = payments.reduce((s: number, p: any) => s + (parseFloat(p.amount) || 0), 0);
+            const balance = totalInvoiced - totalPaid;
+            const fmt = (n: number) => `KES ${n.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(14, 47, pageW - 28, 14, 2, 2, 'F');
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            const colW = (pageW - 28) / 3;
+            doc.text('TOTAL INVOICED',    14 + colW * 0 + colW / 2, 53, { align: 'center' });
+            doc.text('TOTAL PAID',        14 + colW * 1 + colW / 2, 53, { align: 'center' });
+            doc.text('OUTSTANDING BALANCE', 14 + colW * 2 + colW / 2, 53, { align: 'center' });
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(fmt(totalInvoiced), 14 + colW * 0 + colW / 2, 58, { align: 'center' });
+            doc.text(fmt(totalPaid),     14 + colW * 1 + colW / 2, 58, { align: 'center' });
+            doc.setTextColor(balance > 0 ? 220 : 22, balance > 0 ? 38 : 163, balance > 0 ? 38 : 74);
+            doc.text(fmt(balance),       14 + colW * 2 + colW / 2, 58, { align: 'center' });
+
+            // ── Ledger Table ────────────────────────────────────────
+            const filteredLedger = ledger.filter((e: LedgerEntry) => {
+                const d = new Date(e.transaction_date);
+                return d >= start && d <= end;
             });
 
-            if (result && result.success === false) {
-                throw new Error((result as any).message || 'Export failed');
+            const tableRows = filteredLedger.map((e: LedgerEntry) => [
+                new Date(e.transaction_date).toLocaleDateString(),
+                e.reference_number || '—',
+                e.transaction_type?.replace(/_/g, ' ').toUpperCase() || '—',
+                e.description || '—',
+                e.debit_amount  > 0 ? fmt(e.debit_amount)  : '',
+                e.credit_amount > 0 ? fmt(e.credit_amount) : '',
+                fmt(e.running_balance ?? 0)
+            ]);
+
+            if (tableRows.length === 0) {
+                tableRows.push(['', '', 'No transactions in selected period', '', '', '', '']);
             }
+
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.text('TRANSACTION LEDGER', 14, 68);
+
+            autoTable(doc, {
+                startY: 71,
+                head: [['Date', 'Reference', 'Type', 'Description', 'Debit (KES)', 'Credit (KES)', 'Balance (KES)']],
+                body: tableRows,
+                styles: { fontSize: 7, cellPadding: 2 },
+                headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+                columnStyles: {
+                    0: { cellWidth: 20 },
+                    1: { cellWidth: 25 },
+                    2: { cellWidth: 25 },
+                    3: { cellWidth: 55 },
+                    4: { cellWidth: 22, halign: 'right' },
+                    5: { cellWidth: 22, halign: 'right' },
+                    6: { cellWidth: 22, halign: 'right' },
+                },
+                margin: { left: 14, right: 14 },
+            });
+
+            // ── Footer ──────────────────────────────────────────────
+            const finalY = (doc as any).lastAutoTable?.finalY ?? 200;
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(148, 163, 184);
+            doc.text(
+                'This statement is computer-generated and does not require a signature.',
+                pageW / 2, finalY + 8, { align: 'center' }
+            );
+
+            // ── Trigger Download ─────────────────────────────────────
+            const filename = `Statement_${supplier.name.replace(/\s+/g, '_')}_${exportDates.start_date}_to_${exportDates.end_date}.pdf`;
+            doc.save(filename);
 
             setExportModalOpen(false);
             toast.success('Statement downloaded successfully');
@@ -225,7 +341,7 @@ export default function SupplierDetailPage() {
         setLoading(true);
         try {
             // 1. Fetch Profile using dedicated endpoint
-            const supplierRes = await procurementAPI.getSupplier(id as string);
+            const supplierRes = await storeAPI.getSupplier(id as string);
             if (supplierRes.success && supplierRes.data) {
                 setSupplier(supplierRes.data);
             } else {

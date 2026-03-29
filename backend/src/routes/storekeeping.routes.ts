@@ -59,6 +59,10 @@ import {
 } from '../controllers/storekeeping/branch-inventory.controller';
 
 import {
+  receiveFromSupplier
+} from '../controllers/storekeeping/branch-receipt.controller';
+
+import {
   getStockRequests,
   getStockRequest,
   createStockRequest,
@@ -216,6 +220,7 @@ router.get('/branch-stock', authorize(branchRoles), getBranchStock);
 router.get('/branch-stock/low', authorize(branchRoles), getLowStockItems);
 router.post('/branch-stock/out', authorize(branchRoles), recordStockOut);
 router.post('/branch-stock/adjustment', authorize(branchRoles), updateBranchStock);
+router.post('/branch-stock/receive-supplier', authorize(branchRoles), receiveFromSupplier);
 router.get('/stock-movements', authorize(branchRoles), getStockMovements);
 
 const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR];

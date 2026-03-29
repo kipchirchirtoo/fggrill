@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 /**
  * Restaurant Bills Controller
@@ -144,6 +145,8 @@ export const searchOpenBills = async (
         orders:restaurant_orders(count)
       `)
       .eq('status', status);
+
+    query = applyBranchFilter(query, req);
 
     if (branch_id) query = query.eq('branch_id', branch_id);
     if (table_number) query = query.eq('table_number', table_number);
@@ -626,10 +629,10 @@ export const getOpenBills = async (
       `)
       .eq('status', 'OPEN');
 
+    query = applyBranchFilter(query, req);
+
     if (branch_id) {
       query = query.eq('branch_id', branch_id);
-    } else if (req.user?.branch_id) {
-      query = query.eq('branch_id', req.user.branch_id);
     }
 
     const { data: bills, error } = await query.order('created_at', { ascending: false });

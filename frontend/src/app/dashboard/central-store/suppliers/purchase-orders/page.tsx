@@ -103,8 +103,16 @@ export default function PurchaseOrdersPage() {
                         </div>
                         <div className="flex gap-2">
                             <IOSButton variant="secondary" onClick={fetchPOs} leftIcon={<RefreshCw size={16} />}>Refresh</IOSButton>
-                            {(user?.role === UserRole.PROCUREMENT || user?.role === UserRole.SUPER_ADMIN) && (
-                                <IOSButton onClick={() => toast.info('Redirecting to PO Creation...')} leftIcon={<Plus size={16} />}>New PO</IOSButton>
+                            {([UserRole.PROCUREMENT, UserRole.SUPER_ADMIN, UserRole.CENTRAL_STOREKEEPER, UserRole.PURCHASING_MANAGER, UserRole.GENERAL_MANAGER].includes(user?.role as UserRole)) && (
+                                <IOSButton 
+                                    onClick={() => {
+                                        toast.info('Select a supplier first to create a Purchase Order');
+                                        window.location.href = '/dashboard/central-store/suppliers';
+                                    }} 
+                                    leftIcon={<Plus size={16} />}
+                                >
+                                    New PO
+                                </IOSButton>
                             )}
                         </div>
                     </div>

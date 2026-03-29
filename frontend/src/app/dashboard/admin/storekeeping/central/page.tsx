@@ -13,11 +13,11 @@ import { Warehouse, RefreshCw, Search, Package, AlertTriangle } from 'lucide-rea
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface StockItem { id: string; sku: string; name: string; category: string; quantity: number; min_quantity: number; unit: string; }
+import { InventoryItem } from '@/lib/api/types';
 
 export default function AdminCentralStorePage() {
   const { user } = useAuth();
-  const [items, setItems] = useState<StockItem[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -33,7 +33,7 @@ export default function AdminCentralStorePage() {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const filteredItems = items.filter((i) => i.name?.toLowerCase().includes(searchQuery.toLowerCase()));
-  const lowStock = items.filter(i => i.quantity <= i.min_quantity).length;
+  const lowStock = items.filter(i => i.current_stock <= i.min_stock).length;
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
@@ -61,7 +61,7 @@ export default function AdminCentralStorePage() {
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredItems.map((item) => {
-                const isLow = item.quantity <= item.min_quantity;
+                const isLow = item.current_stock <= item.min_stock;
                 return (
                   <IOSCard key={item.id} className={`p-4 ${isLow ? 'border-yellow-200 bg-yellow-50' : ''}`}>
                     <div className="flex items-start justify-between mb-2">
@@ -69,7 +69,7 @@ export default function AdminCentralStorePage() {
                       {isLow && <IOSBadge variant="light" color="warning">Low</IOSBadge>}
                     </div>
                     <div className="flex items-end justify-between mt-4">
-                      <div><p className="text-2xl font-bold">{item.quantity}</p><p className="text-xs text-gray-500">{item.unit}</p></div>
+                      <div><p className="text-2xl font-bold">{item.current_stock}</p><p className="text-xs text-gray-500">{item.unit}</p></div>
                       <p className="text-sm text-gray-500">{item.category}</p>
                     </div>
                   </IOSCard>

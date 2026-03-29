@@ -30,64 +30,10 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { storeAPI } from '@/lib/api';
 import { printDispatchPDF, downloadDispatchPDF } from '@/lib/dispatch-pdf';
 import { Download, Printer, User, Navigation, Calendar } from 'lucide-react';
+import { InventoryItem as Item, StockRequest, Branch } from '@/lib/api/types';
 
 
-interface StockRequest {
-  id: string;
-  request_number: string;
-  request_type: string;
-  priority: string;
-  status: string;
-  reason?: string;
-  needed_by_date?: string;
-  created_at: string;
-  branch: {
-    id: number;
-    name: string;
-    code: string;
-    location: string;
-  };
-  items: {
-    id: string;
-    item_sku: string;
-    requested_quantity: number;
-    approved_quantity?: number;
-    status: string;
-    item?: {
-      sku: string;
-      item_name: string;
-      description: string;
-      category: string;
-      unit_of_measure: string;
-    };
-  }[];
-}
-
-interface Branch {
-  id: number;
-  name: string;
-  code: string;
-  location: string;
-  is_central_warehouse: boolean;
-  totalItems?: number;
-  lowStockItems?: number;
-}
-
-interface Item {
-  id?: number;
-  sku: string;
-  barcode?: string;
-  item_name: string;
-  description?: string;
-  category: string;
-  unit_of_measure: string;
-  quantity: number;
-  retail_price?: number;
-  cost_price?: number;
-  reorder_level?: number;
-  supplier?: string;
-  is_active?: boolean;
-}
+// Local types removed, using @/lib/api/types
 
 const CATEGORIES = ['Beverages', 'Food', 'Cleaning', 'Amenities', 'Kitchen', 'Office', 'Other'];
 const UNITS = ['piece', 'kg', 'liter', 'bottle', 'packet', 'box', 'tray', 'roll', 'carton'];
@@ -125,27 +71,27 @@ export default function CentralWarehousePage() {
   const [itemForm, setItemForm] = useState<Partial<Item>>({
     sku: '',
     barcode: '',
-    item_name: '',
+    name: '',
     description: '',
     category: 'Beverages',
-    unit_of_measure: 'piece',
-    quantity: 0,
-    retail_price: 0,
+    unit: 'piece',
+    current_stock: 0,
+    unit_price: 0,
     cost_price: 0,
-    reorder_level: 10,
+    min_stock: 10,
     supplier: ''
   });
-  const [newItem, setNewItem] = useState<Item>({
+  const [newItem, setNewItem] = useState<Partial<Item>>({
     sku: '',
     barcode: '',
-    item_name: '',
+    name: '',
     description: '',
     category: 'Beverages',
-    unit_of_measure: 'piece',
-    quantity: 0,
-    retail_price: 0,
+    unit: 'piece',
+    current_stock: 0,
+    unit_price: 0,
     cost_price: 0,
-    reorder_level: 10,
+    min_stock: 10,
     supplier: ''
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -230,7 +176,7 @@ export default function CentralWarehousePage() {
   const openCreateDispatchModal = (request: StockRequest) => {
     setDispatchForm({
       request_id: request.id,
-      to_branch_id: request.branch.id,
+      to_branch_id: request.branch?.id || 0,
       vehicle_number: '',
       driver_name: '',
       driver_phone: '',
@@ -251,8 +197,8 @@ export default function CentralWarehousePage() {
         .map(i => ({
           item_sku: i.item_sku,
           quantity: i.approved_quantity || i.requested_quantity || 0,
-          item_name: i.item?.item_name || i.item_sku,
-          unit: i.item?.unit_of_measure || 'units'
+          item_name: i.item?.name || i.item_sku,
+          unit: i.item?.unit || 'units'
         }));
       if (items.length === 0) {
         toast.error('No approved items to dispatch');
@@ -509,16 +455,16 @@ export default function CentralWarehousePage() {
           ...prev,
           sku: data.sku,
           barcode: data.barcode || cleanCode,
-          item_name: data.item_name || '',
+          name: data.name || '',
           description: data.description || '',
           category: data.category || 'Beverages',
-          unit_of_measure: data.unit_of_measure || 'piece',
+          unit: data.unit || 'piece',
           cost_price: data.cost_price || 0,
-          retail_price: data.retail_price || 0,
-          reorder_level: data.reorder_level || 10,
+          unit_price: data.unit_price || 0,
+          min_stock: data.min_stock || 10,
           supplier: data.supplier || ''
         }));
-        toast.info(`Item found: ${data.item_name}`);
+        toast.info(`Item found: ${data.name}`);
       } else {
         // New item - just set barcode
         setItemForm(prev => ({ ...prev, barcode: cleanCode }));
@@ -538,17 +484,17 @@ export default function CentralWarehousePage() {
   };
 
   const openAddItemModal = () => {
-    setItemForm({
+    setNewItem({
       sku: '',
       barcode: '',
-      item_name: '',
+      name: '',
       description: '',
       category: 'Beverages',
-      unit_of_measure: 'piece',
-      quantity: 0,
-      retail_price: 0,
+      unit: 'piece',
+      current_stock: 0,
+      unit_price: 0,
       cost_price: 0,
-      reorder_level: 10,
+      min_stock: 10,
       supplier: ''
     });
     setIsAddItemModalOpen(true);
@@ -560,14 +506,14 @@ export default function CentralWarehousePage() {
     setItemForm({
       sku: item.sku,
       barcode: item.barcode || '',
-      item_name: item.item_name,
+      name: item.name,
       description: item.description || '',
       category: item.category,
-      unit_of_measure: item.unit_of_measure,
-      quantity: item.quantity,
-      retail_price: item.retail_price || 0,
+      unit: item.unit,
+      current_stock: item.current_stock,
+      unit_price: item.unit_price || 0,
       cost_price: item.cost_price || 0,
-      reorder_level: item.reorder_level || 10,
+      min_stock: item.min_stock || 10,
       supplier: item.supplier || ''
     });
     setIsEditItemModalOpen(true);
@@ -580,7 +526,7 @@ export default function CentralWarehousePage() {
 
   const handleAddItem = async () => {
     try {
-      const response = await storeAPI.createItem(itemForm);
+      const response = await storeAPI.createItem(newItem);
 
       if (response.success) {
         toast.success('Item added successfully');
@@ -649,7 +595,7 @@ export default function CentralWarehousePage() {
   // Filter items
   const filteredItems = masterItems.filter(item => {
     const matchesSearch = !searchTerm ||
-      item.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = !categoryFilter || item.category === categoryFilter;
@@ -836,7 +782,7 @@ export default function CentralWarehousePage() {
                           <div className="flex items-center justify-between gap-4">
                             <div className="min-w-0">
                               <p className="font-bold text-stone-900 truncate">{request.request_number}</p>
-                              <p className="text-[13px] text-stone-500 font-medium truncate">{request.branch.name}</p>
+                              <p className="text-[13px] text-stone-500 font-medium truncate">{request.branch?.name}</p>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               <IOSBadge size="sm" className={`text-[10px] font-bold ${getPriorityColor(request.priority)}`}>
@@ -877,26 +823,26 @@ export default function CentralWarehousePage() {
                     </div>
                     <div className="space-y-3">
                       {masterItems
-                        .filter(item => (item.quantity || 0) <= (item.reorder_level || 10))
+                        .filter(item => (item.current_stock || 0) <= (item.min_stock || 10))
                         .slice(0, 5)
                         .map((item) => (
                           <div key={item.sku} className="p-4 bg-red-50/30 border border-red-100 rounded-2xl group">
                             <div className="flex items-center justify-between gap-4">
                               <div className="min-w-0">
-                                <p className="font-bold text-stone-900 truncate">{item.item_name || item.description}</p>
+                                <p className="font-bold text-stone-900 truncate">{item.name || item.description}</p>
                                 <code className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">{item.sku}</code>
                               </div>
                               <div className="text-right flex-shrink-0">
                                 <div className="flex items-baseline justify-end gap-1">
-                                  <span className="text-lg font-bold text-red-600">{item.quantity || 0}</span>
-                                  <span className="text-[10px] font-bold text-red-400 uppercase">{item.unit_of_measure}</span>
+                                  <span className="text-lg font-bold text-red-600">{item.current_stock || 0}</span>
+                                  <span className="text-[10px] font-bold text-red-400 uppercase">{item.unit}</span>
                                 </div>
-                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Lvl: {item.reorder_level || 10}</p>
+                                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Lvl: {item.min_stock || 10}</p>
                               </div>
                             </div>
                           </div>
                         ))}
-                      {masterItems.filter(item => (item.quantity || 0) <= (item.reorder_level || 10)).length === 0 && (
+                      {masterItems.filter(item => (item.current_stock || 0) <= (item.min_stock || 10)).length === 0 && (
                         <div className="text-center py-12 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
                           <PackageCheck className="h-10 w-10 mx-auto mb-3 text-stone-300 opacity-50" />
                           <p className="text-[13px] font-bold text-stone-400">All stock levels are healthy</p>
@@ -958,11 +904,11 @@ export default function CentralWarehousePage() {
                     </thead>
                     <tbody className="divide-y divide-stone-50">
                       {filteredItems.map((item) => {
-                        const isLowStock = (item.quantity || 0) <= (item.reorder_level || 10);
+                        const isLowStock = (item.current_stock || 0) <= (item.min_stock || 10);
                         return (
                           <tr key={item.sku} className="group hover:bg-stone-50/50 transition-colors">
                             <td className="px-4 py-4">
-                              <p className="text-[13px] font-bold text-stone-900 leading-tight">{item.item_name}</p>
+                              <p className="text-[13px] font-bold text-stone-900 leading-tight">{item.name}</p>
                               <p className="text-[11px] text-stone-400 mt-0.5 font-medium line-clamp-1">{item.description || '-'}</p>
                             </td>
                             <td className="px-4 py-4">
@@ -973,12 +919,12 @@ export default function CentralWarehousePage() {
                             </td>
                             <td className="px-4 py-4 text-center">
                               <div className={`inline-flex flex-col items-center ${isLowStock ? 'text-red-600' : 'text-stone-900'}`}>
-                                <span className="text-[14px] font-bold">{item.quantity || 0}</span>
-                                <span className="text-[10px] font-bold opacity-50 uppercase">{item.unit_of_measure}</span>
+                                <span className="text-[14px] font-bold">{item.current_stock || 0}</span>
+                                <span className="text-[10px] font-bold opacity-50 uppercase">{item.unit}</span>
                               </div>
                             </td>
                             <td className="px-4 py-4 text-right">
-                              <p className="text-[13px] font-bold text-stone-900">KES {(item.retail_price || 0).toLocaleString()}</p>
+                              <p className="text-[13px] font-bold text-stone-900">KES {(item.unit_price || 0).toLocaleString()}</p>
                               <p className="text-[10px] text-stone-400 font-bold">Cost: {(item.cost_price || 0).toLocaleString()}</p>
                             </td>
                             <td className="px-4 py-4">
@@ -1040,8 +986,8 @@ export default function CentralWarehousePage() {
                             <p className="text-[10px] text-stone-400 font-bold uppercase">{request.request_type}</p>
                           </td>
                           <td className="px-4 py-4">
-                            <p className="text-[13px] font-bold text-stone-900">{request.branch.name}</p>
-                            <p className="text-[11px] text-stone-400">{request.branch.location}</p>
+                            <p className="text-[13px] font-bold text-stone-900">{request.branch?.name}</p>
+                            <p className="text-[11px] text-stone-400">{request.branch?.location}</p>
                           </td>
                           <td className="px-4 py-4">
                             <IOSBadge size="sm" className={`text-[10px] font-bold ${getPriorityColor(request.priority)}`}>
@@ -1332,7 +1278,7 @@ export default function CentralWarehousePage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Destination</p>
-                    <p className="text-[13px] font-bold text-stone-900">{selectedRequest?.branch.name}</p>
+                    <p className="text-[13px] font-bold text-stone-900">{selectedRequest?.branch?.name}</p>
                   </div>
                 </div>
               </div>
@@ -1434,7 +1380,7 @@ export default function CentralWarehousePage() {
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Branch</p>
-                      <p className="text-[13px] font-bold text-stone-900">{selectedRequest.branch.name}</p>
+                      <p className="text-[13px] font-bold text-stone-900">{selectedRequest.branch?.name}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Priority</p>
@@ -1462,7 +1408,7 @@ export default function CentralWarehousePage() {
                         {reviewItems.map((item, index) => (
                           <tr key={item.id} className="group">
                             <td className="px-3 py-3">
-                              <p className="text-[13px] font-bold text-stone-900 leading-tight">{item.item?.item_name}</p>
+                              <p className="text-[13px] font-bold text-stone-900 leading-tight">{item.item?.name}</p>
                               <code className="text-[10px] font-bold text-stone-400">{item.item_sku}</code>
                             </td>
                             <td className="px-3 py-3 text-center">
@@ -1545,8 +1491,8 @@ export default function CentralWarehousePage() {
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Item Name</p>
                   <input
-                    value={newItem.item_name}
-                    onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
+                    value={newItem.name}
+                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
                     placeholder="e.g. White Sugar"
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
@@ -1579,8 +1525,8 @@ export default function CentralWarehousePage() {
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Unit of Measure</p>
                   <input
-                    value={newItem.unit_of_measure}
-                    onChange={(e) => setNewItem({ ...newItem, unit_of_measure: e.target.value })}
+                    value={newItem.unit}
+                    onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
                     placeholder="e.g. KG, Ltr, Pcs"
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
@@ -1592,8 +1538,8 @@ export default function CentralWarehousePage() {
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Initial Qty</p>
                   <input
                     type="number"
-                    value={newItem.quantity}
-                    onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 0 })}
+                    value={newItem.current_stock}
+                    onChange={(e) => setNewItem({ ...newItem, current_stock: parseInt(e.target.value) || 0 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
                 </div>
@@ -1619,8 +1565,8 @@ export default function CentralWarehousePage() {
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Retail Price</p>
                   <input
                     type="number"
-                    value={newItem.retail_price}
-                    onChange={(e) => setNewItem({ ...newItem, retail_price: parseFloat(e.target.value) || 0 })}
+                    value={newItem.unit_price}
+                    onChange={(e) => setNewItem({ ...newItem, unit_price: parseFloat(e.target.value) || 0 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
                 </div>
@@ -1693,8 +1639,8 @@ export default function CentralWarehousePage() {
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Item Name</p>
                   <input
-                    value={itemForm.item_name}
-                    onChange={(e) => setItemForm({ ...itemForm, item_name: e.target.value })}
+                    value={itemForm.name}
+                    onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
                     placeholder="e.g. White Sugar"
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
@@ -1727,8 +1673,8 @@ export default function CentralWarehousePage() {
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Unit of Measure</p>
                   <input
-                    value={itemForm.unit_of_measure}
-                    onChange={(e) => setItemForm({ ...itemForm, unit_of_measure: e.target.value })}
+                    value={itemForm.unit}
+                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
                     placeholder="e.g. KG, Ltr, Pcs"
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
@@ -1740,8 +1686,8 @@ export default function CentralWarehousePage() {
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Central Stock</p>
                   <input
                     type="number"
-                    value={itemForm.quantity}
-                    onChange={(e) => setItemForm({ ...itemForm, quantity: parseInt(e.target.value) || 0 })}
+                    value={itemForm.current_stock}
+                    onChange={(e) => setItemForm({ ...itemForm, current_stock: parseInt(e.target.value) || 0 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
                 </div>
@@ -1749,8 +1695,8 @@ export default function CentralWarehousePage() {
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Reorder Lvl</p>
                   <input
                     type="number"
-                    value={itemForm.reorder_level}
-                    onChange={(e) => setItemForm({ ...itemForm, reorder_level: parseInt(e.target.value) || 0 })}
+                    value={itemForm.min_stock}
+                    onChange={(e) => setItemForm({ ...itemForm, min_stock: parseInt(e.target.value) || 0 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
                 </div>
@@ -1767,8 +1713,8 @@ export default function CentralWarehousePage() {
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider ml-1">Retail Price</p>
                   <input
                     type="number"
-                    value={itemForm.retail_price}
-                    onChange={(e) => setItemForm({ ...itemForm, retail_price: parseFloat(e.target.value) || 0 })}
+                    value={itemForm.unit_price}
+                    onChange={(e) => setItemForm({ ...itemForm, unit_price: parseFloat(e.target.value) || 0 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                   />
                 </div>
@@ -1813,7 +1759,7 @@ export default function CentralWarehousePage() {
               </div>
               <DialogTitle className="text-xl font-bold text-stone-900">Confirm Deletion</DialogTitle>
               <p className="text-stone-500 text-sm mt-3 leading-relaxed">
-                Are you sure you want to delete <span className="font-bold text-stone-900">{selectedItem?.item_name}</span>? This action is permanent.
+                Are you sure you want to delete <span className="font-bold text-stone-900">{selectedItem?.name}</span>? This action is permanent.
               </p>
 
               <div className="mt-8 space-y-3">
@@ -1902,7 +1848,7 @@ export default function CentralWarehousePage() {
                       >
                         <option value="">Select item...</option>
                         {masterItems.map(mi => (
-                          <option key={mi.sku} value={mi.sku}>{mi.item_name} ({mi.sku})</option>
+                          <option key={mi.sku} value={mi.sku}>{mi.name} ({mi.sku})</option>
                         ))}
                       </select>
                       <input

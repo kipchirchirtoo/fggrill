@@ -12,7 +12,7 @@ import { ClipboardList, RefreshCw, User, Calendar, Eye } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface AuditLog { id: string; action: string; module: string; user_name: string; created_at: string; severity: string; }
+import { AuditLog } from '@/lib/api/types';
 
 export default function AdminAuditPage() {
   const { user } = useAuth();

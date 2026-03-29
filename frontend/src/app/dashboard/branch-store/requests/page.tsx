@@ -12,19 +12,9 @@ import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
+import { StockRequest } from '@/lib/api/types';
 
-interface StockRequest {
-    id: string;
-    request_number: string;
-    request_type: string;
-    priority: string;
-    status: string;
-    created_at: string;
-    items: any[];
-    auditor_id?: string;
-    audited_at?: string;
-    audit_notes?: string;
-}
+// Local StockRequest interface removed in favor of global one in types.ts
 
 export default function BranchRequestsPage() {
     const { user } = useAuth();

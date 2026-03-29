@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { financeAPI, staffAPI, systemAPI, procurementAPI } from '@/lib/api';
+import { financeAPI, staffAPI, systemAPI, procurementAPI, storeAPI } from '@/lib/api';
 import {
   DollarSign, Users, Building2, Bed, RefreshCw,
   UserCog, Package, FileText, Wrench, Utensils, ClipboardList, Settings,
@@ -31,7 +31,7 @@ export default function AdminDashboard() {
         staffAPI.getStaff(),
         systemAPI.getBranches(),
         systemAPI.getDepartments(),
-        procurementAPI.getSuppliers(),
+        storeAPI.getSuppliers(),
       ]);
       setStats({
         staff: staffRes.data?.length || 0,

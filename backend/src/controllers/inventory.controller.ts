@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 // @desc    Get all inventory items
 // @route   GET /api/inventory/items
@@ -11,10 +12,13 @@ export const getItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('inventory_items')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
+    query = applyBranchFilter(query, req);
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
 
@@ -225,14 +229,20 @@ export const getStockMovements = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('stock_movements')
       .select(`
         *,
         item:inventory_items (*),
         performed_by:users (*)
-      `)
-      .order('performed_at', { ascending: false });
+      `);
+
+    // Using item's branch_id since movements might rely on inventory_items
+    // Actually, stock_movements should have branch_id. If not, join and filter. 
+    // We'll assume stock_movements has branch_id, or we filter the joined item.branch_id
+    query = applyBranchFilter(query, req);
+
+    const { data, error } = await query.order('performed_at', { ascending: false });
 
     if (error) throw error;
 
@@ -255,12 +265,15 @@ export const getLowStockItems = async (
 ): Promise<void> => {
   try {
     // Use simple_items table and compare quantity with reorder_level
-    const { data, error } = await supabase
+    let query = supabase
       .from('simple_items')
       .select('*')
       .eq('is_active', true)
-      .lte('quantity', 10) // Items at or below reorder level
-      .order('quantity', { ascending: true });
+      .lte('quantity', 10); // Items at or below reorder level
+
+    query = applyBranchFilter(query, req);
+
+    const { data, error } = await query.order('quantity', { ascending: true });
 
     if (error) throw error;
 
@@ -289,18 +302,24 @@ export const getInventoryStats = async (
 ): Promise<void> => {
   try {
     // Get total items count
-    const { count: totalItems, error: countError } = await supabase
+    let countQuery = supabase
       .from('simple_items')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true);
 
+    countQuery = applyBranchFilter(countQuery, req);
+    const { count: totalItems, error: countError } = await countQuery;
+
     if (countError) throw countError;
 
     // Get items for calculations
-    const { data: items, error: itemsError } = await supabase
+    let dataQuery = supabase
       .from('simple_items')
       .select('quantity, cost_price, reorder_level')
       .eq('is_active', true);
+
+    dataQuery = applyBranchFilter(dataQuery, req);
+    const { data: items, error: itemsError } = await dataQuery;
 
     if (itemsError) throw itemsError;
 
@@ -425,15 +444,18 @@ export const getPurchaseOrders = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('purchase_orders')
       .select(`
         *,
         supplier:suppliers (*),
         created_by:users!created_by_id (*),
         approved_by:users!approved_by_id (*)
-      `)
-      .order('created_at', { ascending: false });
+      `);
+
+    query = applyBranchFilter(query, req);
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
 

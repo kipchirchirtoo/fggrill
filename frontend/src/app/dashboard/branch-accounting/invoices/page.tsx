@@ -7,43 +7,23 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-import { FileText, Plus, Search, Building2, User, ShoppingBag, CheckCircle, Download, Printer } from 'lucide-react';
+import { FileText, Plus, Search, Building2, User, ShoppingBag, CheckCircle, Download, Printer, Hotel, Utensils } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { CreateInvoiceModal } from '@/components/dashboard/branch/CreateInvoiceModal';
 import { api } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
 
-/* 
- * Explicitly define Invoice interface 
- */
-interface InvoiceData {
-    id: string;
-    invoice_number: string;
-    customer?: {
-        customer_name: string;
-        email: string;
-    };
-    invoice_date: string;
-    due_date: string;
-    subtotal: number;
-    vat_amount: number;
-    total_amount: number;
-    balance: number;
-    status: string;
-    items?: any[];
-    notes?: string;
-    reference_number?: string;
-}
+import { Invoice } from '@/lib/api/types';
 
 export default function BranchInvoicesPage() {
     const { user } = useAuth();
     const { activeBranchId } = useBranch();
-    const [invoices, setInvoices] = useState<InvoiceData[]>([]);
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'all' | 'CONFERENCE' | 'GUEST' | 'GENERAL'>('all');
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [createType, setCreateType] = useState<'conference' | 'guest' | 'general' | null>(null);
+    const [createType, setCreateType] = useState<'conference' | 'hotel' | 'restaurant' | 'guest' | 'general' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [isExporting, setIsExporting] = useState<string | null>(null);
 
@@ -71,7 +51,7 @@ export default function BranchInvoicesPage() {
         fetchInvoices();
     }, []);
 
-    const handleCreate = (type: 'conference' | 'guest' | 'general') => {
+    const handleCreate = (type: 'conference' | 'hotel' | 'restaurant' | 'guest' | 'general') => {
         setCreateType(type);
         setShowCreateModal(true);
     };
@@ -81,7 +61,7 @@ export default function BranchInvoicesPage() {
         toast.success("Invoice created and sent to Auditor");
     };
 
-    const handleDownload = async (inv: InvoiceData) => {
+    const handleDownload = async (inv: Invoice) => {
         setIsExporting(inv.id);
         const toastId = toast.loading(`Generating PDF for ${inv.invoice_number}...`);
         try {
@@ -95,7 +75,7 @@ export default function BranchInvoicesPage() {
         }
     };
 
-    const handlePrint = async (inv: InvoiceData) => {
+    const handlePrint = async (inv: Invoice) => {
         setIsExporting(inv.id);
         const toastId = toast.loading(`Preparing print for ${inv.invoice_number}...`);
         try {
@@ -140,19 +120,22 @@ export default function BranchInvoicesPage() {
                             <p className="text-gray-500">Manage and export branch accounting invoices.</p>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             <IOSButton onClick={() => handleCreate('conference')} leftIcon={<Building2 />}>Conference</IOSButton>
-                            <IOSButton variant="secondary" onClick={() => handleCreate('guest')} leftIcon={<User />}>Guest</IOSButton>
-                            <IOSButton variant="secondary" onClick={fetchInvoices} leftIcon={<CheckCircle />}>Refresh</IOSButton>
+                            <IOSButton variant="secondary" onClick={() => handleCreate('hotel')} leftIcon={<Hotel />}>Hotel</IOSButton>
+                            <IOSButton variant="secondary" onClick={() => handleCreate('restaurant')} leftIcon={<Utensils />}>Restaurant</IOSButton>
+                            <IOSButton variant="secondary" onClick={() => handleCreate('guest')} leftIcon={<User />}>Other Guest</IOSButton>
                         </div>
                     </div>
 
                     <IOSCard className="p-0">
                         <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row gap-4 justify-between items-center bg-gray-50/50">
-                            <div className="flex gap-4">
-                                <button onClick={() => setActiveTab('all')} className={`text-sm font-medium ${activeTab === 'all' ? 'text-blue-600' : 'text-gray-500'}`}>All</button>
-                                <button onClick={() => setActiveTab('CONFERENCE')} className={`text-sm font-medium ${activeTab === 'CONFERENCE' ? 'text-blue-600' : 'text-gray-500'}`}>Conference</button>
-                                <button onClick={() => setActiveTab('GUEST')} className={`text-sm font-medium ${activeTab === 'GUEST' ? 'text-blue-600' : 'text-gray-500'}`}>Guest</button>
+                            <div className="flex gap-4 overflow-x-auto no-scrollbar">
+                                <button onClick={() => setActiveTab('all')} className={`text-sm font-medium whitespace-nowrap ${activeTab === 'all' ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : 'text-gray-500'}`}>All</button>
+                                <button onClick={() => setActiveTab('CONFERENCE')} className={`text-sm font-medium whitespace-nowrap ${activeTab === 'CONFERENCE' ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : 'text-gray-500'}`}>Conference</button>
+                                <button onClick={() => setActiveTab('HOTEL' as any)} className={`text-sm font-medium whitespace-nowrap ${activeTab === ('HOTEL' as any) ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : 'text-gray-500'}`}>Hotel</button>
+                                <button onClick={() => setActiveTab('RESTAURANT' as any)} className={`text-sm font-medium whitespace-nowrap ${activeTab === ('RESTAURANT' as any) ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : 'text-gray-500'}`}>Restaurant</button>
+                                <button onClick={() => setActiveTab('GUEST')} className={`text-sm font-medium whitespace-nowrap ${activeTab === 'GUEST' ? 'text-blue-600 border-b-2 border-blue-600 pb-1' : 'text-gray-500'}`}>Other Guest</button>
                             </div>
                             <div className="relative w-full md:w-64">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />

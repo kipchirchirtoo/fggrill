@@ -18,22 +18,11 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { WizardStepIndicator } from '@/components/ui/wizard-step-indicator';
 import { motion, AnimatePresence } from 'framer-motion';
 
-interface Staff {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  role: string;
-  branch_id?: string;
-  branch_name?: string;
-  department?: string;
-  phone?: string;
-  status: 'active' | 'inactive';
-}
+import { StaffMember } from '@/lib/api/types';
 
 export default function AdminStaffPage() {
   const { user } = useAuth();
-  const [staff, setStaff] = useState<Staff[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -106,7 +95,7 @@ export default function AdminStaffPage() {
   const stats = {
     total: staff.length,
     active: staff.filter(s => s.status === 'active').length,
-    inactive: staff.filter(s => s.status === 'inactive').length,
+    inactive: staff.filter(s => s.status !== 'active').length,
   };
 
   const resetForm = () => {
@@ -155,12 +144,12 @@ export default function AdminStaffPage() {
     }
   };
 
-  const handleEditStaff = (member: Staff) => {
+  const handleEditStaff = (member: StaffMember) => {
     setFormData({
       id: member.id,
       first_name: member.first_name,
       last_name: member.last_name,
-      email: member.email,
+      email: member.email || '',
       national_id: (member as any).national_id || '',
       position: (member as any).position || member.role || '',
       branch_id: member.branch_id?.toString() || '',
@@ -189,7 +178,7 @@ export default function AdminStaffPage() {
     }
   };
 
-  const handleDeleteStaff = (member: Staff) => {
+  const handleDeleteStaff = (member: StaffMember) => {
     setFormData({ ...formData, id: member.id });
     setConfirmDeleteOpen(true);
   };
@@ -742,11 +731,13 @@ export default function AdminStaffPage() {
                 <label className="text-sm font-medium">Status</label>
                 <select
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                   className="w-full p-2 border rounded-ios-lg"
                 >
                   <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="on-leave">On Leave</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="terminated">Terminated</option>
                 </select>
               </div>
               <div className="flex gap-3 pt-2">

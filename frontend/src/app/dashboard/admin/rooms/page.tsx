@@ -14,8 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
-
-interface Room { id: string; room_number: string; room_type: string; floor: number; status: string; price: number; branch_name?: string; }
+import { Room } from '@/lib/api/types';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   available: { label: 'Available', color: 'text-green-700', bg: 'bg-green-100', icon: CheckCircle },
@@ -35,7 +34,7 @@ export default function AdminRoomsPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ room_number: '', room_type: 'standard', floor: 1, price: 0 });
+  const [formData, setFormData] = useState({ room_number: '', type_id: 'standard', price_per_night: 0 });
 
   const fetchRooms = useCallback(async () => {
     setIsLoading(true);
@@ -48,7 +47,7 @@ export default function AdminRoomsPage() {
 
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
 
-  const resetForm = () => setFormData({ room_number: '', room_type: 'standard', floor: 1, price: 0 });
+  const resetForm = () => setFormData({ room_number: '', type_id: 'standard', price_per_night: 0 });
 
   const handleAddRoom = async () => {
     if (!formData.room_number) { toast.error('Room number is required'); return; }
@@ -65,7 +64,7 @@ export default function AdminRoomsPage() {
 
   const openEditModal = (room: Room) => {
     setSelectedRoom(room);
-    setFormData({ room_number: room.room_number, room_type: room.room_type, floor: room.floor, price: room.price || 0 });
+    setFormData({ room_number: room.room_number, type_id: room.type_id || 'standard', price_per_night: room.price_per_night || 0 });
     setEditModalOpen(true);
   };
 
@@ -97,7 +96,7 @@ export default function AdminRoomsPage() {
   };
 
   const filteredRooms = rooms.filter((r) => {
-    const matchesSearch = r.room_number?.includes(searchQuery) || r.room_type?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = r.room_number?.includes(searchQuery) || r.type_id?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -148,12 +147,12 @@ export default function AdminRoomsPage() {
                 return (
                   <IOSCard key={room.id} className={`p-4 text-center ${status.bg}`}>
                     <p className="text-2xl font-bold">{room.room_number}</p>
-                    <p className="text-sm text-gray-500">{room.room_type}</p>
+                    <p className="text-sm text-gray-500">{room.type_id}</p>
                     <div className="flex items-center justify-center gap-1 mt-2">
                       <StatusIcon className={`h-4 w-4 ${status.color}`} />
                       <span className={`text-sm ${status.color}`}>{status.label}</span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">KES {room.price?.toLocaleString()}/night</p>
+                    <p className="text-xs text-gray-400 mt-1">KES {room.price_per_night?.toLocaleString()}/night</p>
                     <div className="flex gap-1 mt-2">
                       <IOSButton size="sm" variant="outline" onClick={() => openEditModal(room)}><Edit2 className="h-3 w-3" /></IOSButton>
                       <IOSButton size="sm" variant="destructive" onClick={() => { setSelectedRoom(room); setDeleteConfirmOpen(true); }}><Trash2 className="h-3 w-3" /></IOSButton>
@@ -172,15 +171,14 @@ export default function AdminRoomsPage() {
             <div className="space-y-4 mt-4">
               <div><label className="text-sm font-medium">Room Number *</label><Input value={formData.room_number} onChange={(e) => setFormData({ ...formData, room_number: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Room Type</label>
-                <select value={formData.room_type} onChange={(e) => setFormData({ ...formData, room_type: e.target.value })} className="w-full p-2 border rounded-lg">
+                <select value={formData.type_id} onChange={(e) => setFormData({ ...formData, type_id: e.target.value })} className="w-full p-2 border rounded-lg">
                   <option value="standard">Standard</option>
                   <option value="deluxe">Deluxe</option>
                   <option value="suite">Suite</option>
                   <option value="executive">Executive</option>
                 </select>
               </div>
-              <div><label className="text-sm font-medium">Floor</label><Input type="number" value={formData.floor} onChange={(e) => setFormData({ ...formData, floor: parseInt(e.target.value) || 1 })} /></div>
-              <div><label className="text-sm font-medium">Price (KES)</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
+              <div><label className="text-sm font-medium">Price (KES)</label><Input type="number" value={formData.price_per_night} onChange={(e) => setFormData({ ...formData, price_per_night: parseFloat(e.target.value) || 0 })} /></div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setAddModalOpen(false)} className="flex-1">Cancel</IOSButton>
                 <IOSButton onClick={handleAddRoom} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Adding...' : 'Add'}</IOSButton>
@@ -196,15 +194,14 @@ export default function AdminRoomsPage() {
             <div className="space-y-4 mt-4">
               <div><label className="text-sm font-medium">Room Number *</label><Input value={formData.room_number} onChange={(e) => setFormData({ ...formData, room_number: e.target.value })} /></div>
               <div><label className="text-sm font-medium">Room Type</label>
-                <select value={formData.room_type} onChange={(e) => setFormData({ ...formData, room_type: e.target.value })} className="w-full p-2 border rounded-lg">
+                <select value={formData.type_id} onChange={(e) => setFormData({ ...formData, type_id: e.target.value })} className="w-full p-2 border rounded-lg">
                   <option value="standard">Standard</option>
                   <option value="deluxe">Deluxe</option>
                   <option value="suite">Suite</option>
                   <option value="executive">Executive</option>
                 </select>
               </div>
-              <div><label className="text-sm font-medium">Floor</label><Input type="number" value={formData.floor} onChange={(e) => setFormData({ ...formData, floor: parseInt(e.target.value) || 1 })} /></div>
-              <div><label className="text-sm font-medium">Price (KES)</label><Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} /></div>
+              <div><label className="text-sm font-medium">Price (KES)</label><Input type="number" value={formData.price_per_night} onChange={(e) => setFormData({ ...formData, price_per_night: parseFloat(e.target.value) || 0 })} /></div>
               <div className="flex gap-3">
                 <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1">Cancel</IOSButton>
                 <IOSButton onClick={handleUpdateRoom} disabled={isSubmitting} className="flex-1">{isSubmitting ? 'Updating...' : 'Update'}</IOSButton>
@@ -219,7 +216,7 @@ export default function AdminRoomsPage() {
             <DialogHeader><DialogTitle className="text-red-600">Delete Room</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <p className="text-stone-600">Are you sure you want to delete this room?</p>
-              {selectedRoom && <div className="p-3 bg-stone-50 rounded-lg"><p className="font-medium">Room {selectedRoom.room_number}</p><p className="text-sm text-stone-500">{selectedRoom.room_type}</p></div>}
+              {selectedRoom && <div className="p-3 bg-stone-50 rounded-lg"><p className="font-medium">Room {selectedRoom.room_number}</p><p className="text-sm text-stone-500">{selectedRoom.type_id}</p></div>}
               <div className="flex gap-2">
                 <IOSButton variant="secondary" className="flex-1" onClick={() => setDeleteConfirmOpen(false)}>Cancel</IOSButton>
                 <IOSButton variant="destructive" className="flex-1" onClick={handleDeleteRoom} disabled={isSubmitting}>{isSubmitting ? 'Deleting...' : 'Delete'}</IOSButton>

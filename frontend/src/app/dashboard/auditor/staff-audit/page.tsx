@@ -76,8 +76,8 @@ export default function StaffAuditPage() {
     const fetchInitialData = async () => {
         try {
             const [branchesRes, staffRes] = await Promise.all([
-                api.finance.getBranches(),
-                api.staff.getAll()
+                api.system.getBranches(),
+                api.staff.getStaff()
             ]);
             setBranches(branchesRes.data || []);
             setStaffList(staffRes.data || []);

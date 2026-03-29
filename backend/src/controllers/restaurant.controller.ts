@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { autoDeductIngredients, deductIngredientsForItem } from './kitchen/recipes.controller';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 /**
  * Helper to parse branch_id from query or body
@@ -107,10 +108,16 @@ export const getMenuItems = async (
     if (req.query.category) {
       query = query.eq('category_id', req.query.category);
     }
-    const branchId = req.user?.branch_id || parseBranchId(req.query.branch_id);
-    if (branchId) {
-      query = query.or(`branch_id.eq.${branchId}, branch_id.is.null`);
+    
+    // Menu items usually belong to specific branches or globally. 
+    // Usually it's branch-specific or null (all branches).
+    const parsedBranch = parseBranchId(req.query.branch_id);
+    const effectiveBranch = isGlobalRole(req.user?.role) ? parsedBranch : (req.user?.branch_id || parsedBranch);
+    
+    if (effectiveBranch) {
+      query = query.or(`branch_id.eq.${effectiveBranch},branch_id.is.null`);
     }
+
     if (req.query.available === 'true') {
       query = query.eq('is_available', true);
     }
@@ -785,7 +792,11 @@ export const getOrders = async (
     if (req.query.type) {
       query = query.eq('order_type', req.query.type);
     }
-    const branchId = req.user?.branch_id || parseBranchId(req.query.branch_id);
+    
+    // Strict isolation enforcement for fetching orders.
+    query = applyBranchFilter(query, req);
+
+    const branchId = parseBranchId(req.query.branch_id);
     if (branchId) {
       query = query.eq('branch_id', branchId);
     }

@@ -6,7 +6,8 @@ import {
     createConferenceBooking,
     updateConferenceBookingStatus,
     getBookingInvoice,
-    addConferencePayment
+    addConferencePayment,
+    checkHallAvailability
 } from '../controllers/conference.controller';
 
 import {
@@ -25,6 +26,7 @@ router.use(protect);
 
 // Halls management
 router.get('/halls', getHalls);
+router.get('/halls/:id/availability', checkHallAvailability);
 router.post('/halls', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), createHall);
 
 // Bookings management

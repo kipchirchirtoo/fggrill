@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
-import { API_URL, PYTHON_API_URL } from '@/lib/config';
+import { guestPortalAPI } from '@/lib/api/guest-portal';
 
 interface DashboardData {
   profile: any;
@@ -58,31 +58,25 @@ export default function GuestPortal() {
 
   const fetchDashboard = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/guest-portal/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const result = await response.json();
-      if (result.success) {
+      const result = await guestPortalAPI.getDashboard();
+      if (result.success && result.data) {
         setData(result.data);
       }
 
       // Fetch from Python service
       if (user?.id) {
         try {
-          const loyaltyRes = await fetch(`${PYTHON_API_URL}/api/guest-portal/loyalty/details?guest_id=${user.id}`);
-          const loyaltyData = await loyaltyRes.json();
-          if (loyaltyData.success) {
-            setLoyaltyDetails(loyaltyData.data);
+          const loyaltyRes = await guestPortalAPI.getLoyaltyDetails(user.id);
+          if (loyaltyRes.success) {
+            setLoyaltyDetails(loyaltyRes.data);
           }
 
-          const requestsRes = await fetch(`${PYTHON_API_URL}/api/guest-portal/requests?guest_id=${user.id}`);
-          const requestsData = await requestsRes.json();
-          if (requestsData.success) {
-            setServiceRequests(requestsData.data);
+          const requestsRes = await guestPortalAPI.getServiceRequests(user.id);
+          if (requestsRes.success) {
+            setServiceRequests(requestsRes.data);
           }
         } catch (pyErr) {
-          // console.log('Python service not available, using Node API only');
+          // console.log('Python service not available');
         }
       }
     } catch (error) {
@@ -447,12 +441,8 @@ function BookingsTab() {
   useEffect(() => {
     const fetchBookings = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/guest-portal/bookings`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const result = await response.json();
-        if (result.success) {
+        const result = await guestPortalAPI.getBookings();
+        if (result.success && result.data) {
           setBookings(result.data);
         }
       } catch (error) {
@@ -548,12 +538,8 @@ function RequestsTab({ activeBooking, onRefresh }: { activeBooking: any; onRefre
 
   const fetchRequests = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/guest-portal/requests`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const result = await response.json();
-      if (result.success) {
+      const result = await guestPortalAPI.getRequests();
+      if (result.success && result.data) {
         setRequests(result.data);
       }
     } catch (error) {
@@ -575,16 +561,7 @@ function RequestsTab({ activeBooking, onRefresh }: { activeBooking: any; onRefre
     }
     setSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/guest-portal/requests`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-      const result = await response.json();
+      const result = await guestPortalAPI.createRequest(formData);
       if (result.success) {
         toast.success('Request submitted');
         setShowForm(false);
@@ -592,7 +569,7 @@ function RequestsTab({ activeBooking, onRefresh }: { activeBooking: any; onRefre
         onRefresh();
         setFormData({ request_type: 'room_service', title: '', description: '', priority: 'normal' });
       } else {
-        toast.error(result.message);
+        toast.error(result.message || 'Failed to submit request');
       }
     } catch (error) {
       toast.error('Failed to submit request');
@@ -833,12 +810,8 @@ function LoyaltyTab({ loyalty }: { loyalty: any }) {
   useEffect(() => {
     const fetchLoyalty = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/guest-portal/loyalty`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const result = await response.json();
-        if (result.success) {
+        const result = await guestPortalAPI.getLoyalty();
+        if (result.success && result.data) {
           setTransactions(result.data.transactions || []);
         }
       } catch (error) {
@@ -979,12 +952,8 @@ function MessagesTab({ activeBooking }: { activeBooking: any }) {
 
   const fetchMessages = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/guest-portal/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const result = await response.json();
-      if (result.success) {
+      const result = await guestPortalAPI.getMessages();
+      if (result.success && result.data) {
         setMessages(result.data);
       }
     } catch (error) {
@@ -1002,19 +971,7 @@ function MessagesTab({ activeBooking }: { activeBooking: any }) {
     if (!newMessage.trim()) return;
     setSending(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/guest-portal/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          message: newMessage,
-          booking_id: activeBooking?.id
-        })
-      });
-      const result = await response.json();
+      const result = await guestPortalAPI.sendMessage(newMessage, activeBooking?.id);
       if (result.success) {
         setNewMessage('');
         fetchMessages();
@@ -1108,21 +1065,12 @@ function ProfileTab({ user, profile }: { user: any; profile: any }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/guest-portal/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-      const result = await response.json();
+      const result = await guestPortalAPI.updateProfile(formData);
       if (result.success) {
         toast.success('Profile updated');
         setEditing(false);
       } else {
-        toast.error(result.message);
+        toast.error(result.message || 'Failed to update profile');
       }
     } catch (error) {
       toast.error('Failed to update profile');

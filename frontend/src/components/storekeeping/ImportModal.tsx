@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Upload } from 'lucide-react';
+import { apiClient } from '@/lib/api/core';
 import {
   Dialog,
   DialogContent,
@@ -39,23 +40,13 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const token = localStorage.getItem('token');
+      const res = await apiClient.post<any>('/store/import_data', formData);
 
-      const response = await fetch(`${API_URL}/api/store/import_data`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          // 'Content-Type': 'multipart/form-data' // Do not set content-type manually with FormData
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || 'Failed to import data');
+      if (!res.success) {
+        throw new Error(res.error || res.message || 'Failed to import data');
       }
 
-      const resData = await response.json();
+      const resData = res.data;
 
       toast.success('Data imported successfully');
       if (resData.skipped_skus) {

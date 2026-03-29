@@ -15,6 +15,8 @@ import { AddAdjustmentDialog } from '@/components/hr/add-adjustment-dialog';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { downloadEmployeePDF } from '@/lib/employee-pdf';
+import { BranchSelector } from '@/components/dashboard/BranchSelector';
+import { useBranch } from '@/lib/branch-context';
 
 interface Staff {
     id: string;
@@ -52,6 +54,8 @@ export default function HREmployeesPage() {
     const [branches, setBranches] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
+    const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
+    const { activeBranchId } = useBranch();
     const [formData, setFormData] = useState({
         id: '',
         first_name: '',
@@ -86,43 +90,65 @@ export default function HREmployeesPage() {
     const fetchStaffData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Role guard: only permitted roles may call getSystemUsers (backend requires SUPER_ADMIN, GM, HR_MANAGER, AUDITOR)
+            const canFetchUsers = user && [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR].includes(user.role as UserRole);
+
             const [staffRes, branchesRes, departmentsRes, rolesRes, driversRes, usersRes] = await Promise.all([
                 staffAPI.getStaff({ limit: 1000 }),
                 systemAPI.getBranches(),
                 systemAPI.getDepartments(),
                 staffAPI.getRoles(),
                 storeAPI.getDrivers(),
-                typeof systemAPI.getSystemUsers === 'function' ? systemAPI.getSystemUsers() : Promise.resolve({ data: [] }),
+                canFetchUsers ? systemAPI.getSystemUsers() : Promise.resolve({ success: true, data: [] }),
             ]);
 
             // Map drivers from Central Store into the Staff shape
             const rawDrivers: any[] = driversRes?.data || [];
             const rawUsers: any[] = usersRes?.data || [];
-            const regularStaff: Staff[] = staffRes.success ? (staffRes.data || []) : [];
+            
+            // Fix type mismatch by mapping StaffMember to Staff interface
+            const regularStaff: Staff[] = staffRes.success ? (staffRes.data || []).map((s: any) => ({
+                ...s,
+                id: s.id,
+                first_name: s.first_name,
+                last_name: s.last_name,
+                email: s.email || '',
+                phone: s.phone || '',
+                role: s.role || (s as any).role_name || (s as any).user?.role || 'Staff Member', 
+                branch_id: s.branch_id ? String(s.branch_id) : undefined,
+                status: (s.status === 'active' ? 'active' : 'inactive') as 'active' | 'inactive'
+            })) : [];
 
             // Build a deduplication lookup set from existing staff_profiles
-            // Keys: lowercased email (if available) OR "firstname|lastname|phone"
+            // Keys: normalized name, email, or phone
             const staffKeys = new Set<string>();
+            const nameLookup = new Set<string>();
+            
             for (const s of regularStaff) {
                 if (s.email) staffKeys.add(s.email.toLowerCase().trim());
-                if (s.phone) staffKeys.add(`${s.first_name}|${s.last_name}|${s.phone}`.toLowerCase().trim());
+                if (s.phone) staffKeys.add(s.phone.replace(/\D/g, '').slice(-9));
+                
+                const fullName = `${s.first_name || ''} ${s.last_name || ''}`.toLowerCase().trim();
+                nameLookup.add(fullName);
             }
 
             // Extract users missing from staff_profiles (Waiters, Cashiers, Kitchen, etc)
             const missingUsers: Staff[] = rawUsers
                 .filter((u: any) => {
-                    // Only include users who aren't drivers (already handled) without full profiles
-                    if (u.role === 'driver' || u.role === 'guest') return false;
+                    if (u.role === 'guest') return false;
 
                     const emailKey = (u.email || '').toLowerCase().trim();
-                    const namePhoneKey = `${u.first_name || ''}|${u.last_name || ''}|${(u.phone_number || '')}`.toLowerCase().trim();
+                    const phoneKey = (u.phone_number || '').replace(/\D/g, '').slice(-9);
+                    const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase().trim();
 
-                    return (
-                        (!emailKey || !staffKeys.has(emailKey)) &&
-                        !staffKeys.has(namePhoneKey)
-                    );
+                    const isDuplicate = (emailKey && staffKeys.has(emailKey)) || 
+                                      (phoneKey && staffKeys.has(phoneKey)) || 
+                                      nameLookup.has(fullName);
+                    
+                    return !isDuplicate;
                 })
                 .map((u: any) => {
+                    // ... map to Staff object
                     return {
                         id: u.id,
                         first_name: u.first_name || '',
@@ -138,25 +164,18 @@ export default function HREmployeesPage() {
                     } as Staff;
                 });
 
-            // Update staffKeys with the missing users to prevent drivers from colliding
-            for (const u of missingUsers) {
-                if (u.email) staffKeys.add(u.email.toLowerCase().trim());
-                if (u.phone) staffKeys.add(`${u.first_name}|${u.last_name}|${u.phone}`.toLowerCase().trim());
-            }
-
             // Only include drivers NOT already present in staffKeys
-            const driverStaff: Staff[] = rawDrivers
+            const driverStaff: Staff[] = (rawDrivers || [])
                 .filter((d: any) => {
                     const emailKey = (d.email || '').toLowerCase().trim();
-                    const nameParts = (d.name || '').trim().split(' ');
-                    const firstName = nameParts[0] || '';
-                    const lastName = nameParts.slice(1).join(' ');
-                    const namePhoneKey = `${firstName}|${lastName}|${(d.phone || '')}`.toLowerCase().trim();
+                    const phoneKey = (d.phone || '').replace(/\D/g, '').slice(-9);
+                    const fullName = (d.name || '').toLowerCase().trim();
 
-                    return (
-                        (!emailKey || !staffKeys.has(emailKey)) &&
-                        !staffKeys.has(namePhoneKey)
-                    );
+                    const isDuplicateStaff = (emailKey && staffKeys.has(emailKey)) || 
+                                           (phoneKey && staffKeys.has(phoneKey)) || 
+                                           nameLookup.has(fullName);
+                    
+                    return !isDuplicateStaff;
                 })
                 .map((d: any) => {
                     const nameParts = (d.name || '').trim().split(' ');
@@ -186,22 +205,41 @@ export default function HREmployeesPage() {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [user]);
 
     useEffect(() => {
         fetchStaffData();
     }, [fetchStaffData]);
 
+    // Handle initial branch scoping based on RBAC or active branch
+    useEffect(() => {
+        const adminRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR];
+        const isAdmin = user && adminRoles.includes(user.role as UserRole);
+
+        if (user && !isAdmin) {
+            if (user.branch_id) {
+                setSelectedBranchId(Number(user.branch_id));
+            }
+        } else if (activeBranchId && activeBranchId !== 0) {
+            setSelectedBranchId(activeBranchId);
+        }
+    }, [user, activeBranchId]);
+
     const filteredStaff = staff.filter((s) => {
-        const fullName = `${s.first_name} ${s.last_name}`.toLowerCase();
+        const fullName = `${s.first_name || ''} ${s.last_name || ''}`.toLowerCase();
         const matchesSearch =
             fullName.includes(searchQuery.toLowerCase()) ||
             s.role?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             s.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesDepartment = departmentFilter ? s.department === departmentFilter : true;
+        
+        // Exact branch match (handling numeric vs string comparison)
+        const matchesBranch = selectedBranchId 
+            ? String(s.branch_id) === String(selectedBranchId) 
+            : true;
 
-        return matchesSearch && matchesDepartment;
+        return matchesSearch && matchesDepartment && matchesBranch;
     });
 
     const resetForm = () => {
@@ -339,12 +377,8 @@ export default function HREmployeesPage() {
         const file = e.target.files?.[0];
         if (!file || !selectedStaff) return;
 
-        const formData = new FormData();
-        formData.append('document', file);
-        formData.append('documentType', type);
-
         try {
-            const res = await staffAPI.uploadStaffDocument(selectedStaff.id, formData);
+            const res = await staffAPI.uploadStaffDocument(selectedStaff.id, file);
             if (res.success) {
                 toast.success(`${type} uploaded successfully`);
                 // Refresh documents
@@ -429,9 +463,18 @@ export default function HREmployeesPage() {
                             <button
                                 onClick={() => {
                                     const branchMap = branches.reduce((acc: any, b: any) => ({ ...acc, [b.id]: b.name }), {});
-                                    const departmentMap = departments.reduce((acc: any, d: any) => ({ ...acc, [d.name]: d.name }), {}); // Names are mostly used, mapping just in case
-                                    downloadEmployeePDF(filteredStaff, { branchMap, departmentMap });
-                                    toast.success('Downloading Employee Registry...');
+                                    const departmentMap = departments.reduce((acc: any, d: any) => ({ ...acc, [d.name]: d.name }), {});
+                                    
+                                    const branchName = selectedBranchId 
+                                        ? (branches.find(b => String(b.id) === String(selectedBranchId))?.name || 'Selected Branch')
+                                        : 'All Branches';
+                                        
+                                    downloadEmployeePDF(filteredStaff, { 
+                                        branchMap, 
+                                        departmentMap,
+                                        branchName 
+                                    });
+                                    toast.success(`Downloading ${branchName} Registry...`);
                                 }}
                                 disabled={filteredStaff.length === 0}
                                 className="px-4 py-2.5 rounded-full bg-white border border-stone-200 text-stone-700 text-sm font-bold hover:bg-stone-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
@@ -470,6 +513,13 @@ export default function HREmployeesPage() {
                                 <option value="">All Departments</option>
                                 {departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
                             </select>
+
+                            <BranchSelector
+                                showAllOption={[UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR].includes(user?.role as UserRole)}
+                                value={selectedBranchId}
+                                onChange={(id) => setSelectedBranchId(id)}
+                                className="flex-1 lg:flex-none"
+                            />
 
                             <div className="px-5 py-3 bg-stone-900 text-white rounded-xl text-[13px] font-bold shadow-sm whitespace-nowrap">
                                 {filteredStaff.length} Total Personnel
@@ -1240,9 +1290,8 @@ export default function HREmployeesPage() {
                         <div className="text-center">
                             <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <Archive className="h-6 w-6 text-amber-500" />
-
                             </div>
-                            <h3 className="text-lg font-bold text-stone-900">Archive/Terminate Personnel</h3>
+                            <DialogTitle className="text-lg font-bold text-stone-900">Archive/Terminate Personnel</DialogTitle>
                             <p className="text-stone-500 text-sm mt-2 font-medium">This will mark the employee as terminated and log it in their history.</p>
                         </div>
                         <div className="mt-4">
@@ -1283,7 +1332,7 @@ export default function HREmployeesPage() {
                                     {selectedStaff?.first_name?.[0]}{selectedStaff?.last_name?.[0]}
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-bold text-stone-900">{selectedStaff?.first_name} {selectedStaff?.last_name}</h3>
+                                    <DialogTitle className="text-xl font-bold text-stone-900">{selectedStaff?.first_name} {selectedStaff?.last_name}</DialogTitle>
                                     <p className="text-sm text-[#007AFF] font-semibold">{selectedStaff?.role}</p>
                                 </div>
                             </div>

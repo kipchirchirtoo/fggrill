@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 export const createLoan = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -21,7 +22,8 @@ export const createLoan = async (req: Request, res: Response, next: NextFunction
                 loan_date: loan_date || new Date().toISOString().split('T')[0],
                 start_deduction_month: Number(start_deduction_month),
                 start_deduction_year: Number(start_deduction_year),
-                status: 'pending_approval'
+                status: 'pending_approval',
+                branch_id: (req as any).user?.branch_id
             })
             .select()
             .single();
@@ -42,6 +44,8 @@ export const getLoans = async (req: Request, res: Response, next: NextFunction) 
             .from('staff_loans')
             .select('*')
             .order('created_at', { ascending: false });
+
+        query = applyBranchFilter(query, req);
 
         if (staff_id) query = query.eq('staff_id', staff_id);
         if (status) query = query.eq('status', status);

@@ -27,7 +27,10 @@ router.route('/:id')
     .delete(deletePurchaseOrder);
 
 router.put('/:id/approve', approvePurchaseOrder);
+router.post('/:id/approve', approvePurchaseOrder);
 router.put('/:id/receive', receivePurchaseOrder);
+router.post('/:id/receive', receivePurchaseOrder);
 router.put('/:id/cancel', cancelPurchaseOrder);
+router.post('/:id/cancel', cancelPurchaseOrder);
 
 export default router;

@@ -1,0 +1,24 @@
+﻿
+--- Checking table: accounting_ar_invoices ---
+Columns: id, invoice_number, customer_id, invoice_date, due_date, subtotal, tax_amount, total_amount, paid_amount, balance, status, reference, notes, created_by, created_at, updated_at, items
+
+--- Checking table: accounting_ap_bills ---
+Columns: id, bill_number, vendor_id, bill_date, due_date, subtotal, tax_amount, total_amount, paid_amount, balance, status, reference, notes, created_by, created_at, updated_at, items
+
+--- Checking table: accounting_journal_entries ---
+Columns: id, journal_number, entry_date, description, reference, total_debit, total_credit, status, posted_by, posted_at, reversed_at, reversed_by, reversal_reason, created_at, branch_id
+
+--- Checking table: accounting_bank_transactions ---
+Columns: id, bank_account_id, transaction_date, description, debit_amount, credit_amount, balance, reference, reconciled, reconciled_at, created_at, branch_id
+
+--- Checking table: accounting_bank_accounts ---
+Columns: id, account_number, bank_name, account_name, account_type, currency, current_balance, is_active, created_at, updated_at, branch_id
+
+--- Checking table: accounting_customers ---
+Columns: id, customer_code, customer_name, contact_person, email, phone, address, credit_limit, payment_terms_days, current_balance, is_active, created_at, updated_at
+
+--- Checking table: accounting_vendors ---
+Columns: id, vendor_code, vendor_name, contact_person, email, phone, address, tax_id, payment_terms_days, current_balance, is_active, created_at, updated_at
+
+--- Checking table: accounting_chart_of_accounts ---
+Columns: id, account_code, account_name, account_type, parent_account_id, is_active, balance, currency, tax_code, notes, created_at, updated_at, category_id

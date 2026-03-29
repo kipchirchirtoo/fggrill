@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { AttendanceService } from '../services/attendance.service';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 // Helper to sanitize UUID fields that might come as "null" string from frontend
 const sanitizeUUID = (val: any) => {
@@ -148,7 +149,10 @@ export const getStaff = async (
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
 
-    // Add filters
+    // Apply generic branch isolation
+    query = applyBranchFilter(query, req);
+
+    // Add extra optional filters
     if (req.query.branch_id) {
       query = query.eq('branch_id', req.query.branch_id);
     }
@@ -662,23 +666,44 @@ export const updateStaffMember = async (
         id_number: idNumber
       };
 
-      const { data: newStaff, error: createError } = await supabase
+      // SEARCH for existing profile before creating a new one to prevent duplication
+      let { data: existingProfile } = await supabase
         .from('staff_profiles')
-        .upsert(newProfileInfo, { onConflict: 'id', ignoreDuplicates: false })
-        .select()
-        .single();
+        .select('id')
+        .or(`id_number.eq.${idNumber},email.eq.${userProfile.email},and(first_name.ilike.${userProfile.first_name},last_name.ilike.${userProfile.last_name})`)
+        .maybeSingle();
 
-      if (createError || !newStaff) {
-        logger.error(`Failed to auto-create staff_profile for user ${userProfile.id}:`, createError);
-        res.status(500).json({
-          success: false,
-          message: 'Failed to initialize staff profile for user'
-        });
-        return;
+      if (existingProfile) {
+        // LINK existing profile instead of creating new one
+        const { data: linkedStaff, error: linkError } = await supabase
+          .from('staff_profiles')
+          .update({ user_id: userProfile.id })
+          .eq('id', existingProfile.id)
+          .select()
+          .single();
+        
+        if (linkError) throw linkError;
+        staff = linkedStaff;
+        logger.info('Linked existing staff_profile to user:', userProfile.id);
+      } else {
+        // Create new one if truly missing
+        const { data: newStaff, error: createError } = await supabase
+          .from('staff_profiles')
+          .upsert(newProfileInfo, { onConflict: 'id', ignoreDuplicates: false })
+          .select()
+          .single();
+
+        if (createError || !newStaff) {
+          logger.error(`Failed to auto-create staff_profile for user ${userProfile.id}:`, createError);
+          res.status(500).json({
+            success: false,
+            message: 'Failed to initialize staff profile for user'
+          });
+          return;
+        }
+        staff = newStaff;
+        logger.info('Auto-created missing staff_profiles row for user:', userProfile.id);
       }
-
-      staff = newStaff;
-      logger.info('Auto-created missing staff_profiles row for user:', userProfile.id);
     }
 
     // Get current email from users table for comparison

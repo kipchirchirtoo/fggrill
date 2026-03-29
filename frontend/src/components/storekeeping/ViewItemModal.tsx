@@ -25,6 +25,8 @@ interface ViewItemModalProps {
 }
 
 
+import { apiClient } from '@/lib/api/core';
+
 export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManager = false }: ViewItemModalProps) {
   const [stockHistory, setStockHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -40,14 +42,10 @@ export function ViewItemModal({ isOpen, onClose, item, onEdit, onDelete, isManag
   const fetchStockHistory = async () => {
     setIsLoadingHistory(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${encodeURIComponent(item.sku)}/history`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await apiClient.get<any[]>(`/store/items/${encodeURIComponent(item.sku)}/history`);
 
-      if (response.ok) {
-        const data = await response.json();
-        setStockHistory(data.data || []);
+      if (res.success) {
+        setStockHistory(res.data || []);
       }
     } catch (error) {
       console.error('Failed to fetch stock history:', error);

@@ -10,7 +10,7 @@ import { UserRole } from '@/lib/auth-context';
 import { toast } from 'sonner';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
-import { API_URL } from '@/lib/config';
+import { auditorReportsAPI } from '@/lib/api/reports';
 
 const reports = [
   { id: 'exception_summary',      name: 'Audit Exception Summary',    category: 'Compliance',  icon: AlertTriangle,  color: 'text-red-600',    bg: 'bg-red-50',    desc: 'All open & resolved audit exceptions with severity breakdown' },
@@ -49,17 +49,18 @@ export default function AuditReporting() {
       else if (selectedBranchIds.length > 1) branchName = `${selectedBranchIds.length} Branches`;
       params.append('branch_name', branchName);
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/reports/auditor/export/${reportId}?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await auditorReportsAPI.exportAuditorReport(reportId, {
+        branch_ids: selectedBranchIds.length > 0 ? selectedBranchIds.join(',') : undefined,
+        start_date: dateRange.startDate,
+        end_date: dateRange.endDate,
+        branch_name: branchName
       });
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.message || `Request failed: ${response.status}`);
+      if (!res.success || !res.data) {
+        throw new Error(res.error || 'Failed to generate report');
       }
 
-      const blob = await response.blob();
+      const blob = res.data;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

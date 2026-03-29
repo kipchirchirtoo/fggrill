@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -25,6 +26,8 @@ export const getChartOfAccounts = async (req: Request, res: Response, next: Next
       .from('accounting_chart_of_accounts')
       .select('*')
       .order('account_code');
+
+    query = applyBranchFilter(query, req);
 
     if (account_type) query = query.eq('account_type', account_type);
     if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
@@ -84,7 +87,8 @@ export const createJournalEntry = async (req: Request, res: Response, next: Next
         total_debit,
         total_credit,
         status: 'draft',
-        posted_by: req.user?.id
+        posted_by: req.user?.id,
+        branch_id: req.user?.branch_id
       }])
       .select()
       .single();
@@ -149,6 +153,8 @@ export const getJournalEntries = async (req: Request, res: Response, next: NextF
       `)
       .order('entry_date', { ascending: false });
 
+    query = applyBranchFilter(query, req);
+
     if (start_date) query = query.gte('entry_date', start_date);
     if (end_date) query = query.lte('entry_date', end_date);
     if (status) query = query.eq('status', status);
@@ -166,10 +172,73 @@ export const getJournalEntries = async (req: Request, res: Response, next: NextF
 
 export const createInvoice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { customer_id, customer_name, customer_email, invoice_date, due_date, subtotal, tax_amount, reference, notes, items } = req.body;
+    const { 
+      customer_id, 
+      customer_name, 
+      customer_email, 
+      invoice_date, 
+      due_date, 
+      subtotal, 
+      tax_amount, 
+      reference, 
+      notes, 
+      items,
+      type,
+      conference_hall_id,
+      conference_start_date,
+      conference_end_date,
+      hotel_booking_id,
+      restaurant_reservation_id
+    } = req.body;
 
     const total_amount = subtotal + (tax_amount || 0);
     const invoice_number = `INV-${Date.now()}`;
+
+    // Conference availability check
+    if (type === 'CONFERENCE' && conference_hall_id && conference_start_date && conference_end_date) {
+        // Check for existing bookings in that time range
+        const { data: existing, error: checkError } = await supabase
+            .from('conference_hall_bookings')
+            .select('*')
+            .eq('conference_hall_id', conference_hall_id)
+            .eq('booking_status', 'confirmed');
+
+        if (checkError) throw checkError;
+
+        const reqStart = new Date(conference_start_date);
+        const reqEnd = new Date(conference_end_date);
+
+        const hasOverlap = existing && existing.some(b => {
+            const bStart = new Date(b.start_date);
+            const bEnd = new Date(b.end_date);
+            return reqStart < bEnd && reqEnd > bStart;
+        });
+
+        if (hasOverlap) {
+            res.status(400).json({ success: false, message: 'The hall is already booked for the selected time range' });
+            return;
+        }
+
+        // Also check other invoices
+        const { data: existingInvoices, error: invCheckError } = await supabase
+            .from('accounting_ar_invoices')
+            .select('*')
+            .eq('conference_hall_id', conference_hall_id)
+            .neq('status', 'voided');
+
+        if (invCheckError) throw invCheckError;
+
+        const hasInvOverlap = existingInvoices && existingInvoices.some(inv => {
+            const iStart = new Date(inv.conference_start_date);
+            const iEnd = new Date(inv.conference_end_date);
+            return reqStart < iEnd && reqEnd > iStart;
+        });
+
+        if (hasInvOverlap) {
+            res.status(400).json({ success: false, message: 'The hall is already reserved via another invoice for this time range' });
+            return;
+        }
+    }
 
     // Customer mapping logic to handle string IDs
     let resolvedCustomerId = customer_id;
@@ -192,7 +261,8 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
             customer_code: `CUST-${Date.now()}`,
             customer_name,
             email: customer_email,
-            is_active: true
+            is_active: true,
+            branch_id: req.user?.branch_id
           }])
           .select()
           .single();
@@ -245,7 +315,8 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
                   email: source.email,
                   phone: source.phone,
                   address: source.address,
-                  is_active: true
+                  is_active: true,
+                  branch_id: req.user?.branch_id
                 }])
                 .select()
                 .single();
@@ -295,12 +366,52 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
         reference,
         notes,
         items, // Save items as JSONB
-        created_by: req.user?.id
+        type: type || 'GENERAL',
+        conference_hall_id,
+        conference_start_date,
+        conference_end_date,
+        hotel_booking_id,
+        restaurant_reservation_id,
+        created_by: req.user?.id,
+        branch_id: req.user?.branch_id
       }])
       .select()
       .single();
 
     if (error) throw error;
+
+    // If it's a conference invoice, also create a booking record for visibility in conference management
+    if (type === 'CONFERENCE' && conference_hall_id) {
+        await supabase.from('conference_hall_bookings').insert([{
+            conference_hall_id,
+            branch_id: req.user?.branch_id,
+            customer_name: customer_name,
+            customer_email: customer_email,
+            start_date: conference_start_date,
+            end_date: conference_end_date,
+            invoice_id: data.id, // Linking back
+            invoice_number: invoice_number,
+            total_amount: total_amount,
+            booking_status: 'confirmed',
+            payment_status: 'pending',
+            created_by: req.user?.id,
+            notes: `Auto-generated from Invoice ${invoice_number}. ${notes || ''}`
+        }]);
+    }
+
+    // Link Hotel Booking if provided
+    if (hotel_booking_id) {
+        await supabase.from('bookings')
+            .update({ invoice_id: data.id })
+            .eq('id', hotel_booking_id);
+    }
+
+    // Link Restaurant Reservation if provided
+    if (restaurant_reservation_id) {
+        await supabase.from('restaurant_reservations')
+            .update({ invoice_id: data.id })
+            .eq('id', restaurant_reservation_id);
+    }
 
     logger.info(`Invoice created: ${invoice_number}`);
 
@@ -337,16 +448,16 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
     let resolvedCustomerId = customer_id as string;
     if (resolvedCustomerId) {
       // Try internal ID first
-      const { data: exists } = await supabase
-        .from('accounting_customers')
+      const { data: exists } = await applyBranchFilter(supabase
+        .from('accounting_customers'), req)
         .select('id')
         .eq('id', resolvedCustomerId)
         .maybeSingle();
 
       if (!exists) {
         // Try mapping code
-        const { data: mapped } = await supabase
-          .from('accounting_customers')
+        const { data: mapped } = await applyBranchFilter(supabase
+          .from('accounting_customers'), req)
           .select('id')
           .eq('customer_code', resolvedCustomerId)
           .maybeSingle();
@@ -361,6 +472,8 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
         customer:accounting_customers!customer_id(id, customer_name, email, phone)
       `)
       .order('invoice_date', { ascending: false });
+
+    query = applyBranchFilter(query, req);
 
     if (resolvedCustomerId) query = query.eq('customer_id', resolvedCustomerId);
     if (status) {
@@ -425,7 +538,8 @@ export const recordInvoicePayment = async (req: Request, res: Response, next: Ne
         credit_amount: 0,
         reference: reference || `PYMT-INV-${invoice.invoice_number}`,
         description: notes || `Payment received for invoice ${invoice.invoice_number}`,
-        reconciled: false
+        reconciled: false,
+        branch_id: req.user?.branch_id
       });
 
       // Update bank balance
@@ -485,8 +599,8 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
       // 1. First check if it exists in accounting_vendors by internal ID (if UUID)
       if (isUUID(vendor_id)) {
         logger.info(`Checking if vendor exists in accounting_vendors by ID: ${vendor_id}`);
-        const { data: existingVendor } = await supabase
-          .from('accounting_vendors')
+        const { data: existingVendor } = await applyBranchFilter(supabase
+          .from('accounting_vendors'), req)
           .select('id')
           .eq('id', vendor_id)
           .maybeSingle();
@@ -496,8 +610,8 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
         } else {
           // 2. Not an internal ID, check if it's a vendor_code (external ID)
           logger.info(`Not found by ID, checking vendor_code mapping: ${vendor_id}`);
-          const { data: mappedByCode } = await supabase
-            .from('accounting_vendors')
+          const { data: mappedByCode } = await applyBranchFilter(supabase
+            .from('accounting_vendors'), req)
             .select('id')
             .eq('vendor_code', vendor_id)
             .maybeSingle();
@@ -528,7 +642,8 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
                   email: supplier.email,
                   phone: supplier.phone,
                   address: supplier.address,
-                  is_active: true
+                  is_active: true,
+                  branch_id: req.user?.branch_id
                 }])
                 .select()
                 .single();
@@ -549,8 +664,8 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
       } else {
         // Non-UUID: Check if already mapped by vendor_code
         logger.info(`Non-UUID vendor_id provided, checking vendor_code mapping: ${vendor_id}`);
-        const { data: mappedVendor } = await supabase
-          .from('accounting_vendors')
+        const { data: mappedVendor } = await applyBranchFilter(supabase
+          .from('accounting_vendors'), req)
           .select('id')
           .eq('vendor_code', vendor_id)
           .maybeSingle();
@@ -586,7 +701,8 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
         reference,
         notes,
         items, // Save items as JSONB
-        created_by: req.user?.id
+        created_by: req.user?.id,
+        branch_id: req.user?.branch_id
       }])
       .select()
       .single();
@@ -653,6 +769,8 @@ export const getBills = async (req: Request, res: Response, next: NextFunction):
       `)
       .order('bill_date', { ascending: false });
 
+    query = applyBranchFilter(query, req);
+
     if (resolvedVendorId) query = query.eq('vendor_id', resolvedVendorId);
     if (status) {
       let statusVal = status as string;
@@ -716,7 +834,8 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
         credit_amount: paymentAmount,
         reference: reference || `PYMT-BILL-${bill.bill_number}`,
         description: notes || `Payment made for bill ${bill.bill_number}`,
-        reconciled: false
+        reconciled: false,
+        branch_id: req.user?.branch_id
       });
 
       // Update bank balance
@@ -902,7 +1021,8 @@ export const createBankTransaction = async (req: Request, res: Response, next: N
         credit_amount: transaction_type === 'credit' ? amount : 0,
         reference,
         description,
-        reconciled: false
+        reconciled: false,
+        branch_id: req.user?.branch_id
       }])
       .select()
       .single();
@@ -946,6 +1066,8 @@ export const getBankTransactions = async (req: Request, res: Response, next: Nex
       `)
       .order('transaction_date', { ascending: false });
 
+    query = applyBranchFilter(query, req);
+
     if (bank_account_id) query = query.eq('bank_account_id', bank_account_id);
     if (start_date) query = query.gte('transaction_date', start_date);
     if (end_date) query = query.lte('transaction_date', end_date);
@@ -974,6 +1096,8 @@ export const getBudgets = async (req: Request, res: Response, next: NextFunction
       `)
       .order('budget_name');
 
+    query = applyBranchFilter(query, req);
+
     if (fiscal_year) query = query.eq('fiscal_year', fiscal_year);
     if (department) query = query.eq('department', department);
     if (status) query = query.eq('status', status);
@@ -992,18 +1116,18 @@ export const getBudgets = async (req: Request, res: Response, next: NextFunction
 export const getAccountingDashboard = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // Get AR summary
-    const { data: invoices } = await supabase
-      .from('accounting_ar_invoices')
+    const { data: invoices } = await applyBranchFilter(supabase
+      .from('accounting_ar_invoices'), req)
       .select('total_amount, paid_amount, balance, status, due_date');
 
     // Get AP summary
-    const { data: bills } = await supabase
-      .from('accounting_ap_bills')
+    const { data: bills } = await applyBranchFilter(supabase
+      .from('accounting_ap_bills'), req)
       .select('total_amount, paid_amount, balance, status, due_date');
 
     // Get bank balances
-    const { data: bankAccounts } = await supabase
-      .from('accounting_bank_accounts')
+    const { data: bankAccounts } = await applyBranchFilter(supabase
+      .from('accounting_bank_accounts'), req)
       .select('current_balance, currency');
 
     const today = new Date().toISOString().split('T')[0];
@@ -1049,6 +1173,8 @@ export const getBankDeposits = async (req: Request, res: Response, next: NextFun
       `)
       .order('transaction_date', { ascending: false });
 
+    query = applyBranchFilter(query, req, 'bank_account');
+
     // Filter by type if there's a way to distinguish deposits from other transactions
     // For now, we'll assume transactions with credit_amount > 0 and no specific type are deposits
     // or just return all and let frontend filter if needed.
@@ -1082,6 +1208,8 @@ export const getBankAccounts = async (req: Request, res: Response, next: NextFun
       .select('*')
       .order('bank_name');
 
+    query = applyBranchFilter(query, req);
+
     if (branch_id) {
       query = query.eq('branch_id', branch_id);
     }
@@ -1104,12 +1232,16 @@ export const createBankDeposit = async (req: Request, res: Response, next: NextF
       return;
     }
 
+    const effectiveBranchId = isGlobalRole((req as any).user?.role) 
+      ? (branch_id || (req as any).user?.branch_id)
+      : (req as any).user?.branch_id;
+
     // Record the bank transaction (a deposit is a CREDIT to the bank account in this schema)
     const { data, error } = await supabase
       .from('accounting_bank_transactions')
       .insert([{
         bank_account_id,
-        branch_id,
+        branch_id: effectiveBranchId,
         transaction_date: deposit_date || new Date().toISOString().split('T')[0],
         debit_amount: 0,
         credit_amount: amount,
@@ -1154,16 +1286,25 @@ export const getReconciliationData = async (req: Request, res: Response, next: N
   try {
     const { branch_id } = req.query;
 
-    if (!branch_id) {
+    if (!branch_id && !(req as any).user?.branch_id) {
       res.status(400).json({ success: false, message: 'Branch ID is required' });
       return;
+    }
+
+    const effectiveBranchId = isGlobalRole((req as any).user?.role) 
+      ? (branch_id || (req as any).user?.branch_id)
+      : (req as any).user?.branch_id;
+
+    if (!effectiveBranchId) {
+       res.status(403).json({ success: false, message: 'Access denied: Branch ID missing' });
+       return;
     }
 
     // 1. Fetch unmatched system sales (Restaurant)
     const { data: restOrders, error: restError } = await supabase
       .from('restaurant_orders')
       .select('id, order_number, total_amount, created_at, payment_method')
-      .eq('branch_id', branch_id)
+      .eq('branch_id', effectiveBranchId)
       .eq('payment_status', 'paid')
       .eq('reconciled', false);
 
@@ -1173,7 +1314,7 @@ export const getReconciliationData = async (req: Request, res: Response, next: N
     const { data: barOrders, error: barError } = await supabase
       .from('bar_orders')
       .select('id, order_number, total, created_at, payment_method')
-      .eq('branch_id', branch_id)
+      .eq('branch_id', effectiveBranchId)
       .eq('payment_status', 'paid')
       .eq('reconciled', false);
 
@@ -1186,7 +1327,7 @@ export const getReconciliationData = async (req: Request, res: Response, next: N
         *,
         bank_account:accounting_bank_accounts!inner(*)
       `)
-      .eq('bank_account.branch_id', branch_id)
+      .eq('bank_account.branch_id', effectiveBranchId)
       .eq('reconciled', false)
       .gt('credit_amount', 0);
 
@@ -1199,7 +1340,7 @@ export const getReconciliationData = async (req: Request, res: Response, next: N
     const { data: bankAccounts } = await supabase
       .from('accounting_bank_accounts')
       .select('current_balance')
-      .eq('branch_id', branch_id);
+      .eq('branch_id', effectiveBranchId);
 
     const bankBalance = bankAccounts?.reduce((sum: number, acc: any) => sum + (acc.current_balance || 0), 0) || 0;
 

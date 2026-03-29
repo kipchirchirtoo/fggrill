@@ -1,0 +1,23 @@
+
+Searching for: Kigen
+  staff_profiles: 3 matches
+    - ID: 3062b9ae-a04b-4a21-8f8d-eac36f8e52f3, Name: CHRIS KIGEN, Role: ADMIN, Dept: driver, ID: FGH008, Branch: 1
+    - ID: c907c98a-abed-4ffe-b9a2-0e7726535e48, Name: COLLINS KIGEN, Role: UNSPECIFIED, Dept: general, ID: FGD004, Branch: 4
+    - ID: 64a98f91-bdab-4b91-bc12-da62028a2193, Name: EZEKIEL KIGEN, Role: CHEF, Dept: restaurant, ID: FGB7, Branch: 2
+  users: 0 matches
+
+Searching for: Rider
+  staff_profiles: 1 matches
+    - ID: 6dd8d12d-f607-4797-bdea-5098c8c7cf51, Name: FESTUS RIDER, Role: MAINTENANCE / OTHER, Dept: driver, ID: FGH081, Branch: 1
+  users: 0 matches
+
+Searching for: Yegon
+  staff_profiles: 7 matches
+    - ID: 789da397-524b-4741-bb6c-537c6aba0f1b, Name: MERCY BYEGON, Role: CLUB, Dept: bar_lounge, ID: FGB24, Branch: 2
+    - ID: 61361c89-3067-4521-90c9-a9b85be57669, Name: ALPHONSE YEGON, Role: WAITERS / WAITERESSES, Dept: restaurant, ID: FGG12, Branch: 9
+    - ID: ee7cab43-05dd-472a-a0bc-5a9c8efd706b, Name: EZRA BYEGON, Role: DISPENSE, Dept: restaurant, ID: FGG24, Branch: 9
+    - ID: 50b3aa31-7e66-4722-add0-50054955a7e4, Name: FELIX YEGON, Role: STORES, Dept: driver, ID: FGH073, Branch: 1
+    - ID: ae30dc19-3935-4522-a39d-1c6ac1a3c4f1, Name: MILLICET BYEGON, Role: STEWARD, Dept: general, ID: FGH064, Branch: 1
+    - ID: c1d5b5b3-a0f2-49c5-beef-e5ac03f78689, Name: EZRA KIPRONO BYEGON, Role: DESPENSE, Dept: restaurant, ID: FGB10, Branch: 2
+    - ID: d51e60a1-b82f-4be0-9deb-63c8ae0ffd67, Name: NICHOLAS KIPYEGON, Role: WAITER, Dept: restaurant, ID: FGB12, Branch: 2
+  users: 0 matches

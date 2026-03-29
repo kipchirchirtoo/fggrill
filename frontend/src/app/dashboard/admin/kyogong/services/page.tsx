@@ -7,24 +7,15 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { ServiceFormModal } from '@/components/kyogong/ServiceFormModal';
+import { kyogongAPI } from '@/lib/api/kyogong';
+import { DynamicService } from '@/lib/api/types';
 import { toast } from 'sonner';
-import { API_URL } from '@/lib/config';
 import {
     Plus, Search, Filter, RefreshCw,
     Edit2, Trash2, Power, PowerOff,
     LayoutGrid, List, SlidersHorizontal
 } from 'lucide-react';
 
-interface DynamicService {
-    id: number;
-    service_type: string;
-    name: string;
-    pricing_model: string;
-    base_price: number;
-    price_per_hour: number;
-    is_active: boolean;
-    created_at: string;
-}
 
 export default function DynamicServicesPage() {
     const [services, setServices] = useState<DynamicService[]>([]);
@@ -37,13 +28,9 @@ export default function DynamicServicesPage() {
     const fetchServices = useCallback(async () => {
         setIsLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/api/kyogong/dynamic-services`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const data = await res.json();
-            if (data.success) {
-                setServices(data.data || []);
+            const res = await kyogongAPI.getDynamicServices();
+            if (res.success) {
+                setServices(res.data || []);
             }
         } catch (error) {
             console.error('Error fetching services:', error);
@@ -59,18 +46,11 @@ export default function DynamicServicesPage() {
 
     const handleToggleStatus = async (service: DynamicService) => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/api/kyogong/dynamic-services/${service.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ is_active: !service.is_active })
+            const res = await kyogongAPI.updateDynamicService(service.id, { 
+                is_active: !service.is_active 
             });
 
-            const data = await res.json();
-            if (data.success) {
+            if (res.success) {
                 toast.success(`Service ${service.is_active ? 'disabled' : 'enabled'}`);
                 fetchServices();
             }

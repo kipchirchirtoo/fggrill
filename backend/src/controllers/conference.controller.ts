@@ -75,6 +75,73 @@ export const createHall = async (
     }
 };
 
+// @desc    Check conference hall availability
+// @route   GET /api/conference/halls/:id/availability
+// @access  Private
+export const checkHallAvailability = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { start_date, end_date, exclude_booking_id } = req.query;
+
+        if (!start_date || !end_date) {
+            throw new AppError('Start date and end date are required', 400);
+        }
+
+        let query = supabase
+            .from('conference_hall_bookings')
+            .select('*')
+            .eq('conference_hall_id', id)
+            .eq('booking_status', 'confirmed');
+
+        if (exclude_booking_id) {
+            query = query.neq('id', exclude_booking_id);
+        }
+
+        const { data: bookings, error } = await query;
+
+        if (error) throw error;
+
+        // Overlap check: reqStart < bEnd && reqEnd > bStart
+        const reqStart = new Date(start_date as string);
+        const reqEnd = new Date(end_date as string);
+
+        const overlapping = bookings?.filter(b => {
+            const bStart = new Date(b.start_date);
+            const bEnd = new Date(b.end_date);
+            return reqStart < bEnd && reqEnd > bStart;
+        });
+
+        // Also check accounting invoices for pending/confirmed conference bookings
+        const { data: invoices, error: invError } = await supabase
+            .from('accounting_ar_invoices')
+            .select('*')
+            .eq('conference_hall_id', id)
+            .neq('status', 'voided'); // Assuming 'voided' means cancelled
+
+        if (invError) throw invError;
+
+        const overlappingInvoices = invoices?.filter(inv => {
+            const iStart = new Date(inv.conference_start_date);
+            const iEnd = new Date(inv.conference_end_date);
+            return reqStart < iEnd && reqEnd > iStart;
+        });
+
+        const isAvailable = (!overlapping || overlapping.length === 0) && (!overlappingInvoices || overlappingInvoices.length === 0);
+
+        res.status(200).json({
+            success: true,
+            available: isAvailable,
+            conflicts: [...(overlapping || []), ...(overlappingInvoices || [])]
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // @desc    Get all conference bookings
 // @route   GET /api/conference/bookings
 // @access  Private

@@ -374,11 +374,109 @@ export const receivePurchaseOrder = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        // This endpoint will eventually be deprecated in favor of GRN controller
-        // For now, it will redirect to or simulate GRN creation if needed, 
-        // but it's better to keep it simple or throw an error to use the new GRN workflow.
-        throw new AppError('Please use the GRN (Goods Received Note) workflow for receiving goods', 400);
+        const { id } = req.params;
+        const userId = req.user?.id;
+        
+        // Find PO
+        const { data: po, error: fetchError } = await supabase
+            .from('store_purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !po) {
+            throw new AppError('Purchase order not found', 404);
+        }
+
+        if (po.status === 'RECEIVED' || po.status === 'received') {
+            throw new AppError('Purchase order is already received', 400);
+        }
+
+        // Get po items
+        const { data: items, error: itemsError } = await supabase
+            .from('store_po_items')
+            .select('*')
+            .eq('po_id', id);
+
+        if (itemsError || !items) {
+            throw new AppError('Could not fetch po items', 500);
+        }
+
+        // Determine destination branch.
+        let targetBranchId = req.user?.branch_id;
+        if (!targetBranchId) {
+            const { data: central } = await supabase.from('branches').select('id').eq('is_central_store', true).single();
+            if (central) {
+                targetBranchId = central.id;
+            } else {
+                throw new AppError('User has no branch, and no central store is configured', 400);
+            }
+        }
+
+        // Update items and branch stock
+        for (const item of items) {
+            const qty = item.quantity_ordered || item.quantity;
+            if (!qty) continue;
+            
+            // Add to receiving branch stock
+            const { data: existing } = await supabase
+                .from('branch_stock')
+                .select('quantity')
+                .eq('branch_id', targetBranchId)
+                .eq('item_sku', item.item_id)
+                .maybeSingle();
+
+            const currentQty = (existing && typeof existing.quantity === 'number') ? existing.quantity : 0;
+            const newQty = currentQty + qty;
+
+            await supabase
+                .from('branch_stock')
+                .upsert({
+                    branch_id: targetBranchId,
+                    item_sku: item.item_id,
+                    quantity: newQty,
+                    last_stock_in: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'branch_id,item_sku' });
+
+            // Log stock movement
+            await supabase
+                .from('branch_stock_movements')
+                .insert({
+                    branch_id: targetBranchId,
+                    item_sku: item.item_id,
+                    movement_type: 'PO_RECEIVE',
+                    quantity: qty,
+                    reference_type: 'PURCHASE_ORDER',
+                    reference_id: id,
+                    reference_number: po.po_number,
+                    performed_by: userId,
+                    notes: `Directly received PO ${po.po_number}`
+                });
+        }
+
+        // Update PO status to RECEIVED
+        const { data: updatedPO, error: updateError } = await supabase
+            .from('store_purchase_orders')
+            .update({
+                status: 'RECEIVED',
+                received_by_id: userId,
+                received_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase order received',
+            data: updatedPO
+        });
     } catch (error) {
+        logger.error('Error receiving purchase order:', error);
         next(error);
     }
 };

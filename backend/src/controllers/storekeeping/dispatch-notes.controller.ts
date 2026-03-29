@@ -526,49 +526,17 @@ export const dispatchItems = async (
             }
         }
 
-        // Update dispatch status to IN_TRANSIT
-        const updateData: any = {
-            status: 'IN_TRANSIT',
-            dispatched_at: new Date().toISOString(),
-            dispatcher_id: userId,
-            updated_at: new Date().toISOString()
-        };
+        const updates: any = {};
+        if (vehicle_id) updates.vehicle_id = vehicle_id;
+        if (driver_id) updates.driver_id = driver_id;
+        if (resolvedVehicleNumber) updates.vehicle_number = resolvedVehicleNumber;
+        if (resolvedDriverName) updates.driver_name = resolvedDriverName;
+        if (resolvedDriverPhone) updates.driver_phone = resolvedDriverPhone;
+        if (estimated_delivery) updates.estimated_delivery = estimated_delivery;
+        if (notes) updates.notes = notes;
 
-        if (vehicle_id) updateData.vehicle_id = vehicle_id;
-        if (driver_id) updateData.driver_id = driver_id;
-        if (resolvedVehicleNumber) updateData.vehicle_number = resolvedVehicleNumber;
-        if (resolvedDriverName) updateData.driver_name = resolvedDriverName;
-        if (resolvedDriverPhone) updateData.driver_phone = resolvedDriverPhone;
-        if (estimated_delivery) updateData.estimated_delivery = estimated_delivery;
-        if (notes) updateData.notes = notes;
-
-        const { error: updateError } = await supabase
-            .from('dispatch_notes')
-            .update(updateData)
-            .eq('id', id);
-
-        if (updateError) throw updateError;
-
-        // Deduct stock from central warehouse and add to in-transit
-        if (dispatch.items && dispatch.items.length > 0) {
-            for (const item of dispatch.items) {
-                // Deduct from central warehouse
-                await supabase.rpc('update_branch_stock', {
-                    p_branch_id: dispatch.from_branch_id,
-                    p_item_sku: item.item_sku,
-                    p_quantity_change: -item.dispatched_quantity
-                });
-
-                // Add to in-transit stock
-                await supabase
-                    .from('in_transit_stock')
-                    .insert({
-                        dispatch_id: id,
-                        item_sku: item.item_sku,
-                        quantity: item.dispatched_quantity
-                    });
-            }
-        }
+        // Perform validation, status update, and stock deduction centrally
+        await BranchInventoryService.dispatchItems(id, userId, updates);
 
         res.status(200).json({
             success: true,
@@ -593,6 +561,10 @@ export const confirmDelivery = async (
         const { items_received, discrepancy_notes } = req.body;
         const userId = req.user?.id;
 
+        if (!items_received || !Array.isArray(items_received)) {
+            throw new AppError('items_received array is required', 400);
+        }
+
         // Get dispatch details
         const { data: dispatch, error: fetchError } = await supabase
             .from('dispatch_notes')
@@ -607,7 +579,98 @@ export const confirmDelivery = async (
             throw new AppError('Dispatch note not found', 404);
         }
 
-        // Update dispatch status
+        if (dispatch.status === 'CONFIRMED' || dispatch.status === 'DELIVERED') {
+            throw new AppError('Dispatch note has already been confirmed', 400);
+        }
+
+        // Update dispatch items with received quantities FIRST in a safe loop
+        for (const receivedItem of items_received) {
+            try {
+                const originalItem = dispatch.items.find((i: any) => i.id === receivedItem.item_id);
+
+                if (originalItem) {
+                    const rawQty = receivedItem.received_quantity ?? receivedItem.quantity ?? originalItem.dispatched_quantity ?? 0;
+                    const receivedQty = isFinite(Number(rawQty)) ? Math.max(0, Math.round(Number(rawQty))) : 0;
+                    const rawDamaged = receivedItem.damaged_quantity ?? receivedItem.damaged ?? 0;
+                    const damaged = isFinite(Number(rawDamaged)) ? Math.max(0, Math.round(Number(rawDamaged))) : 0;
+                    const missing = (originalItem.dispatched_quantity || 0) - receivedQty - damaged;
+
+                    await supabase
+                        .from('dispatch_items')
+                        .update({
+                            received_quantity: receivedQty,
+                            damaged_quantity: damaged,
+                            missing_quantity: missing > 0 ? missing : 0,
+                            status: missing > 0 ? 'PARTIAL' : 'RECEIVED',
+                            discrepancy_reason: receivedItem.discrepancy_reason || receivedItem.note
+                        })
+                        .eq('id', receivedItem.item_id);
+
+                    // Pre-fetch branch stock to insert previous_stock reliably
+                    const { data: existing } = await supabase
+                        .from('branch_stock')
+                        .select('quantity')
+                        .eq('branch_id', dispatch.to_branch_id)
+                        .eq('item_sku', originalItem.item_sku)
+                        .maybeSingle();
+
+                    const currentQty = (existing && typeof existing.quantity === 'number') ? existing.quantity : 0;
+                    const newQty = currentQty + receivedQty;
+
+                    // Add to receiving branch stock
+                    if (receivedQty > 0) {
+                        const { error: upsertError } = await supabase
+                            .from('branch_stock')
+                            .upsert({
+                                branch_id: dispatch.to_branch_id,
+                                item_sku: originalItem.item_sku,
+                                quantity: newQty,
+                                last_stock_in: new Date().toISOString(),
+                                updated_at: new Date().toISOString()
+                            }, { onConflict: 'branch_id,item_sku' });
+
+                        if (upsertError) {
+                            throw new AppError(`Failed to update branch stock: ${upsertError.message}`, 500);
+                        }
+                    }
+
+                    // Log stock movement ONLY IF quantities actually moved, enforcing schema constraints
+                    if (receivedQty > 0 || damaged > 0 || missing > 0) {
+                        const { error: movementError } = await supabase
+                            .from('branch_stock_movements')
+                            .insert({
+                                branch_id: dispatch.to_branch_id,
+                                item_sku: originalItem.item_sku,
+                                movement_type: 'DISPATCH_RECEIVE',
+                                quantity: receivedQty,
+                                previous_stock: currentQty,
+                                new_stock: newQty,
+                                reference_type: 'DISPATCH',
+                                reference_id: id,
+                                reference_number: dispatch.dispatch_number,
+                                performed_by: userId,
+                                notes: `Received from dispatch ${dispatch.dispatch_number}`
+                            });
+
+                        if (movementError) {
+                            throw new AppError(`Failed to log movement: ${movementError.message}`, 500);
+                        }
+                    }
+
+                    // Remove from in-transit stock
+                    await supabase
+                        .from('in_transit_stock')
+                        .delete()
+                        .eq('dispatch_id', id)
+                        .eq('item_sku', originalItem.item_sku);
+                }
+            } catch (err: any) {
+                logger.error(`Error processing item ${receivedItem.item_id}: ${err.message}`);
+                throw new AppError(`Item processing failed: ${err.message}`, 400); // Bubble safely
+            }
+        }
+
+        // Update dispatch status globally only after items are safe
         await supabase
             .from('dispatch_notes')
             .update({
@@ -618,82 +681,6 @@ export const confirmDelivery = async (
                 updated_at: new Date().toISOString()
             })
             .eq('id', id);
-
-        // Update dispatch items with received quantities
-        for (const receivedItem of items_received) {
-            const originalItem = dispatch.items.find((i: any) => i.id === receivedItem.item_id);
-
-            if (originalItem) {
-                // Support both field naming conventions from frontend
-                const rawQty = receivedItem.received_quantity ?? receivedItem.quantity ?? originalItem.dispatched_quantity ?? 0;
-                const receivedQty = isFinite(Number(rawQty)) ? Math.max(0, Math.round(Number(rawQty))) : 0;
-                const rawDamaged = receivedItem.damaged_quantity ?? receivedItem.damaged ?? 0;
-                const damaged = isFinite(Number(rawDamaged)) ? Math.max(0, Math.round(Number(rawDamaged))) : 0;
-                const missing = (originalItem.dispatched_quantity || 0) - receivedQty - damaged;
-
-                await supabase
-                    .from('dispatch_items')
-                    .update({
-                        received_quantity: receivedQty,
-                        damaged_quantity: damaged,
-                        missing_quantity: missing > 0 ? missing : 0,
-                        status: missing > 0 ? 'PARTIAL' : 'RECEIVED',
-                        discrepancy_reason: receivedItem.discrepancy_reason || receivedItem.note
-                    })
-                    .eq('id', receivedItem.item_id);
-
-                // Add to receiving branch stock
-                if (receivedQty > 0) {
-                    // Always use direct upsert for reliability
-                    const { data: existing, error: selectError } = await supabase
-                        .from('branch_stock')
-                        .select('quantity')
-                        .eq('branch_id', dispatch.to_branch_id)
-                        .eq('item_sku', originalItem.item_sku)
-                        .maybeSingle();
-
-                    const currentQty = (existing && typeof existing.quantity === 'number') ? existing.quantity : 0;
-                    const newQty = currentQty + receivedQty;
-
-                    const { error: upsertError } = await supabase
-                        .from('branch_stock')
-                        .upsert({
-                            branch_id: dispatch.to_branch_id,
-                            item_sku: originalItem.item_sku,
-                            quantity: newQty,
-                            last_stock_in: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        }, { onConflict: 'branch_id,item_sku' });
-
-                    if (upsertError) {
-                        logger.error('branch_stock upsert failed:', upsertError.message);
-                        throw new AppError(`Failed to update branch stock: ${upsertError.message}`, 500);
-                    }
-                }
-
-                // Log stock movement
-                await supabase
-                    .from('branch_stock_movements')
-                    .insert({
-                        branch_id: dispatch.to_branch_id,
-                        item_sku: originalItem.item_sku,
-                        movement_type: 'DISPATCH_RECEIVE',
-                        quantity: receivedQty,
-                        reference_type: 'DISPATCH',
-                        reference_id: id,
-                        reference_number: dispatch.dispatch_number,
-                        performed_by: userId,
-                        notes: `Received from dispatch ${dispatch.dispatch_number}`
-                    });
-
-                // Remove from in-transit stock
-                await supabase
-                    .from('in_transit_stock')
-                    .delete()
-                    .eq('dispatch_id', id)
-                    .eq('item_sku', originalItem.item_sku);
-            }
-        }
 
         // Update stock request status if linked
         if (dispatch.stock_request_id) {

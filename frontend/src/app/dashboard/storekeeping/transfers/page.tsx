@@ -17,6 +17,8 @@ import { storeAPI } from '@/lib/api';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
+import { InventoryItem as Item, Branch } from '@/lib/api/types';
+
 interface Dispatch {
   id: string;
   dispatch_number: string;
@@ -25,8 +27,8 @@ interface Dispatch {
   status: string;
   created_at: string;
   dispatched_at?: string;
-  from_branch?: { id: number; name: string; code: string };
-  to_branch?: { id: number; name: string; code: string };
+  from_branch?: Branch;
+  to_branch?: Branch;
   items_count?: number;
 }
 
@@ -36,16 +38,8 @@ interface TransferItem {
   quantity: number;
   ordered: boolean;
   created_at: string;
-  item?: { sku: string; item_name?: string; description?: string; retail_price?: number };
+  item?: Partial<Item>;
   shop_user?: { id: string; first_name?: string; last_name?: string; email?: string };
-}
-
-interface Item {
-  sku: string;
-  item_name: string;
-  description?: string;
-  quantity: number;
-  retail_price?: number;
 }
 
 export default function TransfersPage() {
@@ -154,7 +148,7 @@ export default function TransfersPage() {
     }
   };
 
-  const filteredItems = items.filter(i => !searchTerm || i.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) || i.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredItems = items.filter(i => !searchTerm || i.name?.toLowerCase().includes(searchTerm.toLowerCase()) || i.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
   const getStatusColor = (s: string) => ({ DRAFT: 'bg-gray-100 text-gray-800', PENDING: 'bg-[#F2F2F7] text-[#3C3C43]', IN_TRANSIT: 'bg-[#F2F2F7] text-[#000000]', DELIVERED: 'bg-[#F2F2F7] text-[#000000]', CONFIRMED: 'bg-[#E5E5EA] text-[#000000]', DISPUTED: 'bg-[#F2F2F7] text-[#000000]' }[s] || 'bg-gray-100 text-gray-800');
   const inTransitCount = dispatches.filter(d => d.status === 'IN_TRANSIT').length;
   const deliveredCount = dispatches.filter(d => ['DELIVERED', 'CONFIRMED'].includes(d.status)).length;
@@ -231,7 +225,7 @@ export default function TransfersPage() {
                 {isManager && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>}
               </tr></thead><tbody className="divide-y">
                 {transferItems.map(i => <tr key={i.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-4"><p className="font-medium">{i.item?.item_name || i.item?.description}</p><p className="text-xs text-gray-500 font-mono">{i.item_sku}</p></td>
+                  <td className="px-4 py-4"><p className="font-medium">{i.item?.name || i.item?.description}</p><p className="text-xs text-gray-500 font-mono">{i.item_sku}</p></td>
                   <td className="px-4 py-4"><User className="h-4 w-4 inline text-gray-400 mr-1" />{i.shop_user?.first_name} {i.shop_user?.last_name}</td>
                   <td className="px-4 py-4 font-bold">{i.quantity}</td>
                   {isManager && <td className="px-4 py-4"><div className="flex gap-2">
@@ -257,9 +251,9 @@ export default function TransfersPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Remove</th>
               </tr></thead><tbody className="divide-y">
                 {myCart.map(i => <tr key={i.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-4"><p className="font-medium">{i.item?.item_name || i.item?.description}</p><p className="text-xs text-gray-500 font-mono">{i.item_sku}</p></td>
+                  <td className="px-4 py-4"><p className="font-medium">{i.item?.name || i.item?.description}</p><p className="text-xs text-gray-500 font-mono">{i.item_sku}</p></td>
                   <td className="px-4 py-4 font-bold text-[#3C3C43]">{i.quantity}</td>
-                  <td className="px-4 py-4">KES {(i.item?.retail_price || 0).toLocaleString()}</td>
+                  <td className="px-4 py-4">KES {(i.item?.unit_price || 0).toLocaleString()}</td>
                   <td className="px-4 py-4"><IOSButton size="sm" variant="outline" className="text-[#3C3C43]" onClick={() => handleCompleteTransfer(i, true)}><X className="h-4 w-4" /></IOSButton></td>
                 </tr>)}
               </tbody></table></div>}
@@ -275,11 +269,11 @@ export default function TransfersPage() {
               <div className="max-h-64 overflow-y-auto border rounded-ios-lg">
                 {filteredItems.slice(0, 20).map(i => (
                   <div key={i.sku} onClick={() => setSelectedItem(i)} className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${selectedItem?.sku === i.sku ? 'bg-[#F2F2F7]' : ''}`}>
-                    <div className="flex justify-between"><div><p className="font-medium">{i.item_name}</p><p className="text-xs text-gray-500 font-mono">{i.sku}</p></div><div className="text-right"><p className="font-bold">{i.quantity} stock</p><p className="text-xs text-gray-500">KES {(i.retail_price || 0).toLocaleString()}</p></div></div>
+                    <div className="flex justify-between"><div><p className="font-medium">{i.name}</p><p className="text-xs text-gray-500 font-mono">{i.sku}</p></div><div className="text-right"><p className="font-bold">{i.current_stock} stock</p><p className="text-xs text-gray-500">KES {(i.unit_price || 0).toLocaleString()}</p></div></div>
                   </div>
                 ))}
               </div>
-              {selectedItem && <div className="bg-[#F2F2F7] p-4 rounded-ios-lg"><p className="font-medium mb-2">Selected: {selectedItem.item_name}</p><div className="flex items-center gap-4"><label>Qty:</label><Input type="number" min="1" max={selectedItem.quantity} value={transferQty} onChange={e => setTransferQty(parseInt(e.target.value) || 1)} className="w-24" /><span className="text-sm text-gray-500">Max: {selectedItem.quantity}</span></div></div>}
+              {selectedItem && <div className="bg-[#F2F2F7] p-4 rounded-ios-lg"><p className="font-medium mb-2">Selected: {selectedItem.name}</p><div className="flex items-center gap-4"><label>Qty:</label><Input type="number" min="1" max={selectedItem.current_stock} value={transferQty} onChange={e => setTransferQty(parseInt(e.target.value) || 1)} className="w-24" /><span className="text-sm text-gray-500">Max: {selectedItem.current_stock}</span></div></div>}
               <div className="flex justify-end gap-3 pt-4 border-t"><IOSButton variant="outline" onClick={() => setIsAddToCartOpen(false)}>Cancel</IOSButton><IOSButton onClick={handleAddToCart} disabled={!selectedItem || transferQty <= 0} leftIcon={<Plus />}>Add</IOSButton></div>
             </div>
           </DialogContent>

@@ -53,10 +53,13 @@ export default function HRSalariesPage() {
         setIsLoading(true);
         try {
 
+            // Role guard: only permitted roles may call getSystemUsers (backend requires SUPER_ADMIN, GM, HR_MANAGER, AUDITOR)
+            const canFetchUsers = user && [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR].includes(user.role as UserRole);
+
             const [staffRes, driversRes, usersRes] = await Promise.all([
                 staffAPI.getStaff({ limit: 1000 }),
                 storeAPI.getDrivers(),
-                typeof systemAPI.getSystemUsers === 'function' ? systemAPI.getSystemUsers() : Promise.resolve({ data: [] }),
+                canFetchUsers ? systemAPI.getSystemUsers() : Promise.resolve({ success: true, data: [] }),
             ]);
 
             const isGuest = (u: any) => {
@@ -174,7 +177,7 @@ export default function HRSalariesPage() {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [user]);
 
     useEffect(() => {
         fetchStaffSalaries();

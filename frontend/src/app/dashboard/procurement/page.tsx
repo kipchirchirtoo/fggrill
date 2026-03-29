@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { procurementAPI, storeAPI } from '@/lib/api';
+import { toast } from 'sonner';
 
 export default function ProcurementDashboard() {
     const [stats, setStats] = useState({
@@ -36,22 +38,41 @@ export default function ProcurementDashboard() {
     });
 
     const [recentPOs, setRecentPOs] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Mock data for initial layout - will be replaced with API calls
-    useEffect(() => {
-        setStats({
-            pendingPOs: 5,
-            openGRNIs: 12,
-            pendingInvoices: 8,
-            lowStockItems: 14
-        });
+    const fetchData = React.useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const [posRes, grniRes, invoicesRes, lowStockRes] = await Promise.all([
+                procurementAPI.getPurchaseOrders({ status: 'pending' }),
+                procurementAPI.getGRNIReport(),
+                procurementAPI.getInvoices({ status: 'pending' }),
+                storeAPI.getItems({ limit: 1, search: '' }) // To get stats
+            ]);
 
-        setRecentPOs([
-            { id: '1', po_number: 'PO240201001', supplier: 'Fresh Foods Ltd', total: 45000, status: 'pending', date: '2024-02-01' },
-            { id: '2', po_number: 'PO240131004', supplier: 'Clean Supplies Co', total: 12500, status: 'approved', date: '2024-01-31' },
-            { id: '3', po_number: 'PO240131002', supplier: 'Global Stationery', total: 8400, status: 'received', date: '2024-01-31' },
-        ]);
+            const recentRes = await procurementAPI.getPurchaseOrders({ limit: 5 });
+
+            setStats({
+                pendingPOs: posRes.success ? (posRes.count || posRes.data?.length || 0) : 0,
+                openGRNIs: grniRes.success ? (grniRes.count || grniRes.data?.length || 0) : 0,
+                pendingInvoices: invoicesRes.success ? (invoicesRes.count || invoicesRes.data?.length || 0) : 0,
+                lowStockItems: lowStockRes.success && lowStockRes.stats ? lowStockRes.stats.lowStock : 0
+            });
+
+            if (recentRes.success) {
+                setRecentPOs(recentRes.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching procurement stats:', error);
+            toast.error('Failed to load live dashboard data');
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
     return (
         <div className="p-6 space-y-6">

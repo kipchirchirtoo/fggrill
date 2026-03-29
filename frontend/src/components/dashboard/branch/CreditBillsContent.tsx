@@ -77,7 +77,14 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
 
         setVerifyingId(advance.id);
         try {
-            const res = await api.staff.simplePayroll.approveAdvance(advance.id);
+            // Safety check for simplePayroll API
+            const payrollApi = api.staff?.simplePayroll;
+            if (!payrollApi || typeof payrollApi.approveAdvance !== 'function') {
+                toast.error('Approval feature is currently unavailable');
+                return;
+            }
+
+            const res = await payrollApi.approveAdvance(advance.id);
             if (res.success) {
                 toast.success('Advance approved successfully');
                 loadData();
@@ -99,7 +106,14 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
 
         setVerifyingId(loan.id);
         try {
-            const res = await api.staff.simplePayroll.approveLoan(loan.id);
+            // Safety check for simplePayroll API
+            const payrollApi = api.staff?.simplePayroll;
+            if (!payrollApi || typeof payrollApi.approveLoan !== 'function') {
+                toast.error('Approval feature is currently unavailable');
+                return;
+            }
+
+            const res = await payrollApi.approveLoan(loan.id);
             if (res.success) {
                 toast.success('Loan approved successfully');
                 loadData();
@@ -121,7 +135,14 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
 
         setIsMigrating(true);
         try {
-            const res = await api.staff.simplePayroll.triggerPendingBillsMigration();
+            // Safety check for simplePayroll API
+            const payrollApi = api.staff?.simplePayroll;
+            if (!payrollApi || typeof payrollApi.triggerPendingBillsMigration !== 'function') {
+                toast.error('Migration feature is currently unavailable');
+                return;
+            }
+
+            const res = await payrollApi.triggerPendingBillsMigration();
             if (res.success) {
                 toast.success('Migration completed successfully');
                 loadData();
@@ -144,33 +165,53 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
     const loadData = async () => {
         if (!branchId) return;
         setIsLoading(true);
+
+        // Safety check for API availability
+        const payrollApi = api.staff?.simplePayroll;
+
         try {
-            // Fetch based on active tab
-            if (activeTab === 'staff_credit') {
-                const res = await api.staff.simplePayroll.getCreditBills(); // Fetch all statuses
-                if (res.success && Array.isArray(res.data)) {
-                    // Filter by branch locally since API doesn't support branch_id filtering yet for these endpoints
-                    const filtered = res.data.filter((item: any) =>
-                        !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
-                    );
-                    setCreditBills(filtered);
+            // Helper function to fetch data safely based on active tab
+            const fetchData = async (tab: string) => {
+                if (!payrollApi) {
+                    console.warn(`Simple Payroll API namespace missing for tab: ${tab}`);
+                    return { success: true, data: [] };
                 }
-            } else if (activeTab === 'loans') {
-                const res = await api.staff.simplePayroll.getLoans(); // Fetch all statuses
-                if (res.success && Array.isArray(res.data)) {
-                    const filtered = res.data.filter((item: any) =>
-                        !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
-                    );
-                    setLoans(filtered);
+
+                switch (tab) {
+                    case 'staff_credit':
+                        return typeof payrollApi.getCreditBills === 'function'
+                            ? await payrollApi.getCreditBills()
+                            : { success: false, message: 'getCreditBills method missing' };
+                    case 'loans':
+                        return typeof payrollApi.getLoans === 'function'
+                            ? await payrollApi.getLoans()
+                            : { success: false, message: 'getLoans method missing' };
+                    case 'advances':
+                        return typeof payrollApi.getAdvances === 'function'
+                            ? await payrollApi.getAdvances()
+                            : { success: false, message: 'getAdvances method missing' };
+                    default:
+                        return { success: true, data: [] };
                 }
-            } else if (activeTab === 'advances') {
-                const res = await api.staff.simplePayroll.getAdvances(); // Fetch all statuses
-                if (res.success && Array.isArray(res.data)) {
-                    const filtered = res.data.filter((item: any) =>
-                        !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
-                    );
-                    setAdvances(filtered);
-                }
+            };
+
+            const res = await fetchData(activeTab);
+
+            if (res && res.success && Array.isArray(res.data)) {
+                // Filter by branch locally since API doesn't support branch_id filtering yet for these endpoints
+                const filtered = res.data.filter((item: any) =>
+                    !item.staff || item.staff.branch_id === branchId || !item.staff.branch_id
+                );
+
+                if (activeTab === 'staff_credit') setCreditBills(filtered);
+                else if (activeTab === 'loans') setLoans(filtered);
+                else if (activeTab === 'advances') setAdvances(filtered);
+            } else if (res && !res.success) {
+                console.error(`API Error for ${activeTab}:`, res.message);
+                // Clear active list on failure to ensure UI consistency
+                if (activeTab === 'staff_credit') setCreditBills([]);
+                else if (activeTab === 'loans') setLoans([]);
+                else if (activeTab === 'advances') setAdvances([]);
             }
         } catch (error) {
             console.error('Error loading data', error);
@@ -566,20 +607,38 @@ function NewRecordModal({ type, staffList, onClose, onSuccess }: any) {
                 payload.deduction_month = formData.deduction_month;
             }
 
-            // Call API
+            // Call API with safety checks
             let res;
+            const payrollApi = api.staff?.simplePayroll;
+
+            if (!payrollApi) {
+                toast.error('Payroll requested feature is currently unavailable');
+                setLoading(false);
+                return;
+            }
+
             if (type === 'staff_credit') {
-                res = await api.staff.simplePayroll.createCreditBill({
+                if (typeof payrollApi.createCreditBill !== 'function') {
+                    toast.error('Credit bill recording is unavailable');
+                    setLoading(false);
+                    return;
+                }
+                res = await payrollApi.createCreditBill({
                     staff_id: formData.staff_id,
                     amount: parseFloat(formData.amount),
                     description: formData.description || 'Staff credit bill',
                     date: new Date().toISOString().split('T')[0]
                 });
             } else if (type === 'loans') {
+                if (typeof payrollApi.createLoan !== 'function') {
+                    toast.error('Loan recording is unavailable');
+                    setLoading(false);
+                    return;
+                }
                 const total = parseFloat(formData.amount);
                 const months = parseInt(formData.repayment_period) || 1;
                 const [deductYear, deductMonth] = formData.deduction_month.split('-').map(Number);
-                res = await api.staff.simplePayroll.createLoan({
+                res = await payrollApi.createLoan({
                     staff_id: formData.staff_id,
                     total_amount: total,
                     installment_amount: parseFloat((total / months).toFixed(2)),
@@ -589,8 +648,13 @@ function NewRecordModal({ type, staffList, onClose, onSuccess }: any) {
                     start_deduction_year: deductYear
                 });
             } else if (type === 'advances') {
+                if (typeof payrollApi.createAdvance !== 'function') {
+                    toast.error('Advance recording is unavailable');
+                    setLoading(false);
+                    return;
+                }
                 const [deductYear, deductMonth] = formData.deduction_month.split('-').map(Number);
-                res = await api.staff.simplePayroll.createAdvance({
+                res = await payrollApi.createAdvance({
                     staff_id: formData.staff_id,
                     amount: parseFloat(formData.amount),
                     reason: formData.description || 'Salary advance',

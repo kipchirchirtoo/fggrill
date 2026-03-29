@@ -1,0 +1,21 @@
+﻿
+> frontend@1.0.1 build
+> next build
+
+   Γû▓ Next.js 14.0.3
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/297) ...
+
+   Generating static pages (74/297) 
+
+   Generating static pages (148/297) 
+
+   Generating static pages (222/297) 
+
+ Γ£ô Generating static pages (297/297) 

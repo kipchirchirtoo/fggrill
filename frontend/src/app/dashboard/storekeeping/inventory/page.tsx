@@ -22,6 +22,9 @@ import {
   Lock, Unlock, Settings, FileSpreadsheet, Building2, Barcode, Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { storeAPI } from '@/lib/api/store';
+import { systemAPI } from '@/lib/api/system';
+import { API_URL } from '@/lib/config';
 
 
 // SKU Category codes mapping - matches backend sku.service.ts
@@ -60,18 +63,18 @@ interface Branch {
 }
 
 interface Item {
-  id?: number;
+  id?: string;
   sku: string;
   barcode?: string;
-  item_name: string;
+  name: string;
   description?: string;
   category: string;
   category_code?: string;
-  unit_of_measure: string;
-  quantity: number;
-  retail_price?: number;
+  unit: string;
+  current_stock: number;
+  unit_price?: number;
   cost_price?: number;
-  reorder_level?: number;
+  min_stock?: number;
   supplier?: string;
   is_active?: boolean;
   is_auto_sku?: boolean;
@@ -117,25 +120,25 @@ export default function InventoryPage() {
   const [itemForm, setItemForm] = useState<Partial<Item>>({
     sku: '',
     barcode: '',
-    item_name: '',
+    name: '',
     description: '',
     category: 'Bar & Beverages',
-    unit_of_measure: 'piece',
-    quantity: 0,
-    retail_price: 0,
+    unit: 'piece',
+    current_stock: 0,
+    unit_price: 0,
     cost_price: 0,
-    reorder_level: 10,
+    min_stock: 10,
     supplier: ''
   });
 
   // Update SKU preview when item name or category changes
   useEffect(() => {
     if (!itemForm.sku || itemForm.sku === '') {
-      setSkuPreview(generateSKUPreview(itemForm.category || 'General', itemForm.item_name || ''));
+      setSkuPreview(generateSKUPreview(itemForm.category || 'General', itemForm.name || ''));
     } else {
       setSkuPreview(itemForm.sku);
     }
-  }, [itemForm.item_name, itemForm.category, itemForm.sku]);
+  }, [itemForm.name, itemForm.category, itemForm.sku]);
 
   // Fetch branches on mount
   useEffect(() => {
@@ -152,13 +155,9 @@ export default function InventoryPage() {
 
   const fetchBranches = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/branches`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const branchList = Array.isArray(data.data) ? data.data : [];
+      const result = await storeAPI.getBranches();
+      if (result.success && result.data) {
+        const branchList = Array.isArray(result.data) ? result.data : [];
         setBranches(branchList);
 
         // Auto-select user's branch or first branch
@@ -177,13 +176,9 @@ export default function InventoryPage() {
 
   const fetchConfig = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/get_edit_lock_status`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setEditLock(data.edit_lock || false);
+      const result = await storeAPI.getEditLockStatus();
+      if (result.success && result.data) {
+        setEditLock(result.data.locked || false);
       }
     } catch (error) {
       console.error('Error fetching config:', error);
@@ -192,16 +187,8 @@ export default function InventoryPage() {
 
   const toggleEditLock = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/set_edit_lock_status`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ edit_lock_status: !editLock })
-      });
-      if (response.ok) {
+      const result = await storeAPI.setEditLockStatus(!editLock);
+      if (result.success) {
         setEditLock(!editLock);
         toast.success(editLock ? 'Edit lock disabled' : 'Edit lock enabled - Maintenance mode active');
       }
@@ -213,12 +200,9 @@ export default function InventoryPage() {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/export_data`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const blob = await response.blob();
+      const result = await storeAPI.exportData();
+      if (result.success && result.data) {
+        const blob = result.data;
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -244,23 +228,16 @@ export default function InventoryPage() {
 
     setIsImporting(true);
     try {
-      const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${API_URL}/api/store/import_data`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
+      const result = await storeAPI.importData(formData);
 
-      if (response.ok) {
-        const result = await response.json();
-        toast.success(`Import successful: ${result.created || 0} created, ${result.updated || 0} updated`);
+      if (result.success) {
+        toast.success(`Import successful`);
         fetchItems();
       } else {
-        const err = await response.json();
-        throw new Error(err.detail || 'Import failed');
+        throw new Error(result.message || 'Import failed');
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to import data');
@@ -273,18 +250,11 @@ export default function InventoryPage() {
   const fetchItems = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      // Use branch-specific endpoint if branch is selected
-      const url = selectedBranch
-        ? `${API_URL}/api/store/items?branch_id=${selectedBranch}`
-        : `${API_URL}/api/store/items`;
-
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const result = await storeAPI.getItems({
+        branch_id: selectedBranch || undefined
       });
-      if (response.ok) {
-        const data = await response.json();
-        setItems(Array.isArray(data.data) ? data.data : []);
+      if (result.success && result.data) {
+        setItems(Array.isArray(result.data) ? result.data : []);
       }
     } catch (error) {
       toast.error('Failed to load inventory');
@@ -294,15 +264,13 @@ export default function InventoryPage() {
   };
 
   const handleAddItem = async () => {
-    if (!itemForm.item_name?.trim()) {
+    if (!itemForm.name?.trim()) {
       toast.error('Item name is required');
       return;
     }
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
-
       // Prepare payload - SKU will be auto-generated by backend if empty
       const payload = {
         ...itemForm,
@@ -311,19 +279,10 @@ export default function InventoryPage() {
         branch_id: selectedBranch
       };
 
-      const response = await fetch(`${API_URL}/api/store/items`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      const result = await storeAPI.createItem(payload);
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        const generatedSku = result.data?.sku || 'unknown';
+      if (result.success && result.data) {
+        const generatedSku = result.data.sku || 'unknown';
         toast.success(`Item added successfully! SKU: ${generatedSku}`);
         setIsAddModalOpen(false);
         fetchItems();
@@ -331,14 +290,14 @@ export default function InventoryPage() {
         setItemForm({
           sku: '',
           barcode: '',
-          item_name: '',
+          name: '',
           description: '',
           category: 'Bar & Beverages',
-          unit_of_measure: 'piece',
-          quantity: 0,
-          retail_price: 0,
+          unit: 'piece',
+          current_stock: 0,
+          unit_price: 0,
           cost_price: 0,
-          reorder_level: 10,
+          min_stock: 10,
           supplier: ''
         });
       } else {
@@ -352,24 +311,16 @@ export default function InventoryPage() {
   };
 
   const handleUpdateItem = async () => {
-    if (!selectedItem) return;
+    if (!selectedItem?.sku) return;
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${selectedItem.sku}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(itemForm)
-      });
+      const result = await storeAPI.updateItem(selectedItem.sku, itemForm);
 
-      if (response.ok) {
+      if (result.success) {
         toast.success('Item updated successfully');
         setIsEditModalOpen(false);
         fetchItems();
       } else {
-        throw new Error('Failed to update item');
+        throw new Error(result.message || 'Failed to update item');
       }
     } catch (error) {
       toast.error('Failed to update item');
@@ -377,20 +328,16 @@ export default function InventoryPage() {
   };
 
   const handleDeleteItem = async () => {
-    if (!selectedItem) return;
+    if (!selectedItem?.sku) return;
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/items/${selectedItem.sku}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const result = await storeAPI.deleteItem(selectedItem.sku);
 
-      if (response.ok) {
+      if (result.success) {
         toast.success('Item deleted successfully');
         setIsDeleteModalOpen(false);
         fetchItems();
       } else {
-        throw new Error('Failed to delete item');
+        throw new Error(result.message || 'Failed to delete item');
       }
     } catch (error) {
       toast.error('Failed to delete item');
@@ -400,14 +347,14 @@ export default function InventoryPage() {
   const openAddModal = () => {
     setItemForm({
       sku: '',
-      item_name: '',
+      name: '',
       description: '',
       category: 'Beverages',
-      unit_of_measure: 'piece',
-      quantity: 0,
-      retail_price: 0,
+      unit: 'piece',
+      current_stock: 0,
+      unit_price: 0,
       cost_price: 0,
-      reorder_level: 10,
+      min_stock: 10,
       supplier: ''
     });
     setIsAddModalOpen(true);
@@ -421,14 +368,14 @@ export default function InventoryPage() {
 
   const filteredItems = items.filter(item => {
     const matchesSearch = !searchTerm ||
-      item.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sku?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = !categoryFilter || item.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
-  const lowStockCount = items.filter(i => (i.quantity || 0) <= (i.reorder_level || 10)).length;
-  const totalValue = items.reduce((sum, i) => sum + ((i.quantity || 0) * (i.cost_price || 0)), 0);
+  const lowStockCount = items.filter(i => (i.current_stock || 0) <= (i.min_stock || 10)).length;
+  const totalValue = items.reduce((sum, i) => sum + ((i.current_stock || 0) * (i.cost_price || 0)), 0);
 
   return (
     <RouteGuard
@@ -585,7 +532,7 @@ export default function InventoryPage() {
                     return (
                       <tr key={String(item.sku)} className="group hover:bg-stone-50/50 transition-colors">
                         <td className="px-5 py-3.5">
-                          <p className="text-[13px] font-bold text-stone-900 leading-tight">{String(item.item_name)}</p>
+                          <p className="text-[13px] font-bold text-stone-900 leading-tight">{String(item.name)}</p>
                           <p className="text-[11px] text-stone-400 mt-0.5 font-medium line-clamp-1">{String(item.description || '-')}</p>
                         </td>
                         <td className="px-4 py-3.5">
@@ -598,12 +545,12 @@ export default function InventoryPage() {
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           <div className={`inline-flex flex-col items-center ${isLowStock ? 'text-red-600' : 'text-stone-900'}`}>
-                            <span className="text-[13px] font-bold">{item.quantity || 0}</span>
-                            <span className="text-[10px] font-bold opacity-50 uppercase">{String(item.unit_of_measure || '')}</span>
+                            <span className="text-[13px] font-bold">{item.current_stock || 0}</span>
+                            <span className="text-[10px] font-bold opacity-50 uppercase">{String(item.unit || '')}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3.5 text-right font-bold text-stone-900 text-[13px]">
-                          KES {(Number(item.retail_price) || 0).toLocaleString()}
+                          KES {(Number(item.unit_price) || 0).toLocaleString()}
                         </td>
                         {canEdit && (
                           <td className="px-5 py-3.5">
@@ -671,8 +618,8 @@ export default function InventoryPage() {
                     <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Item Name *</p>
                     <input
                       placeholder="e.g., White Bread 400g"
-                      value={itemForm.item_name}
-                      onChange={(e) => setItemForm({ ...itemForm, item_name: e.target.value })}
+                      value={itemForm.name}
+                      onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
                       className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-medium"
                     />
                   </div>
@@ -727,8 +674,8 @@ export default function InventoryPage() {
                 <div>
                   <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 ml-1">Unit of Measure</p>
                   <select
-                    value={itemForm.unit_of_measure}
-                    onChange={(e) => setItemForm({ ...itemForm, unit_of_measure: e.target.value })}
+                    value={itemForm.unit}
+                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
                     className="w-full h-11 px-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 text-sm font-bold text-stone-700"
                   >
                     {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
@@ -742,8 +689,8 @@ export default function InventoryPage() {
                   <input
                     type="number"
                     min="0"
-                    value={itemForm.quantity}
-                    onChange={(e) => setItemForm({ ...itemForm, quantity: parseInt(e.target.value) || 0 })}
+                    value={itemForm.current_stock}
+                    onChange={(e) => setItemForm({ ...itemForm, current_stock: parseInt(e.target.value) || 0 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
                   />
                 </div>
@@ -764,8 +711,8 @@ export default function InventoryPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={itemForm.retail_price}
-                    onChange={(e) => setItemForm({ ...itemForm, retail_price: parseFloat(e.target.value) || 0 })}
+                    value={itemForm.unit_price}
+                    onChange={(e) => setItemForm({ ...itemForm, unit_price: parseFloat(e.target.value) || 0 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
                   />
                 </div>
@@ -774,8 +721,8 @@ export default function InventoryPage() {
                   <input
                     type="number"
                     min="0"
-                    value={itemForm.reorder_level}
-                    onChange={(e) => setItemForm({ ...itemForm, reorder_level: parseInt(e.target.value) || 10 })}
+                    value={itemForm.min_stock}
+                    onChange={(e) => setItemForm({ ...itemForm, min_stock: parseInt(e.target.value) || 10 })}
                     className="w-full h-11 px-4 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900/5 focus:border-stone-900 outline-none transition-all font-bold text-stone-900"
                   />
                 </div>

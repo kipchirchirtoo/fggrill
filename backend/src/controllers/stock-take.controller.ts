@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import notificationService from '../services/notification.service';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 /**
  * Delay utility for exponential backoff
@@ -19,18 +20,19 @@ export const getStockTakes = async (req: Request, res: Response) => {
             .select(`
                 *,
                 branch:branches(name)
-            `)
-            .order('created_at', { ascending: false });
+            `);
 
-        if (branch_id) {
-            query = query.eq('branch_id', branch_id);
+        query = applyBranchFilter(query, req);
+
+        if (req.query.branch_id) {
+            query = query.eq('branch_id', req.query.branch_id);
         }
 
         if (status) {
             query = query.eq('status', status);
         }
 
-        const { data, error } = await query;
+        const { data, error } = await query.order('created_at', { ascending: false });
 
         if (error) throw error;
 

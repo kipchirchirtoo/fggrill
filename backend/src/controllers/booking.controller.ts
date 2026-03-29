@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { supabase } from '../config/database';
 import { bookingService, BookingRequest } from '../services/booking.service';
+import { isGlobalRole } from '../utils/branchIsolation';
 
 // @desc    Get all bookings
 // @route   GET /api/bookings
@@ -21,7 +22,8 @@ export const getBookings = async (
     const limit = parseInt(req.query.limit as string) || 10;
     const startIndex = (page - 1) * limit;
 
-    const branchId = req.user?.branch_id || req.query.branch_id;
+    const isGlobal = isGlobalRole(req.user?.role);
+    const branchId = isGlobal ? req.query.branch_id : req.user?.branch_id;
 
     // Construct select string based on whether we need to filter by branch (which requires inner join on rooms)
     let selectString = '*, guest:guests!guest_id(*)';
@@ -458,7 +460,8 @@ export const getAvailableRooms = async (
       query = query.not('id', 'in', bookedIdsString);
     }
 
-    const branchId = req.user?.branch_id || req.query.branch_id;
+    const isGlobal = isGlobalRole(req.user?.role);
+    const branchId = isGlobal ? req.query.branch_id : req.user?.branch_id;
     if (branchId) {
       query = query.eq('branch_id', branchId);
     }
@@ -510,11 +513,14 @@ export const checkAvailability = async (
       throw new AppError('Check-in date, check-out date, and room type are required', 400);
     }
 
+    const isGlobal = isGlobalRole(req.user?.role);
+    const effectiveBranchId = isGlobal && branchId ? branchId as string : req.user?.branch_id?.toString();
+
     const availability = await bookingService.checkAvailability(
       checkInDate as string,
       checkOutDate as string,
       roomTypeId as string,
-      branchId as string
+      effectiveBranchId
     );
 
     res.status(200).json({

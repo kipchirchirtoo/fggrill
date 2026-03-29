@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/minimal/button";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { procurementAPI } from '@/lib/api';
+import { procurementAPI, storeAPI } from '@/lib/api';
 import { Wallet, CreditCard, Search, RefreshCw, Eye, History, Landmark, ArrowUpRight, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
@@ -92,7 +92,7 @@ export default function PaymentsPage() {
 
     const fetchSuppliers = useCallback(async () => {
         try {
-            const res = await procurementAPI.getSuppliers();
+            const res = await storeAPI.getSuppliers();
             if (res.success) setSuppliers(res.data || []);
         } catch (e) {}
     }, []);

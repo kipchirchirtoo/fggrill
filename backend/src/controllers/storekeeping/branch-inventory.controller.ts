@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
+import { isGlobalRole } from '../../utils/branchIsolation';
 
 // ============================================================
 // BRANCH STOCK MANAGEMENT
@@ -21,8 +22,13 @@ export const getBranchStock = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
+    let branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = isGlobalRole(req.user?.role);
+
+    // Strict override
+    if (!isCentral) {
+      branchId = req.user?.branch_id;
+    }
 
     if (!branchId) {
       if (isCentral) {
@@ -55,8 +61,12 @@ export const getLowStockItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
+    let branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = isGlobalRole(req.user?.role);
+
+    if (!isCentral) {
+        branchId = req.user?.branch_id;
+    }
 
     if (!branchId) {
       if (isCentral) {
@@ -245,35 +255,15 @@ export const getBranchRequests = async (
     let branchId = queryBranchId;
     const status = req.query.status as string;
 
-    // console.log('getBranchRequests Debug:', {
-//       userRole: req.user?.role,
-//       userBranchId: req.user?.branch_id,
-//       queryBranchId,
-//       initialBranchId: branchId
-//     });
+    const isCentralRole = isGlobalRole(req.user?.role);
 
-    // Allow central roles to fetch all requests (branchId is optional)
-    const isCentralRole = [
-      'super_admin',
-      'general_manager',
-      'central_storekeeper',
-      'central_operations_manager',
-      'auditor'
-    ].includes(req.user?.role || '');
-
-    // console.log('isCentralRole:', isCentralRole);
-
-    if (branchId === null) {
-      if (!isCentralRole) {
-        // Non-central roles must use their assigned branch
-        branchId = req.user?.branch_id || null;
-
-        if (!branchId) {
-          res.status(400).json({ success: false, message: 'Branch ID required' });
-          return;
-        }
+    // Strict override
+    if (!isCentralRole) {
+      branchId = req.user?.branch_id || null;
+      if (!branchId) {
+        res.status(400).json({ success: false, message: 'Branch ID required' });
+        return;
       }
-      // Central roles keep branchId as null to fetch all
     }
 
     // console.log('Final branchId for service call:', branchId);
@@ -737,7 +727,12 @@ export const getIncomingDispatches = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    let branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
+    const isCentral = isGlobalRole(req.user?.role);
+
+    if (!isCentral) {
+      branchId = req.user?.branch_id;
+    }
 
     if (!branchId) {
       res.status(400).json({ success: false, message: 'Branch ID required' });

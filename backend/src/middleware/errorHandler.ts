@@ -57,7 +57,18 @@ export const errorHandler = (
       res.status(400).json({
         success: false,
         message: 'Validation Error',
-        errors: err.errors
+        errors: err.errors || err.message
+      });
+      break;
+
+    // PostgreSQL undefined column or syntax error (e.g. from PL/pgSQL triggers)
+    case '42703':
+    case '42P01':
+    case '42000':
+      res.status(400).json({
+        success: false,
+        message: 'Database schema or column reference error',
+        error: err.message
       });
       break;
 

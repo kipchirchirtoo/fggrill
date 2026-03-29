@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import { applyBranchFilter } from '../../utils/branchIsolation';
 
 /**
  * Get all variance reasons
@@ -30,18 +31,19 @@ export const getDailyVariance = async (req: Request, res: Response) => {
     try {
         const { branch_id, date, item_sku } = req.query;
 
-        if (!branch_id) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
-
         let query = supabase
             .from('kitchen_daily_variance')
             .select(`
                 *,
                 reason:kitchen_variance_reasons(reason, requires_approval),
                 approver:users!approved_by(first_name, last_name)
-            `)
-            .eq('branch_id', branch_id);
+            `);
+
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
 
         if (date) {
             query = query.eq('variance_date', date);
@@ -163,15 +165,18 @@ export const getPortionStock = async (req: Request, res: Response) => {
     try {
         const { branch_id } = req.query;
 
-        if (!branch_id) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
-
-        const { data, error } = await supabase
+        let query = supabase
             .from('kitchen_portion_stock')
             .select('*')
-            .eq('branch_id', branch_id)
             .order('portion_name');
+
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -190,14 +195,15 @@ export const getPortionLedger = async (req: Request, res: Response) => {
     try {
         const { branch_id, item_sku } = req.query;
 
-        if (!branch_id) {
-            return res.status(400).json({ success: false, message: 'Branch ID is required' });
-        }
-
         let query = supabase
             .from('kitchen_portion_ledger')
-            .select('*')
-            .eq('branch_id', branch_id);
+            .select('*');
+
+        query = applyBranchFilter(query, req);
+
+        if (branch_id) {
+            query = query.eq('branch_id', branch_id);
+        }
 
         if (item_sku) {
             query = query.eq('item_sku', item_sku);

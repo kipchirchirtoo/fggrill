@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentsVerificationAPI } from '@/lib/api';
+import { PaymentVerification, PaymentStats } from '@/lib/api/types';
 import { PaymentDetailModal } from '@/components/modals/PaymentDetailModal';
 
 type TabId = 'all' | 'pending' | 'accountant_verified' | 'auditor_verified' | 'flagged';
@@ -22,10 +23,10 @@ export default function BranchPaymentsPage() {
     const { activeBranchId } = useBranch();
 
     const [activeTab, setActiveTab] = useState<TabId>('all');
-    const [payments, setPayments] = useState<any[]>([]);
-    const [stats, setStats] = useState<any>(null);
+    const [payments, setPayments] = useState<PaymentVerification[]>([]);
+    const [stats, setStats] = useState<PaymentStats | null>(null);
     const [loading, setLoading] = useState(false);
-    const [selectedPayment, setSelectedPayment] = useState<any>(null);
+    const [selectedPayment, setSelectedPayment] = useState<PaymentVerification | null>(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
 
     // Date filters
@@ -94,7 +95,7 @@ export default function BranchPaymentsPage() {
         setFiltersApplied(false);
     };
 
-    const handleViewDetails = async (payment: any) => {
+    const handleViewDetails = async (payment: PaymentVerification) => {
         // All non-payment_verification records are already fully loaded
         if (payment._source === 'banking' || payment._source === 'payment' || payment._source === 'pos') {
             setSelectedPayment(payment);
@@ -130,6 +131,16 @@ export default function BranchPaymentsPage() {
         }
     };
 
+    const getStatusLabel = (status: string) => {
+        switch (status) {
+            case 'pending': return 'Pending';
+            case 'accountant_verified': return 'Awaiting Auditor';
+            case 'auditor_verified': return 'Approved';
+            case 'flagged': return 'Flagged';
+            default: return status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+    };
+
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'pending': return 'text-amber-600 bg-amber-100';
@@ -140,12 +151,12 @@ export default function BranchPaymentsPage() {
         }
     };
 
-    const tabs: { id: TabId; label: string; icon: any; countKey?: string }[] = [
+    const tabs: { id: TabId; label: string; icon: any; countKey?: keyof PaymentStats }[] = [
         { id: 'all', label: 'All Payments', icon: CreditCard },
-        { id: 'pending', label: 'Pending', icon: Clock, countKey: 'pending' },
-        { id: 'accountant_verified', label: 'Awaiting Auditor', icon: CheckCircle, countKey: 'accountant_verified' },
-        { id: 'auditor_verified', label: 'Approved', icon: CheckCircle, countKey: 'auditor_verified' },
-        { id: 'flagged', label: 'Flagged', icon: AlertTriangle, countKey: 'flagged' },
+        { id: 'pending', label: 'Pending', icon: Clock, countKey: 'pending' as keyof PaymentStats },
+        { id: 'accountant_verified', label: 'Awaiting Auditor', icon: CheckCircle, countKey: 'accountant_verified' as keyof PaymentStats },
+        { id: 'auditor_verified', label: 'Approved', icon: CheckCircle, countKey: 'auditor_verified' as keyof PaymentStats },
+        { id: 'flagged', label: 'Flagged', icon: AlertTriangle, countKey: 'flagged' as keyof PaymentStats },
     ];
 
     return (
@@ -162,7 +173,7 @@ export default function BranchPaymentsPage() {
                                 <CreditCard className="h-6 w-6 text-blue-600" />
                                 Payments Dashboard
                             </h1>
-                            <p className="text-gray-500">All branch payments including banking transactions</p>
+                            <p className="text-gray-500">All Branch Payments Including Banking Transactions</p>
                         </div>
                         <IOSButton
                             variant="secondary"
@@ -264,7 +275,7 @@ export default function BranchPaymentsPage() {
                     {/* Tabs */}
                     <div className="flex border-b border-gray-200 overflow-x-auto">
                         {tabs.map(tab => {
-                            const count = tab.countKey ? (stats?.[tab.countKey] || 0) : payments.length;
+                            const count = tab.countKey ? (stats ? (stats[tab.countKey] as number) : 0) : payments.length;
                             return (
                                 <button
                                     key={tab.id}
@@ -292,18 +303,18 @@ export default function BranchPaymentsPage() {
                         {loading ? (
                             <div className="flex items-center justify-center py-16 gap-3 text-gray-500">
                                 <RefreshCw className="h-5 w-5 animate-spin" />
-                                Loading payments...
+                                Loading Payments...
                             </div>
                         ) : payments.length === 0 ? (
                             <div className="text-center py-16 text-gray-500">
                                 <CreditCard className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                                <p className="font-medium">No payments found</p>
+                                <p className="font-medium">No Payments Found</p>
                                 <p className="text-sm mt-1">
                                     {filtersApplied
-                                        ? `No payments between ${startDate} and ${endDate}`
+                                        ? `No Payments Between ${startDate} and ${endDate}`
                                         : activeTab !== 'all'
-                                        ? `No ${activeTab.replace(/_/g, ' ')} payments`
-                                        : 'No payment records exist yet'}
+                                        ? `No ${getStatusLabel(activeTab)} Payments`
+                                        : 'No Payment Records Exist Yet'}
                                 </p>
                             </div>
                         ) : (
@@ -370,7 +381,7 @@ export default function BranchPaymentsPage() {
                                                     {payment.reference_number || '—'}
                                                 </td>
                                                 <td className="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
-                                                    KES {parseFloat(payment.amount || 0).toLocaleString()}
+                                                    KES {(payment.amount || 0).toLocaleString()}
                                                 </td>
                                                 <td className="px-4 py-3 text-gray-500 text-xs">
                                                     {payment.recorded_by_user?.full_name || '—'}
@@ -378,7 +389,7 @@ export default function BranchPaymentsPage() {
                                                 <td className="px-4 py-3">
                                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(payment.status)}`}>
                                                         {getStatusIcon(payment.status)}
-                                                        {payment.status?.replace(/_/g, ' ')}
+                                                        {getStatusLabel(payment.status)}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-center">

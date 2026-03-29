@@ -36,29 +36,14 @@ import { storeAPI } from '@/lib/api';
 import { format } from 'date-fns';
 
 
+import { InventoryItem as Item, StockRequest, Branch } from '@/lib/api/types';
+
 interface BranchStock {
   id: string;
   item_sku: string;
   quantity: number;
   reorder_level: number;
-  item?: {
-    sku: string;
-    item_name: string;
-    description: string;
-    category: string;
-    unit_of_measure: string;
-    retail_price: number;
-  };
-}
-
-interface StockRequest {
-  id: string;
-  request_number: string;
-  request_type: string;
-  priority: string;
-  status: string;
-  created_at: string;
-  items: any[];
+  item?: Item;
 }
 
 interface IncomingDispatch {
@@ -268,8 +253,6 @@ export default function BranchStorekeeperPage() {
       // NOTE: Using raw fetch here because storeAPI.updateBranchStock might not exist or have the right signature
       // If it exists, replace with: await storeAPI.updateBranchStock(...)
       // For now, assuming direct update or using a loop if API doesn't support bulk
-      const token = localStorage.getItem('token');
-
       for (const [sku, quantity] of itemsToUpdate) {
         const item = branchStock.find(s => s.item_sku === sku);
         if (item) {
@@ -277,19 +260,11 @@ export default function BranchStorekeeperPage() {
           const adjustment = Number(quantity) - theoreticalStock;
 
           if (adjustment !== 0) {
-            // Fallback to fetch if API method missing
-            await fetch(`${API_URL}/api/store/branch-stock/update`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                item_sku: sku,
-                quantity: adjustment,
-                movement_type: 'MORNING_COUNT',
-                notes: updateNotes || 'Morning stock count'
-              })
+            await storeAPI.adjustBranchStock({
+              item_sku: sku,
+              quantity: adjustment,
+              movement_type: 'MORNING_COUNT',
+              notes: updateNotes || 'Morning stock count'
             });
           }
         }
@@ -363,8 +338,9 @@ export default function BranchStorekeeperPage() {
       setReceivedItems({});
       setDeliveryNotes('');
       fetchDashboardData();
-    } catch (error) {
-      toast.error('Failed to confirm delivery');
+    } catch (error: any) {
+      const backendMessage = error?.response?.data?.message;
+      toast.error(backendMessage || error?.message || 'Failed to confirm delivery');
     }
   };
 
@@ -396,7 +372,7 @@ export default function BranchStorekeeperPage() {
   const filteredStock = branchStock.filter((stock: BranchStock) =>
     searchTerm === '' ||
     stock.item_sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    stock.item?.item_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    stock.item?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (isLoading) {

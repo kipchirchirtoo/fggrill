@@ -7,6 +7,7 @@ import { paymentVerificationService } from '../services/payment.verification.ser
 import { mpesaService } from '../services/mpesa.service';
 import notificationService from '../services/notification.service';
 import { deductIngredientsForItem } from './kitchen/recipes.controller';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 /**
  * Get Bill Details by Booking ID (or Barcode)
@@ -169,9 +170,7 @@ export const getBillDetails = async (
                 .or(`order_number.eq.${searchId},order_number.eq.${searchId + ' '}`);
 
             // Branch isolation
-            if (req.user?.branch_id) {
-                restaurantQuery = restaurantQuery.eq('branch_id', req.user.branch_id);
-            }
+            restaurantQuery = applyBranchFilter(restaurantQuery, req);
 
             const { data: order, error: orderError } = await restaurantQuery.single();
 
@@ -222,9 +221,7 @@ export const getBillDetails = async (
                 .or(`order_number.eq.${searchId},order_number.eq.${searchId + ' '}`);
 
             // Branch isolation
-            if (req.user?.branch_id) {
-                barQuery = barQuery.eq('branch_id', req.user.branch_id);
-            }
+            barQuery = applyBranchFilter(barQuery, req);
 
             const { data: order, error: orderError } = await barQuery.single();
 
@@ -287,9 +284,7 @@ export const getBillDetails = async (
                 `)
                 .eq('transaction_number', searchId);
 
-            if (req.user?.branch_id) {
-                kyogongQuery = kyogongQuery.eq('branch_id', req.user.branch_id);
-            }
+            kyogongQuery = applyBranchFilter(kyogongQuery, req);
 
             const { data: tx, error: txError } = await kyogongQuery.single();
 
@@ -339,9 +334,7 @@ export const getBillDetails = async (
                 `)
                 .eq('transaction_ref', searchId);
 
-            if (req.user?.branch_id) {
-                posQuery = posQuery.eq('branch_id', req.user.branch_id);
-            }
+            posQuery = applyBranchFilter(posQuery, req);
 
             let { data: finalTx, error: txError } = await posQuery.single();
 
@@ -352,9 +345,7 @@ export const getBillDetails = async (
                     .select('*, items:pos_transaction_items(*, product:restaurant_menu_items(name))')
                     .eq('transaction_ref', cleanId);
 
-                if (req.user?.branch_id) {
-                    cleanIdQuery = cleanIdQuery.eq('branch_id', req.user.branch_id);
-                }
+                cleanIdQuery = applyBranchFilter(cleanIdQuery, req);
                 const { data: tx2 } = await cleanIdQuery.single();
                 finalTx = tx2;
             }
@@ -401,9 +392,7 @@ export const getBillDetails = async (
                 .select('*')
                 .eq('bill_number', searchId);
 
-            if (req.user?.branch_id) {
-                query = query.eq('branch_id', req.user.branch_id);
-            }
+            query = applyBranchFilter(query, req);
 
             const { data: bill, error: billError } = await query.single();
 
@@ -448,9 +437,7 @@ export const getBillDetails = async (
                 .eq('confirmation_number', searchId);
 
             // Branch isolation via room join
-            if (req.user?.branch_id) {
-                query = query.eq('room.branch_id', req.user.branch_id);
-            }
+            query = applyBranchFilter(query, req, 'room.branch_id');
 
             const { data: booking, error: bookingError } = await query.single();
 
@@ -473,9 +460,7 @@ export const getBillDetails = async (
                 `)
                 .eq('id', bookingId);
 
-            if (req.user?.branch_id) {
-                hotelQuery = hotelQuery.eq('room.branch_id', req.user.branch_id);
-            }
+            hotelQuery = applyBranchFilter(hotelQuery, req, 'room.branch_id');
 
             const { data: booking, error: bookingError } = await hotelQuery.maybeSingle(); // Changed to maybeSingle to avoid 404 throw early
             if (!bookingError && booking) {
@@ -489,7 +474,7 @@ export const getBillDetails = async (
                 .select('*, items:shift_transaction_items(*), branch:branches(name)')
                 .eq('id', bookingId);
 
-            if (req.user?.branch_id) kyogongQuery = kyogongQuery.eq('branch_id', req.user.branch_id);
+            kyogongQuery = applyBranchFilter(kyogongQuery, req);
             const { data: tx } = await kyogongQuery.maybeSingle();
             if (tx) {
                 res.json({
@@ -1655,28 +1640,11 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
         const { branch_id, status, customer_type, bill_type } = req.query;
 
         const userRole = (req.user as any)?.role?.toLowerCase() || '';
+        const isGlobal = isGlobalRole(userRole);
 
-        // Prioritize branch_id from query
+        // Prioritize branch_id from query only if global
         let queryBranchId = branch_id ? parseInt(branch_id as string) : null;
-
-        // If no query branch_id, use the user's assigned branch. 
-        // If the user's branch is null (e.g., central staff), they might see all if we don't strict filter, 
-        // but for local receptionists, they MUST be tied to a branch.
-        // Let's enforce a strict branch filter for these roles. If they have no branch_id in DB, default to 1 (Bomet Town) for now, 
-        // or explicitly require a branch.
-        const userBranchId = (req.user as any)?.branch_id || (req.user as any)?.branchId;
-
-        let effectiveBranchId = queryBranchId;
-
-        if (!effectiveBranchId) {
-            if (userRole === 'super_admin' || userRole === 'general_manager') {
-                // Admins can see all if they don't specify
-                effectiveBranchId = null;
-            } else {
-                // Must be restricted. If no branch in DB, default to 1 as a safety fallback to prevent seeing ALL branches.
-                effectiveBranchId = userBranchId || 1;
-            }
-        }
+        let effectiveBranchId = isGlobal ? queryBranchId : ((req.user as any)?.branch_id || 1);
 
         // Define roles that should see EVERYTHING (Hotel, Invoices, All Branches potentially)
         // Usually, these roles only see "Everything in THEIR branch" unless they are super_admin.
@@ -2072,8 +2040,13 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         let queryStr = 'SELECT * FROM public.credit_bills WHERE 1=1';
         const params: any[] = [];
 
-        if (branch_id) {
-            params.push(parseInt(branch_id as string));
+        const isGlobal = isGlobalRole(req.user?.role);
+        const effectiveBranchId = isGlobal ? 
+            (branch_id ? parseInt(branch_id as string) : null) : 
+            req.user?.branch_id;
+
+        if (effectiveBranchId) {
+            params.push(effectiveBranchId);
             queryStr += ` AND branch_id = $${params.length}`;
         }
 
@@ -2124,7 +2097,10 @@ export const getLoans = async (req: Request, res: Response, next: NextFunction):
             .eq('bill_type', 'loan')
             .order('credit_date', { ascending: false });
 
-        if (branch_id) {
+        query = applyBranchFilter(query, req);
+        const isGlobal = isGlobalRole(req.user?.role);
+
+        if (isGlobal && branch_id) {
             query = query.eq('branch_id', parseInt(branch_id as string));
         }
 
@@ -2163,7 +2139,10 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
             .or('bill_type.eq.advance,bill_type.eq.salary_advance')
             .order('credit_date', { ascending: false });
 
-        if (branch_id) {
+        query = applyBranchFilter(query, req);
+        const isGlobal = isGlobalRole(req.user?.role);
+
+        if (isGlobal && branch_id) {
             query = query.eq('branch_id', parseInt(branch_id as string));
         }
 
@@ -2404,7 +2383,10 @@ export const getCashierShifts = async (req: Request, res: Response, next: NextFu
             .select('*')
             .order('shift_date', { ascending: false });
 
-        if (branch_id) {
+        query = applyBranchFilter(query, req);
+        const isGlobal = isGlobalRole(req.user?.role);
+
+        if (isGlobal && branch_id) {
             query = query.eq('branch_id', parseInt(branch_id as string));
         }
 
@@ -2580,26 +2562,32 @@ export const getCashierStats = async (req: Request, res: Response, next: NextFun
         const { branch_id } = req.query;
         const today = new Date().toISOString().split('T')[0];
 
+        const isGlobal = isGlobalRole(req.user?.role);
+        const effectiveBranchId = isGlobal && branch_id ? parseInt(branch_id as string) : req.user?.branch_id;
+
         // Get today's transactions
-        const { data: transactions } = await supabase
+        let txQuery = supabase
             .from('cashier_transactions')
             .select('*')
-            .eq('branch_id', parseInt(branch_id as string))
             .gte('transaction_date', today);
+        if (effectiveBranchId) txQuery = txQuery.eq('branch_id', effectiveBranchId);
+        const { data: transactions } = await txQuery;
 
         // Get unpaid bills
-        const { count: unpaidCount } = await supabase
+        let unpaidQuery = supabase
             .from('unpaid_bills')
             .select('*', { count: 'exact', head: true })
-            .eq('branch_id', parseInt(branch_id as string))
             .eq('status', 'unpaid');
+        if (effectiveBranchId) unpaidQuery = unpaidQuery.eq('branch_id', effectiveBranchId);
+        const { count: unpaidCount } = await unpaidQuery;
 
         // Get pending credit bills
-        const { count: pendingCreditsCount } = await supabase
+        let creditQuery = supabase
             .from('credit_bills')
             .select('*', { count: 'exact', head: true })
-            .eq('branch_id', parseInt(branch_id as string))
             .eq('approval_status', 'pending');
+        if (effectiveBranchId) creditQuery = creditQuery.eq('branch_id', effectiveBranchId);
+        const { count: pendingCreditsCount } = await creditQuery;
 
         // Get active shift
         const { data: activeShift } = await supabase
@@ -2647,7 +2635,10 @@ export const getCashierLogbookToday = async (req: Request, res: Response, next: 
         const { type } = req.query;
         const branch_id = req.headers['x-branch-id'];
 
-        if (!type || !branch_id) {
+        const isGlobal = isGlobalRole(req.user?.role);
+        const effectiveBranchId = isGlobal && branch_id ? branch_id : req.user?.branch_id;
+
+        if (!type || !effectiveBranchId) {
             throw new AppError('Type and Branch ID are required', 400);
         }
 
@@ -2662,7 +2653,7 @@ export const getCashierLogbookToday = async (req: Request, res: Response, next: 
                 unpaid_bills:cashier_logbook_lines(*),
                 paid_bills:cashier_logbook_lines(*)
             `)
-            .eq('branch_id', branch_id)
+            .eq('branch_id', effectiveBranchId)
             .eq('type', type)
             .eq('log_date', today)
             .single();
@@ -2690,7 +2681,7 @@ export const getCashierLogbookToday = async (req: Request, res: Response, next: 
         const { data: stats, error: statsError } = await supabase
             .from('cashier_transactions')
             .select('amount, payment_method')
-            .eq('branch_id', branch_id)
+            .eq('branch_id', effectiveBranchId)
             .gte('created_at', `${today}T00:00:00Z`)
             .lte('created_at', `${today}T23:59:59Z`);
 
@@ -2931,7 +2922,10 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
             .eq('status', status)
             .order('log_date', { ascending: false });
 
-        if (branch_id) {
+        query = applyBranchFilter(query, req);
+        const isGlobal = isGlobalRole(req.user?.role);
+
+        if (isGlobal && branch_id) {
             query = query.eq('branch_id', branch_id);
         }
 
@@ -3250,11 +3244,14 @@ export const getPOSReconciliation = async (req: Request, res: Response, next: Ne
         const { date, branch_id } = req.query;
         const targetDate = date ? (date as string) : new Date().toISOString().split('T')[0];
 
+        const isGlobal = isGlobalRole(req.user?.role);
+        const effectiveBranchId = isGlobal && branch_id ? parseInt(branch_id as string) : (req.user?.branch_id || 0);
+
         // 1. Get transactions for the day
         const { data: transactions, error: txError } = await supabase
             .from('pos_transactions')
             .select('*')
-            .eq('branch_id', parseInt(branch_id as string || req.user?.branch_id?.toString() || '0'))
+            .eq('branch_id', effectiveBranchId)
             .gte('created_at', `${targetDate}T00:00:00Z`)
             .lte('created_at', `${targetDate}T23:59:59Z`);
 

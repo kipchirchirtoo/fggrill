@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { migratePendingBills } from '../jobs/migrate-pending-bills.job';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 export const createCreditBill = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -53,9 +54,13 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             .select('*')
             .order('bill_date', { ascending: false });
 
+        query = applyBranchFilter(query, req);
+
         if (staff_id) query = query.eq('staff_id', staff_id);
         if (status === 'pending') query = query.eq('status', 'pending');
         if (status === 'paid' || status === 'deducted') query = query.eq('status', status);
+
+
 
         const { data, error } = await query;
         if (error) throw error;

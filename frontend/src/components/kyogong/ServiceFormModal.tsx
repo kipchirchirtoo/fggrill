@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { X, Loader2, Save } from 'lucide-react';
+import { kyogongAPI } from '@/lib/api/kyogong';
 import { IOSButton } from '@/components/ui/ios-button';
-import { API_URL } from '@/lib/config';
 
 interface ServiceFormModalProps {
     service?: any;
@@ -42,36 +42,25 @@ export function ServiceFormModal({ service, onClose, onSaved }: ServiceFormModal
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            const url = service
-                ? `${API_URL}/api/kyogong/dynamic-services/${service.id}`
-                : `${API_URL}/api/kyogong/dynamic-services`;
+            const payload = {
+                name,
+                service_type: serviceType,
+                pricing_model: pricingModel,
+                base_price: parseFloat(basePrice),
+                price_per_hour: pricePerHour ? parseFloat(pricePerHour) : undefined,
+                is_active: isActive
+            };
 
-            const method = service ? 'PUT' : 'POST';
+            const res = service
+                ? await kyogongAPI.updateDynamicService(service.id, payload)
+                : await kyogongAPI.createDynamicService(payload);
 
-            const res = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    name,
-                    service_type: serviceType,
-                    pricing_model: pricingModel,
-                    base_price: parseFloat(basePrice),
-                    price_per_hour: pricePerHour ? parseFloat(pricePerHour) : undefined,
-                    is_active: isActive
-                })
-            });
-
-            const data = await res.json();
-            if (data.success) {
+            if (res.success) {
                 toast.success(service ? 'Service updated' : 'Service created');
                 onSaved();
                 onClose();
             } else {
-                toast.error(data.error || 'Failed to save service');
+                toast.error(res.error || 'Failed to save service');
             }
         } catch (error) {
             console.error('Error saving service:', error);

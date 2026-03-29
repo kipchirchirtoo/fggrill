@@ -12,7 +12,7 @@ import { Calendar, RefreshCw, User, Bed, Clock } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 
-interface Booking { id: string; guest_name: string; room_number: string; check_in: string; check_out: string; status: string; total_amount: number; }
+import { Booking } from '@/lib/api/types';
 
 const statusConfig: Record<string, { color: string; bg: string }> = {
   confirmed: { color: 'text-green-700', bg: 'bg-green-100' },
@@ -72,7 +72,7 @@ export default function AdminReservationsPage() {
                         <div>
                           <p className="font-bold flex items-center gap-2"><User className="h-4 w-4" /> {booking.guest_name}</p>
                           <p className="text-sm text-gray-500">Room {booking.room_number}</p>
-                          <p className="text-xs text-gray-400 flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(booking.check_in).toLocaleDateString()} - {new Date(booking.check_out).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-400 flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(booking.check_in_date).toLocaleDateString()} - {new Date(booking.check_out_date).toLocaleDateString()}</p>
                         </div>
                       </div>
                       <div className="text-right">

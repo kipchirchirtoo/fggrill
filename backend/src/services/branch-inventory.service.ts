@@ -663,6 +663,25 @@ export async function dispatchItems(
       throw new Error('No items found in dispatch note');
     }
 
+    // Validate stock before processing any deductions
+    for (const item of dispatch.items) {
+      const { data: currentStock, error: currentStockError } = await supabase
+        .from('branch_stock')
+        .select('quantity')
+        .eq('branch_id', dispatch.from_branch_id)
+        .eq('item_sku', item.item_sku)
+        .single();
+        
+      if (currentStockError && currentStockError.code !== 'PGRST116') {
+        throw new Error(`Failed to verify stock for item ${item.item_sku}: ${currentStockError.message}`);
+      }
+
+      const available = currentStock?.quantity || 0;
+      if (available < item.dispatched_quantity) {
+         throw new Error(`Insufficient stock for item ${item.item_sku}. Available: ${available}, Dispatched: ${item.dispatched_quantity}`);
+      }
+    }
+
     // Deduct from central warehouse stock
     for (const item of dispatch.items) {
       try {

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { aggregationService } from '../services/aggregation.service';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 // @desc    Get all transactions
 // @route   GET /api/finance/transactions
@@ -23,6 +24,8 @@ export const getTransactions = async (
       .range(startIndex, startIndex + limit - 1);
 
     // Add filters
+    query = applyBranchFilter(query, req);
+
     if (req.query.type && req.query.type !== 'all') {
       query = query.eq('transaction_type', req.query.type);
     }
@@ -134,6 +137,8 @@ export const getInvoices = async (
       .range(startIndex, startIndex + limit - 1);
 
     // Add filters
+    query = applyBranchFilter(query, req);
+
     if (req.query.status && req.query.status !== 'all') {
       let status = (req.query.status as string).toLowerCase();
       if (status === 'pending') status = 'sent';
@@ -381,13 +386,17 @@ export const getFinancialOverview = async (
       .eq('payment_status', 'completed');
 
     // Apply filters
-    if (branch_id) {
-      restaurantQuery = restaurantQuery.eq('branch_id', branch_id);
-      barQuery = barQuery.eq('branch_id', branch_id);
-      roomQuery = roomQuery.eq('rooms.branch_id', branch_id);
-      expensesTableQuery = expensesTableQuery.eq('branch_id', branch_id);
-      financeIncomeQuery = financeIncomeQuery.eq('branch_id', branch_id);
-      financeExpenseQuery = financeExpenseQuery.eq('branch_id', branch_id);
+    const userBranchId = req.user?.branch_id;
+    const isGlobal = isGlobalRole(req.user?.role);
+    const effectiveBranchId = isGlobal && branch_id ? branch_id : userBranchId;
+
+    if (effectiveBranchId) {
+      restaurantQuery = restaurantQuery.eq('branch_id', effectiveBranchId);
+      barQuery = barQuery.eq('branch_id', effectiveBranchId);
+      roomQuery = roomQuery.eq('rooms.branch_id', effectiveBranchId);
+      expensesTableQuery = expensesTableQuery.eq('branch_id', effectiveBranchId);
+      financeIncomeQuery = financeIncomeQuery.eq('branch_id', effectiveBranchId);
+      financeExpenseQuery = financeExpenseQuery.eq('branch_id', effectiveBranchId);
     }
 
     if (startDate) {
@@ -414,8 +423,8 @@ export const getFinancialOverview = async (
       .select('balance')
       .neq('status', 'paid');
 
-    if (branch_id) {
-      pendingQuery = pendingQuery.eq('branch_id', branch_id);
+    if (effectiveBranchId) {
+      pendingQuery = pendingQuery.eq('branch_id', effectiveBranchId);
     }
 
     const [
@@ -499,6 +508,8 @@ export const getBudgets = async (
         department:departments(id, name)
       `)
       .order('fiscal_year', { ascending: false });
+
+    query = applyBranchFilter(query, req);
 
     if (fiscal_year) {
       query = query.eq('fiscal_year', fiscal_year);
@@ -592,6 +603,8 @@ export const getExpenses = async (
         approved_by:users!approved_by(id, first_name, last_name)
       `)
       .order('created_at', { ascending: false });
+
+    query = applyBranchFilter(query, req);
 
     if (status) {
       query = query.eq('status', status);
