@@ -1,4 +1,6 @@
 
+import { printHtml } from './tauri-print';
+
 export const printReservationInvoice = ({ reservation, branch, user }: {
     reservation: any,
     branch?: any,
@@ -32,7 +34,7 @@ export const printReservationInvoice = ({ reservation, branch, user }: {
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-    const printHtml = `
+    const printHtmlContent = `
         <html>
         <head>
             <title>Invoice ${invoiceNumber} - ${companyName}</title>
@@ -319,9 +321,5 @@ export const printReservationInvoice = ({ reservation, branch, user }: {
         </html>
     `;
 
-    const printWindow = window.open('', '_blank', 'width=900,height=800');
-    if (printWindow) {
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
-    }
+    printHtml(printHtmlContent, { width: 900, height: 800, title: `Invoice ${invoiceNumber}` });
 };

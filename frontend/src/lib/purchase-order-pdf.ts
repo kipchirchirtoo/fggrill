@@ -1,6 +1,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { openBlobForPrint } from './tauri-print';
 
 interface POItem {
     item?: { name: string };
@@ -208,5 +209,5 @@ export const downloadPurchaseOrderPDF = async (po: PurchaseOrderData) => {
 export const printPurchaseOrderPDF = async (po: PurchaseOrderData) => {
     const doc = await generatePurchaseOrderPDF(po);
     doc.autoPrint();
-    window.open(doc.output('bloburl'), '_blank');
+    openBlobForPrint(doc.output('bloburl') as unknown as string);
 };

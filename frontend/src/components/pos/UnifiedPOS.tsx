@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { restaurantAPI, barAPI, staffAPI, receiptsAPI } from '@/lib/api';
+import { printHtml as printHtmlHelper } from '@/lib/tauri-print';
 import { toast } from 'sonner';
 import {
     Search, ChefHat, Plus, Minus, X, ShoppingCart,
@@ -509,13 +510,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                 </html>
             `;
 
-            const printWindow = window.open('', '_blank', 'width=450,height=600');
-            if (printWindow) {
-                printWindow.document.write(receiptHtml);
-                printWindow.document.close();
-            } else {
-                toast.error('Pop-up blocked! Allow pop-ups to print receipts.');
-            }
+            printHtmlHelper(receiptHtml, { width: 450, height: 600, title: `Receipt ${receiptNumber}` });
         } catch (e) {
             console.error('Print Error:', e);
             toast.error('Printing failed.');

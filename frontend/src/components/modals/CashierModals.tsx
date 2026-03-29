@@ -11,6 +11,7 @@ import { IOSCard } from '../ui/ios-card';
 import { Input } from '../ui/input';
 import { toast } from 'sonner';
 import { cashierAPI } from '@/lib/api';
+import { printHtml as printHtmlHelper } from '@/lib/tauri-print';
 import { useBranch } from '@/lib/branch-context';
 import { useAuth } from '@/lib/auth-context';
 
@@ -311,11 +312,7 @@ export const printBrandedBill = ({ billData, activeBranch, user, items, billType
         </html>
     `;
 
-    const printWindow = window.open('', '_blank', 'width=600,height=800');
-    if (printWindow) {
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
-    }
+    printHtmlHelper(printHtml, { width: 600, height: 800, title: `Bill ${billNumber}` });
 };
 
 interface ModalProps {

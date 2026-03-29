@@ -130,11 +130,17 @@ export async function fetchAPI<T>(
       });
 
       // ── Token Expiry Redirect ─────────────────────────────────────────────
-      if (response.status === 401 && !isPython && typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        if (window.location.pathname.includes('/dashboard') || window.location.pathname.includes('/admin')) {
-          window.location.href = '/login?expired=true';
+      // Skip for /auth/me — that endpoint is handled gracefully by checkAuth()
+      // in auth-context.tsx which uses the cached user on failure.
+      const isSessionCheck = endpoint === '/auth/me' || endpoint === '/auth/session';
+      if (response.status === 401 && !isPython && typeof window !== 'undefined' && !isSessionCheck) {
+        const isLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
+        if (!isLoginPage) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          if (window.location.pathname.includes('/dashboard') || window.location.pathname.includes('/admin')) {
+            window.location.href = '/login?expired=true';
+          }
         }
       }
 

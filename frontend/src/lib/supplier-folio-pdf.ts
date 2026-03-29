@@ -1,6 +1,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { openBlobForPrint } from './tauri-print';
 
 interface SupplierData {
     name: string;
@@ -178,5 +179,5 @@ export const downloadSupplierFolioPDF = async (supplier: SupplierData) => {
 export const printSupplierFolioPDF = async (supplier: SupplierData) => {
     const doc = await generateSupplierFolioPDF(supplier);
     doc.autoPrint();
-    window.open(doc.output('bloburl'), '_blank');
+    openBlobForPrint(doc.output('bloburl') as unknown as string);
 };

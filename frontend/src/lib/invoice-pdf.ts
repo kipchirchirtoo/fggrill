@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatDate } from './date-utils';
 import { PYTHON_SERVICE_URL } from './config';
+import { openBlobForPrint } from './tauri-print';
 
 interface InvoiceItem {
     description?: string;
@@ -265,11 +266,8 @@ export const printInvoicePDF = async (invoice: InvoiceData) => {
     try {
         const doc = await generateInvoicePDF(invoice);
         doc.autoPrint();
-        const blobUrl = doc.output('bloburl');
-        const printWindow = window.open(blobUrl, '_blank');
-        if (!printWindow) {
-            throw new Error('Popup blocked. Please allow popups for this site.');
-        }
+        const blobUrl = doc.output('bloburl') as unknown as string;
+        openBlobForPrint(blobUrl);
         return true;
     } catch (error) {
         console.error('Print error:', error);

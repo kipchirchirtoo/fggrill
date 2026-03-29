@@ -44,6 +44,42 @@ pub async fn cmd_open_pos_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Open a print window — used for receipts, invoices, folios
+#[tauri::command]
+pub async fn cmd_open_print_window(
+    app: AppHandle,
+    label: String,
+    title: Option<String>,
+    width: Option<f64>,
+    height: Option<f64>,
+    url: Option<String>,
+) -> Result<(), String> {
+    let win_label = format!("print-{}", label);
+    let win_title = title.unwrap_or_else(|| "Print Preview".to_string());
+    let win_width = width.unwrap_or(900.0);
+    let win_height = height.unwrap_or(700.0);
+    let win_url = url.unwrap_or_else(|| "about:blank".to_string());
+
+    // If a window with this label already exists, close it first
+    if let Some(existing) = app.get_webview_window(&win_label) {
+        let _ = existing.destroy();
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        &win_label,
+        tauri::WebviewUrl::External(win_url.parse().map_err(|e: url::ParseError| e.to_string())?),
+    )
+    .title(&win_title)
+    .inner_size(win_width, win_height)
+    .center()
+    .focused(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Return branch configuration from local store
 #[tauri::command]
 pub async fn cmd_get_branch_config() -> Result<BranchConfig, String> {

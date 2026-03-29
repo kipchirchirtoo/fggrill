@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatDate } from './date-utils';
 import { PYTHON_SERVICE_URL } from './config';
+import { openBlobForPrint } from './tauri-print';
 
 interface DispatchItem {
     item_sku: string;
@@ -261,7 +262,7 @@ export const downloadDispatchPDF = async (dispatch: DispatchData) => {
 export const printDispatchPDF = async (dispatch: DispatchData) => {
     const doc = await generateDispatchPDF(dispatch);
     doc.autoPrint();
-    window.open(doc.output('bloburl'), '_blank');
+    openBlobForPrint(doc.output('bloburl') as unknown as string);
 };
 
 // =========================================================

@@ -62,6 +62,7 @@ pub fn run() {
             // App
             commands::app::cmd_get_app_info,
             commands::app::cmd_open_pos_window,
+            commands::app::cmd_open_print_window,
             commands::app::cmd_get_branch_config,
         ])
         .run(tauri::generate_context!())

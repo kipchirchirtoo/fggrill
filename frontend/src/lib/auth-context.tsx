@@ -132,11 +132,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null);
           }
         } catch (error: any) {
-          const is401 = error.message?.includes('401') || error.message?.includes('Unauthorized') || error.message?.includes('expired');
+          const msg = error.message || '';
+          const is401 = msg.includes('401') || msg.includes('Unauthorized') || msg.includes('expired') || msg.includes('invalid');
           if (is401) {
+            // Genuine auth failure — clear credentials
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             setUser(null);
+          } else {
+            // Network error, timeout, or server hiccup during hard refresh.
+            // Keep the cached user so the user isn't logged out.
+            console.warn('[Auth V3] getMe() failed (non-auth), keeping cached session:', msg);
           }
         }
       } else {
