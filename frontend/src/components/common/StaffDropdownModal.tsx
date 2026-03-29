@@ -21,12 +21,14 @@ interface StaffDropdownModalProps {
   roleFilter?: string;
 }
 
+const EMPTY_ARRAY: (string | number)[] = [];
+
 export function StaffDropdownModal({
   isOpen,
   onClose,
   onSelect,
   activeBranchId,
-  selectedIds = [],
+  selectedIds = EMPTY_ARRAY,
   isMulti = false,
   title = "Select Staff Member",
   roleFilter
@@ -36,13 +38,20 @@ export function StaffDropdownModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [localSelectedIds, setLocalSelectedIds] = useState<(string | number)[]>(selectedIds);
 
+  // Effect 1: Fetch staff data only when modal opens or branch changes
   useEffect(() => {
     if (isOpen) {
       fetchStaff();
-      setLocalSelectedIds(selectedIds);
       setSearchTerm('');
     }
-  }, [isOpen, activeBranchId, selectedIds]);
+  }, [isOpen, activeBranchId]);
+
+  // Effect 2: Sync selection state when prop changes or modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setLocalSelectedIds(selectedIds);
+    }
+  }, [isOpen, selectedIds]);
 
   const fetchStaff = async () => {
     setIsLoading(true);

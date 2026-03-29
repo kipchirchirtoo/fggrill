@@ -16,6 +16,7 @@ export const barStockRequestsAPI = {
 export const cashierAPI = {
   getStats: (branchId?: number) => fetchAPI<any>(`/cashier/stats${buildQuery({ branch_id: branchId })}`),
   getSummary: (params?: any) => fetchAPI<any>(`/cashier/summary${buildQuery(params)}`),
+  getPayments: (params?: any) => fetchAPI<any[]>(`/payments-verification${buildQuery(params)}`),
   recordCollection: (data: any) => fetchAPI<any>('/cashier/collections', { method: 'POST', body: JSON.stringify(data) }),
   
   // Bills & Payments

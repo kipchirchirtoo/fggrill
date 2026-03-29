@@ -34,9 +34,9 @@ const normalizeUrl = (url: string | undefined, defaultUrl: string): string => {
 // Detect if we're running in the C# Desktop App / Electron
 const isDesktop = typeof window !== 'undefined' && (window as any).electronAPI !== undefined;
 
-// Always use production APIs for the terminal app, unless overridden
-const DEFAULT_API_URL = 'https://api.hirall.com';
-const DEFAULT_PYTHON_URL = 'https://services.hirall.com';
+// Always use localhost for development unless overridden
+const DEFAULT_API_URL = 'http://localhost:5000';
+const DEFAULT_PYTHON_URL = 'http://localhost:5001';
 
 export const API_URL = normalizeUrl(process.env.NEXT_PUBLIC_API_URL, DEFAULT_API_URL);
 export const PYTHON_API_URL = normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL, DEFAULT_PYTHON_URL);

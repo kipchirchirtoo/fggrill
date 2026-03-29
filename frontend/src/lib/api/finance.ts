@@ -147,6 +147,7 @@ export const financeAPI = {
   
   // Accounting Aliases
   getInvoices: (params?: any) => accountingAPI.getInvoices(params),
+  getPayments: (params?: any) => paymentsVerificationAPI.getPayments(params),
   getInvoice: (id: string) => accountingAPI.getInvoice(id),
   createInvoice: (data: any) => accountingAPI.createInvoice(data),
   updateInvoice: (id: string, data: any) => accountingAPI.updateInvoice(id, data),

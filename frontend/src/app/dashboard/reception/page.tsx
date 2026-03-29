@@ -153,12 +153,12 @@ export default function ReceptionDashboard(): JSX.Element {
         cashierAPI.getPayments({ branch_id: branchId as any, limit: 50 })
       ]);
 
-      const bookingsData = bookingsRes.status === 'fulfilled' ? bookingsRes.value?.data || [] : [];
-      const roomsData = roomsRes.status === 'fulfilled' ? (roomsRes.value?.data || roomsRes.value?.rooms || []) : [];
-      const paymentsData = paymentsRes.status === 'fulfilled' ? paymentsRes.value?.data || [] : [];
+      const bookingsData = bookingsRes.status === 'fulfilled' ? (bookingsRes.value?.data || (bookingsRes.value as any)?.bookings || []) : [];
+      const roomsData = roomsRes.status === 'fulfilled' ? (roomsRes.value?.data || (roomsRes.value as any)?.rooms || []) : [];
+      const paymentsData = paymentsRes.status === 'fulfilled' ? (paymentsRes.value?.data || (paymentsRes.value as any)?.payments || []) : [];
 
-      setAllBookings(bookingsData);
-      setRecentPayments(paymentsData);
+      setAllBookings(Array.isArray(bookingsData) ? bookingsData : []);
+      setRecentPayments(Array.isArray(paymentsData) ? paymentsData : []);
 
       // Process rooms
       const processedRooms: Room[] = roomsData.map((r: any) => ({
