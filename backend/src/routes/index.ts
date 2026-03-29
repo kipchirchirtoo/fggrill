@@ -72,6 +72,8 @@ import statutoryDeductionsRoutes from './statutory-deductions.routes';
 import performanceRoutes from './performance.routes';
 import paymentsRoutes from './payments.routes';
 import payrollPoliciesRoutes from './payroll-policies.routes';
+import adminLogsRoutes from './admin-logs.routes';
+import adminAiRoutes from './admin-ai.route';
 
 const router = express.Router();
 
@@ -167,6 +169,8 @@ router.use('/payroll-statutory', statutoryDeductionsRoutes);
 router.use('/performance', performanceRoutes);
 router.use('/payments-verification', paymentsRoutes);
 router.use('/payroll-policies', payrollPoliciesRoutes);
+router.use('/admin-logs', adminLogsRoutes);
+router.use('/admin-ai', adminAiRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

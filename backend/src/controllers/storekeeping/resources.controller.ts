@@ -527,118 +527,127 @@ export const deleteSupplier = async (req: Request, res: Response) => {
 
     client = await pool.connect();
 
-    // Pass supplier ID via session variable for safe use in DO block
-    await client.query(`SELECT set_config('app.delete_supplier_id', $1, true)`, [id]);
+    // Start explicit transaction to ensure session variable persists for the DO block
+    await client.query('BEGIN');
 
-    // Use a PL/pgSQL DO block to handle all cascade deletes in a single transaction.
-    // Each delete is wrapped in its own BEGIN/EXCEPTION block so missing tables
-    // (from migrations not yet applied) won't abort the whole transaction.
-    await client.query(`
-      DO $$
-      DECLARE
-        v_id UUID := current_setting('app.delete_supplier_id')::UUID;
-      BEGIN
-        -- 1. Credit note items (child of credit notes)
-        BEGIN
-          DELETE FROM store_credit_note_items 
-          WHERE credit_note_id IN (SELECT id FROM store_supplier_credit_notes WHERE supplier_id = v_id);
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+    try {
+      // Pass supplier ID via session variable for safe use in DO block
+      await client.query(`SELECT set_config('app.delete_supplier_id', $1, true)`, [id]);
 
-        -- 2. Credit notes
+      // Use a PL/pgSQL DO block to handle all cascade deletes in a single transaction.
+      // Each delete is wrapped in its own BEGIN/EXCEPTION block so missing tables
+      // (from migrations not yet applied) won't abort the whole transaction.
+      await client.query(`
+        DO $$
+        DECLARE
+          v_id UUID := current_setting('app.delete_supplier_id')::UUID;
         BEGIN
-          DELETE FROM store_supplier_credit_notes WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 1. Credit note items (child of credit notes)
+          BEGIN
+            DELETE FROM store_credit_note_items 
+            WHERE credit_note_id IN (SELECT id FROM store_supplier_credit_notes WHERE supplier_id = v_id);
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 3. Payment-invoice allocations
-        BEGIN
-          DELETE FROM store_payment_invoice_allocations 
-          WHERE payment_id IN (SELECT id FROM store_supplier_payments WHERE supplier_id = v_id);
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 2. Credit notes
+          BEGIN
+            DELETE FROM store_supplier_credit_notes WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 4. Supplier payments
-        BEGIN
-          DELETE FROM store_supplier_payments WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 3. Payment-invoice allocations
+          BEGIN
+            DELETE FROM store_payment_invoice_allocations 
+            WHERE payment_id IN (SELECT id FROM store_supplier_payments WHERE supplier_id = v_id);
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 5. Invoice items then invoices
-        BEGIN
-          DELETE FROM store_supplier_invoice_items 
-          WHERE invoice_id IN (SELECT id FROM store_supplier_invoices WHERE supplier_id = v_id);
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
-        BEGIN
-          DELETE FROM store_supplier_invoices WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 4. Supplier payments
+          BEGIN
+            DELETE FROM store_supplier_payments WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 6. VAT summary & transactions
-        BEGIN
-          DELETE FROM store_supplier_vat_summary WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
-        BEGIN
-          DELETE FROM store_vat_transactions WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 5. Invoice items then invoices
+          BEGIN
+            DELETE FROM store_supplier_invoice_items 
+            WHERE invoice_id IN (SELECT id FROM store_supplier_invoices WHERE supplier_id = v_id);
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
+          BEGIN
+            DELETE FROM store_supplier_invoices WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 7. Supplier ledger & balances
-        BEGIN
-          DELETE FROM store_supplier_ledger WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
-        BEGIN
-          DELETE FROM store_supplier_balances WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 6. VAT summary & transactions
+          BEGIN
+            DELETE FROM store_supplier_vat_summary WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
+          BEGIN
+            DELETE FROM store_vat_transactions WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 8. GRNI control account entries
-        BEGIN
-          DELETE FROM store_grni_control_account WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 7. Supplier ledger & balances
+          BEGIN
+            DELETE FROM store_supplier_ledger WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
+          BEGIN
+            DELETE FROM store_supplier_balances WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 9. GRN items then GRNs
-        BEGIN
-          DELETE FROM store_grn_items 
-          WHERE grn_id IN (SELECT id FROM store_grn WHERE supplier_id = v_id);
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
-        BEGIN
-          DELETE FROM store_grn WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 8. GRNI control account entries
+          BEGIN
+            DELETE FROM store_grni_control_account WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 10. PO items then purchase orders
-        BEGIN
-          DELETE FROM store_po_items 
-          WHERE po_id IN (SELECT id FROM store_purchase_orders WHERE supplier_id = v_id);
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
-        BEGIN
-          DELETE FROM store_purchase_orders WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 9. GRN items then GRNs
+          BEGIN
+            DELETE FROM store_grn_items 
+            WHERE grn_id IN (SELECT id FROM store_grn WHERE supplier_id = v_id);
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
+          BEGIN
+            DELETE FROM store_grn WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 11. Supplier quotations & performance
-        BEGIN
-          DELETE FROM store_supplier_quotations WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
-        BEGIN
-          DELETE FROM store_supplier_performance WHERE supplier_id = v_id;
-        EXCEPTION WHEN undefined_table THEN NULL;
-        END;
+          -- 10. PO items then purchase orders
+          BEGIN
+            DELETE FROM store_po_items 
+            WHERE po_id IN (SELECT id FROM store_purchase_orders WHERE supplier_id = v_id);
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
+          BEGIN
+            DELETE FROM store_purchase_orders WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-        -- 12. Finally delete the supplier
-        DELETE FROM store_suppliers WHERE id = v_id;
-      END $$;
-    `);
+          -- 11. Supplier quotations & performance
+          BEGIN
+            DELETE FROM store_supplier_quotations WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
+          BEGIN
+            DELETE FROM store_supplier_performance WHERE supplier_id = v_id;
+          EXCEPTION WHEN undefined_table THEN NULL;
+          END;
 
-    res.json({ success: true, message: 'Supplier and all related records deleted successfully' });
+          -- 12. Finally delete the supplier
+          DELETE FROM store_suppliers WHERE id = v_id;
+        END $$;
+      `);
+
+      await client.query('COMMIT');
+      res.json({ success: true, message: 'Supplier and all related records deleted successfully' });
+    } catch (transactionError) {
+      await client.query('ROLLBACK');
+      throw transactionError;
+    }
   } catch (error: any) {
     logger.error('Error deleting supplier:', error);
     res.status(500).json({ success: false, message: error.message });

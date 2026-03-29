@@ -60,9 +60,9 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
             } else {
                 toast.error(res.message || 'Failed to approve advance');
             }
-        } catch (error) {
-            console.error('Verification error', error);
-            toast.error('An error occurred during verification');
+        } catch (error: any) {
+            console.error('Advance verification error:', error);
+            toast.error(error?.message || 'An error occurred during verification');
         } finally {
             setVerifyingId(null);
         }
@@ -89,9 +89,9 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
             } else {
                 toast.error(res.message || 'Failed to approve loan');
             }
-        } catch (error) {
-            console.error('Verification error', error);
-            toast.error('An error occurred during verification');
+        } catch (error: any) {
+            console.error('Loan verification error:', error);
+            toast.error(error?.message || 'An error occurred during verification');
         } finally {
             setVerifyingId(null);
         }
@@ -321,18 +321,27 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                                                 {(bill.balance ?? bill.amount).toLocaleString()}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${bill.is_paid
-                                                    ? 'bg-emerald-100 text-emerald-700'
-                                                    : (bill.balance < bill.amount && bill.balance > 0)
-                                                        ? 'bg-blue-100 text-blue-700'
-                                                        : 'bg-amber-100 text-amber-700'
-                                                    }`}>
-                                                    {bill.is_paid
-                                                        ? 'Settled'
-                                                        : (bill.balance < bill.amount && bill.balance > 0)
-                                                            ? 'Partial'
-                                                            : 'Pending'}
-                                                </span>
+                                                {(() => {
+                                                    // Restored Settled Logic: Check is_paid boolean primary, status enum fallback
+                                                    const isSettled = bill.is_paid || 
+                                                                    bill.status === 'paid' || 
+                                                                    bill.status === 'paid_cash' || 
+                                                                    bill.status === 'deducted';
+                                                    
+                                                    const isPartial = !isSettled && 
+                                                                    ((bill.balance < bill.amount && bill.balance > 0) || (bill.paid_amount > 0 && !isSettled));
+                                                    
+                                                    return (
+                                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${isSettled 
+                                                            ? 'bg-emerald-100 text-emerald-700' 
+                                                            : isPartial 
+                                                                ? 'bg-blue-100 text-blue-700' 
+                                                                : 'bg-amber-100 text-amber-700'
+                                                        }`}>
+                                                            {isSettled ? 'Settled' : isPartial ? 'Partial' : 'Pending'}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <button

@@ -346,8 +346,8 @@ export default function BranchSuppliersPage() {
         </div>
 
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="max-w-2xl border-none shadow-2xl p-0 overflow-hidden rounded-2xl">
-            <div className="bg-stone-50 p-6 border-b border-stone-100">
+          <DialogContent className="max-w-2xl border-none shadow-2xl p-0 overflow-hidden rounded-2xl flex flex-col max-h-[95vh]">
+            <div className="bg-stone-50 p-6 border-b border-stone-100 shrink-0">
               <DialogHeader>
                 <DialogTitle className="text-xl font-black text-stone-900">
                   {selectedSupplier ? 'Edit Local Vendor' : 'Add Local Vendor'}
@@ -356,7 +356,7 @@ export default function BranchSuppliersPage() {
               </DialogHeader>
             </div>
             
-            <div className="p-6 space-y-6 bg-white">
+            <div className="p-6 space-y-6 bg-white flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-stone-200">
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 px-1">Vendor Name *</label>
@@ -428,7 +428,7 @@ export default function BranchSuppliersPage() {
               </div>
             </div>
 
-            <div className="bg-stone-50 p-6 flex justify-end gap-3 border-t border-stone-100">
+            <div className="bg-stone-50 p-6 flex justify-end gap-3 border-t border-stone-100 shrink-0">
               <IOSButton variant="outline" onClick={() => setIsModalOpen(false)} className="h-11 px-8">Cancel</IOSButton>
               <IOSButton onClick={handleSave} leftIcon={<Save />} className="h-11 px-8 bg-black hover:bg-stone-900">
                 {selectedSupplier ? 'Update Vendor' : 'Register Vendor'}

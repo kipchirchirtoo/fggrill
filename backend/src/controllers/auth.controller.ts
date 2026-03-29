@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 import db from '../db';
+import { logAuthAttempt, logSecurityEvent } from '../utils/audit';
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -79,6 +80,15 @@ export const register = async (
     });
 
     logger.info(`New user registered: ${email}`);
+    
+    await logAuthAttempt({
+      email,
+      status: 'success',
+      userId: profile.id,
+      req,
+      message: 'New account registered',
+      authMethod: 'password'
+    });
   } catch (error) {
     next(error);
   }
@@ -160,8 +170,25 @@ export const login = async (
       });
 
       logger.info(`User logged in via Supabase Auth: ${email}`);
+      
+      await logAuthAttempt({
+        email,
+        status: 'success',
+        userId: authData.user.id,
+        req,
+        authMethod: 'password'
+      });
       return;
     }
+
+    // If we reach here, Supabase Auth failed (AuthError)
+    await logAuthAttempt({
+      email,
+      status: 'failed',
+      req,
+      message: authError?.message || 'Supabase Auth Failed',
+      authMethod: 'password'
+    });
 
     // Fallback: Direct database authentication using Supabase client
     logger.info(`Supabase Auth failed for ${email}, trying direct DB auth via Supabase client`);
@@ -255,6 +282,14 @@ export const login = async (
         success: false,
         message: 'Invalid credentials'
       });
+
+      await logAuthAttempt({
+        email,
+        status: 'failed',
+        req,
+        message: 'Incorrect password (Fallback Auth)',
+        authMethod: 'password'
+      });
       return;
     }
 
@@ -316,6 +351,15 @@ export const login = async (
     });
 
     logger.info(`User logged in via direct DB auth: ${email}`);
+
+    await logAuthAttempt({
+      email,
+      status: 'success',
+      userId,
+      req,
+      authMethod: 'password',
+      message: 'Direct DB Auth Success'
+    });
   } catch (error) {
     next(error);
   }
@@ -643,6 +687,14 @@ export const posLogin = async (
         success: false,
         message: 'Invalid PIN'
       });
+
+      await logAuthAttempt({
+        email: 'N/A (PIN)',
+        status: 'invalid_pin',
+        req,
+        message: `Failed PIN attempt: ${pin}`,
+        authMethod: 'pos_pin'
+      });
       return;
     }
 
@@ -781,6 +833,15 @@ export const posLogin = async (
     });
 
     logger.info(`User ${user.email} logged in via POS PIN: ${pin}`);
+
+    await logAuthAttempt({
+      email: user.email,
+      status: 'success',
+      userId: user.id,
+      req,
+      authMethod: 'pos_pin',
+      message: `POS PIN Success: ${pin}`
+    });
   } catch (error) {
     next(error);
   }

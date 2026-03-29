@@ -17,7 +17,7 @@ import {
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
   Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight, Calculator, Search,
-  SlidersHorizontal, LayoutDashboard, Plus
+  SlidersHorizontal, LayoutDashboard, Plus, Brain
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -270,6 +270,18 @@ export function ConsolidatedNav() {
         icon={Settings}
         label="Admin Dashboard"
         active={pathname === '/dashboard/admin'}
+      />
+      <NavItem
+        href="/dashboard/superadmin/audit-logs"
+        icon={ShieldCheck}
+        label="Audit & Security Logs"
+        active={pathname === '/dashboard/superadmin/audit-logs'}
+      />
+      <NavItem
+        href="/dashboard/superadmin/behavior-intelligence"
+        icon={Brain}
+        label="AI Insights"
+        active={pathname === '/dashboard/superadmin/behavior-intelligence'}
       />
       <NavItem
         href="/dashboard/admin/restaurant/menu"

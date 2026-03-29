@@ -14,6 +14,7 @@ export * from './employee-portal';
 export * from './search';
 export * from './bar';
 export * from './guest-portal';
+export * from './admin-logs';
 
 import { authAPI, userAPI, notificationsAPI, systemAPI, idCardsAPI, channelManagerAPI, documentsAPI } from './system';
 import { bookingsAPI, roomsAPI, guestAPI, ratePlansAPI, guestLoyaltyAPI } from './rooms';
@@ -27,8 +28,9 @@ import { procurementAPI, suppliersAPI } from './procurement';
 import { kyogongAPI } from './kyogong';
 import { employeePortalAPI } from './employee-portal';
 import { searchAPI, attendanceAnalyticsAPI, automationAPI, forecastingAPI } from './search';
-import { barStockRequestsAPI, cashierAPI } from './bar';
+import { cashierAPI, barStockRequestsAPI } from './bar';
 import { guestPortalAPI } from './guest-portal';
+import { adminLogsAPI } from './admin-logs';
 
 // Explicitly export all API modules as named exports for better reliability and discovery
 export { 
@@ -46,6 +48,7 @@ export {
   searchAPI, attendanceAnalyticsAPI, automationAPI, forecastingAPI,
   barStockRequestsAPI, cashierAPI,
   guestPortalAPI,
+  adminLogsAPI,
   // Add common aliases as named exports for backward compatibility
   bookingsAPI as folioAPI,
   roomsAPI as pricingAPI,
@@ -112,6 +115,7 @@ export interface ApiInterface {
   pricingAPI: typeof roomsAPI;
   inventory: typeof inventoryAPI;
   kitchenStock: typeof kitchenAPI;
+  adminLogs: typeof adminLogsAPI;
 }
 
 export const api: ApiInterface = {
@@ -168,6 +172,7 @@ export const api: ApiInterface = {
   pricingAPI: roomsAPI,
   inventory: inventoryAPI,
   kitchenStock: kitchenAPI,
+  adminLogs: adminLogsAPI,
 };
 
 export default api;

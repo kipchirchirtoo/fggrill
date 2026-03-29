@@ -50,6 +50,7 @@ from id_cards.routes import id_cards_bp
 from reports.auditor_reports import auditor_reports_bp
 from payroll.routes import payroll_bp
 from search.routes import search_bp, init_search_routes
+from behavior_intelligence.routes import behavior_bp
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {
@@ -81,7 +82,7 @@ app.register_blueprint(id_cards_bp)
 app.register_blueprint(auditor_reports_bp)
 app.register_blueprint(payroll_bp)
 app.register_blueprint(search_bp)
-
+app.register_blueprint(behavior_bp, url_prefix='/api/behavior')
 
 # Configure logging
 logging.basicConfig(

@@ -62,7 +62,12 @@ export function BillDetailsModal({ bill, onClose, onUpdate, isAuditor = false }:
     let isSettled = false;
 
     if (isCreditBill) {
-        isSettled = bill.is_paid;
+        // Restored Settled Logic: Check is_paid boolean primary, status enum fallback
+        isSettled = bill.is_paid || 
+                    bill.status === 'paid' || 
+                    bill.status === 'paid_cash' || 
+                    bill.status === 'deducted';
+        
         statusLabel = isSettled ? 'Settled' : 'Pending Payment';
         statusColor = isSettled ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
     } else if (isLoan) {

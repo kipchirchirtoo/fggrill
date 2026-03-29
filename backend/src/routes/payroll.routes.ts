@@ -123,7 +123,7 @@ router.post(
   createLoan
 );
 
-router.patch(
+router.post(
   '/loans/:id/approve',
   authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   approveLoan
@@ -142,10 +142,17 @@ router.post(
   createAdvance
 );
 
-router.patch(
+router.post(
   '/advances/:id/approve',
   authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER]),
   approveAdvance
+);
+
+// Standardized migration action
+router.post(
+  '/trigger-migration',
+  authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  triggerPendingBillsMigration
 );
 
 export default router;

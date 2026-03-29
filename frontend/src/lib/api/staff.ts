@@ -114,7 +114,7 @@ const staffBase = {
 export const simplePayrollAPI = {
   getCreditBills: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/credit-bills${buildQuery(params)}`),
   createCreditBill: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
-  updateCreditBillStatus: (id: string | number, status: string) => fetchAPI<ApiResponse<void>>(`/payroll/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ is_paid: status === 'paid' }) }),
+  updateCreditBillStatus: (id: string | number, status: string) => fetchAPI<ApiResponse<void>>(`/payroll/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   getLoans: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/loans${buildQuery(params)}`),
   createLoan: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/loans', { method: 'POST', body: JSON.stringify(data) }),
   getAdvances: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/advances${buildQuery(params)}`),
