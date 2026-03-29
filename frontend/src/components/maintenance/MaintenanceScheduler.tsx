@@ -15,6 +15,9 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDate } from '@/lib/date-utils';
+import { useAuth } from '@/lib/auth-context';
+import { StaffDropdownModal } from '@/components/common/StaffDropdownModal';
+import { StaffMember } from '@/lib/api/types';
 
 interface MaintenanceTask {
   id: string;
@@ -43,13 +46,6 @@ interface MaintenanceTask {
   notes?: string;
 }
 
-interface MaintenanceStaff {
-  id: string;
-  name: string;
-  role: string;
-  available: boolean;
-  current_tasks: number;
-}
 
 interface MaintenanceSchedulerProps {
   branchId?: number;
@@ -92,9 +88,10 @@ const TYPE_CONFIG = {
 };
 
 export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceSchedulerProps) {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<MaintenanceTask[]>([]);
-  const [staff, setStaff] = useState<MaintenanceStaff[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<string>('');
@@ -136,13 +133,12 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
 
   useEffect(() => {
     fetchTasks();
-    fetchStaff();
   }, [branchId]);
 
   const fetchTasks = async () => {
     setIsLoading(true);
     try {
-      const response = await maintenanceAPI.getRequests(branchId);
+      const response = await maintenanceAPI.getRequests(branchId) as any;
       const tasksData = response.data || response.requests || response || [];
 
       const processed: MaintenanceTask[] = tasksData.map((t: any) => ({
@@ -198,18 +194,6 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
     }
   };
 
-  const fetchStaff = async () => {
-    try {
-      // In production, this would fetch maintenance staff
-      setStaff([
-        { id: '1', name: 'John Technician', role: 'Senior Technician', available: true, current_tasks: 2 },
-        { id: '2', name: 'Mary Engineer', role: 'HVAC Specialist', available: true, current_tasks: 1 },
-        { id: '3', name: 'Peter Electrician', role: 'Electrician', available: false, current_tasks: 3 }
-      ]);
-    } catch (error) {
-      console.error('Error fetching staff:', error);
-    }
-  };
 
   const filteredTasks = useMemo(() => {
     let result = [...tasks];
@@ -302,7 +286,7 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
         room_number: formData.room_number || '',
         priority: formData.priority,
         issue_type: formData.type,
-        reported_by: user?.name || 'Staff',
+        reported_by: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Staff',
         branch_id: branchId
       };
 
@@ -649,19 +633,19 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Assign To</label>
-                <select
-                  value={formData.assigned_to}
-                  onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-ios-lg"
+                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Assign To</label>
+                <button
+                  onClick={() => setIsStaffModalOpen(true)}
+                  className="w-full h-10 px-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between group hover:border-indigo-600 transition-all shadow-sm active:scale-[0.99]"
                 >
-                  <option value="">Unassigned</option>
-                  {staff.map(s => (
-                    <option key={s.id} value={s.id} disabled={!s.available}>
-                      {s.name} ({s.role}) {!s.available && '- Busy'}
-                    </option>
-                  ))}
-                </select>
+                  <div className="flex items-center gap-2 truncate">
+                    <User className={`h-4 w-4 ${formData.assigned_to ? 'text-indigo-600' : 'text-gray-400'}`} />
+                    <span className={`text-sm truncate ${formData.assigned_to ? 'text-indigo-600 font-bold' : 'text-gray-400 font-medium'}`}>
+                      {formData.assigned_to ? (tasks.find(t => t.assigned_to?.id === formData.assigned_to)?.assigned_to?.name || 'Assigned') : 'Choose Technician...'}
+                    </span>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+                </button>
               </div>
             </div>
 
@@ -756,6 +740,25 @@ export function MaintenanceScheduler({ branchId, compact = false }: MaintenanceS
           </div>
         </DialogContent>
       </Dialog>
+
+      <StaffDropdownModal
+        isOpen={isStaffModalOpen}
+        onClose={() => setIsStaffModalOpen(false)}
+        activeBranchId={branchId}
+        onSelect={(staff) => {
+          if (!Array.isArray(staff)) {
+            setFormData(prev => ({
+              ...prev,
+              assigned_to: staff.id
+            }));
+            // We also need to ensure the task's assigned_to name is updated if we're in edit mode,
+            // but the handleSubmitTask will handle the ID.
+          }
+        }}
+        isMulti={false}
+        title="Assign Technician"
+        roleFilter="maintenance"
+      />
     </div>
   );
 }

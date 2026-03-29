@@ -108,6 +108,22 @@ const staffBase = {
   submitPerformanceReview: (data: any) => fetchAPI<any>('/staff/performance', { method: 'POST', body: JSON.stringify(data) }),
 };
 
+// ─── Simple Payroll ──────────────────────────────────────────────────────────
+// NOTE: Must be declared BEFORE staffAPI to avoid TDZ initialization error
+
+export const simplePayrollAPI = {
+  getCreditBills: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/credit-bills${buildQuery(params)}`),
+  createCreditBill: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
+  updateCreditBillStatus: (id: string | number, status: string) => fetchAPI<ApiResponse<void>>(`/payroll/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ is_paid: status === 'paid' }) }),
+  getLoans: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/loans${buildQuery(params)}`),
+  createLoan: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/loans', { method: 'POST', body: JSON.stringify(data) }),
+  getAdvances: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/advances${buildQuery(params)}`),
+  createAdvance: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/advances', { method: 'POST', body: JSON.stringify(data) }),
+  approveAdvance: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/advances/${id}/approve`, { method: 'POST' }),
+  approveLoan: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/loans/${id}/approve`, { method: 'POST' }),
+  triggerPendingBillsMigration: () => fetchAPI<ApiResponse<void>>('/payroll/trigger-migration', { method: 'POST' }),
+};
+
 export const staffAPI = {
   // Appended for UI Compatibility
   getStaffHistory: (id: any) => fetchAPI<any[]>(`/staff/${id}/history`),
@@ -149,14 +165,4 @@ export const staffAPI = {
   shifts: shiftsAPI,
 };
 
-// ─── Simple Payroll ──────────────────────────────────────────────────────────
-
-export const simplePayrollAPI = {
-  getCreditBills: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/credit-bills${buildQuery(params)}`),
-  createCreditBill: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
-  updateCreditBillStatus: (id: string | number, status: string) => fetchAPI<ApiResponse<void>>(`/payroll/credit-bills/${id}`, { method: 'PATCH', body: JSON.stringify({ is_paid: status === 'paid' }) }),
-  getLoans: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/loans${buildQuery(params)}`),
-  createLoan: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/loans', { method: 'POST', body: JSON.stringify(data) }),
-  getAdvances: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/advances${buildQuery(params)}`),
-  createAdvance: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/advances', { method: 'POST', body: JSON.stringify(data) }),
-};
+// simplePayrollAPI has been moved above staffAPI to fix initialization order (TDZ issue)

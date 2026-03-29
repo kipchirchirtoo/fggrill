@@ -1,0 +1,62 @@
+﻿
+src/app/components/ErpApp.tsx(55,25): error TS7006: Parameter 'amount' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(552,23): error TS2345: Argument of type '{ id: number; items: 
+any[]; subtotal: number; tax: number; total: number; date: string; }' is not assignable to 
+parameter of type 'SetStateAction<null>'.
+src/app/components/ErpApp.tsx(576,84): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(577,59): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(580,12): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(593,35): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(597,35): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(601,35): error TS18047: 'currentReceipt' is possibly 'null'.
+src/app/components/ErpApp.tsx(763,29): error TS7006: Parameter 'newProduct' implicitly has 
+an 'any' type.
+src/app/components/ErpApp.tsx(772,32): error TS7006: Parameter 'updatedProduct' implicitly 
+has an 'any' type.
+src/app/components/ErpApp.tsx(783,32): error TS7006: Parameter 'productId' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(791,26): error TS7031: Binding element 'product' implicitly 
+has an 'any' type.
+src/app/components/ErpApp.tsx(791,35): error TS7031: Binding element 'onSubmit' implicitly 
+has an 'any' type.
+src/app/components/ErpApp.tsx(791,45): error TS7031: Binding element 'onCancel' implicitly 
+has an 'any' type.
+src/app/components/ErpApp.tsx(828,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(839,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(849,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(859,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(869,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1003,12): error TS2741: Property 'product' is missing in type 
+'{ onSubmit: (newProduct: any) => void; onCancel: () => void; }' but required in type '{ 
+product: any; onSubmit: any; onCancel: any; }'.
+src/app/components/ErpApp.tsx(1036,29): error TS7006: Parameter 'employee' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1072,48): error TS18047: 'selectedEmployee' is possibly 'null'.
+src/app/components/ErpApp.tsx(1072,78): error TS18047: 'selectedEmployee' is possibly 'null'.
+src/app/components/ErpApp.tsx(1073,52): error TS18047: 'selectedEmployee' is possibly 'null'.
+src/app/components/ErpApp.tsx(1230,22): error TS2345: Argument of type 'Date' is not 
+assignable to parameter of type 'SetStateAction<null>'.
+src/app/components/ErpApp.tsx(1391,38): error TS2339: Property 'toLocaleTimeString' does not 
+exist on type 'never'.
+src/app/components/ErpApp.tsx(1473,30): error TS2362: The left-hand side of an arithmetic 
+operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/app/components/ErpApp.tsx(1473,58): error TS2363: The right-hand side of an arithmetic 
+operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/app/components/ErpApp.tsx(1530,32): error TS7006: Parameter 'date' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1530,38): error TS7006: Parameter 'time' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1537,31): error TS7006: Parameter 'bookingId' implicitly has 
+an 'any' type.
+src/app/components/ErpApp.tsx(1537,42): error TS7006: Parameter 'newStatus' implicitly has 
+an 'any' type.
+src/app/components/ErpApp.tsx(1799,22): error TS7031: Binding element 'login' implicitly has 
+an 'any' type.
+
+

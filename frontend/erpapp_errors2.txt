@@ -1,0 +1,35 @@
+﻿
+src/app/components/ErpApp.tsx(763,29): error TS7006: Parameter 'newProduct' implicitly has 
+an 'any' type.
+src/app/components/ErpApp.tsx(772,32): error TS7006: Parameter 'updatedProduct' implicitly 
+has an 'any' type.
+src/app/components/ErpApp.tsx(783,32): error TS7006: Parameter 'productId' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(828,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(839,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(849,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(859,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(869,44): error TS7006: Parameter 'prev' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1036,29): error TS7006: Parameter 'employee' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1473,30): error TS2362: The left-hand side of an arithmetic 
+operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/app/components/ErpApp.tsx(1473,58): error TS2363: The right-hand side of an arithmetic 
+operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/app/components/ErpApp.tsx(1530,32): error TS7006: Parameter 'date' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1530,38): error TS7006: Parameter 'time' implicitly has an 
+'any' type.
+src/app/components/ErpApp.tsx(1537,31): error TS7006: Parameter 'bookingId' implicitly has 
+an 'any' type.
+src/app/components/ErpApp.tsx(1537,42): error TS7006: Parameter 'newStatus' implicitly has 
+an 'any' type.
+src/app/components/ErpApp.tsx(1799,22): error TS7031: Binding element 'login' implicitly has 
+an 'any' type.
+
+

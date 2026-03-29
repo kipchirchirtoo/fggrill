@@ -11,7 +11,7 @@ import {
     DollarSign, Waves, Ticket, Users, Bed,
     UtensilsCrossed, Wine, Plus, CreditCard,
     Banknote, Building, AlertCircle, CheckCircle2, Clock,
-    Trash2, User, X
+    Trash2, User, X, ChevronRight
 } from 'lucide-react';
 import {
     Select,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { fetchAPI } from '@/lib/api';
 import { useEffect } from 'react';
+import { StaffDropdownModal } from '@/components/common/StaffDropdownModal';
 
 interface CloseShiftModalProps {
     isOpen: boolean;
@@ -116,25 +117,13 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
         notes: ''
     });
 
-    const [staffList, setStaffList] = useState<any[]>([]);
+    const [isCreditStaffModalOpen, setIsCreditStaffModalOpen] = useState(false);
+    const [isPaidStaffModalOpen, setIsPaidStaffModalOpen] = useState(false);
     const [newCreditBill, setNewCreditBill] = useState({ staffId: '', amount: '', name: '' });
-
-
     const [newPaidBill, setNewPaidBill] = useState({ staffId: '', amount: '', name: '' });
 
-    useEffect(() => {
-        if (isOpen) {
-            loadStaff();
-        }
-    }, [isOpen]);
-
     const loadStaff = async () => {
-        try {
-            const res = await fetchAPI('/staff?status=active') as any;
-            if (res.success) setStaffList(res.data);
-        } catch (error) {
-            console.error('Failed to load staff list', error);
-        }
+        // Redundant - fetch handled by StaffDropdownModal
     };
 
     const addCreditBill = () => {
@@ -143,11 +132,10 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
         const amount = parseFloat(newCreditBill.amount);
         if (isNaN(amount) || amount <= 0) return;
 
-        const staff = staffList.find(s => s.id === newCreditBill.staffId);
         const bill = {
             id: Date.now().toString(),
             staff_id: newCreditBill.staffId,
-            name: staff ? `${staff.first_name} ${staff.last_name}` : 'Unknown Staff',
+            name: newCreditBill.name || 'Unknown Staff',
             amount: amount,
             timestamp: new Date().toISOString()
         };
@@ -181,11 +169,10 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
         const amount = parseFloat(newPaidBill.amount);
         if (isNaN(amount) || amount <= 0) return;
 
-        const staff = staffList.find(s => s.id === newPaidBill.staffId);
         const bill = {
             id: Date.now().toString(),
             staff_id: newPaidBill.staffId,
-            name: staff ? `${staff.first_name} ${staff.last_name}` : 'Unknown Staff',
+            name: newPaidBill.name || 'Unknown Staff',
             amount: amount,
             timestamp: new Date().toISOString()
         };
@@ -529,16 +516,30 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                                         <p className="text-2xl font-black text-slate-900 tabular-nums">KES {formData.credit_bills_taken?.toLocaleString()}</p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 mb-8">
-                                        <Select value={newCreditBill.staffId} onValueChange={(val) => setNewCreditBill({ ...newCreditBill, staffId: val })}>
-                                            <SelectTrigger className="h-12 bg-white border-slate-100 rounded-xl text-xs font-bold px-4">
-                                                <SelectValue placeholder="Staff" />
-                                            </SelectTrigger>
-                                            <SelectContent className="rounded-xl border-slate-100">
-                                                {staffList.map((staff) => (
-                                                    <SelectItem key={staff.id} value={staff.id}>{staff.first_name} {staff.last_name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCreditStaffModalOpen(true)}
+                                            className="h-12 bg-white border border-slate-200 rounded-xl px-4 flex items-center justify-between group hover:border-slate-900 transition-all shadow-sm"
+                                        >
+                                            <span className={`text-[10px] font-black uppercase tracking-widest ${newCreditBill.staffId ? 'text-slate-900' : 'text-slate-400'}`}>
+                                                {newCreditBill.name || 'Select Staff'}
+                                            </span>
+                                            <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-900" />
+                                        </button>
+                                        
+                                        <StaffDropdownModal
+                                            isOpen={isCreditStaffModalOpen}
+                                            onClose={() => setIsCreditStaffModalOpen(false)}
+                                            activeBranchId={currentShift?.branch_id}
+                                            onSelect={(staff: any) => {
+                                                setNewCreditBill({
+                                                    ...newCreditBill,
+                                                    staffId: staff.id,
+                                                    name: `${staff.first_name} ${staff.last_name}`
+                                                });
+                                            }}
+                                            title="Assign Credit Issue"
+                                        />
                                         <div className="flex gap-2">
                                             <Input
                                                 type="number"
@@ -583,16 +584,30 @@ export function CloseShiftModal({ isOpen, onClose, onSubmit, currentShift, isLoa
                                         <p className="text-2xl font-black text-slate-900 tabular-nums">KES {formData.paid_bills_value?.toLocaleString()}</p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 mb-8">
-                                        <Select value={newPaidBill.staffId} onValueChange={(val) => setNewPaidBill({ ...newPaidBill, staffId: val })}>
-                                            <SelectTrigger className="h-12 bg-white border-slate-100 rounded-xl text-xs font-bold px-4">
-                                                <SelectValue placeholder="Payer" />
-                                            </SelectTrigger>
-                                            <SelectContent className="rounded-xl border-slate-100">
-                                                {staffList.map((staff) => (
-                                                    <SelectItem key={staff.id} value={staff.id}>{staff.first_name} {staff.last_name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsPaidStaffModalOpen(true)}
+                                            className="h-12 bg-white border border-slate-200 rounded-xl px-4 flex items-center justify-between group hover:border-slate-900 transition-all shadow-sm"
+                                        >
+                                            <span className={`text-[10px] font-black uppercase tracking-widest ${newPaidBill.staffId ? 'text-slate-900' : 'text-slate-400'}`}>
+                                                {newPaidBill.name || 'Select Payer'}
+                                            </span>
+                                            <ChevronRight className="h-3 w-3 text-slate-300 group-hover:text-slate-900" />
+                                        </button>
+
+                                        <StaffDropdownModal
+                                            isOpen={isPaidStaffModalOpen}
+                                            onClose={() => setIsPaidStaffModalOpen(false)}
+                                            activeBranchId={currentShift?.branch_id}
+                                            onSelect={(staff: any) => {
+                                                setNewPaidBill({
+                                                    ...newPaidBill,
+                                                    staffId: staff.id,
+                                                    name: `${staff.first_name} ${staff.last_name}`
+                                                });
+                                            }}
+                                            title="Record Debt Clearance"
+                                        />
                                         <div className="flex gap-2">
                                             <Input
                                                 type="number"

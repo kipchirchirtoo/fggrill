@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BillDetailsModal } from './BillDetailsModal';
+import { StaffDropdownModal } from '@/components/common/StaffDropdownModal';
+import { StaffMember } from '@/lib/api/types';
 
 interface CreditBillsContentProps {
     branchId: number | null;
@@ -22,41 +24,8 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
 
     // Modal State
     const [showModal, setShowModal] = useState(false);
-    const [staffList, setStaffList] = useState<any[]>([]);
 
-    useEffect(() => {
-        if (showModal) {
-            loadStaff();
-        }
-    }, [showModal]);
-
-    const loadStaff = async () => {
-        try {
-            const params: any = {
-                status: 'active'
-            };
-            
-            // Only add branchId if it's not null
-            if (branchId) {
-                params.branchId = branchId;
-            }
-
-            const res = await api.staff.getStaff(params);
-
-            if (res.success && Array.isArray(res.data)) {
-                setStaffList(res.data);
-            } else if (Array.isArray(res)) {
-                setStaffList(res);
-            } else {
-                console.error('Unexpected staff response format:', res);
-                setStaffList([]);
-            }
-        } catch (error) {
-            console.error('Failed to load staff', error);
-            toast.error('Failed to load staff members');
-            setStaffList([]);
-        }
-    };
+    // Lists state
 
     // State for lists
     const [creditBills, setCreditBills] = useState<any[]>([]);
@@ -528,7 +497,7 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
             {showModal && (
                 <NewRecordModal
                     type={activeTab}
-                    staffList={staffList}
+                    branchId={branchId}
                     onClose={() => setShowModal(false)}
                     onSuccess={() => {
                         setShowModal(false);
@@ -568,15 +537,17 @@ function Tabs({ tabs, activeTab, onChange }: any) {
     );
 }
 
-function NewRecordModal({ type, staffList, onClose, onSuccess }: any) {
+function NewRecordModal({ type, branchId, onClose, onSuccess }: any) {
     const [formData, setFormData] = useState({
         staff_id: '',
+        staff_name: '',
         amount: '',
         description: '', // used for reason/notes
         repayment_period: '1', // months, for loans
         deduction_month: new Date().toISOString().slice(0, 7), // YYYY-MM for advances
     });
     const [loading, setLoading] = useState(false);
+    const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
 
     const handleSubmit = async () => {
         try {
@@ -705,18 +676,35 @@ function NewRecordModal({ type, staffList, onClose, onSuccess }: any) {
                     {/* Staff Selection */}
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-stone-700">Staff Member <span className="text-red-500">*</span></label>
-                        <select
-                            className="w-full h-10 px-3 rounded-lg border border-stone-200 bg-white text-sm focus:ring-2 focus:ring-blue-500 max-h-40 overflow-y-auto"
-                            value={formData.staff_id}
-                            onChange={(e) => setFormData({ ...formData, staff_id: e.target.value })}
+                        <button
+                            type="button"
+                            onClick={() => setIsStaffModalOpen(true)}
+                            className="w-full h-11 px-4 rounded-xl border border-stone-200 bg-white flex items-center justify-between group hover:border-blue-500 transition-all shadow-sm"
                         >
-                            <option value="">Select Staff...</option>
-                            {staffList.map((staff: any) => (
-                                <option key={staff.id} value={staff.id}>
-                                    {staff.first_name} {staff.last_name} ({staff.staff_number || 'No ID'})
-                                </option>
-                            ))}
-                        </select>
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${formData.staff_id ? 'bg-blue-600 text-white' : 'bg-stone-100 text-stone-400 group-hover:bg-blue-50 group-hover:text-blue-600'}`}>
+                                    <User className="h-4 w-4" />
+                                </div>
+                                <span className={`text-sm truncate ${formData.staff_id ? 'text-stone-900 font-semibold' : 'text-stone-400'}`}>
+                                    {formData.staff_name || 'Select staff member...'}
+                                </span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
+                        </button>
+                        
+                        <StaffDropdownModal
+                            isOpen={isStaffModalOpen}
+                            onClose={() => setIsStaffModalOpen(false)}
+                            activeBranchId={branchId}
+                            onSelect={(staff: any) => {
+                                setFormData({ 
+                                    ...formData, 
+                                    staff_id: staff.id,
+                                    staff_name: `${staff.first_name} ${staff.last_name}`
+                                });
+                            }}
+                            title={`Assign To Personnel`}
+                        />
                     </div>
 
                     {/* Amount */}

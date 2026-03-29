@@ -97,7 +97,7 @@ function BranchExpensesContent() {
           startDate,
           endDate
         },
-        activeBranchId
+        activeBranchId || undefined
       );
 
       if (response.success && Array.isArray(response.data?.expenses)) {
@@ -141,7 +141,7 @@ function BranchExpensesContent() {
 
     // Sort
     filtered.sort((a, b) => {
-      let valA, valB;
+      let valA: any, valB: any;
 
       if (sortField === 'date') {
         valA = new Date(a.date).getTime();
@@ -226,10 +226,12 @@ function BranchExpensesContent() {
   };
 
   return (
-    <BranchPageWrapper
-      title="Branch Expenses"
-      subtitle="Track and manage operational expenses"
-      actions={
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Branch Expenses</h1>
+          <p className="text-sm text-slate-500">Track and manage operational expenses</p>
+        </div>
         <div className="flex gap-2">
           <IOSButton variant="secondary" size="sm" onClick={fetchExpenses}>
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -240,8 +242,7 @@ function BranchExpensesContent() {
             New Expense
           </IOSButton>
         </div>
-      }
-    >
+      </div>
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <IOSCard className="p-4 bg-blue-50 border-blue-100">
@@ -453,6 +454,6 @@ function BranchExpensesContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </BranchPageWrapper>
+    </div>
   );
 }

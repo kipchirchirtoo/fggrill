@@ -11,6 +11,9 @@ import {
 import { toast } from 'sonner';
 import { UserRole } from '@/lib/auth-context';
 import { systemAPI, staffAPI } from '@/lib/api';
+import { StaffDropdownModal } from '@/components/common/StaffDropdownModal';
+import { StaffMember, Branch, ApiResponse } from '@/lib/api/types';
+import { ChevronRight, Filter } from 'lucide-react';
 
 interface StaffModalProps {
   isOpen: boolean;
@@ -72,7 +75,7 @@ export function StaffModal({ isOpen, onClose, mode = 'create', initialData, onSu
   const fetchBranches = async () => {
     setIsLoadingData(true);
     try {
-      const branchesRes = await systemAPI.getBranches().catch(() => ({ data: [] }));
+      const branchesRes = await systemAPI.getBranches().catch(() => ({ data: [] })) as any;
       setBranches(branchesRes.data || branchesRes.branches || []);
     } catch (error) {
       console.error('Error fetching branches:', error);
@@ -428,6 +431,20 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     date: '',
     notes: ''
   });
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [activeBranchId, setActiveBranchId] = useState<string | number | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+
+  useEffect(() => {
+    if (isOpen) fetchBranches();
+  }, [isOpen]);
+
+  const fetchBranches = async () => {
+    try {
+      const res = await systemAPI.getBranches() as ApiResponse<Branch[]>;
+      setBranches(res.data || res.branches || []);
+    } catch (e) {}
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -438,6 +455,10 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
   };
 
   const handleSubmit = async () => {
+    if (selectedStaff.length === 0) {
+      toast.error('Please select at least one staff member');
+      return;
+    }
     try {
       await staffAPI.createSchedule({ ...scheduleData, staff: selectedStaff });
       toast.success('Staff schedule updated successfully!');
@@ -480,7 +501,7 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               name="shift"
               value={scheduleData.shift}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             >
               <option value="morning">Morning (06:00 - 14:00)</option>
               <option value="evening">Evening (14:00 - 22:00)</option>
@@ -497,45 +518,71 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               name="date"
               value={scheduleData.date}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Staff Members
-            </label>
-            <div className="space-y-2">
-              {['Mary K.', 'John M.', 'Sarah W.', 'Peter N.'].map(staff => (
-                <label key={staff} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedStaff.includes(staff)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedStaff(prev => [...prev, staff]);
-                      } else {
-                        setSelectedStaff(prev => prev.filter(s => s !== staff));
-                      }
-                    }}
-                    className="rounded text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm text-gray-700">{staff}</span>
-                </label>
-              ))}
+          <div className="space-y-3 pt-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 font-sf-pro-display">
+                Filter by Branch
+              </label>
+              <select
+                value={activeBranchId || ''}
+                onChange={(e) => setActiveBranchId(e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
+              >
+                <option value="">All Branches</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 font-sf-pro-display">
+                Staff Members ({selectedStaff.length} selected)
+              </label>
+              <button
+                onClick={() => setIsStaffModalOpen(true)}
+                className="w-full h-12 bg-white border border-gray-200 rounded-xl px-4 flex items-center justify-between group hover:border-indigo-600 transition-all shadow-sm active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-gray-400 group-hover:text-indigo-600" />
+                  <span className={`text-sm ${selectedStaff.length > 0 ? 'text-indigo-600 font-bold' : 'text-gray-400'}`}>
+                    {selectedStaff.length > 0 ? `${selectedStaff.length} recipients selected` : 'Tap to choose staff...'}
+                  </span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+              </button>
+
+              <StaffDropdownModal
+                isOpen={isStaffModalOpen}
+                onClose={() => setIsStaffModalOpen(false)}
+                onSelect={(staff: StaffMember | StaffMember[]) => {
+                  if (Array.isArray(staff)) {
+                    const names = staff.map((s: StaffMember) => `${s.first_name} ${s.last_name}`);
+                    setSelectedStaff(names);
+                  }
+                }}
+                isMulti={true}
+                activeBranchId={activeBranchId}
+                title="Schedule Assignment"
+              />
             </div>
           </div>
 
-          <div>
+          <div className="pt-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
+              Notes & Instructions
             </label>
             <textarea
               name="notes"
               value={scheduleData.notes}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              placeholder="e.g. Special duties for today..."
             />
           </div>
         </div>
@@ -543,9 +590,9 @@ export function ScheduleModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         <div className="flex justify-end p-5 shrink-0 border-t border-gray-100 bg-gray-50">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 font-bold"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 font-bold active:scale-95 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100"
           >
-            <Clock className="inline h-4 w-4 mr-2" />
+            <Clock className="h-4 w-4" />
             Schedule Staff
           </button>
         </div>
@@ -561,6 +608,20 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     year: new Date().getFullYear(),
     notes: ''
   });
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [activeBranchId, setActiveBranchId] = useState<string | number | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+
+  useEffect(() => {
+    if (isOpen) fetchBranches();
+  }, [isOpen]);
+
+  const fetchBranches = async () => {
+    try {
+      const res = await systemAPI.getBranches() as ApiResponse<Branch[]>;
+      setBranches(res.data || res.branches || []);
+    } catch (e) {}
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -571,6 +632,10 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   };
 
   const handleSubmit = async () => {
+    if (selectedStaff.length === 0) {
+      toast.error('Please select at least one employee');
+      return;
+    }
     try {
       await staffAPI.processPayroll({ ...payrollData, staff: selectedStaff });
       toast.success('Payroll processed successfully!');
@@ -614,7 +679,7 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 name="month"
                 value={payrollData.month}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               >
                 <option value="">Select Month</option>
                 <option value="01">January</option>
@@ -642,46 +707,72 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 onChange={handleChange}
                 min={2020}
                 max={2100}
-                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Staff Members
-            </label>
-            <div className="space-y-2">
-              {['Mary K.', 'John M.', 'Sarah W.', 'Peter N.'].map(staff => (
-                <label key={staff} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedStaff.includes(staff)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedStaff(prev => [...prev, staff]);
-                      } else {
-                        setSelectedStaff(prev => prev.filter(s => s !== staff));
-                      }
-                    }}
-                    className="rounded text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm text-gray-700">{staff}</span>
-                </label>
-              ))}
+          <div className="space-y-3 pt-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 font-sf-pro-display">
+                Filter by Branch
+              </label>
+              <select
+                value={activeBranchId || ''}
+                onChange={(e) => setActiveBranchId(e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
+              >
+                <option value="">All Branches</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 font-sf-pro-display">
+                Staff Members ({selectedStaff.length} selected)
+              </label>
+              <button
+                onClick={() => setIsStaffModalOpen(true)}
+                className="w-full h-12 bg-white border border-gray-200 rounded-xl px-4 flex items-center justify-between group hover:border-indigo-600 transition-all shadow-sm active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-gray-400 group-hover:text-indigo-600" />
+                  <span className={`text-sm ${selectedStaff.length > 0 ? 'text-indigo-600 font-bold' : 'text-gray-400'}`}>
+                    {selectedStaff.length > 0 ? `${selectedStaff.length} employees selected` : 'Tap to select group...'}
+                  </span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+              </button>
+
+              <StaffDropdownModal
+                isOpen={isStaffModalOpen}
+                onClose={() => setIsStaffModalOpen(false)}
+                onSelect={(staff: StaffMember | StaffMember[]) => {
+                  if (Array.isArray(staff)) {
+                    const names = staff.map((s: StaffMember) => `${s.first_name} ${s.last_name}`);
+                    setSelectedStaff(names);
+                  }
+                }}
+                isMulti={true}
+                activeBranchId={activeBranchId}
+                title="Payroll Group Selection"
+              />
             </div>
           </div>
 
-          <div>
+          <div className="pt-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
+              Notes & Batch Reference
             </label>
             <textarea
               name="notes"
               value={payrollData.notes}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg"
+              className="w-full px-3 py-2 border border-gray-300 rounded-ios-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              placeholder="e.g. Monthly salary batch..."
             />
           </div>
         </div>
@@ -689,9 +780,9 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         <div className="flex justify-end p-5 shrink-0 border-t border-gray-100 bg-gray-50">
           <button
             onClick={handleSubmit}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-100"
+            className="px-6 py-2 bg-indigo-600 text-white rounded-ios-lg hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-100 active:scale-95 transition-all flex items-center gap-2"
           >
-            <DollarSign className="inline h-4 w-4 mr-2" />
+            <DollarSign className="h-4 w-4" />
             Process Payroll
           </button>
         </div>
@@ -700,7 +791,7 @@ export function PayrollModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   );
 }
 
-export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; onClose: () => void; staff?: any }) {
+export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; onClose: () => void; staff?: StaffMember }) {
   const [performanceData, setPerformanceData] = useState({
     rating: 5,
     attendance: 5,
@@ -749,7 +840,7 @@ export function PerformanceModal({ isOpen, onClose, staff }: { isOpen: boolean; 
           <div>
             <h2 className="text-xl font-bold text-gray-900">Performance Review</h2>
             {staff && (
-              <p className="text-sm text-gray-500">{staff.name} - {staff.role}</p>
+              <p className="text-sm text-gray-500">{staff.first_name} {staff.last_name} - {staff.role}</p>
             )}
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-ios-lg">

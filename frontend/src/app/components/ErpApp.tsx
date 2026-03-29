@@ -7,8 +7,24 @@ import { Toaster, toast } from 'sonner';
 import { api } from '@/lib/api';
 import { StaffMember, Room, Booking, Product, InventoryItem } from '@/lib/api/types';
 
+interface AppState {
+  user: any;
+  currentModule: string;
+  cart: any[];
+  products: any[];
+  employees: any[];
+  bookings: any[];
+  notifications: any[];
+  isLoading: boolean;
+}
+
+interface ERPContextType {
+  state: AppState;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
+}
+
 // Context for global state management
-const ERPContext = createContext();
+const ERPContext = createContext<ERPContextType>({} as ERPContextType);
 
 // Mock Data
 const MOCK_USERS = [
@@ -36,20 +52,20 @@ const MOCK_EMPLOYEES = [
 ];
 
 // Utility Functions
-const formatCurrency = (amount) => {
+const formatCurrency = (amount: any) => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD'
   }).format(amount);
 };
 
-const calculateTotalRevenue = (products) => {
-  return products.reduce((total, product) => total + ((product.unit_price || product.price || 0) * (100 - (product.current_stock || product.stock || 0))), 0);
+const calculateTotalRevenue = (products: any[]) => {
+  return products.reduce((total: number, product: any) => total + ((product.unit_price || product.price || 0) * (100 - (product.current_stock || product.stock || 0))), 0);
 };
 
 // Main App Component
 export default function ERPApp() {
-  const [state, setState] = useState({
+  const [state, setState] = useState<AppState>({
     user: null,
     currentModule: 'login',
     cart: [],
@@ -87,7 +103,7 @@ export default function ERPApp() {
     }
   }, [state.user, fetchData]);
 
-  const login = async (username, password) => {
+  const login = async (username: string, password: string) => {
     try {
       const res = await api.auth.login({ username, password });
       if (res.success) {
@@ -124,12 +140,12 @@ export default function ERPApp() {
 
 // Login Component
 // Dashboard Component
-function Dashboard({ logout }) {
+function Dashboard({ logout }: { logout: () => void }) {
   const { state, setState } = useContext(ERPContext);
   const { user, currentModule } = state;
 
-  const getModuleAccess = (role) => {
-    const access = {
+  const getModuleAccess = (role: string) => {
+    const access: Record<string, string[]> = {
       'Super Admin': ['dashboard', 'pos', 'inventory', 'hr', 'employee', 'booking'],
       'HR Manager': ['dashboard', 'hr', 'employee'],
       'Store Manager': ['dashboard', 'pos', 'inventory', 'booking'],
@@ -148,7 +164,7 @@ function Dashboard({ logout }) {
     { id: 'booking', name: 'Booking Engine', icon: Icons.Calendar },
   ];
 
-  const allowedModules = modules.filter(module => getModuleAccess(user.role).includes(module.id));
+  const allowedModules = modules.filter((module: any) => getModuleAccess(user.role).includes(module.id));
 
   return (
     <motion.div
@@ -164,10 +180,10 @@ function Dashboard({ logout }) {
           <p className="text-sm text-slate-400">{user.role}</p>
         </div>
         <nav className="space-y-2">
-          {allowedModules.map(module => (
+          {allowedModules.map((module: any) => (
             <button
               key={module.id}
-              onClick={() => setState(prev => ({ ...prev, currentModule: module.id }))}
+              onClick={() => setState((prev: AppState) => ({ ...prev, currentModule: module.id }))}
               className={`flex w-full items-center space-x-2 rounded-ios-lg px-4 py-2 text-left transition-colors ${currentModule === module.id ? 'bg-indigo-600' : 'hover:bg-slate-700'}`}
             >
               <module.icon className="h-5 w-5" />
@@ -208,11 +224,11 @@ function DashboardModule() {
   const totalEmployees = employees.length;
   // Mock performance/attendance since it's not in the base StaffMember type yet
   const averagePerformance = employees.length > 0
-    ? employees.reduce((sum, emp) => sum + ((emp as any).performance || 90), 0) / totalEmployees
+    ? employees.reduce((sum: number, emp: any) => sum + ((emp as any).performance || 90), 0) / totalEmployees
     : 0;
-  const totalInventoryValue = products.reduce((sum, product) => sum + ((product.unit_price || 0) * (product.current_stock || 0)), 0);
+  const totalInventoryValue = products.reduce((sum: number, product: any) => sum + ((product.unit_price || 0) * (product.current_stock || 0)), 0);
 
-  const DashboardCard = ({ title, value, icon: Icon }) => (
+  const DashboardCard = ({ title, value, icon: Icon }: any) => (
     <div className="rounded-ios-lg bg-white p-6 shadow-md">
       <div className="flex items-center justify-between">
         <div>
@@ -257,8 +273,8 @@ function DashboardModule() {
                 <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Low Stock Alerts</h3>
                 <div className="space-y-4">
                   {products
-                    .filter(product => (product.current_stock || product.stock || 0) < 30)
-                    .map(product => (
+                    .filter((product: any) => (product.current_stock || product.stock || 0) < 30)
+                    .map((product: any) => (
                       <div key={product.id} className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <span className="text-2xl">{product.image || '📦'}</span>
@@ -273,9 +289,9 @@ function DashboardModule() {
                 <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Top Performers</h3>
                 <div className="space-y-4">
                   {[...employees]
-                    .sort((a, b) => ((b as any).performance || 90) - ((a as any).performance || 90))
+                    .sort((a: any, b: any) => ((b as any).performance || 90) - ((a as any).performance || 90))
                     .slice(0, 5)
-                    .map(employee => (
+                    .map((employee: any) => (
                       <div key={employee.id} className="flex items-center justify-between">
                         <span>{employee.first_name} {employee.last_name}</span>
                         <div className="flex items-center space-x-2">
@@ -310,14 +326,14 @@ function DashboardModule() {
               />
               <DashboardCard
                 title="Pending Reviews"
-                value={employees.filter(emp => emp.performance < 75).length}
+                value={employees.filter((emp: any) => emp.performance < 75).length}
                 icon={Icons.AlertCircle}
               />
             </div>
             <div className="mt-8 rounded-ios-lg bg-white p-6 shadow-md">
               <h3 className="mb-4 text-lg font-semibold font-sf-pro-display">Employee Performance Overview</h3>
               <div className="space-y-4">
-                {employees.map(employee => (
+                {employees.map((employee: any) => (
                   <div key={employee.id} className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">{employee.first_name} {employee.last_name}</p>
@@ -428,10 +444,10 @@ function POSModule() {
   const { state, setState } = useContext(ERPContext);
   const { products, cart } = state;
   const [showReceipt, setShowReceipt] = useState(false);
-  const [currentReceipt, setCurrentReceipt] = useState(null);
+  const [currentReceipt, setCurrentReceipt] = useState<any>({});
   const TAX_RATE = 0.1; // 10% tax
 
-  const addToCart = (product) => {
+  const addToCart = (product: any) => {
     const stock = product.current_stock || product.stock || 0;
     if (stock === 0) {
       toast.error('Product out of stock!');
@@ -446,7 +462,7 @@ function POSModule() {
       }
       setState(prev => ({
         ...prev,
-        cart: prev.cart.map(item =>
+        cart: prev.cart.map((item: any) =>
           item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
@@ -461,15 +477,15 @@ function POSModule() {
     toast.success(`Added ${product.name} to cart`);
   };
 
-  const removeFromCart = (productId) => {
+  const removeFromCart = (productId: any) => {
     setState(prev => ({
       ...prev,
-      cart: prev.cart.filter(item => item.id !== productId)
+      cart: prev.cart.filter((item: any) => item.id !== productId)
     }));
     toast.success('Item removed from cart');
   };
 
-  const updateQuantity = (productId, delta) => {
+  const updateQuantity = (productId: any, delta: number) => {
     const item = cart.find(item => item.id === productId);
     const product = products.find(p => p.id === productId);
 
@@ -485,7 +501,7 @@ function POSModule() {
 
     setState(prev => ({
       ...prev,
-      cart: prev.cart.map(item =>
+      cart: prev.cart.map((item: any) =>
         item.id === productId
           ? { ...item, quantity: item.quantity + delta }
           : item
@@ -499,7 +515,7 @@ function POSModule() {
   };
 
   const calculateTotal = () => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
     const tax = subtotal * TAX_RATE;
     const total = subtotal + tax;
     return { subtotal, tax, total };
@@ -524,7 +540,7 @@ function POSModule() {
     // Update inventory
     setState(prev => ({
       ...prev,
-      products: prev.products.map(product => {
+      products: prev.products.map((product: any) => {
         const cartItem = cart.find(item => item.id === product.id);
         return cartItem
           ? { ...product, stock: product.stock - cartItem.quantity }
@@ -561,7 +577,7 @@ function POSModule() {
           <p className="text-sm text-slate-600">Receipt #{currentReceipt.id}</p>
         </div>
         <div className="mb-6 divide-y divide-slate-200">
-          {currentReceipt.items.map(item => (
+          {currentReceipt.items.map((item: any) => (
             <div key={item.id} className="flex items-center justify-between py-2">
               <div>
                 <span className="font-medium">{item.name}</span>
@@ -619,7 +635,7 @@ function POSModule() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map(product => {
+          {products.map((product: any) => {
             const stock = product.current_stock || product.stock || 0;
             const price = product.unit_price || product.price || 0;
             return (
@@ -665,7 +681,7 @@ function POSModule() {
           {cart.length === 0 ? (
             <p className="text-center text-slate-500">Cart is empty</p>
           ) : (
-            cart.map(item => (
+            cart.map((item: any) => (
               <div key={item.id} className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <span className="text-2xl">{item.image}</span>
@@ -736,15 +752,15 @@ function InventoryModule() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  const categories = ['all', ...new Set(products.map(p => p.category))];
+  const categories = ['all', ...new Set(products.map((p: any) => p.category))];
 
   const filteredProducts = products
-    .filter(product =>
+    .filter((product: any) =>
       (selectedCategory === 'all' || product.category === selectedCategory) &&
       (product.name || product.item_name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-  const handleAddProduct = (newProduct) => {
+  const handleAddProduct = (newProduct: any) => {
     setState(prev => ({
       ...prev,
       products: [...prev.products, { id: Date.now(), ...newProduct }]
@@ -753,10 +769,10 @@ function InventoryModule() {
     setShowAddModal(false);
   };
 
-  const handleUpdateProduct = (updatedProduct) => {
+  const handleUpdateProduct = (updatedProduct: any) => {
     setState(prev => ({
       ...prev,
-      products: prev.products.map(p =>
+      products: prev.products.map((p: any) =>
         p.id === updatedProduct.id ? updatedProduct : p
       )
     }));
@@ -764,16 +780,16 @@ function InventoryModule() {
     setEditingProduct(null);
   };
 
-  const handleDeleteProduct = (productId) => {
+  const handleDeleteProduct = (productId: any) => {
     setState(prev => ({
       ...prev,
-      products: prev.products.filter(p => p.id !== productId)
+      products: prev.products.filter((p: any) => p.id !== productId)
     }));
     toast.success('Product deleted successfully!');
   };
 
-  const ProductForm = ({ product, onSubmit, onCancel }) => {
-    const [formData, setFormData] = useState(
+  const ProductForm = ({ product, onSubmit, onCancel }: any) => {
+    const [formData, setFormData] = useState<any>(
       product || {
         name: '',
         unit_price: '',
@@ -783,7 +799,7 @@ function InventoryModule() {
       }
     );
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e: any) => {
       e.preventDefault();
       onSubmit({
         ...formData,
@@ -809,7 +825,7 @@ function InventoryModule() {
               <input
                 type="text"
                 value={formData.name}
-                onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                onChange={e => setFormData((prev: any) => ({ ...prev, name: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
               />
@@ -820,7 +836,7 @@ function InventoryModule() {
                 type="number"
                 step="0.01"
                 value={formData.unit_price || formData.price || ''}
-                onChange={e => setFormData(prev => ({ ...prev, unit_price: e.target.value }))}
+                onChange={e => setFormData((prev: any) => ({ ...prev, unit_price: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
               />
@@ -830,7 +846,7 @@ function InventoryModule() {
               <input
                 type="number"
                 value={formData.current_stock || formData.stock || ''}
-                onChange={e => setFormData(prev => ({ ...prev, current_stock: e.target.value }))}
+                onChange={e => setFormData((prev: any) => ({ ...prev, current_stock: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
               />
@@ -840,7 +856,7 @@ function InventoryModule() {
               <input
                 type="text"
                 value={formData.category}
-                onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                onChange={e => setFormData((prev: any) => ({ ...prev, category: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
               />
@@ -850,7 +866,7 @@ function InventoryModule() {
               <input
                 type="text"
                 value={formData.image || '🍽️'}
-                onChange={e => setFormData(prev => ({ ...prev, image: e.target.value }))}
+                onChange={e => setFormData((prev: any) => ({ ...prev, image: e.target.value }))}
                 className="mt-1 w-full rounded-md border border-slate-300 p-2"
                 required
               />
@@ -910,7 +926,7 @@ function InventoryModule() {
           onChange={e => setSelectedCategory(e.target.value)}
           className="rounded-ios-lg border-slate-200 focus:border-indigo-500 focus:ring-indigo-500"
         >
-          {categories.map(category => (
+          {categories.map((category: any) => (
             <option key={category} value={category}>
               {category.charAt(0).toUpperCase() + category.slice(1)}
             </option>
@@ -932,7 +948,7 @@ function InventoryModule() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredProducts.map(product => (
+              {filteredProducts.map((product: any) => (
                 <tr key={product.id} className="hover:bg-slate-50">
                   <td className="p-4">
                     <div className="flex items-center space-x-3">
@@ -1005,19 +1021,19 @@ function InventoryModule() {
 function HRModule() {
   const { state, setState } = useContext(ERPContext);
   const { employees } = state;
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [showPayrollModal, setShowPayrollModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const TAX_RATE = 0.2; // 20% tax rate
   const BENEFITS_RATE = 0.1; // 10% benefits
 
-  const filteredEmployees = employees.filter(employee =>
+  const filteredEmployees = employees.filter((employee: any) =>
     `${employee.first_name} ${employee.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (employee.role || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const calculatePayroll = (employee) => {
+  const calculatePayroll = (employee: any) => {
     const grossPay = employee.base_salary || employee.salary || 0;
     const taxDeduction = grossPay * TAX_RATE;
     const benefits = grossPay * BENEFITS_RATE;
@@ -1109,7 +1125,7 @@ function HRModule() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {filteredEmployees.map(employee => (
+        {filteredEmployees.map((employee: any) => (
           <div
             key={employee.id}
             className="rounded-ios-lg bg-white p-6 shadow-md transition-shadow hover:shadow-lg"
@@ -1201,7 +1217,7 @@ function EmployeeModule() {
   const { state, setState } = useContext(ERPContext);
   const { user } = state;
   const [clockedIn, setClockedIn] = useState(false);
-  const [clockInTime, setClockInTime] = useState(null);
+  const [clockInTime, setClockInTime] = useState<any>(null);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState([
     { id: 1, startDate: '2025-11-25', endDate: '2025-11-27', type: 'Vacation', status: 'Pending' },
@@ -1228,7 +1244,7 @@ function EmployeeModule() {
       reason: ''
     });
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e: any) => {
       e.preventDefault();
       const newRequest = {
         id: Date.now(),
@@ -1444,7 +1460,7 @@ function EmployeeModule() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {leaveRequests.map(request => (
+                {leaveRequests.map((request: any) => (
                   <tr key={request.id}>
                     <td className="py-3 pr-4">
                       <div>
@@ -1454,7 +1470,7 @@ function EmployeeModule() {
                         </p>
                         <p className="text-sm text-slate-600">
                           {Math.ceil(
-                            (new Date(request.endDate) - new Date(request.startDate)) /
+                            (new Date(request.endDate).getTime() - new Date(request.startDate).getTime()) /
                             (1000 * 60 * 60 * 24)
                           )}{' '}
                           days
@@ -1511,16 +1527,16 @@ function BookingModule() {
     '20:00', '20:30', '21:00', '21:30'
   ];
 
-  const isTimeSlotAvailable = (date, time) => {
+  const isTimeSlotAvailable = (date: any, time: any) => {
     const existingBooking = displayBookings.find(
       booking => (booking.check_in_date || booking.date) === date && booking.time === time
     );
     return !existingBooking;
   };
 
-  const handleStatusChange = (bookingId, newStatus) => {
+  const handleStatusChange = (bookingId: any, newStatus: any) => {
     setLocalBookings(prev =>
-      prev.map(booking =>
+      prev.map((booking: any) =>
         booking.id === bookingId
           ? { ...booking, status: newStatus }
           : booking
@@ -1538,7 +1554,7 @@ function BookingModule() {
       notes: ''
     });
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e: any) => {
       e.preventDefault();
 
       if (!isTimeSlotAvailable(formData.date, formData.time)) {
@@ -1611,7 +1627,7 @@ function BookingModule() {
                 required
               >
                 <option value="">Select a time</option>
-                {timeSlots.map(time => (
+                {timeSlots.map((time: any) => (
                   <option
                     key={time}
                     value={time}
@@ -1706,7 +1722,7 @@ function BookingModule() {
             />
 
             <div className="space-y-2">
-              {timeSlots.map(time => {
+              {timeSlots.map((time: any) => {
                 const isAvailable = isTimeSlotAvailable(
                   selectedDate.toISOString().split('T')[0],
                   time
@@ -1780,10 +1796,10 @@ function BookingModule() {
   );
 }
 
-function LoginPage({ login }) {
+function LoginPage({ login }: any) {
   const [formData, setFormData] = useState({ username: '', password: '' });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: any) => {
     e.preventDefault();
     login(formData.username, formData.password);
   };
@@ -1806,14 +1822,14 @@ function LoginPage({ login }) {
               type="text"
               placeholder="Username"
               value={formData.username}
-              onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
+              onChange={(e: any) => setFormData(prev => ({ ...prev, username: e.target.value }))}
               className="w-full rounded-md border border-slate-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
             />
             <input
               type="password"
               placeholder="Password"
               value={formData.password}
-              onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+              onChange={(e: any) => setFormData(prev => ({ ...prev, password: e.target.value }))}
               className="w-full rounded-md border border-slate-300 px-4 py-2 focus:border-indigo-500 focus:outline-none"
             />
           </div>

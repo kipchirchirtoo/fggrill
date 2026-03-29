@@ -10,7 +10,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
 
 interface SearchResult {
-    type: 'staff' | 'order' | 'guest' | 'transaction' | 'receipt' | 'booking' | 'payment' | 'bill';
+    type: string;
     id: string;
     title: string;
     subtitle: string;
@@ -158,7 +158,7 @@ export default function UniversalSearchPage() {
         setSelectedResult(null);
 
         try {
-            const response = await searchAPI.universalSearch(query.trim());
+            const response = await searchAPI.globalSearch(query.trim());
 
             if (response.success && response.data) {
                 setResults(response.data);

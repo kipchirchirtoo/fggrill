@@ -40,6 +40,20 @@ export interface User {
   is_active: boolean;
   photo_url?: string;
   permissions?: string[];
+  
+  // UI Compatibility Aliases
+  first_name?: string;
+  last_name?: string;
+  firstName?: string;
+  lastName?: string;
+  branch_name?: string;
+  is_central?: boolean;
+  department?: string;
+  employee_id?: string;
+  start_date?: string;
+  profile_photo?: string;
+  id_number?: string;
+  phone_number?: string;
 }
 
 export interface AuthResponse {

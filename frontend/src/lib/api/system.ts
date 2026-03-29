@@ -110,10 +110,6 @@ const systemBase = {
 };
 
 export const systemAPI = {
-  // Appended for UI Compatibility
-  getPendingLogbooks: (params?: any) => fetchAPI<any[]>('/accounting/logbooks/pending'),
-  auditLogbook: (id: any, data?: any) => fetchAPI<any>(`/accounting/logbooks/${id}/audit`, { method: 'POST', body: JSON.stringify(data) }),
-
   ...systemBase,
 };
 

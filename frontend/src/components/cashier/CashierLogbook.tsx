@@ -5,10 +5,12 @@ import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { fetchAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Plus, Trash2, Save, Calculator, AlertCircle, FileText, Check, TrendingUp, Shield, Clock } from 'lucide-react';
+import { Plus, Trash2, Save, Calculator, AlertCircle, FileText, Check, TrendingUp, Shield, Clock, User as UserIcon, ChevronRight } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
 import { IOSButton } from '@/components/ui/ios-button';
+import { StaffDropdownModal } from '@/components/common/StaffDropdownModal';
+import { StaffMember } from '@/lib/api/types';
 
 interface LogbookLine {
     id?: string;
@@ -58,20 +60,8 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
         unpaid_bills: [],
         paid_bills: []
     });
-    const [staffList, setStaffList] = useState<any[]>([]);
-
-    useEffect(() => {
-        loadStaff();
-    }, []);
-
-    const loadStaff = async () => {
-        try {
-            const res = await fetchAPI('/staff?status=active') as any;
-            if (res.success) setStaffList(res.data);
-        } catch (error) {
-            console.error('Failed to load staff list', error);
-        }
-    };
+    const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+    const [activeLineIndex, setActiveLineIndex] = useState<number | null>(null);
 
 
     // Configuration based on type
@@ -331,26 +321,22 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                         <div className="space-y-2">
                             {logbook.credit_bills.map((line, i) => (
                                 <div key={i} className="flex gap-2">
-                                    <select
-                                        className="h-8 text-xs flex-1 bg-stone-50 border border-stone-200 rounded px-2"
-                                        value={line.staff_id || ''}
+                                    <button
+                                        className="h-9 px-3 text-xs flex-1 bg-gradient-to-br from-white to-stone-50 border border-stone-200 rounded-xl flex items-center justify-between group hover:border-indigo-500 transition-all shadow-sm active:scale-[0.98]"
                                         disabled={isReadOnly}
-                                        onChange={e => {
-                                            const staffId = e.target.value;
-                                            const staff = staffList.find(s => s.id === staffId);
-                                            updateLine('credit_bills', i, {
-                                                staff_id: staffId,
-                                                customer_name: staff ? `${staff.first_name} ${staff.last_name}` : ''
-                                            });
+                                        onClick={() => {
+                                            setActiveLineIndex(i);
+                                            setIsStaffModalOpen(true);
                                         }}
                                     >
-                                        <option value="">Select Staff</option>
-                                        {staffList.map(staff => (
-                                            <option key={staff.id} value={staff.id}>
-                                                {staff.first_name} {staff.last_name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        <div className="flex items-center gap-2 truncate">
+                                            <UserIcon size={14} className={line.staff_id ? 'text-indigo-600' : 'text-stone-400'} />
+                                            <span className={`truncate ${line.staff_id ? 'text-stone-900 font-bold' : 'text-stone-400 font-medium'}`}>
+                                                {line.customer_name || 'Choose Staff...'}
+                                            </span>
+                                        </div>
+                                        <ChevronRight size={12} className="text-stone-300 group-hover:text-indigo-500 transition-colors" />
+                                    </button>
                                     <Input
                                         placeholder="Name"
                                         className="h-8 text-xs flex-1"
@@ -472,6 +458,25 @@ export function CashierLogbook({ type }: CashierLogbookProps) {
                     </IOSButton>
                 </div>
             )}
+
+            <StaffDropdownModal
+                isOpen={isStaffModalOpen}
+                onClose={() => {
+                    setIsStaffModalOpen(false);
+                    setActiveLineIndex(null);
+                }}
+                activeBranchId={activeBranch?.id}
+                onSelect={(staff) => {
+                    if (activeLineIndex !== null && !Array.isArray(staff)) {
+                        updateLine('credit_bills', activeLineIndex, {
+                            staff_id: staff.id,
+                            customer_name: `${staff.first_name} ${staff.last_name}`
+                        });
+                    }
+                }}
+                isMulti={false}
+                title="Select Credit Staff"
+            />
         </div>
     );
 }
