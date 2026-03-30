@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+
 /**
  * tauri-print.ts — Cross-platform print utility
  * 
@@ -11,20 +13,54 @@ export const isTauri = (): boolean => {
 };
 
 /**
+ * Helper to convert a Blob URL (or Blob) to a Base64 Data URL.
+ * Better for passing between Tauri windows.
+ */
+async function blobToDataUrl(blobUrl: string): Promise<string> {
+  try {
+    const response = await fetch(blobUrl);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.error('[PrintHelper] Blob conversion failed:', e);
+    return blobUrl; // Fallback to original
+  }
+}
+
+/**
  * Open a print window with the given HTML content.
- * 
- * Strategy:
- * 1. Try window.open (works in browsers)
- * 2. If blocked/null (Tauri), use hidden iframe approach
  * 
  * @param html - Full HTML document string
  * @param options - width, height for the popup window
  */
-export function printHtml(
+export async function printHtml(
   html: string,
   options: { width?: number; height?: number; title?: string } = {}
-): void {
+): Promise<void> {
   const { width = 900, height = 800, title = 'Print Preview' } = options;
+
+  if (isTauri()) {
+    try {
+      // For HTML, we can use a data URL as well
+      const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+      
+      await invoke('cmd_open_print_window', {
+        label: `print-${Date.now()}`,
+        title,
+        width,
+        height,
+        url: dataUrl
+      });
+      return;
+    } catch (e) {
+      console.error('[PrintHelper] Tauri print window failed:', e);
+    }
+  }
 
   // ── Strategy 1: window.open (browser) ──────────────────────────────────
   if (!isTauri()) {
@@ -36,7 +72,7 @@ export function printHtml(
     }
   }
 
-  // ── Strategy 2: Hidden iframe (Tauri fallback) ─────────────────────────
+  // ── Strategy 2: Hidden iframe (Tauri fallback / Browser popup blocked) ──
   // Create a hidden iframe, write the HTML, and trigger print
   const existingFrame = document.getElementById('__fg_print_frame') as HTMLIFrameElement;
   if (existingFrame) {
@@ -89,15 +125,33 @@ export function printHtml(
 
 /**
  * Open a blob URL (for jsPDF) in a printable window.
- * In Tauri, creates an iframe to display the PDF blob.
+ * In Tauri, uses the native window command for a reliable preview.
  */
-export function openBlobForPrint(blobUrl: string): void {
+export async function openBlobForPrint(blobUrl: string): Promise<void> {
+  if (isTauri()) {
+    try {
+      // 1. Convert to data URL to avoid blob cross-origin issues
+      const dataUrl = await blobToDataUrl(blobUrl);
+      
+      // 2. Open native window
+      await invoke('cmd_open_print_window', {
+        label: `preview-${Date.now()}`,
+        title: 'Document Preview',
+        url: dataUrl
+      });
+      return;
+    } catch (e) {
+      console.error('[PrintHelper] Tauri print window failed:', e);
+      // Fallback below
+    }
+  }
+
   if (!isTauri()) {
     const printWindow = window.open(blobUrl, '_blank');
     if (printWindow) return;
   }
 
-  // Fallback: open in an iframe
+  // Final fallback: open in an iframe (Legacy/Emergency)
   const existingFrame = document.getElementById('__fg_pdf_frame') as HTMLIFrameElement;
   if (existingFrame) existingFrame.remove();
 
