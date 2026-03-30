@@ -5,21 +5,22 @@
  * Falls back to iframe-based printing when window.open is blocked.
  */
 
-/** Detect if we're running inside the Tauri webview */
+/** Detect if we're running inside the Tauri webview (or embedded iframe within it) */
 export const isTauri = (): boolean => {
-  return typeof window !== 'undefined' && !!((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+  if (typeof window === 'undefined') return false;
+  // Direct Tauri webview — globals injected by withGlobalTauri
+  if ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__) return true;
+  // Embedded inside a Tauri iframe (RemoteWebView) — check URL param set by the shell
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('fg_desktop') === '1') return true;
+  } catch (_) { /* ignore */ }
+  // Try parent frame globals (same-origin only)
+  try {
+    if ((window.top as any)?.__TAURI_INTERNALS__ || (window.top as any)?.__TAURI__) return true;
+  } catch (_) { /* cross-origin — ignore */ }
+  return false;
 };
-
-/**
- * Helper to get Tauri's invoke function safely (dynamic import)
- */
-async function getTauriInvoke() {
-  if (isTauri()) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke;
-  }
-  return null;
-}
 
 /**
  * Helper to convert a Blob URL (or Blob) to a Base64 Data URL.
@@ -53,28 +54,8 @@ export async function printHtml(
 ): Promise<void> {
   const { width = 900, height = 800, title = 'Print Preview' } = options;
 
-  if (isTauri()) {
-    try {
-      const invoke = await getTauriInvoke();
-      if (invoke) {
-        // For HTML, we can use a data URL as well
-        const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-        
-        await invoke('cmd_open_print_window', {
-          label: `print-${Date.now()}`,
-          title,
-          width,
-          height,
-          url: dataUrl
-        });
-        return;
-      }
-    } catch (e) {
-      console.error('[PrintHelper] Tauri print window failed:', e);
-      alert('Native print window failed to open. Check console for details.');
-      return; // DO NOT fallback to iframe in Tauri, it is blocked!
-    }
-  }
+  // In Tauri, data: URLs are not supported by WebviewUrl::External without the
+  // 'webview-data-url' feature flag. Use the iframe approach for all HTML printing.
 
   // ── Strategy 1: window.open (browser) ──────────────────────────────────
   if (!isTauri()) {
@@ -138,66 +119,51 @@ export async function printHtml(
 }
 
 /**
- * Open a blob URL (for jsPDF) in a printable window.
- * In Tauri, uses the native window command for a reliable preview.
+ * Open a blob URL (for jsPDF) in a printable overlay.
+ * Uses an iframe overlay — works in both browser and Tauri (no data: URL window needed).
  */
 export async function openBlobForPrint(blobUrl: string): Promise<void> {
-  if (isTauri()) {
-    try {
-      const invoke = await getTauriInvoke();
-      if (invoke) {
-        // 1. Convert to data URL to avoid blob cross-origin issues
-        const dataUrl = await blobToDataUrl(blobUrl);
-        
-        // 2. Open native window
-        await invoke('cmd_open_print_window', {
-          label: `preview-${Date.now()}`,
-          title: 'Document Preview',
-          url: dataUrl
-        });
-        return;
-      } else {
-        console.error('[PrintHelper] Tauri environment detected, but invoke module failed to load.');
-        return; // Prevent fallback
-      }
-    } catch (e: any) {
-      console.error('[PrintHelper] Tauri print window failed:', e);
-      alert('Failed to open Native Preview Window. Error Details: ' + e.toString() + ' | Ensure desktop app is updated.');
-      return; // DO NOT fallback to iframe in Tauri, it is blocked!
-    }
-  }
-
-  if (!isTauri()) {
+  // In plain browser (not Tauri, not iframe), try window.open first (simpler UX).
+  // Skip window.open in Tauri or when running inside an iframe (window !== window.top),
+  // because Tauri intercepts blob: URLs opened via window.open and rejects them.
+  const isInsideIframe = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
+  if (!isTauri() && !isInsideIframe) {
     const printWindow = window.open(blobUrl, '_blank');
     if (printWindow) return;
   }
 
-  // Final fallback: open in an iframe (Legacy/Emergency)
+  // In Tauri (or if window.open was blocked): use iframe overlay inside the webview.
+  // Tauri's WebviewUrl::External does NOT support data:/blob: URLs without extra feature flags,
+  // so we render the PDF inline instead of opening a new native window.
   const existingFrame = document.getElementById('__fg_pdf_frame') as HTMLIFrameElement;
   if (existingFrame) existingFrame.remove();
+  const existingOverlay = document.getElementById('__fg_pdf_overlay');
+  if (existingOverlay) existingOverlay.remove();
+  const existingBtn = document.getElementById('__fg_pdf_close_btn');
+  if (existingBtn) existingBtn.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = '__fg_pdf_overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99998;';
 
   const iframe = document.createElement('iframe');
   iframe.id = '__fg_pdf_frame';
   iframe.src = blobUrl;
   iframe.style.cssText = 'position:fixed;top:5%;left:5%;width:90%;height:90%;z-index:99999;border:2px solid #333;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.4);background:white;';
-  
-  // Add a close button overlay
-  const overlay = document.createElement('div');
-  overlay.id = '__fg_pdf_overlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99998;';
-  overlay.onclick = () => {
-    iframe.remove();
-    overlay.remove();
-  };
 
   const closeBtn = document.createElement('button');
-  closeBtn.innerHTML = '✕ Close Preview Window';
+  closeBtn.id = '__fg_pdf_close_btn';
+  closeBtn.innerHTML = '✕ Close Preview';
   closeBtn.style.cssText = 'position:fixed;top:2%;right:6%;z-index:100000;background:#111;color:white;border:none;padding:8px 20px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;';
-  closeBtn.onclick = () => {
+
+  const cleanup = () => {
     iframe.remove();
     overlay.remove();
     closeBtn.remove();
   };
+
+  overlay.onclick = cleanup;
+  closeBtn.onclick = cleanup;
 
   document.body.appendChild(overlay);
   document.body.appendChild(iframe);

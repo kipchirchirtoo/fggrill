@@ -16,7 +16,7 @@ export function RemoteWebView({ targetPath }: RemoteWebViewProps) {
   const token = session?.token ?? '';
   const branchId = session?.branch_id ?? '';
   const sep = targetPath.includes('?') ? '&' : '?';
-  const remoteUrl = `${baseUrl}${targetPath}${sep}desktop_token=${encodeURIComponent(token)}&fg_branch_id=${encodeURIComponent(branchId)}`;
+  const remoteUrl = `${baseUrl}${targetPath}${sep}desktop_token=${encodeURIComponent(token)}&fg_branch_id=${encodeURIComponent(branchId)}&fg_desktop=1`;
 
   return (
     // Full viewport — no border, no padding, no rounding.
