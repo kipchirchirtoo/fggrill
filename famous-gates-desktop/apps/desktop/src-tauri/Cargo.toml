@@ -1,6 +1,6 @@
 [package]
 name = "famous-gates-desktop"
-version = "1.0.0"
+version = "1.0.3"
 description = "Famous Gates Hotels — Hybrid Desktop Application"
 authors = ["Hirall Systems <info@hirall.com>"]
 license = "MIT"
