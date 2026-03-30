@@ -44,6 +44,7 @@ keyring = "2"
 base64 = "0.22"
 sha2 = "0.10"
 hmac = "0.12"
+url = "2"
 
 [features]
 default = ["custom-protocol"]
