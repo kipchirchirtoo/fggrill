@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
-
 /**
  * tauri-print.ts — Cross-platform print utility
  * 
@@ -11,6 +9,17 @@ import { invoke } from '@tauri-apps/api/core';
 export const isTauri = (): boolean => {
   return typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 };
+
+/**
+ * Helper to get Tauri's invoke function safely (dynamic import)
+ */
+async function getTauriInvoke() {
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke;
+  }
+  return null;
+}
 
 /**
  * Helper to convert a Blob URL (or Blob) to a Base64 Data URL.
@@ -46,19 +55,22 @@ export async function printHtml(
 
   if (isTauri()) {
     try {
-      // For HTML, we can use a data URL as well
-      const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-      
-      await invoke('cmd_open_print_window', {
-        label: `print-${Date.now()}`,
-        title,
-        width,
-        height,
-        url: dataUrl
-      });
-      return;
+      const invoke = await getTauriInvoke();
+      if (invoke) {
+        // For HTML, we can use a data URL as well
+        const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+        
+        await invoke('cmd_open_print_window', {
+          label: `print-${Date.now()}`,
+          title,
+          width,
+          height,
+          url: dataUrl
+        });
+        return;
+      }
     } catch (e) {
-      console.error('[PrintHelper] Tauri print window failed:', e);
+      console.error('[PrintHelper] Calibri print window failed:', e);
     }
   }
 
@@ -130,16 +142,19 @@ export async function printHtml(
 export async function openBlobForPrint(blobUrl: string): Promise<void> {
   if (isTauri()) {
     try {
-      // 1. Convert to data URL to avoid blob cross-origin issues
-      const dataUrl = await blobToDataUrl(blobUrl);
-      
-      // 2. Open native window
-      await invoke('cmd_open_print_window', {
-        label: `preview-${Date.now()}`,
-        title: 'Document Preview',
-        url: dataUrl
-      });
-      return;
+      const invoke = await getTauriInvoke();
+      if (invoke) {
+        // 1. Convert to data URL to avoid blob cross-origin issues
+        const dataUrl = await blobToDataUrl(blobUrl);
+        
+        // 2. Open native window
+        await invoke('cmd_open_print_window', {
+          label: `preview-${Date.now()}`,
+          title: 'Document Preview',
+          url: dataUrl
+        });
+        return;
+      }
     } catch (e) {
       console.error('[PrintHelper] Tauri print window failed:', e);
       // Fallback below
