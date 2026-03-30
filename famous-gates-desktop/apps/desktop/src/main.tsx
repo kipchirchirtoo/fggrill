@@ -6,6 +6,8 @@ import { Toaster } from 'sonner';
 import { router } from './routes/router';
 import { AppStateProvider } from './state/AppStateProvider';
 import { NetworkMonitor } from './components/NetworkMonitor';
+import { LicenseGate } from './components/LicenseGate';
+import { UpdateManager } from './components/UpdateManager';
 import './assets/styles/globals.css';
 
 const queryClient = new QueryClient({
@@ -23,9 +25,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <AppStateProvider>
-        <NetworkMonitor />
-        <RouterProvider router={router} />
-        <Toaster position="top-right" richColors closeButton />
+        <LicenseGate>
+          <NetworkMonitor />
+          <UpdateManager />
+          <RouterProvider router={router} />
+          <Toaster position="top-right" richColors closeButton />
+        </LicenseGate>
       </AppStateProvider>
     </QueryClientProvider>
   </React.StrictMode>

@@ -20,6 +20,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::default().build())
+        .plugin(tauri_plugin_process::init())
         // ── App State ────────────────────────────────────────────────────────
         .manage(state::AppState::default())
         // ── Setup ────────────────────────────────────────────────────────────
@@ -64,6 +66,8 @@ pub fn run() {
             commands::app::cmd_open_pos_window,
             commands::app::cmd_open_print_window,
             commands::app::cmd_get_branch_config,
+            // License
+            commands::license::cmd_verify_license,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Famous Gates Desktop");

@@ -160,9 +160,9 @@ export async function openBlobForPrint(blobUrl: string): Promise<void> {
         console.error('[PrintHelper] Tauri environment detected, but invoke module failed to load.');
         return; // Prevent fallback
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('[PrintHelper] Tauri print window failed:', e);
-      alert('Failed to open Native Preview Window. Please check the system logs.');
+      alert('Failed to open Native Preview Window. Error Details: ' + e.toString() + ' | Ensure desktop app is updated.');
       return; // DO NOT fallback to iframe in Tauri, it is blocked!
     }
   }

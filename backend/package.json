@@ -1,6 +1,6 @@
 {
   "name": "famous-gate-hotel-backend",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Backend API for Kyogong Management System",
   "main": "dist/server.js",
   "scripts": {
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@getbrevo/brevo": "^4.0.1",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.84.0",
     "@types/json2csv": "^5.0.7",
     "@types/node-cron": "^3.0.11",

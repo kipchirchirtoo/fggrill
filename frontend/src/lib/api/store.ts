@@ -134,7 +134,7 @@ export const storeAPI = {
   updateSupplier: (id: string, data: any)=> fetchAPI<void>(`/store/suppliers/${id}`, { method: 'PUT',  body: JSON.stringify(data) }),
   deleteSupplier: (id: string)           => fetchAPI<void>(`/store/suppliers/${id}`, { method: 'DELETE' }),
   receiveFromSupplier: (data: {
-    supplier_id: number;
+    supplier_id: string;
     items: Array<{
       item_sku: string;
       quantity: number;

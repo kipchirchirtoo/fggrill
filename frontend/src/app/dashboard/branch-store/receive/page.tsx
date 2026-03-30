@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditorReportsAPI } from '@/lib/api';
-import { Truck, RefreshCw, Check, AlertTriangle, ArrowDownToLine, Package, Search, FileDown, Activity, Clock, Plus, Trash2, User } from 'lucide-react';
+import { Truck, RefreshCw, Check, AlertTriangle, ArrowDownToLine, Package, Search, FileDown, Activity, Clock, Plus, Trash2, User, ChevronDown, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -66,6 +66,39 @@ export default function BranchReceivePage() {
     unit: string;
   }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // SKU search combobox state
+  const [skuSearch, setSkuSearch] = useState('');
+  const [skuDropdownOpen, setSkuDropdownOpen] = useState(false);
+  const skuDropdownRef = useRef<HTMLDivElement>(null);
+
+  // New SKU modal state
+  const [isNewSkuModalOpen, setIsNewSkuModalOpen] = useState(false);
+  const [newSkuForm, setNewSkuForm] = useState({
+    item_name: '',
+    category: '',
+    unit_of_measure: 'units',
+    cost_price: '',
+    description: '',
+  });
+  const [isCreatingSku, setIsCreatingSku] = useState(false);
+
+  const CATEGORIES = [
+    'Foodstuffs','Cereals','Spices','Spread','Beverages','Satches','Flour',
+    'Perishable goods','Fruits','Vegetables','Non-consumables','Soap',
+    'Detergent','Stationery','Gas','Other'
+  ];
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (skuDropdownRef.current && !skuDropdownRef.current.contains(e.target as Node)) {
+        setSkuDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -220,6 +253,53 @@ export default function BranchReceivePage() {
     ));
   };
 
+  const filteredMasterItems = useMemo(() => {
+    if (!skuSearch.trim()) return masterItems.slice(0, 50);
+    const q = skuSearch.toLowerCase();
+    return masterItems.filter(i =>
+      i.item_name?.toLowerCase().includes(q) || i.sku?.toLowerCase().includes(q)
+    ).slice(0, 50);
+  }, [masterItems, skuSearch]);
+
+  const handleSkuSelect = (itemSku: string) => {
+    handleAddReceiptItem(itemSku);
+    setSkuSearch('');
+    setSkuDropdownOpen(false);
+  };
+
+  const handleCreateNewSku = async () => {
+    if (!newSkuForm.item_name.trim() || !newSkuForm.category) {
+      toast.error('Item name and category are required');
+      return;
+    }
+    setIsCreatingSku(true);
+    try {
+      const res = await storeAPI.createItem({
+        item_name: newSkuForm.item_name.trim(),
+        category: newSkuForm.category,
+        unit_of_measure: newSkuForm.unit_of_measure,
+        cost_price: parseFloat(newSkuForm.cost_price) || 0,
+        description: newSkuForm.description.trim(),
+        is_active: true,
+      });
+      if (res.success && res.data) {
+        toast.success(`SKU created: ${res.data.sku || res.data.item_name}`);
+        // Refresh catalog and auto-add the new item
+        const catalogRes = await storeAPI.getMasterCatalog();
+        if (catalogRes.success) setMasterItems(catalogRes.data || []);
+        if (res.data.sku) handleAddReceiptItem(res.data.sku);
+        setIsNewSkuModalOpen(false);
+        setNewSkuForm({ item_name: '', category: '', unit_of_measure: 'units', cost_price: '', description: '' });
+      } else {
+        throw new Error(res.message || 'Failed to create SKU');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create SKU');
+    } finally {
+      setIsCreatingSku(false);
+    }
+  };
+
   const submitSupplierReceipt = async () => {
     if (!selectedSupplierId) {
       toast.error('Please select a supplier');
@@ -233,16 +313,18 @@ export default function BranchReceivePage() {
     setIsSubmitting(true);
     try {
       const payload = {
-        supplier_id: parseInt(selectedSupplierId),
-        delivery_note_number: supplierFormData.delivery_note,
-        invoice_number: supplierFormData.invoice_no,
-        remarks: supplierFormData.remarks,
+        supplier_id: selectedSupplierId,  // UUID string — do not coerce to Number
+        delivery_note_number: supplierFormData.delivery_note || undefined,
+        invoice_number: supplierFormData.invoice_no || undefined,
+        remarks: supplierFormData.remarks || undefined,
         items: receiptItems.map(i => ({
           item_sku: i.item_sku,
-          quantity: i.quantity,
-          unit_price: i.unit_price
+          quantity: Number(i.quantity),
+          unit_price: Number(i.unit_price)
         }))
       };
+
+      console.log('[receiveFromSupplier] payload:', JSON.stringify(payload, null, 2));
 
       const res = await storeAPI.receiveFromSupplier(payload);
       if (res.success) {
@@ -255,7 +337,9 @@ export default function BranchReceivePage() {
         throw new Error(res.message || 'Submission failed');
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to receive goods');
+      const msg = error?.response?.data?.message || error?.message || 'Failed to receive goods';
+      console.error('[receiveFromSupplier] error:', error?.response?.data || error);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -360,17 +444,59 @@ export default function BranchReceivePage() {
                       <h2 className="text-xs font-bold uppercase tracking-widest text-stone-400">Add Item</h2>
                       <Package className="h-4 w-4 text-stone-500" />
                     </div>
-                    <Select onValueChange={handleAddReceiptItem}>
-                      <SelectTrigger className="bg-stone-800 border-none text-white">
-                        <SelectValue placeholder="Search SKU / Item" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {masterItems.map(item => (
-                          <SelectItem key={item.sku} value={item.sku}>{item.item_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                    {/* Searchable SKU combobox */}
+                    <div className="relative" ref={skuDropdownRef}>
+                      <div
+                        className="flex items-center bg-stone-800 border border-stone-700 rounded-lg px-3 h-10 gap-2 cursor-text"
+                        onClick={() => setSkuDropdownOpen(true)}
+                      >
+                        <Search className="h-3.5 w-3.5 text-stone-500 shrink-0" />
+                        <input
+                          className="flex-1 bg-transparent text-sm text-white placeholder-stone-500 outline-none"
+                          placeholder="Search SKU / Item"
+                          value={skuSearch}
+                          onChange={(e) => { setSkuSearch(e.target.value); setSkuDropdownOpen(true); }}
+                          onFocus={() => setSkuDropdownOpen(true)}
+                        />
+                        {skuSearch && (
+                          <button onClick={(e) => { e.stopPropagation(); setSkuSearch(''); }} className="text-stone-500 hover:text-white">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <ChevronDown className="h-3.5 w-3.5 text-stone-500 shrink-0" />
+                      </div>
+
+                      {skuDropdownOpen && (
+                        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-stone-100 overflow-hidden max-h-56 overflow-y-auto">
+                          {filteredMasterItems.length === 0 ? (
+                            <div className="px-4 py-3 text-sm text-stone-400 text-center">No items found</div>
+                          ) : (
+                            filteredMasterItems.map(item => (
+                              <button
+                                key={item.sku}
+                                className="w-full text-left px-4 py-2.5 hover:bg-stone-50 transition-colors border-b border-stone-50 last:border-0"
+                                onMouseDown={(e) => { e.preventDefault(); handleSkuSelect(item.sku); }}
+                              >
+                                <p className="text-sm font-semibold text-stone-800">{item.item_name}</p>
+                                <p className="text-[10px] font-mono text-stone-400">{item.sku}</p>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <p className="text-[10px] text-stone-500 mt-2 italic">Select from master catalog to add to receipt</p>
+
+                    {/* Add new SKU button */}
+                    <button
+                      onClick={() => setIsNewSkuModalOpen(true)}
+                      className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-stone-600 text-stone-400 hover:border-stone-400 hover:text-stone-200 transition-colors text-xs font-semibold"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add New SKU Item
+                    </button>
                   </IOSCard>
                 </div>
 
@@ -665,6 +791,82 @@ export default function BranchReceivePage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* ── New SKU Item Modal ─────────────────────────────────────────── */}
+        <Dialog open={isNewSkuModalOpen} onOpenChange={setIsNewSkuModalOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-4 w-4 text-[#007AFF]" />
+                Add New SKU Item
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div>
+                <label className="text-xs font-bold text-stone-500 mb-1.5 block">Item Name *</label>
+                <Input
+                  placeholder="e.g. Basmati Rice 5kg"
+                  value={newSkuForm.item_name}
+                  onChange={(e) => setNewSkuForm({ ...newSkuForm, item_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-stone-500 mb-1.5 block">Category *</label>
+                <Select value={newSkuForm.category} onValueChange={(v) => setNewSkuForm({ ...newSkuForm, category: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-500 mb-1.5 block">Unit of Measure</label>
+                  <Select value={newSkuForm.unit_of_measure} onValueChange={(v) => setNewSkuForm({ ...newSkuForm, unit_of_measure: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['units','kg','g','litres','ml','pieces','bags','boxes','crates','dozen','packets'].map(u => (
+                        <SelectItem key={u} value={u}>{u}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-stone-500 mb-1.5 block">Cost Price (KES)</label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={newSkuForm.cost_price}
+                    onChange={(e) => setNewSkuForm({ ...newSkuForm, cost_price: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-stone-500 mb-1.5 block">Description (optional)</label>
+                <Input
+                  placeholder="Brief description..."
+                  value={newSkuForm.description}
+                  onChange={(e) => setNewSkuForm({ ...newSkuForm, description: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <IOSButton variant="secondary" className="flex-1" onClick={() => setIsNewSkuModalOpen(false)}>
+                  Cancel
+                </IOSButton>
+                <IOSButton className="flex-1" onClick={handleCreateNewSku} disabled={isCreatingSku}>
+                  {isCreatingSku ? 'Creating…' : 'Create & Add'}
+                </IOSButton>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </DashboardLayout>
     </ProtectedRoute>
   );

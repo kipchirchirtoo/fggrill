@@ -1,0 +1,15 @@
+{
+  "version": "1.0.4",
+  "notes": "v1.0.4 — Offline WebView2 bundling, auto-updater, branch license key system, searchable SKU picker, Gemini AI behavior intelligence.",
+  "pub_date": "2026-03-30T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "",
+      "url": "https://github.com/allan-too/fggrill/releases/download/v1.0.4/Famous.Gates.Hotels_1.0.4_x64-setup.nsis.zip"
+    },
+    "linux-x86_64": {
+      "signature": "",
+      "url": "https://github.com/allan-too/fggrill/releases/download/v1.0.4/famous-gates-hotels_1.0.4_amd64.AppImage.tar.gz"
+    }
+  }
+}

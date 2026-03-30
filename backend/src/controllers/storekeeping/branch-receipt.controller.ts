@@ -36,7 +36,7 @@ export const receiveFromSupplier = async (
 
         // 1. Verify the supplier belongs to this branch (or is global)
         const { data: supplier, error: supplierError } = await supabase
-            .from('suppliers')
+            .from('store_suppliers')
             .select('id, name, branch_id')
             .eq('id', supplier_id)
             .single();
@@ -68,9 +68,9 @@ export const receiveFromSupplier = async (
                 quantity,
                 'SUPPLIER_RECEIPT',
                 userId,
-                'SUPPLIER_DN', // Reference Type
-                delivery_note_number || 'N/A', // Reference ID/Number placeholder
-                delivery_note_number,
+                'SUPPLIER_DN',           // referenceType
+                delivery_note_number || 'N/A', // referenceId
+                delivery_note_number || 'N/A', // referenceNumber
                 `Direct receipt from ${supplier.name}. ${remarks || ''}`
             );
 

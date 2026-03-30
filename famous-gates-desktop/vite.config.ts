@@ -48,4 +48,11 @@ export default defineConfig(async () => ({
     sourcemap: !!process.env.TAURI_DEBUG,
     rollupOptions: {},
   },
+
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./apps/desktop/src/__tests__/setup.ts'],
+    include: ['apps/desktop/src/**/*.{test,spec}.{ts,tsx}'],
+  },
 }));
