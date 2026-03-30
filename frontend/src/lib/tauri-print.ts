@@ -7,7 +7,7 @@
 
 /** Detect if we're running inside the Tauri webview */
 export const isTauri = (): boolean => {
-  return typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+  return typeof window !== 'undefined' && !!((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
 };
 
 /**
@@ -70,7 +70,9 @@ export async function printHtml(
         return;
       }
     } catch (e) {
-      console.error('[PrintHelper] Calibri print window failed:', e);
+      console.error('[PrintHelper] Tauri print window failed:', e);
+      alert('Native print window failed to open. Check console for details.');
+      return; // DO NOT fallback to iframe in Tauri, it is blocked!
     }
   }
 
@@ -154,10 +156,14 @@ export async function openBlobForPrint(blobUrl: string): Promise<void> {
           url: dataUrl
         });
         return;
+      } else {
+        console.error('[PrintHelper] Tauri environment detected, but invoke module failed to load.');
+        return; // Prevent fallback
       }
     } catch (e) {
       console.error('[PrintHelper] Tauri print window failed:', e);
-      // Fallback below
+      alert('Failed to open Native Preview Window. Please check the system logs.');
+      return; // DO NOT fallback to iframe in Tauri, it is blocked!
     }
   }
 
@@ -185,7 +191,7 @@ export async function openBlobForPrint(blobUrl: string): Promise<void> {
   };
 
   const closeBtn = document.createElement('button');
-  closeBtn.innerHTML = '✕ Close Preview';
+  closeBtn.innerHTML = '✕ Close Preview Window';
   closeBtn.style.cssText = 'position:fixed;top:2%;right:6%;z-index:100000;background:#111;color:white;border:none;padding:8px 20px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;';
   closeBtn.onclick = () => {
     iframe.remove();
