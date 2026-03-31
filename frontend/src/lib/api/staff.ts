@@ -38,6 +38,7 @@ export const attendanceAPI = {
 const payrollBase = {
   getSummary: (params?: any) => fetchAPI<any>(`/payroll/summary${buildQuery(params)}`),
   getDraft:   (params: { month: number; year: number; branch_id?: number }) => fetchAPI<any>(`/payroll/draft${buildQuery(params)}`),
+  generate:   (data: { month: number; year: number; branch_id?: number }) => fetchAPI<any>('/payroll/generate', { method: 'POST', body: JSON.stringify(data) }),
   approveDraft: (data: any) => fetchAPI<any>('/payroll/approve', { method: 'POST', body: JSON.stringify(data) }),
 
   // Adjustments (Loans, Advances, etc.)

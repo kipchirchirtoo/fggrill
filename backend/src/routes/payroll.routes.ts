@@ -7,7 +7,8 @@ import {
   getPayrollHistory,
   generatePayslip,
   downloadPayslipsZip,
-  downloadSummaryPDF
+  downloadSummaryPDF,
+  forceGeneratePayroll
 } from '../controllers/payroll.controller';
 import {
   createCreditBill,
@@ -31,6 +32,13 @@ router.get(
   '/draft',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
   getDraftPayroll
+);
+
+// Force-regenerate payroll (deletes existing draft records and recalculates)
+router.post(
+  '/generate',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
+  forceGeneratePayroll
 );
 
 // Get history of approved payroll runs

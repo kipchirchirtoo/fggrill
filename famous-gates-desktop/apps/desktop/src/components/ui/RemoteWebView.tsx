@@ -38,7 +38,7 @@ export function RemoteWebView({ targetPath }: RemoteWebViewProps) {
         title={`Famous Gates: ${targetPath}`}
         onLoad={() => setFrameLoading(false)}
         allow="fullscreen"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-top-navigation"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-top-navigation allow-modals"
       />
     </div>
   );

@@ -1054,7 +1054,7 @@ function createWindow() {
             contextIsolation: true,
             nodeIntegration: false,
             partition: 'persist:pos-cache',
-            webSecurity: !isDev // Disable in dev for CORS flexibility
+            webSecurity: false // Remote origin needs cross-origin requests to api.hirall.com
         }
     });
 
@@ -1066,56 +1066,38 @@ function createWindow() {
     });
 
     // --- CORS & Security Fixes ---
-    const corsUrls = [
-        '*://127.0.0.1/*',
-        '*://localhost/*',
-        '*://api.hirall.com/*'
-    ];
-
-    const CORS_HEADERS = {
-        'Access-Control-Allow-Origin': 'pos://terminal.html',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, PATCH, DELETE',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Max-Age': '86400',
-    };
 
     const setupSessionCORS = (ses) => {
-        ses.webRequest.onHeadersReceived(
-            { urls: ['*://api.hirall.com/*'] },
-            (details, callback) => {
-                const requestHeaders = details.requestHeaders || {};
-                const origin = requestHeaders['Origin'] || requestHeaders['origin'] || '';
-                const responseHeaders = details.responseHeaders || {};
+        // Intercept ALL outgoing responses and inject permissive CORS headers.
+        // This covers api.hirall.com, Supabase, PowerSync, storage, and any other
+        // service the live site calls — so nothing gets blocked inside Electron.
+        ses.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
+            const responseHeaders = { ...(details.responseHeaders || {}) };
 
-                if (origin.startsWith('pos://')) {
-                    // Dynamically allow the actual origin instead of hardcoding terminal.html
-                    responseHeaders['Access-Control-Allow-Origin'] = [origin];
-                    responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS, PUT, PATCH, DELETE'];
-                    responseHeaders['Access-Control-Allow-Headers'] = ['Content-Type, Authorization, X-Requested-With, Accept, Origin, x-branch-id'];
-                    responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
-                    responseHeaders['Access-Control-Max-Age'] = ['86400'];
-                }
-
-                callback({ responseHeaders });
+            // Always allow the actual requesting origin
+            const origin = (details.requestHeaders?.['Origin'] || details.requestHeaders?.['origin'] || '');
+            if (origin) {
+                responseHeaders['Access-Control-Allow-Origin'] = [origin];
+                responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
+            } else {
+                responseHeaders['Access-Control-Allow-Origin'] = ['*'];
             }
-        );
-    };
+            responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, PATCH, DELETE, OPTIONS'];
+            responseHeaders['Access-Control-Allow-Headers'] = [
+                'Content-Type, Authorization, X-Requested-With, Accept, Origin, ' +
+                'x-branch-id, apikey, x-client-info, x-supabase-api-version, ' +
+                'x-powersync-token, cache-control, pragma'
+            ];
+            responseHeaders['Access-Control-Max-Age'] = ['86400'];
 
-    // Handle OPTIONS preflight by intercepting before the request is sent
-    // and returning a synthetic 200 response with CORS headers
-    const setupPreflightHandler = (ses) => {
-        ses.webRequest.onBeforeRequest(
-            { urls: ['*://api.hirall.com/*'] },
-            (details, callback) => {
-                if (details.method === 'OPTIONS') {
-                    // We can't return a synthetic response here directly,
-                    // but we can use net.f
-                }
+            // Remove any restrictive CSP the server sends — it breaks the app inside Electron
+            delete responseHeaders['content-security-policy'];
+            delete responseHeaders['Content-Security-Policy'];
+            delete responseHeaders['x-frame-options'];
+            delete responseHeaders['X-Frame-Options'];
 
-                callback({ responseHeaders });
-            }
-        );
+            callback({ responseHeaders });
+        });
     };
 
     // Apply to both default session and our partition session
@@ -1146,19 +1128,26 @@ function createWindow() {
     const startUrl = DOMAIN_URL + TERMINAL_PATH;
 
     const loadApp = async () => {
-        // ALWAYS try to load local UI first for true offline experience
-        console.log('[App] Loading local offline UI...');
-        loadOfflinePage();
-
-        // Update online status in background
-        updateOnlineStatus();
+        if (isOnline || await checkOnlineStatus()) {
+            // Online: load the live site directly — always up to date, no rebuild needed
+            const liveUrl = DOMAIN_URL + TERMINAL_PATH;
+            console.log(`[App] Loading live URL: ${liveUrl}`);
+            mainWindow.loadURL(liveUrl).catch(err => {
+                console.warn(`[App] Live URL failed (${err.message}), falling back to local UI`);
+                loadOfflinePage();
+            });
+        } else {
+            // Offline: fall back to local static build
+            console.log('[App] Offline — loading local UI');
+            loadOfflinePage();
+        }
     };
 
     // Handle load failures gracefully
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
         console.warn(`[App] Failed to load URL: ${validatedURL} (${errorCode}: ${errorDescription})`);
-        // Only trigger offline page for main domain failures
-        if (validatedURL.startsWith(DOMAIN_URL)) {
+        // Only fall back to offline page if the live domain itself fails to load
+        if (validatedURL.startsWith(DOMAIN_URL) && errorCode !== -3) {
             loadOfflinePage();
         }
     });
@@ -1176,32 +1165,27 @@ function createWindow() {
     // Intercept Links & Force In-App Rendering
     // ──────────────────────────────────────────
     
-    // 1. Intercept target="_blank" or window.open calls
+    // 1. Handle window.open() calls — load in same window, never spawn popups
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        console.log(`[LinkHandler] Intercepted new window request for: ${url}`);
-        
-        // Convert production/dev domain links to local protocol
-        if (url.startsWith(DOMAIN_URL)) {
-            const relativePath = url.substring(DOMAIN_URL.length + 1);
-            mainWindow.loadURL(isDev ? `${DOMAIN_URL}/${relativePath}` : `pos://${relativePath}`);
-        } else {
-            // Force all other links to open in the SAME window instead of a popup
-            mainWindow.loadURL(url);
+        console.log(`[LinkHandler] window.open: ${url}`);
+
+        // Supabase/OAuth auth popups need to open — allow as new window
+        if (url.includes('supabase.co/auth') || url.includes('accounts.google.com') || url.includes('github.com/login')) {
+            return { action: 'allow' };
         }
-        
-        // Prevent Electron from spawning a separate window
+
+        // Everything else: navigate in the main window
+        setImmediate(() => mainWindow.loadURL(url));
         return { action: 'deny' };
     });
 
-    // 2. Intercept direct navigation (e.g., standard href clicks)
+    // 2. Allow all navigation — the live site handles its own routing
     mainWindow.webContents.on('will-navigate', (event, url) => {
-        console.log(`[LinkHandler] Intercepted navigation request for: ${url}`);
-        
-        // If it's a link to the main site, forcefully route it through the internal protocol
-        if (url.startsWith('https://famousgate.hirall.com') && !isDev) {
+        console.log(`[LinkHandler] Navigation: ${url}`);
+        // Let everything through — live site, Supabase auth redirects, etc.
+        // Only block truly dangerous schemes
+        if (url.startsWith('javascript:') || url.startsWith('vbscript:')) {
             event.preventDefault();
-            const relativePath = url.replace('https://famousgate.hirall.com/', '');
-            mainWindow.loadURL(`pos://${relativePath}`);
         }
     });
 
@@ -1298,15 +1282,16 @@ app.on('ready', () => {
             let resolvedPath = tryResolve(finalPath);
 
             // 4. SPA Fallback logic:
-            // If not resolved, try falling back to parent directory's HTML (for Next.js dynamic routes)
+            // Walk up the path segments trying to find a matching HTML file
             if (!resolvedPath) {
-                const parts = relativePath.split('/');
-                if (parts[0] === 'dashboard' && parts.length > 1) {
-                    // Try dashboard.html or dashboard/index.html
-                    resolvedPath = tryResolve(path.join(FRONTEND_OUT_PATH, 'dashboard'));
+                const parts = relativePath.split('/').filter(Boolean);
+                // Try progressively shorter paths until we find a match
+                for (let i = parts.length - 1; i >= 1; i--) {
+                    const candidate = parts.slice(0, i).join('/');
+                    resolvedPath = tryResolve(path.join(FRONTEND_OUT_PATH, candidate));
+                    if (resolvedPath) break;
                 }
-                
-                // If still not resolved, try the root index.html instead of terminal.html
+                // Final fallback: root index.html
                 if (!resolvedPath) {
                     resolvedPath = tryResolve(path.join(FRONTEND_OUT_PATH, 'index.html'));
                 }

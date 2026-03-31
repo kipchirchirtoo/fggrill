@@ -25,12 +25,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <AppStateProvider>
-        <LicenseGate>
+        {/* LicenseGate disabled in dev — re-enable for production builds */}
+        {/* <LicenseGate> */}
           <NetworkMonitor />
           <UpdateManager />
           <RouterProvider router={router} />
           <Toaster position="top-right" richColors closeButton />
-        </LicenseGate>
+        {/* </LicenseGate> */}
       </AppStateProvider>
     </QueryClientProvider>
   </React.StrictMode>

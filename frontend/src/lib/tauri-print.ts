@@ -126,15 +126,19 @@ export async function openBlobForPrint(blobUrl: string): Promise<void> {
   // In plain browser (not Tauri, not iframe), try window.open first (simpler UX).
   // Skip window.open in Tauri or when running inside an iframe (window !== window.top),
   // because Tauri intercepts blob: URLs opened via window.open and rejects them.
-  const isInsideIframe = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
+  const isInsideIframe = (() => { try { return window.self !== window.top; } catch (_e) { return true; } })();
   if (!isTauri() && !isInsideIframe) {
     const printWindow = window.open(blobUrl, '_blank');
     if (printWindow) return;
   }
 
-  // In Tauri (or if window.open was blocked): use iframe overlay inside the webview.
-  // Tauri's WebviewUrl::External does NOT support data:/blob: URLs without extra feature flags,
-  // so we render the PDF inline instead of opening a new native window.
+  // In Tauri / WebView2: blob: URLs are blocked by the Edge security policy.
+  // Convert to a base64 data URL first — data URLs are always allowed inline.
+  let srcUrl = blobUrl;
+  if (isTauri() || isInsideIframe) {
+    srcUrl = await blobToDataUrl(blobUrl);
+  }
+
   const existingFrame = document.getElementById('__fg_pdf_frame') as HTMLIFrameElement;
   if (existingFrame) existingFrame.remove();
   const existingOverlay = document.getElementById('__fg_pdf_overlay');
@@ -148,7 +152,7 @@ export async function openBlobForPrint(blobUrl: string): Promise<void> {
 
   const iframe = document.createElement('iframe');
   iframe.id = '__fg_pdf_frame';
-  iframe.src = blobUrl;
+  iframe.src = srcUrl;
   iframe.style.cssText = 'position:fixed;top:5%;left:5%;width:90%;height:90%;z-index:99999;border:2px solid #333;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.4);background:white;';
 
   const closeBtn = document.createElement('button');

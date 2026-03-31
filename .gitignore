@@ -59,3 +59,6 @@ desktop-app/FgGrillPos/bin/
 desktop-app/FgGrillPos/obj/
 desktop-app/FgGrillPos/wwwroot/
 dist/
+
+# Rust/Tauri build artifacts
+famous-gates-desktop/apps/desktop/src-tauri/target/

@@ -1283,7 +1283,7 @@ export async function generateBrandedPayrollSummaryV2(
   const subtitle = `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()} · Total Employees: ${records.length}${approverLine ? ' · ' + approverLine : ''}`;
 
   // A3 LANDSCAPE: 1190 × 842 pt
-  const doc = new PDFDocument({ margin: 36, size: 'A3', layout: 'landscape' });
+  const doc = new PDFDocument({ margin: 36, size: 'A3', layout: 'landscape', autoFirstPage: true, bufferPages: true });
   
   const filename = `Payroll_Summary_${branchName.replace(/\s+/g, '_')}_${monthName}_${runData.year}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
@@ -1354,8 +1354,7 @@ export async function generateBrandedPayrollSummaryV2(
   let sumLoans = 0, sumAdvances = 0, sumCredits = 0, sumTotalDed = 0, sumNet = 0;
 
   records.forEach((r, i) => {
-    if (y > 750) { // Page break
-      drawFooter(doc);
+    if (y > 790) { // Page break — A3 landscape is 842pt, leave room for footer
       doc.addPage();
       y = drawHeader(doc, title + ' (cont.)', `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()}`);
       y = drawTHeader(doc, y);
@@ -1445,8 +1444,7 @@ export async function generateBrandedPayrollSummaryV2(
 
   // Summary box
   y += 40;
-  if (y > 700) {
-    drawFooter(doc);
+  if (y > 760) {
     doc.addPage();
     y = 50;
   }
@@ -1468,7 +1466,14 @@ export async function generateBrandedPayrollSummaryV2(
       .text(runData.approved_at ? new Date(runData.approved_at).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' }) : '', MARGIN, sigY + 24);
   }
 
-  drawFooter(doc);
+  // Stamp footer on every buffered page
+  const totalPages = doc.bufferedPageRange().count;
+  for (let p = 0; p < totalPages; p++) {
+    doc.switchToPage(p);
+    drawFooter(doc);
+  }
+
+  doc.flushPages();
   doc.end();
 }
 
