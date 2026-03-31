@@ -2,13 +2,6 @@
 // The rest of the app never calls invoke() directly
 
 import { invoke } from '@tauri-apps/api/core';
-import {
-  list_thermal_printers,
-  print_thermal_printer,
-  test_thermal_printer,
-  type PrintJobRequest,
-  type TestPrintRequest,
-} from 'tauri-plugin-thermal-printer';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authBridge = {
@@ -81,12 +74,7 @@ export const bridge = {
   app: appBridge,
 };
 
-// ── Thermal Printer ───────────────────────────────────────────────────────────
-export const thermalBridge = {
-  listPrinters: () => list_thermal_printers(),
-  print: (job: PrintJobRequest) => print_thermal_printer(job),
-  test: (req: TestPrintRequest) => test_thermal_printer(req),
-};
+
 
 // Re-export types so callers don't need to import from the plugin directly
 export type { PrintJobRequest, TestPrintRequest };
