@@ -129,6 +129,18 @@ initializeApp().then(({ app, httpServer }) => {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Branch-ID', 'X-Request-Time', 'x-request-time', 'Cache-Control', 'Pragma', 'Expires']
   }));
 
+  // Override any wildcard CORS header injected by the hosting platform (Render, etc.)
+  // Duplicate Access-Control-Allow-Origin headers cause browser CORS failures.
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      // Force a single specific origin — removes any platform-injected '*'
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    next();
+  });
+
   // Relaxed Helmet for development
   app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },

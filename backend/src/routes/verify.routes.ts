@@ -9,7 +9,7 @@ router.post('/', (req: Request, res: Response) => {
         let branchName = '';
         
         if (Array.isArray(branch) && branch.length > 0) {
-            branchName = branch[0].name;
+            branchName = (branch[0] as { name: string }).name;
         } else if (branch && typeof branch.name === 'string') {
             branchName = branch.name;
         } else {
