@@ -133,20 +133,22 @@ export async function printHtml(
  * Uses an iframe overlay — works in both browser and Tauri (no data: URL window needed).
  */
 export async function openBlobForPrint(blobUrl: string): Promise<void> {
-  // In plain browser (not Tauri, not iframe), try window.open first (simpler UX).
-  // Skip window.open in Tauri or when running inside an iframe (window !== window.top),
-  // because Tauri intercepts blob: URLs opened via window.open and rejects them.
+  // Detect if we're inside any iframe (Tauri RemoteWebView, or browser popup blocked)
   const isInsideIframe = (() => { try { return window.self !== window.top; } catch (_e) { return true; } })();
+
+  // In plain browser tab (not iframe, not Tauri), try window.open first — simplest UX
   if (!isTauri() && !isInsideIframe) {
     const printWindow = window.open(blobUrl, '_blank');
     if (printWindow) return;
   }
 
-  // In Tauri / WebView2: blob: URLs are blocked by the Edge security policy.
-  // Convert to a base64 data URL first — data URLs are always allowed inline.
+  // In Tauri WebView2 OR any iframe: blob: URLs are blocked by Edge security policy.
+  // ALWAYS convert to base64 data URL — this works everywhere without restrictions.
   let srcUrl = blobUrl;
-  if (isTauri() || isInsideIframe) {
+  try {
     srcUrl = await blobToDataUrl(blobUrl);
+  } catch (_) {
+    // If conversion fails, fall through with original blob URL
   }
 
   const existingFrame = document.getElementById('__fg_pdf_frame') as HTMLIFrameElement;
