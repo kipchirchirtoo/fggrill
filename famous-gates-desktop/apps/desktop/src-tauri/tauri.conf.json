@@ -1,6 +1,6 @@
 {
   "productName": "Famous Gates Hotels",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.hirall.famousgates",
   "build": {
     "beforeDevCommand": "npm run build:frontend -- --watch",
@@ -45,7 +45,13 @@
     },
     "updater": {
       "pubkey": "",
-      "endpoints": []
+      "endpoints": [
+        "https://github.com/allan-too/fggrill/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
