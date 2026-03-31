@@ -36,7 +36,15 @@ export function RemoteWebView({ targetPath }: RemoteWebViewProps) {
         src={remoteUrl}
         className="h-full w-full border-0"
         title={`Famous Gates: ${targetPath}`}
-        onLoad={() => setFrameLoading(false)}
+        onLoad={(e) => {
+          setFrameLoading(false);
+          // Persist the desktop flag in the iframe's sessionStorage so it
+          // survives SPA navigation (Next.js router strips query params)
+          try {
+            const frame = e.currentTarget as HTMLIFrameElement;
+            frame.contentWindow?.sessionStorage?.setItem('fg_desktop', '1');
+          } catch (_) { /* cross-origin guard */ }
+        }}
         allow="fullscreen"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-top-navigation allow-modals"
       />

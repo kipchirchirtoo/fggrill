@@ -10,10 +10,20 @@ export const isTauri = (): boolean => {
   if (typeof window === 'undefined') return false;
   // Direct Tauri webview — globals injected by withGlobalTauri
   if ((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__) return true;
+  // Persistent flag set by the shell on first load (survives SPA navigation)
+  if ((window as any).__FG_DESKTOP__ === true) return true;
+  // Check sessionStorage — set once on first load with fg_desktop=1
+  try {
+    if (sessionStorage.getItem('fg_desktop') === '1') return true;
+  } catch (_) { /* ignore */ }
   // Embedded inside a Tauri iframe (RemoteWebView) — check URL param set by the shell
   try {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('fg_desktop') === '1') return true;
+    if (params.get('fg_desktop') === '1') {
+      // Persist it so navigation doesn't lose it
+      try { sessionStorage.setItem('fg_desktop', '1'); } catch (_) { /* ignore */ }
+      return true;
+    }
   } catch (_) { /* ignore */ }
   // Try parent frame globals (same-origin only)
   try {
