@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { XCircle, CheckCircle2, User, Calendar, FileText, Clock, ChevronDown, ChevronUp, Banknote, History } from 'lucide-react';
@@ -72,6 +72,13 @@ export function BillDetailsModal({ bill, onClose, onUpdate, isAuditor = false }:
 
     const typeLabel = isCreditBill ? 'Credit Bill' : (isLoan ? 'Staff Loan' : 'Salary Advance');
 
+    // Use balance from DB if positive; fall back to full amount for legacy pending bills with balance=0
+    const currentBalance = isCreditBill
+        ? (bill.balance > 0 ? bill.balance : (isSettled ? 0 : bill.amount))
+        : balance;
+
+    const canSettle = isCreditBill && !isSettled && !isAuditor;
+
     const handleFullSettle = async () => {
         if (!confirm('Mark this bill as fully paid? This cannot be easily undone.')) return;
         setIsLoading(true);
@@ -99,7 +106,7 @@ export function BillDetailsModal({ bill, onClose, onUpdate, isAuditor = false }:
     const handlePartialPayment = async () => {
         const amt = parseFloat(partialAmount);
         if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
-        if (amt > balance) { toast.error(`Amount exceeds remaining balance of KES ${balance.toLocaleString()}`); return; }
+        if (amt > currentBalance) { toast.error(`Amount exceeds remaining balance of KES ${currentBalance.toLocaleString()}`); return; }
 
         setIsLoading(true);
         try {
@@ -139,7 +146,7 @@ export function BillDetailsModal({ bill, onClose, onUpdate, isAuditor = false }:
             const payrollApi = api.staff?.simplePayroll;
             if (payrollApi?.getCreditBillPayments) {
                 const res = await payrollApi.getCreditBillPayments(bill.id);
-                if (res.success) setPaymentHistory(res.data || []);
+                if (res.success) setPaymentHistory((res as any).data || []);
             }
         } catch { /* silent */ }
         finally {
@@ -147,9 +154,6 @@ export function BillDetailsModal({ bill, onClose, onUpdate, isAuditor = false }:
             setShowHistory(true);
         }
     };
-
-    const canSettle = isCreditBill && !isSettled && !isAuditor;
-    const currentBalance = isCreditBill ? (bill.balance ?? bill.amount) : balance;
 
     return (
         <div className="fixed inset-0 z-[105] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">

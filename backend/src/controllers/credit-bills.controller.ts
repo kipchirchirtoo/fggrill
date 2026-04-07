@@ -31,6 +31,8 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 description,
                 bill_date: date || new Date().toISOString().split('T')[0],
                 status: 'pending',
+                balance: amount,
+                paid_amount: 0,
                 shift_id: currentShift?.id || (req.body as any).shift_id,
                 branch_id: branch_id || (req.body as any).branch_id
             })
