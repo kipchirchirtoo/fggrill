@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditorReportsAPI, auditAPI } from '@/lib/api';
-import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock, FileDown, Activity, AlertTriangle, Check } from 'lucide-react';
+import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock, FileDown, Activity, AlertTriangle, Check, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -406,49 +406,95 @@ export default function BranchRequestsPage() {
                                     </div>
                                 </div>
 
+                                {/* Dispatch info banner */}
+                                {(selectedRequest as any).dispatch_number && (
+                                    <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 px-4 py-3 rounded-xl">
+                                        <Truck className="h-4 w-4 text-emerald-600 shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-bold text-emerald-700">Dispatch: {(selectedRequest as any).dispatch_number}</p>
+                                            {(selectedRequest as any).dispatched_at && (
+                                                <p className="text-[11px] text-emerald-600">
+                                                    Dispatched on {new Date((selectedRequest as any).dispatched_at).toLocaleDateString()}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                                            (selectedRequest as any).dispatch_status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' :
+                                            (selectedRequest as any).dispatch_status === 'IN_TRANSIT' ? 'bg-blue-100 text-blue-700' :
+                                            'bg-stone-100 text-stone-600'
+                                        }`}>
+                                            {(selectedRequest as any).dispatch_status}
+                                        </span>
+                                    </div>
+                                )}
+
                                 {/* Items List */}
                                 <div>
-                                    <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2 block">Items</label>
+                                    <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2 block">Items Breakdown</label>
                                     <div className="border border-stone-100 rounded-xl overflow-hidden">
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-stone-50 text-stone-500 font-medium border-b border-stone-100">
                                                 <tr>
                                                     <th className="px-4 py-3">Item</th>
-                                                    <th className="px-4 py-3 text-right">Requested</th>
-                                                    <th className="px-4 py-3 text-right">Approved</th>
-                                                    <th className="px-4 py-3 text-center">Status</th>
+                                                    <th className="px-4 py-3 text-right text-amber-600">Requested</th>
+                                                    <th className="px-4 py-3 text-right text-emerald-600">Approved</th>
+                                                    <th className="px-4 py-3 text-right text-blue-600">Distributed</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-stone-100">
-                                                {selectedRequest.items?.map((item: any) => (
-                                                    <tr key={item.id} className="hover:bg-stone-50/50">
-                                                        <td className="px-4 py-3">
-                                                            <p className="font-medium text-stone-800">{item.item_name || item.item_sku}</p>
-                                                            {item.rejection_reason && (
-                                                                <p className="text-xs text-rose-500 mt-1">Reason: {item.rejection_reason}</p>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right font-mono">{item.requested_quantity}</td>
-                                                        <td className="px-4 py-3 text-right font-mono">
-                                                            {['APPROVED', 'PARTIALLY_APPROVED', 'DELIVERED', 'RECEIVED'].includes(item.status) ? (
-                                                                <span className="text-emerald-600 font-bold">{item.approved_quantity}</span>
-                                                            ) : (
-                                                                <span className="text-stone-300">-</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${item.status === 'APPROVED' || item.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-600' :
-                                                                item.status === 'RECEIVED' ? 'bg-blue-50 text-blue-600' :
-                                                                    item.status === 'REJECTED' ? 'bg-rose-50 text-rose-600' :
-                                                                        'bg-amber-50 text-amber-600'
-                                                                }`}>
-                                                                {item.status}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                {selectedRequest.items?.map((item: any) => {
+                                                    const isApproved = ['APPROVED', 'PARTIALLY_APPROVED', 'DELIVERED', 'RECEIVED', 'DISPATCHED'].includes(item.status);
+                                                    const isRejected = item.status === 'REJECTED';
+                                                    const hasDistribution = item.dispatched_quantity != null && item.dispatched_quantity > 0;
+                                                    return (
+                                                        <tr key={item.id} className="hover:bg-stone-50/50">
+                                                            <td className="px-4 py-3">
+                                                                <p className="font-medium text-stone-800">{item.item_name || item.item_sku}</p>
+                                                                <p className="text-[10px] text-stone-400 font-mono">{item.item_sku}</p>
+                                                                {item.unit && <p className="text-[10px] text-stone-400">{item.unit}</p>}
+                                                                {isRejected && item.rejection_reason && (
+                                                                    <p className="text-xs text-rose-500 mt-1">Reason: {item.rejection_reason}</p>
+                                                                )}
+                                                            </td>
+                                                            {/* Requested */}
+                                                            <td className="px-4 py-3 text-right">
+                                                                <span className="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                                                                    {item.requested_quantity}
+                                                                </span>
+                                                            </td>
+                                                            {/* Approved */}
+                                                            <td className="px-4 py-3 text-right">
+                                                                {isRejected ? (
+                                                                    <span className="font-mono font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded">0</span>
+                                                                ) : isApproved ? (
+                                                                    <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                                                                        {item.approved_quantity ?? item.requested_quantity}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-stone-300 font-mono">—</span>
+                                                                )}
+                                                            </td>
+                                                            {/* Distributed */}
+                                                            <td className="px-4 py-3 text-right">
+                                                                {hasDistribution ? (
+                                                                    <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                                                                        {item.dispatched_quantity}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-stone-300 font-mono">—</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
+                                    </div>
+                                    {/* Legend */}
+                                    <div className="flex items-center gap-4 mt-2 px-1">
+                                        <span className="flex items-center gap-1 text-[10px] text-amber-600"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Requested by you</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Approved by auditor</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-blue-600"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Distributed by central store</span>
                                     </div>
                                 </div>
 

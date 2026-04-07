@@ -236,6 +236,48 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
         doc.text(invoice.notes, margin, cursorY, { maxWidth: 170 });
     }
 
+    // 7. Bank Details + Branch
+    cursorY += invoice.notes ? 20 : 20;
+    if (cursorY > 240) { doc.addPage(); cursorY = 20; }
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(44, 62, 80);
+    doc.text('PAYMENT DETAILS:', margin, cursorY);
+    cursorY += 6;
+
+    const bankDetails = [
+        ['AC Name:', 'FAMOUS GATES LIMITED'],
+        ['AC No:', '2041305757'],
+        ['Bank:', 'ABSA BANK'],
+        ['Branch:', 'BOMET'],
+    ];
+
+    autoTable(doc, {
+        startY: cursorY,
+        body: bankDetails,
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 2 },
+        columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 30, textColor: [44, 62, 80] },
+            1: { cellWidth: 80 }
+        },
+        margin: { left: margin, right: margin }
+    });
+
+    if ((doc as any).lastAutoTable) {
+        cursorY = (doc as any).lastAutoTable.finalY + 5;
+    } else {
+        cursorY += 30;
+    }
+
+    // Branch info
+    const branchName = invoice.branch?.name || 'FamousGate Hotels';
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(120);
+    doc.text(`Issued by: ${branchName}`, margin, cursorY);
+
     // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {

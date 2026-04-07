@@ -111,7 +111,21 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
             throw new AppError(`Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
         }
 
+        // Fetch current bill to get amount for full settlement tracking
+        const { data: bill, error: fetchError } = await supabase
+            .from('staff_credit_bills')
+            .select('amount')
+            .eq('id', id)
+            .single();
+        if (fetchError || !bill) throw new AppError('Credit bill not found', 404);
+
         let updateData: any = { status: resolvedStatus };
+
+        // Full settlement: set paid_amount = amount, balance = 0
+        if (resolvedStatus === 'paid_cash' || resolvedStatus === 'deducted') {
+            updateData.paid_amount = bill.amount;
+            updateData.balance = 0;
+        }
 
         // If paying in cash, link to the current shift for reconciliation
         if (resolvedStatus === 'paid_cash') {
@@ -122,10 +136,21 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
                 .eq('cashier_id', cashier_id)
                 .eq('status', 'open')
                 .single();
-            
+
             if (currentShift) {
                 updateData.paid_in_shift_id = currentShift.id;
             }
+
+            // Record full payment in payments table
+            await supabase.from('staff_credit_bill_payments').insert({
+                credit_bill_id: id,
+                amount: bill.amount,
+                payment_method: 'cash',
+                payment_date: new Date().toISOString().split('T')[0],
+                recorded_by: (req as any).user?.id,
+                shift_id: updateData.paid_in_shift_id || null,
+                notes: 'Full settlement'
+            });
         }
 
         const { data, error } = await supabase
@@ -138,6 +163,119 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
         if (error) throw error;
 
         res.status(200).json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Record a partial payment against a credit bill
+// @route   POST /api/payroll/credit-bills/:id/partial-payment
+// @access  Private (Branch Accountant, Manager)
+export const partialPayCreditBill = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { amount, payment_method, reference, notes } = req.body;
+
+        const paymentAmount = parseFloat(amount);
+        if (!paymentAmount || paymentAmount <= 0) {
+            throw new AppError('Payment amount must be greater than 0', 400);
+        }
+
+        // Fetch current bill
+        const { data: bill, error: fetchError } = await supabase
+            .from('staff_credit_bills')
+            .select('id, amount, paid_amount, balance, status')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !bill) throw new AppError('Credit bill not found', 404);
+
+        if (['paid_cash', 'deducted', 'cancelled'].includes(bill.status)) {
+            throw new AppError('This bill is already fully settled or cancelled', 400);
+        }
+
+        const currentPaid = parseFloat(bill.paid_amount) || 0;
+        const currentBalance = parseFloat(bill.balance) ?? parseFloat(bill.amount);
+
+        if (paymentAmount > currentBalance) {
+            throw new AppError(`Payment amount (${paymentAmount}) exceeds remaining balance (${currentBalance})`, 400);
+        }
+
+        const newPaidAmount = currentPaid + paymentAmount;
+        const newBalance = parseFloat(bill.amount) - newPaidAmount;
+        const isFullyPaid = newBalance <= 0;
+
+        // Get current open shift for reconciliation
+        const cashier_id = (req as any).user?.id;
+        const { data: currentShift } = await supabase
+            .from('cashier_shifts')
+            .select('id')
+            .eq('cashier_id', cashier_id)
+            .eq('status', 'open')
+            .single();
+
+        // Record the payment
+        const { error: paymentError } = await supabase
+            .from('staff_credit_bill_payments')
+            .insert({
+                credit_bill_id: id,
+                amount: paymentAmount,
+                payment_method: payment_method || 'cash',
+                payment_date: new Date().toISOString().split('T')[0],
+                reference: reference || null,
+                notes: notes || null,
+                recorded_by: cashier_id,
+                shift_id: currentShift?.id || null
+            });
+
+        if (paymentError) throw paymentError;
+
+        // Update bill balance and status
+        const newStatus = isFullyPaid ? 'paid_cash' : 'partial';
+        const billUpdate: any = {
+            paid_amount: newPaidAmount,
+            balance: Math.max(0, newBalance),
+            status: newStatus
+        };
+        if (isFullyPaid && currentShift) {
+            billUpdate.paid_in_shift_id = currentShift.id;
+        }
+
+        const { data: updatedBill, error: updateError } = await supabase
+            .from('staff_credit_bills')
+            .update(billUpdate)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        res.status(200).json({
+            success: true,
+            message: isFullyPaid ? 'Bill fully settled' : `Partial payment of KES ${paymentAmount.toLocaleString()} recorded`,
+            data: updatedBill
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Get payment history for a credit bill
+// @route   GET /api/payroll/credit-bills/:id/payments
+// @access  Private
+export const getCreditBillPayments = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+
+        const { data, error } = await supabase
+            .from('staff_credit_bill_payments')
+            .select('*, recorded_by_user:users!recorded_by(first_name, last_name)')
+            .eq('credit_bill_id', id)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.status(200).json({ success: true, data: data || [] });
     } catch (error) {
         next(error);
     }

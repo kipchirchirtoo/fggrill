@@ -349,22 +349,56 @@ export async function getRequests(branchId: number | null, status?: string) {
     reviewers = r || [];
   }
 
+  // Get dispatch notes linked to these requests (to show distributed quantities)
+  const { data: dispatches } = await supabase
+    .from('dispatch_notes')
+    .select('id, stock_request_id, status, dispatch_number, dispatched_at')
+    .in('stock_request_id', requestIds);
+
+  let dispatchItems: any[] = [];
+  if (dispatches && dispatches.length > 0) {
+    const dispatchIds = dispatches.map(d => d.id);
+    const { data: dItems } = await supabase
+      .from('dispatch_items')
+      .select('dispatch_id, item_sku, dispatched_quantity, status')
+      .in('dispatch_id', dispatchIds);
+    dispatchItems = dItems || [];
+  }
+
   // Map items and reviewers back to requests
-  return requests.map(request => ({
-    ...request,
-    branch: request.requesting_branch || { name: 'Unknown' },
-    branch_name: request.requesting_branch?.name || 'Unknown',
-    items: (items || []).filter(i => i.request_id === request.id).map(i => {
-      const details = itemDetails?.find(id => id.sku === i.item_sku);
-      return {
-        ...i,
-        item: details,
-        item_name: details?.item_name || i.item_sku,
-        unit: details?.unit_of_measure || ''
-      };
-    }),
-    reviewed_by_user: reviewers.find(r => r.id === request.reviewed_by)
-  }));
+  return requests.map(request => {
+    // Find dispatch(es) for this request
+    const requestDispatches = (dispatches || []).filter(d => d.stock_request_id === request.id);
+    const requestDispatchIds = requestDispatches.map(d => d.id);
+    const requestDispatchItems = dispatchItems.filter(di => requestDispatchIds.includes(di.dispatch_id));
+
+    // Latest dispatch info
+    const latestDispatch = requestDispatches[0] || null;
+
+    return {
+      ...request,
+      branch: request.requesting_branch || { name: 'Unknown' },
+      branch_name: request.requesting_branch?.name || 'Unknown',
+      dispatch_number: latestDispatch?.dispatch_number || null,
+      dispatch_status: latestDispatch?.status || null,
+      dispatched_at: latestDispatch?.dispatched_at || null,
+      items: (items || []).filter(i => i.request_id === request.id).map(i => {
+        const details = itemDetails?.find(id => id.sku === i.item_sku);
+        // Sum dispatched quantity across all dispatches for this item
+        const dispatched_quantity = requestDispatchItems
+          .filter(di => di.item_sku === i.item_sku)
+          .reduce((sum: number, di: any) => sum + (di.dispatched_quantity || 0), 0);
+        return {
+          ...i,
+          item: details,
+          item_name: details?.item_name || i.item_sku,
+          unit: details?.unit_of_measure || '',
+          dispatched_quantity: dispatched_quantity || null
+        };
+      }),
+      reviewed_by_user: reviewers.find(r => r.id === request.reviewed_by)
+    };
+  });
 }
 
 /**

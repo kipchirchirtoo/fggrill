@@ -2637,6 +2637,31 @@ class BrandedPDFGenerator:
             elements.append(Paragraph("<b>Outstanding balance must be settled</b>", 
                 ParagraphStyle('Warning', parent=self.styles['Normal'], textColor=FG_RED, alignment=TA_CENTER)))
         
+        # Bank Payment Details
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Paragraph("<b>PAYMENT DETAILS</b>", self.styles['Heading4']))
+        bank_data = [
+            ['AC Name:', 'FAMOUS GATES LIMITED'],
+            ['AC No:', '2041305757'],
+            ['Bank:', 'ABSA BANK'],
+            ['Branch:', 'BOMET'],
+        ]
+        bank_table = Table(bank_data, colWidths=[1.5*inch, 4.5*inch])
+        bank_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('BACKGROUND', (0, 0), (-1, -1), ROW_ALT),
+            ('GRID', (0, 0), (-1, -1), 0.3, FG_GRAY),
+        ]))
+        elements.append(bank_table)
+        
+        # Branch info
+        branch_name = data.get('branch_name', 'FamousGate Hotels')
+        elements.append(Spacer(1, 0.15*inch))
+        elements.append(Paragraph(f"<i>Issued by: {branch_name}</i>", self.styles['SmallText']))
+        
         # Barcode for Cashier Scanning
         elements.append(Spacer(1, 0.5*inch))
         try:
@@ -2791,6 +2816,30 @@ class BrandedPDFGenerator:
             ('TOPPADDING', (0, 0), (-1, -1), 20),
         ]))
         elements.append(auth_table)
+        
+        # Bank Payment Details
+        elements.append(Spacer(1, 0.4*inch))
+        elements.append(Paragraph("<b>PAYMENT DETAILS</b>", self.styles['SectionHeader']))
+        bank_data = [
+            ['AC Name:', 'FAMOUS GATES LIMITED', 'Bank:', 'ABSA BANK'],
+            ['AC No:', '2041305757', 'Branch:', 'BOMET'],
+        ]
+        bank_table = Table(bank_data, colWidths=[1.2*inch, 2.3*inch, 1.2*inch, 2.3*inch])
+        bank_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('BACKGROUND', (0, 0), (-1, -1), ROW_ALT),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(bank_table)
+        
+        # Branch info
+        branch_name = data.get('branch_name', filters.get('branch_name', 'FamousGate Hotels'))
+        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Paragraph(f"<i>Issued by: {branch_name}</i>", self.styles['SmallText']))
         
         return self._create_pdf(elements, filename=f"/tmp/CNF_Invoice_{data.get('invoice_number', 'EXT')}.pdf")
 
@@ -3930,16 +3979,28 @@ class BrandedPDFGenerator:
         
         # 6. Payment Info
         elements.append(Spacer(1, 0.2*inch))
-        elements.append(Paragraph("<b>Payment Methods:</b>", self.styles['Heading4']))
+        elements.append(Paragraph("<b>PAYMENT DETAILS</b>", self.styles['Heading4']))
         
-        payment_info = [
-            "M-Pesa: Paybill 123456, Account: Invoice Number",
-            "Bank Transfer: Equity Bank, Acc: 1234567890",
-            "Cheque: Payable to FamousGate Hotels"
+        bank_data = [
+            ['AC Name:', 'FAMOUS GATES LIMITED', 'Bank:', 'ABSA BANK'],
+            ['AC No:', '2041305757', 'Branch:', 'BOMET'],
         ]
+        bank_table = Table(bank_data, colWidths=[1.2*inch, 2.3*inch, 1.2*inch, 2.3*inch])
+        bank_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('BACKGROUND', (0, 0), (-1, -1), ROW_ALT),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(bank_table)
         
-        for method in payment_info:
-             elements.append(Paragraph(f"• {method}", self.styles['Normal']))
+        # Branch info
+        branch_name = data.get('branch_name', filters.get('branch_name', 'FamousGate Hotels'))
+        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Paragraph(f"<i>Issued by: {branch_name}</i>", self.styles['SmallText']))
         
         return self._create_pdf(elements)
 

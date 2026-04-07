@@ -98,8 +98,8 @@ export default function StaffAuditPage() {
             });
 
             if (res.success) {
-                setRecords(res.data);
-                setSummary(res.summary);
+                setRecords(res.data || []);
+                setSummary(res.summary || []);
             }
         } catch (error) {
             console.error('Failed to fetch staff audit:', error);
@@ -130,9 +130,9 @@ export default function StaffAuditPage() {
         return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
     };
 
-    const totalCreditBills = summary.reduce((sum, item) => sum + item.total_credit_bills, 0);
-    const totalAdvances = summary.reduce((sum, item) => sum + item.total_advances, 0);
-    const totalLoans = summary.reduce((sum, item) => sum + item.total_loans, 0);
+    const totalCreditBills = (summary || []).reduce((sum, item) => sum + (item.total_credit_bills || 0), 0);
+    const totalAdvances = (summary || []).reduce((sum, item) => sum + (item.total_advances || 0), 0);
+    const totalLoans = (summary || []).reduce((sum, item) => sum + (item.total_loans || 0), 0);
 
     const handleExport = async (exportFormat: 'pdf' | 'csv') => {
         setIsExporting(true);

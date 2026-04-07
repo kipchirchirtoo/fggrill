@@ -3,7 +3,9 @@ import {
     createCreditBill,
     getCreditBills,
     updateCreditBillStatus,
-    triggerPendingBillsMigration
+    triggerPendingBillsMigration,
+    partialPayCreditBill,
+    getCreditBillPayments
 } from '../controllers/credit-bills.controller';
 import {
     createAdvance,
@@ -40,6 +42,8 @@ router.post('/credit-bills', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_M
 router.get('/credit-bills', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.EMPLOYEE, UserRole.AUDITOR, UserRole.HR_MANAGER]), getCreditBills);
 router.patch('/credit-bills/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), updateCreditBillStatus);
 router.post('/credit-bills/migrate-pending', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), triggerPendingBillsMigration);
+router.post('/credit-bills/:id/partial-payment', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), partialPayCreditBill);
+router.get('/credit-bills/:id/payments', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]), getCreditBillPayments);
 
 // ==========================================
 // ADVANCES
