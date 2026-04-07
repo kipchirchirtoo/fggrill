@@ -1,10 +1,12 @@
--- Backfill balance for pending/partial bills where balance was never set correctly
--- These are bills created before balance was properly initialized on insert
+-- Ensure paid_amount column exists before backfilling
+ALTER TABLE staff_credit_bills
+    ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(12, 2) DEFAULT 0;
 
+-- Backfill balance for pending/partial bills where balance was never set correctly
 UPDATE staff_credit_bills
 SET
-    balance = amount - COALESCE(paid_amount, 0),
-    paid_amount = COALESCE(paid_amount, 0)
+    paid_amount = COALESCE(paid_amount, 0),
+    balance = amount - COALESCE(paid_amount, 0)
 WHERE
     status IN ('pending', 'accountant_confirmed', 'auditor_confirmed', 'partial')
     AND (balance IS NULL OR balance = 0)

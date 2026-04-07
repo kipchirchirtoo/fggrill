@@ -14,7 +14,9 @@ import {
   createCreditBill,
   getCreditBills,
   updateCreditBillStatus,
-  triggerPendingBillsMigration
+  triggerPendingBillsMigration,
+  partialPayCreditBill,
+  getCreditBillPayments
 } from '../controllers/credit-bills.controller';
 import { getLoans, createLoan, approveLoan } from '../controllers/loans.controller';
 import { getAdvances, createAdvance, approveAdvance } from '../controllers/advances.controller';
@@ -94,6 +96,13 @@ router.get(
 );
 
 // Credit Bills (Deductions from staff)
+// Static paths MUST come before dynamic /:id routes
+router.post(
+  '/credit-bills/migrate-pending',
+  authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  triggerPendingBillsMigration
+);
+
 router.post(
   '/credit-bills',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.CASHIER, UserRole.AUDITOR]),
@@ -113,9 +122,15 @@ router.patch(
 );
 
 router.post(
-  '/credit-bills/migrate-pending',
-  authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
-  triggerPendingBillsMigration
+  '/credit-bills/:id/partial-payment',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  partialPayCreditBill
+);
+
+router.get(
+  '/credit-bills/:id/payments',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getCreditBillPayments
 );
 
 // Staff Loans
