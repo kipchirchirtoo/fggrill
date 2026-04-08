@@ -115,27 +115,12 @@ export const checkHallAvailability = async (
             return reqStart < bEnd && reqEnd > bStart;
         });
 
-        // Also check accounting invoices for pending/confirmed conference bookings
-        const { data: invoices, error: invError } = await supabase
-            .from('accounting_ar_invoices')
-            .select('*')
-            .eq('conference_hall_id', id)
-            .neq('status', 'voided'); // Assuming 'voided' means cancelled
-
-        if (invError) throw invError;
-
-        const overlappingInvoices = invoices?.filter(inv => {
-            const iStart = new Date(inv.conference_start_date);
-            const iEnd = new Date(inv.conference_end_date);
-            return reqStart < iEnd && reqEnd > iStart;
-        });
-
-        const isAvailable = (!overlapping || overlapping.length === 0) && (!overlappingInvoices || overlappingInvoices.length === 0);
+        const isAvailable = !overlapping || overlapping.length === 0;
 
         res.status(200).json({
             success: true,
             available: isAvailable,
-            conflicts: [...(overlapping || []), ...(overlappingInvoices || [])]
+            conflicts: overlapping || []
         });
     } catch (error) {
         next(error);

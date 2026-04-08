@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { migratePendingBills } from '../jobs/migrate-pending-bills.job';
 import { applyBranchFilter } from '../utils/branchIsolation';
+import { logger } from '../utils/logger';
 
 export const createCreditBill = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -197,17 +198,23 @@ export const partialPayCreditBill = async (req: Request, res: Response, next: Ne
         }
 
         // Try to get paid_amount and balance — may not exist on older schemas
-        const { data: billFull } = await supabase
-            .from('staff_credit_bills')
-            .select('paid_amount, balance')
-            .eq('id', id)
-            .single();
-
-        const currentPaid = parseFloat(billFull?.paid_amount) || 0;
-        // If balance column doesn't exist or is 0 on a pending bill, fall back to amount
-        const currentBalance = (billFull?.balance > 0)
-            ? parseFloat(billFull.balance)
-            : (parseFloat(bill.amount) - currentPaid);
+        let currentPaid = 0;
+        let currentBalance = parseFloat(bill.amount);
+        try {
+            const { data: billFull, error: fullErr } = await supabase
+                .from('staff_credit_bills')
+                .select('paid_amount, balance')
+                .eq('id', id)
+                .single();
+            if (!fullErr && billFull) {
+                currentPaid = parseFloat(billFull.paid_amount ?? 0) || 0;
+                currentBalance = (billFull.balance > 0)
+                    ? parseFloat(billFull.balance)
+                    : (parseFloat(bill.amount) - currentPaid);
+            }
+        } catch (_) {
+            // columns don't exist yet — use defaults (full amount as balance)
+        }
 
         if (paymentAmount > currentBalance + 0.001) { // small epsilon for float safety
             throw new AppError(`Payment amount (${paymentAmount}) exceeds remaining balance (${currentBalance})`, 400);
@@ -245,7 +252,9 @@ export const partialPayCreditBill = async (req: Request, res: Response, next: Ne
         }
 
         // Update bill — build update object carefully
-        const newStatus = isFullyPaid ? 'paid_cash' : 'partial';
+        // Use 'paid_cash' for full settlement (always valid), keep 'pending' for partial
+        // to avoid constraint violation if migration 52 hasn't run yet
+        const newStatus = isFullyPaid ? 'paid_cash' : 'pending';
         const billUpdate: any = { status: newStatus };
 
         // Only set balance/paid_amount if the columns exist (try/catch the update)

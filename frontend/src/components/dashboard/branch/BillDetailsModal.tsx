@@ -48,7 +48,9 @@ export function BillDetailsModal({ bill, onClose, onUpdate, isAuditor = false }:
             bill.status === 'paid' ||
             bill.status === 'paid_cash' ||
             bill.status === 'deducted';
-        const isPartial = bill.status === 'partial';
+        // A bill is partially paid if it has paid_amount > 0 but isn't fully settled
+        // status 'partial' is used when migration 52 has run; fall back to paid_amount check
+        const isPartial = bill.status === 'partial' || (!isSettled && (bill.paid_amount > 0));
         statusLabel = isSettled ? 'Fully Settled' : isPartial ? 'Partially Paid' : 'Pending Payment';
         statusColor = isSettled
             ? 'bg-emerald-100 text-emerald-700'
