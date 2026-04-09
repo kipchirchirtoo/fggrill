@@ -51,16 +51,35 @@ export const protect = async (
 
     try {
       // First try to verify as our custom JWT token
-      const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+      const candidateSecrets = [
+        process.env.JWT_SECRET,
+        process.env.SUPABASE_JWT_SECRET
+      ]
+        .filter((secret, index, arr) => secret && arr.indexOf(secret) === index) as string[];
 
-      try {
-        const decoded = jwt.verify(token, jwtSecret) as any;
+      if (!candidateSecrets.length) {
+        candidateSecrets.push('fallback-secret-key');
+      }
 
-        if (!decoded || !decoded.sub) {
-          logger.error('Auth Middleware - JWT decoded but missing sub', { decoded });
-          throw new jwt.JsonWebTokenError('Invalid token payload');
+      let decoded: any;
+      const jwtErrors: string[] = [];
+
+      for (const secret of candidateSecrets) {
+        try {
+          decoded = jwt.verify(token, secret) as any;
+          break;
+        } catch (err: any) {
+          jwtErrors.push(err.message);
         }
+      }
 
+      if (decoded && !decoded.sub) {
+        logger.error('Auth Middleware - JWT decoded but missing sub', { decoded });
+        jwtErrors.push('Invalid token payload: missing sub');
+        decoded = undefined;
+      }
+
+      if (decoded?.sub) {
         logger.debug('Auth Middleware - JWT verified for sub:', decoded.sub);
 
         // Valid JWT - get user from database
@@ -90,9 +109,9 @@ export const protect = async (
           next();
           return;
         }
-      } catch (jwtError: any) {
+      } else {
         logger.debug('Auth Middleware - Custom JWT verification skipped or failed, trying Supabase auth', {
-          error: jwtError.message,
+          errors: jwtErrors,
           tokenPrefix: token.substring(0, 10)
         });
         // JWT verification failed, try Supabase auth

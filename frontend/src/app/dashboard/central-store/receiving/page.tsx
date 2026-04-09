@@ -88,7 +88,7 @@ export default function GoodsReceivingPage() {
         const fetchSuppliers = async () => {
             setIsLoadingSuppliers(true);
             try {
-                const res = await storeAPI.getSuppliers();
+                const res = await storeAPI.getSuppliers({ scope: 'global' });
                 if (res.success) setSuppliers(res.data || []);
             } catch (err) {
                 toast.error('Failed to load suppliers');

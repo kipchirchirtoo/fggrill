@@ -259,8 +259,8 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
         theme: 'plain',
         styles: { fontSize: 9, cellPadding: 2 },
         columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 30, textColor: [44, 62, 80] },
-            1: { cellWidth: 80 }
+            0: { fontStyle: 'bold', cellWidth: 35, textColor: [44, 62, 80] },
+            1: { cellWidth: 95 }
         },
         margin: { left: margin, right: margin }
     });
@@ -272,11 +272,10 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
     }
 
     // Branch info
-    const branchName = invoice.branch?.name || 'FamousGate Hotels';
     doc.setFontSize(9);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(120);
-    doc.text(`Issued by: ${branchName}`, margin, cursorY);
+    doc.text('Issued by: FamousGate Hote', margin, cursorY);
 
     // Footer
     const pageCount = (doc as any).internal.getNumberOfPages();

@@ -133,6 +133,25 @@ export const staffAPI = {
   getStaffDocuments: (id: any) => fetchAPI<any[]>(`/staff/${id}/documents`),
   archiveStaff: (id: any) => fetchAPI<void>(`/staff/${id}/archive`),
   uploadStaffDocument: (id: any, file: any) => fetchAPI<any>(`/staff/${id}/documents`, { method: 'POST' }),
+  uploadStaffPhoto: async (id: string | number, file: File): Promise<ApiResponse<any>> => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    
+    const response = await fetch(`${API_URL}/api/staff/${id}/photo`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Upload failed');
+    }
+    
+    return response.json();
+  },
   clockIn: (data?: any) => fetchAPI<any>('/staff/attendance/clock-in', { method: 'POST', body: JSON.stringify(data) }),
   clockOut: (data?: any) => fetchAPI<any>('/staff/attendance/clock-out', { method: 'POST', body: JSON.stringify(data) }),
   getStaffByIdentifier: (data: any) => fetchAPI<any>(`/staff/identifier/${data}`),

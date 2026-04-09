@@ -54,7 +54,7 @@ export default function NewGRNPage() {
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const suppliersRes = await storeAPI.getSuppliers();
+            const suppliersRes = await storeAPI.getSuppliers({ scope: 'global' });
             if (suppliersRes.success) setSuppliers(suppliersRes.data || []);
 
             if (po_id) {

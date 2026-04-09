@@ -29,12 +29,33 @@ export const cashierAPI = {
   createUnpaidBill: (data: any) => fetchAPI<any>('/cashier/unpaid-bills', { method: 'POST', body: JSON.stringify(data) }),
   recordBillPayment: (id: string, data: any) => fetchAPI<any>(`/cashier/unpaid-bills/${id}/payment`, { method: 'POST', body: JSON.stringify(data) }),
   confirmUnpaidBill: (id: string) => fetchAPI<any>(`/cashier/unpaid-bills/${id}/confirm`, { method: 'PATCH' }),
-  
+  downloadUnpaidBillInvoice: async (id: string) => {
+    const response = await fetchAPI<Blob>(`/cashier/unpaid-bills/${id}/pdf`, {
+      method: 'GET',
+      responseType: 'blob'
+    });
+    return response;
+  },
+  downloadOutstandingCustomerCredits: async (params: { branch_id: number; search?: string }) => {
+    const response = await fetchAPI<Blob>(`/cashier/unpaid-bills/outstanding/pdf${buildQuery(params)}`, {
+      method: 'GET',
+      responseType: 'blob'
+    });
+    return response;
+  },
+
   // Credit Bills
   getCreditBills: (params?: any) => fetchAPI<any>(`/cashier/credit-bills${buildQuery(params)}`),
   createCreditBill: (data: any) => fetchAPI<any>('/cashier/credit-bills', { method: 'POST', body: JSON.stringify(data) }),
   confirmCreditBill: (id: string) => fetchAPI<any>(`/cashier/credit-bills/${id}/confirm`, { method: 'PATCH' }),
   recordCreditPayment: (id: string, data: any) => fetchAPI<any>(`/cashier/credit-bills/${id}/payment`, { method: 'POST', body: JSON.stringify(data) }),
+  downloadCreditBillInvoice: async (id: string) => {
+    const response = await fetchAPI<Blob>(`/cashier/credit-bills/${id}/pdf`, {
+      method: 'GET',
+      responseType: 'blob'
+    });
+    return response;
+  },
   
   getLoans: (params?: any) => fetchAPI<any>(`/cashier/credit-bills/loans${buildQuery(params)}`),
   getAdvances: (params?: any) => fetchAPI<any>(`/cashier/credit-bills/advances${buildQuery(params)}`),

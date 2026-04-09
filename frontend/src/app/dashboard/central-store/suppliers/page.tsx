@@ -58,7 +58,7 @@ export default function CentralSuppliersPage() {
   const fetchSuppliers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await storeAPI.getSuppliers();
+      const response = await storeAPI.getSuppliers({ scope: 'global' });
       if (response.success) setSuppliers(response.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }

@@ -13,6 +13,8 @@ import {
     createCreditBill,
     confirmCreditBill,
     recordCreditPayment,
+    downloadCustomerCreditInvoice,
+    downloadCustomerCreditOutstandingReport,
     getCashierShifts,
     startShift,
     closeShift,
@@ -120,6 +122,9 @@ router.route('/unpaid-bills/:id/confirm')
         authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'auditor', 'branch_accountant'] as any),
         confirmUnpaidBill
     );
+
+router.get('/unpaid-bills/:id/pdf', downloadCustomerCreditInvoice);
+router.get('/unpaid-bills/outstanding/pdf', downloadCustomerCreditOutstandingReport);
 
 // ============================================
 // CREDIT BILLS ROUTES

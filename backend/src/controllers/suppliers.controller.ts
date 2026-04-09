@@ -5,31 +5,61 @@ import { supabase } from '../config/database';
 export const getSuppliers = async (req: Request, res: Response) => {
   try {
     const { status, category, search, scope } = req.query;
-    const rowBranchId = req.user?.branch_id || req.user?.branchId || req.headers['x-branch-id'] || req.query.branchId;
-    const userBranchId = rowBranchId ? Number(rowBranchId) : null;
+    const rawBranchContext = req.user?.branch_id || req.user?.branchId || req.headers['x-branch-id'] || req.query.branchId || req.query.branch_id;
+    const userBranchId = rawBranchContext ? Number(rawBranchContext) : null;
     const isCentral = !userBranchId || req.user?.role === 'super_admin' || req.user?.role === 'central_storekeeper';
+    const scopeParam = typeof scope === 'string' ? scope.toLowerCase() : undefined;
 
     let query = supabase
       .from('suppliers')
       .select('*, supplier_products(count)')
       .order('name', { ascending: true });
 
-    // 1. Apply Scoping Filters
-    if (!isCentral) {
-      const branchId = Number(userBranchId);
-      if (isNaN(branchId)) {
-        console.error('Invalid branch_id encountered:', userBranchId);
-        return res.status(400).json({ success: false, message: 'Invalid branch context' });
+    const branchId = userBranchId && !Number.isNaN(userBranchId) ? Number(userBranchId) : null;
+
+    const applyBranchScope = (targetBranchId: number | null) => {
+      if (!targetBranchId || Number.isNaN(targetBranchId)) {
+        console.error('Invalid branch_id encountered while scoping suppliers:', targetBranchId);
+        throw new Error('Invalid branch context');
       }
-      
-      if (scope === 'branch') {
-        query = query.eq('branch_id', branchId);
-      } else if (scope === 'global') {
+      query = query.eq('branch_id', targetBranchId);
+    };
+
+    try {
+      if (scopeParam === 'global' || scopeParam === 'central') {
         query = query.is('branch_id', null);
+      } else if (scopeParam === 'branch') {
+        if (isCentral) {
+          const requestedBranch = req.query.branchId || req.query.branch_id;
+          const branchScope = requestedBranch ? Number(requestedBranch) : branchId;
+          if (!branchScope || Number.isNaN(branchScope)) {
+            return res.status(400).json({ success: false, message: 'Branch scope requires a valid branch_id' });
+          }
+          query = query.eq('branch_id', branchScope);
+        } else {
+          if (!branchId) {
+            return res.status(400).json({ success: false, message: 'Branch scope requires a valid branch context' });
+          }
+          applyBranchScope(branchId);
+        }
+      } else if (scopeParam === 'all') {
+        if (branchId) {
+          query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+        }
+        // Central users already see all suppliers by default.
       } else {
-        // Default: see own branch OR global
-        query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+        // Default behaviour: strictly separate branch vs central (global)
+        if (isCentral) {
+          query = query.is('branch_id', null);
+        } else if (branchId) {
+          applyBranchScope(branchId);
+        } else {
+          return res.status(400).json({ success: false, message: 'Unable to determine branch context for suppliers' });
+        }
       }
+    } catch (scopeError: any) {
+      console.error('Supplier scope error:', scopeError);
+      return res.status(400).json({ success: false, message: scopeError.message || 'Invalid supplier scope' });
     }
 
     // 2. Apply Status Filter

@@ -105,7 +105,7 @@ export default function BranchReceivePage() {
     try {
       const [dispatchRes, supplierRes, catalogRes] = await Promise.all([
         storeAPI.getIncomingDispatches(),
-        storeAPI.getSuppliers(),
+        storeAPI.getSuppliers({ scope: 'branch' }),
         storeAPI.getMasterCatalog()
       ]);
       

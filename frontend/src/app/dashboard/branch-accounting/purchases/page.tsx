@@ -146,7 +146,7 @@ export default function BranchPurchasesPage() {
             const [ordersRes, invoicesRes, suppliersRes, itemsRes] = await Promise.all([
                 procurementAPI.getPurchaseOrders(statusFilter ? { status: statusFilter } : {}),
                 procurementAPI.getInvoices(),
-                storeAPI.getSuppliers(),
+                storeAPI.getSuppliers({ scope: 'branch' }),
                 storeAPI.getItems()
             ]);
 

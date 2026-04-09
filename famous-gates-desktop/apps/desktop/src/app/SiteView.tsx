@@ -9,11 +9,10 @@ export function SiteView() {
   return (
     <div className="fixed inset-0 bg-white overflow-hidden">
       <iframe
-        src="https://famousgate.hirall.com/terminal"
+        src="https://famousgate.hirall.com/terminal?fg_desktop=1"
         className="h-full w-full border-0"
         title="Famous Gates Hotels"
         allow="fullscreen clipboard-read clipboard-write"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-top-navigation allow-modals"
       />
     </div>
   );

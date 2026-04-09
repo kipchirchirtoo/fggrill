@@ -5,7 +5,7 @@ import api from '@/lib/api';
 import { API_URL } from '@/lib/config';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { useBranch } from '@/lib/branch-context';
-import { AddAdjustmentDialog } from '@/components/hr/add-adjustment-dialog';
+import { useRouter } from 'next/navigation';
 import { 
   Calendar, 
   ChevronLeft, 
@@ -162,7 +162,7 @@ export default function PayrollPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
+  const router = useRouter();
 
   // Computed branch totals from records
   const branchTotals = records.reduce((acc, r) => ({
@@ -333,7 +333,7 @@ export default function PayrollPage() {
             </IOSButton>
 
             <IOSButton 
-              onClick={() => setIsAdjustmentDialogOpen(true)}
+              onClick={() => router.push('/dashboard/hr/adjustments')}
               className="bg-white text-stone-900 border border-stone-200 shadow-sm hover:bg-stone-50"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -559,12 +559,6 @@ export default function PayrollPage() {
           )}
         </div>
       </div>
-
-      <AddAdjustmentDialog 
-        open={isAdjustmentDialogOpen} 
-        onOpenChange={setIsAdjustmentDialogOpen}
-        onSuccess={fetchPayroll}
-      />
     </DashboardLayout>
   );
 }

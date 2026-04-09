@@ -305,6 +305,7 @@ class BrandedPDFGenerator:
             'revenue_reconciliation': self._generate_revenue_reconciliation_report,
             'ai_analysis': self._generate_ai_report,
             'invoice': self._generate_invoice,
+            'customer_credit_outstanding': self._generate_customer_credit_outstanding,
         }
         
         # Normalize report type - handle common variations and cases
@@ -2657,10 +2658,9 @@ class BrandedPDFGenerator:
         ]))
         elements.append(bank_table)
         
-        # Branch info
-        branch_name = data.get('branch_name', 'FamousGate Hotels')
+        # Issuer info
         elements.append(Spacer(1, 0.15*inch))
-        elements.append(Paragraph(f"<i>Issued by: {branch_name}</i>", self.styles['SmallText']))
+        elements.append(Paragraph("<i>Issued by: FamousGate Hote</i>", self.styles['SmallText']))
         
         # Barcode for Cashier Scanning
         elements.append(Spacer(1, 0.5*inch))
@@ -2836,10 +2836,9 @@ class BrandedPDFGenerator:
         ]))
         elements.append(bank_table)
         
-        # Branch info
-        branch_name = data.get('branch_name', filters.get('branch_name', 'FamousGate Hotels'))
+        # Issuer info
         elements.append(Spacer(1, 0.1*inch))
-        elements.append(Paragraph(f"<i>Issued by: {branch_name}</i>", self.styles['SmallText']))
+        elements.append(Paragraph("<i>Issued by: FamousGate Hote</i>", self.styles['SmallText']))
         
         return self._create_pdf(elements, filename=f"/tmp/CNF_Invoice_{data.get('invoice_number', 'EXT')}.pdf")
 
@@ -3859,150 +3858,362 @@ class BrandedPDFGenerator:
 
 
     def _generate_invoice(self, data: Dict, filters: Dict) -> str:
-        """Generate a Branded Invoice PDF"""
+        """Generate a Professional Branded Invoice PDF"""
         elements = []
         
-        # 1. Header with Logo & Invoice Details
-        logo = self._get_logo(width=1.2*inch)
-        
+        # Extract data
         invoice_number = data.get('invoice_number', 'INV-0000')
+        reference_code = data.get('reference_code')
         invoice_date = data.get('invoice_date', datetime.now().strftime('%d/%m/%Y'))
         due_date = data.get('due_date', datetime.now().strftime('%d/%m/%Y'))
         status = data.get('status', 'PENDING').upper()
-        
-        # Company Info (Sender)
-        sender_info = [
-            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
-            Paragraph("Bomet, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: +254 706 782 828 | Email: info@famousgatehotels.com", self.styles['SmallText']),
-        ]
-        
-        # Invoice Title Block
-        title_block = [
-            Paragraph("<b>INVOICE</b>", ParagraphStyle('InvoiceTitle', parent=self.styles['Heading1'], fontSize=24, textColor=FG_BLUE, alignment=TA_RIGHT)),
-            Paragraph(f"<b>#{invoice_number}</b>", ParagraphStyle('InvoiceNum', parent=self.styles['Normal'], fontSize=12, alignment=TA_RIGHT)),
-            Spacer(1, 0.1*inch),
-            Paragraph(f"Date: {invoice_date}", ParagraphStyle('InvoiceDate', parent=self.styles['Normal'], alignment=TA_RIGHT)),
-            Paragraph(f"Due Date: {due_date}", ParagraphStyle('InvoiceDate', parent=self.styles['Normal'], alignment=TA_RIGHT)),
-            Spacer(1, 0.1*inch),
-            Paragraph(f"Status: <font color='{FG_GREEN if status=='PAID' else FG_RED}'>{status}</font>", ParagraphStyle('InvoiceStatus', parent=self.styles['Normal'], alignment=TA_RIGHT)),
-        ]
-        
-        header_data = [[logo if logo else '', sender_info, title_block]]
-        header_table = Table(header_data, colWidths=[1.5*inch, 3*inch, 2.5*inch])
-        header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
-        ]))
-        elements.append(header_table)
-        elements.append(Spacer(1, 0.5*inch))
-        
-        # 2. Bill To & Ship To
         customer_name = data.get('customer_name', 'Guest / Customer')
         customer_address = data.get('customer_address', 'N/A')
         customer_phone = data.get('customer_phone', '')
         
-        bill_to = [
-            Paragraph("<b>BILL TO:</b>", self.styles['Heading4']),
-            Paragraph(customer_name, self.styles['Normal']),
-            Paragraph(customer_address, self.styles['Normal']),
-            Paragraph(customer_phone, self.styles['Normal']),
+        # 1. Professional Header with Logo
+        elements.extend(self._create_header("CUSTOMER CREDIT INVOICE", None))
+        
+        # 2. Invoice Details Section
+        elements.append(Paragraph("<b>INVOICE INFORMATION</b>", self.styles['SectionHeader']))
+        
+        # Status color
+        status_color = FG_GREEN if status == 'PAID' else FG_RED if status == 'UNPAID' else colors.orange
+        
+        invoice_info_data = [
+            ['Invoice Number:', invoice_number, 'Invoice Date:', invoice_date],
+            ['Reference ID:', reference_code or 'N/A', 'Due Date:', due_date],
+            ['Status:', Paragraph(f"<font color='{status_color}'><b>{status}</b></font>", self.styles['Normal']), '', ''],
         ]
         
-        bill_table = Table([[bill_to]], colWidths=[7*inch])
-        bill_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), FG_LIGHT),
-            ('Padding', (0, 0), (-1, -1), 12),
-            ('ROUNDED', (0, 0), (-1, -1), 8),
+        invoice_info_table = Table(invoice_info_data, colWidths=[1.5*inch, 2.25*inch, 1.5*inch, 2.25*inch])
+        invoice_info_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('BACKGROUND', (0, 0), (0, -1), ROW_ALT),
+            ('BACKGROUND', (2, 0), (2, -1), ROW_ALT),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ]))
-        elements.append(bill_table)
+        elements.append(invoice_info_table)
         elements.append(Spacer(1, 0.3*inch))
         
-        # 3. Invoice Items Table
-        headers = ['Item Description', 'Quantity', 'Unit Price', 'Total']
+        # 3. Bill To Section
+        elements.append(Paragraph("<b>BILL TO</b>", self.styles['SectionHeader']))
+        
+        bill_to_data = [
+            ['Customer Name:', customer_name],
+            ['Address:', customer_address],
+            ['Contact:', customer_phone or 'N/A'],
+        ]
+        
+        bill_to_table = Table(bill_to_data, colWidths=[1.5*inch, 5.5*inch])
+        bill_to_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('BACKGROUND', (0, 0), (0, -1), FG_LIGHT),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(bill_to_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # 4. Items Table with Professional Styling
+        elements.append(Paragraph("<b>ITEMS & CHARGES</b>", self.styles['SectionHeader']))
+        
+        headers = [
+            Paragraph('<b>Item Description</b>', self.styles['TableHeader']),
+            Paragraph('<b>Quantity</b>', self.styles['TableHeader']),
+            Paragraph('<b>Unit Price</b>', self.styles['TableHeader']),
+            Paragraph('<b>Total</b>', self.styles['TableHeader'])
+        ]
         items_data = [headers]
         
         subtotal = 0
         items = data.get('items', [])
         
         if not items:
-            items_data.append(['No items', '-', '-', '-'])
-        
-        for item in items:
-            desc = item.get('description', 'Item')
-            qty = float(item.get('quantity', 0) or 0)
-            price = float(item.get('unit_price', 0) or 0)
-            total = float(item.get('total', 0) or (qty * price))
-            subtotal += total
-            
             items_data.append([
-                Paragraph(desc, self.styles['Normal']),
-                self._format_number(qty),
-                self._format_currency(price),
-                self._format_currency(total)
+                Paragraph('No items', self.styles['Normal']),
+                '-', '-', '-'
             ])
+        else:
+            for item in items:
+                desc = item.get('description', 'Item')
+                qty = float(item.get('quantity', 0) or 0)
+                price = float(item.get('unit_price', 0) or 0)
+                total = float(item.get('total', 0) or (qty * price))
+                subtotal += total
+                
+                items_data.append([
+                    Paragraph(desc, self.styles['Normal']),
+                    self._format_number(qty),
+                    self._format_currency(price),
+                    self._format_currency(total)
+                ])
         
-        # 4. Totals Calculation
-        tax_rate = float(data.get('tax_rate', 0) or 0) # percentage
+        # Calculate totals
+        tax_rate = float(data.get('tax_rate', 0) or 0)
         tax_amount = subtotal * (tax_rate / 100)
         total_amount = subtotal + tax_amount
         
-        items_data.append(['', '', 'Subtotal:', self._format_currency(subtotal)])
+        # Add subtotal, tax, and total rows
+        items_data.append(['', '', Paragraph('<b>Subtotal:</b>', self.styles['Normal']), self._format_currency(subtotal)])
         if tax_amount > 0:
-            items_data.append(['', '', f'Tax ({tax_rate}%):', self._format_currency(tax_amount)])
-        items_data.append(['', '', '<b>TOTAL:</b>', f"<b>{self._format_currency(total_amount)}</b>"])
+            items_data.append(['', '', Paragraph(f'<b>Tax ({tax_rate}%):</b>', self.styles['Normal']), self._format_currency(tax_amount)])
+        items_data.append(['', '', Paragraph('<b>GRAND TOTAL:</b>', self.styles['Heading4']), Paragraph(f"<b>{self._format_currency(total_amount)}</b>", self.styles['Heading4'])])
         
-        item_table = Table(items_data, colWidths=[3.5*inch, 1*inch, 1.2*inch, 1.3*inch])
+        item_table = Table(items_data, colWidths=[3.5*inch, 1*inch, 1.5*inch, 1.5*inch])
         item_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), FG_BLUE),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
             ('TEXTCOLOR', (0, 0), (-1, 0), FG_WHITE),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('ALIGN', (0, 1), (0, -1), 'LEFT'), # Desc align left
-            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'), # Numbers align right
-            ('BACKGROUND', (0, -1), (-1, -1), HEADER_GRAY), # Total row bg
-            ('GRID', (0, 0), (-1, -4), 0.5, FG_GRAY), # Grid for items only
-            ('LINEBELOW', (0, 0), (-1, 0), 1, FG_DARK),
-            ('LINEABOVE', (2, -1), (-1, -1), 1, FG_DARK), # Line above total
-            ('PADDING', (0, 0), (-1, -1), 8),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+            ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -4), 0.5, FG_GRAY),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, FG_DARK),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -4), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (2, -3), (3, -1), FG_LIGHT),
+            ('LINEABOVE', (2, -3), (3, -3), 1, FG_GRAY),
+            ('LINEABOVE', (2, -1), (3, -1), 2, FG_DARK),
         ]))
         elements.append(item_table)
-        elements.append(Spacer(1, 0.5*inch))
+        elements.append(Spacer(1, 0.4*inch))
         
-        # 5. Terms & Notes
+        # 5. Notes & Terms Section
         notes = data.get('notes', 'Thank you for your business!')
         terms = data.get('terms', 'Payment due within 30 days.')
         
-        elements.append(Paragraph("<b>Notes & Terms:</b>", self.styles['Heading4']))
-        elements.append(Paragraph(notes, self.styles['Normal']))
-        elements.append(Paragraph(terms, self.styles['SmallText']))
+        elements.append(Paragraph("<b>NOTES & TERMS</b>", self.styles['SectionHeader']))
         
-        # 6. Payment Info
-        elements.append(Spacer(1, 0.2*inch))
-        elements.append(Paragraph("<b>PAYMENT DETAILS</b>", self.styles['Heading4']))
+        notes_data = [
+            ['Notes:', notes],
+            ['Payment Terms:', terms],
+        ]
+        
+        notes_table = Table(notes_data, colWidths=[1.5*inch, 5.5*inch])
+        notes_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('BACKGROUND', (0, 0), (0, -1), FG_LIGHT),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(notes_table)
+        elements.append(Spacer(1, 0.4*inch))
+        
+        # 6. Payment Details Section
+        elements.append(Paragraph("<b>PAYMENT DETAILS</b>", self.styles['SectionHeader']))
         
         bank_data = [
-            ['AC Name:', 'FAMOUS GATES LIMITED', 'Bank:', 'ABSA BANK'],
-            ['AC No:', '2041305757', 'Branch:', 'BOMET'],
+            ['Account Name:', 'FAMOUS GATES LIMITED', 'Bank:', 'ABSA BANK'],
+            ['Account No:', '2041305757', 'Branch:', 'BOMET'],
         ]
-        bank_table = Table(bank_data, colWidths=[1.2*inch, 2.3*inch, 1.2*inch, 2.3*inch])
+        
+        bank_table = Table(bank_data, colWidths=[1.5*inch, 2*inch, 1.5*inch, 2*inch])
         bank_table.setStyle(TableStyle([
             ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
             ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
             ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
             ('BACKGROUND', (0, 0), (-1, -1), ROW_ALT),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ]))
         elements.append(bank_table)
         
-        # Branch info
-        branch_name = data.get('branch_name', filters.get('branch_name', 'FamousGate Hotels'))
-        elements.append(Spacer(1, 0.1*inch))
-        elements.append(Paragraph(f"<i>Issued by: {branch_name}</i>", self.styles['SmallText']))
+        # 7. Barcode for Reference
+        if reference_code:
+            elements.append(Spacer(1, 0.3*inch))
+            try:
+                from barcode_generator.routes import barcode_service
+                barcode_bytes = barcode_service.generate_barcode(reference_code, include_text=True)
+                barcode_img = Image(io.BytesIO(barcode_bytes), width=2.5*inch, height=0.8*inch)
+                elements.append(barcode_img)
+                elements.append(Paragraph(f"<i>Reference: {reference_code}</i>", self.styles['SmallText']))
+            except:
+                pass
+        
+        # 8. Footer
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Paragraph("<i>This is a computer-generated invoice. For inquiries, contact FamousGate Hotels.</i>", self.styles['SmallText']))
+        elements.append(Paragraph("<i>Tel: +254 706 782 828 | Email: info@famousgatehotels.com</i>", self.styles['SmallText']))
         
         return self._create_pdf(elements)
+
+    def _generate_customer_credit_outstanding(self, data: Dict, filters: Dict) -> str:
+        """Generate Outstanding Customer Credits Report"""
+        elements = []
+        
+        # Extract data
+        branch_info = data.get('branch', {})
+        branch_name = branch_info.get('name', 'Branch')
+        branch_location = branch_info.get('location', '')
+        summary = data.get('summary', {})
+        bills = data.get('bills', [])
+        generated_at = data.get('generated_at', datetime.now().isoformat())
+        
+        # Parse generated_at
+        try:
+            gen_date = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+            date_str = gen_date.strftime('%d/%m/%Y %H:%M')
+        except:
+            date_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+        
+        # 1. Header with Logo
+        logo = self._get_logo(width=1.2*inch)
+        
+        header_info = [
+            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
+            Paragraph("Outstanding Customer Credit Bills", self.styles['SmallText']),
+            Paragraph(f"{branch_name}{' • ' + branch_location if branch_location else ''}", self.styles['SmallText']),
+        ]
+        
+        title_block = [
+            Paragraph("<b>OUTSTANDING CREDITS</b>", ParagraphStyle('ReportTitle', parent=self.styles['Heading1'], fontSize=20, textColor=FG_BLUE, alignment=TA_RIGHT)),
+            Paragraph(f"Generated: {date_str}", ParagraphStyle('ReportDate', parent=self.styles['SmallText'], alignment=TA_RIGHT)),
+        ]
+        
+        header_data = [[logo if logo else '', header_info, title_block]]
+        header_table = Table(header_data, colWidths=[1.5*inch, 3*inch, 2.5*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+        ]))
+        elements.append(header_table)
+        elements.append(Spacer(1, 0.4*inch))
+        
+        # 2. Summary Cards
+        total_bills = summary.get('total_bills', 0)
+        unique_customers = summary.get('unique_customers', 0)
+        total_outstanding = summary.get('total_outstanding', 0)
+        total_amount = summary.get('total_amount', 0)
+        
+        summary_data = [
+            ['Total Bills', str(total_bills), 'Unique Customers', str(unique_customers)],
+            ['Total Outstanding', self._format_currency(total_outstanding), 'Total Amount', self._format_currency(total_amount)],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), FG_BLUE),
+            ('BACKGROUND', (2, 0), (2, -1), FG_BLUE),
+            ('TEXTCOLOR', (0, 0), (0, -1), FG_WHITE),
+            ('TEXTCOLOR', (2, 0), (2, -1), FG_WHITE),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 1, FG_GRAY),
+            ('PADDING', (0, 0), (-1, -1), 10),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.4*inch))
+        
+        # 3. Bills List
+        elements.append(Paragraph("<b>OUTSTANDING BILLS DETAIL</b>", self.styles['Heading3']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        if not bills:
+            elements.append(Paragraph("No outstanding customer credit bills found.", self.styles['Normal']))
+        else:
+            for bill in bills:
+                # Bill Header
+                position = bill.get('position', '')
+                customer_name = bill.get('customer_name', 'Customer')
+                invoice_number = bill.get('invoice_number', 'N/A')
+                status = bill.get('status', 'PENDING')
+                
+                bill_header = Paragraph(
+                    f"<b>{position}. {customer_name}</b> • Invoice #{invoice_number} • <font color='{FG_RED if status != 'PAID' else FG_GREEN}'>{status}</font>",
+                    self.styles['Normal']
+                )
+                elements.append(bill_header)
+                elements.append(Spacer(1, 0.1*inch))
+                
+                # Bill Details
+                bill_date = bill.get('bill_date', 'N/A')
+                due_date = bill.get('due_date', 'N/A')
+                payment_terms = bill.get('payment_terms', 'N/A')
+                outstanding_amount = bill.get('outstanding_amount', 0)
+                total_amount_bill = bill.get('total_amount', 0)
+                paid_amount = bill.get('paid_amount', 0)
+                customer_phone = bill.get('customer_phone', '')
+                reference_code = bill.get('reference_code', invoice_number)
+                
+                detail_data = [
+                    ['Bill Date:', bill_date, 'Due Date:', due_date],
+                    ['Payment Terms:', payment_terms, 'Reference:', reference_code],
+                    ['Total Amount:', self._format_currency(total_amount_bill), 'Paid:', self._format_currency(paid_amount)],
+                    ['Outstanding:', self._format_currency(outstanding_amount), 'Contact:', customer_phone or 'N/A'],
+                ]
+                
+                detail_table = Table(detail_data, colWidths=[1.2*inch, 2*inch, 1.2*inch, 2*inch])
+                detail_table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BACKGROUND', (0, 0), (-1, -1), FG_LIGHT),
+                    ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                    ('PADDING', (0, 0), (-1, -1), 6),
+                    ('TEXTCOLOR', (1, 2), (1, 2), FG_RED if outstanding_amount > 0 else FG_GREEN),
+                ]))
+                elements.append(detail_table)
+                
+                # Remarks
+                remarks = bill.get('remarks')
+                if remarks:
+                    elements.append(Spacer(1, 0.05*inch))
+                    elements.append(Paragraph(f"<i>Remarks: {remarks}</i>", self.styles['SmallText']))
+                
+                # Line Items
+                items = bill.get('items', [])
+                if items:
+                    elements.append(Spacer(1, 0.1*inch))
+                    items_header = ['#', 'Description', 'Qty', 'Unit Price', 'Total']
+                    items_data = [items_header]
+                    
+                    for item in items:
+                        pos = item.get('position', '')
+                        desc = item.get('description', 'Item')
+                        qty = item.get('quantity', 0)
+                        unit_price = item.get('unit_price', 0)
+                        total = item.get('total', 0)
+                        
+                        items_data.append([
+                            str(pos),
+                            Paragraph(desc, self.styles['SmallText']),
+                            self._format_number(qty),
+                            self._format_currency(unit_price),
+                            self._format_currency(total)
+                        ])
+                    
+                    items_table = Table(items_data, colWidths=[0.3*inch, 2.7*inch, 0.7*inch, 1*inch, 1*inch])
+                    items_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+                        ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+                        ('PADDING', (0, 0), (-1, -1), 4),
+                    ]))
+                    elements.append(items_table)
+                
+                elements.append(Spacer(1, 0.3*inch))
+        
+        # Footer
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Paragraph("<i>This is a system-generated report. For inquiries, contact FamousGate Hotels.</i>", self.styles['SmallText']))
+        
+        return self._create_pdf(elements)
+
 
     def _generate_revenue_reconciliation_report(self, data: Dict, filters: Dict) -> str:
         """Generate Revenue Reconciliation Report"""

@@ -8,6 +8,8 @@ import { mpesaService } from '../services/mpesa.service';
 import notificationService from '../services/notification.service';
 import { deductIngredientsForItem } from './kitchen/recipes.controller';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import axios from 'axios';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 /**
  * Get Bill Details by Booking ID (or Barcode)
@@ -1860,6 +1862,8 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             .rpc('generate_bill_number');
 
         const bill_number = billNumberData || `BILL${Date.now()}`;
+        const normalizedBillNumber = String(bill_number).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const scan_reference = `CCB-${normalizedBillNumber}`;
 
         const { data, error } = await supabase
             .from('unpaid_bills')
@@ -1880,6 +1884,7 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
                 due_date,
                 remarks,
                 items: items || [],
+                scan_reference,
                 status: 'unpaid',
                 created_by: req.user?.id
             })
@@ -1963,6 +1968,256 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
             data: updatedBill
         });
     } catch (error) {
+        next(error);
+    }
+};
+
+export const downloadCustomerCreditInvoice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            throw new AppError('Bill id is required', 400);
+        }
+
+        const { data: bill, error: fetchError } = await supabase
+            .from('unpaid_bills')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !bill) {
+            throw new AppError('Customer credit bill not found', 404);
+        }
+
+        let branchName: string | null = null;
+        let branchLocation: string | null = null;
+
+        if (bill.branch_id) {
+            const { data: branch } = await supabase
+                .from('branches')
+                .select('name, location, address')
+                .eq('id', bill.branch_id)
+                .maybeSingle();
+
+            if (branch) {
+                branchName = branch.name || null;
+                branchLocation = branch.location || branch.address || null;
+            }
+        }
+
+        const itemsArray = Array.isArray(bill.items) ? bill.items : [];
+
+        const normalizedItems = itemsArray.map((item: any, index: number) => {
+            const quantity = Number(item?.quantity ?? item?.qty ?? 0) || 0;
+            const unitPrice = Number(item?.unitPrice ?? item?.unit_price ?? item?.price ?? 0) || 0;
+            const total = Number(item?.total ?? item?.total_amount ?? quantity * unitPrice) || 0;
+
+            return {
+                description: item?.description || item?.name || `Item ${index + 1}`,
+                quantity,
+                unit_price: unitPrice,
+                total
+            };
+        });
+
+        const invoiceNumber = bill.bill_number || bill.id;
+        const formatDate = (value?: string | null) => {
+            if (!value) return undefined;
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) return undefined;
+            return parsed.toISOString().split('T')[0];
+        };
+
+        const invoicePayload = {
+            invoice_number: invoiceNumber,
+            invoice_date: formatDate(bill.bill_date) || new Date().toISOString().split('T')[0],
+            due_date: formatDate(bill.due_date),
+            status: (bill.status || 'pending').toUpperCase(),
+            customer_name: bill.customer_name || 'Customer',
+            customer_address: branchName ? `${branchName}${branchLocation ? ' • ' + branchLocation : ''}` : 'FamousGate Hotels',
+            customer_phone: bill.customer_phone || '',
+            items: normalizedItems,
+            tax_rate: Number(bill.tax_rate || 0) || 0,
+            notes: bill.remarks || 'Thank you for your business.',
+            terms: bill.payment_terms || 'Payment due upon receipt.',
+            reference_code: bill.scan_reference || invoiceNumber
+        };
+
+        const pythonResponse = await axios.post(
+            `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
+            {
+                reportType: 'invoice',
+                data: invoicePayload,
+                filters: {
+                    branch_name: branchName || undefined,
+                    branch_id: bill.branch_id || undefined,
+                    bill_number: bill.bill_number || undefined,
+                    scan_reference: bill.scan_reference || undefined
+                },
+                useRealData: false
+            },
+            { responseType: 'arraybuffer' }
+        );
+
+        const filename = `${invoiceNumber || 'Invoice'}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(Buffer.from(pythonResponse.data));
+    } catch (error: any) {
+        if (axios.isAxiosError(error)) {
+            logger.error('Failed to generate branded invoice PDF', error);
+            return next(new AppError('Unable to generate invoice PDF at this time', 502));
+        }
+        next(error);
+    }
+};
+
+export const downloadCustomerCreditOutstandingReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { branch_id: branchIdParam, search: searchParam } = req.query;
+        const userBranchId = (req.user as any)?.branch_id;
+
+        let branchId: number | null = null;
+        if (branchIdParam) {
+            const parsed = parseInt(branchIdParam as string, 10);
+            if (!Number.isNaN(parsed)) {
+                branchId = parsed;
+            }
+        } else if (userBranchId) {
+            branchId = Number(userBranchId);
+        }
+
+        if (!branchId) {
+            throw new AppError('Branch id is required to generate the report', 400);
+        }
+
+        const searchTerm = (searchParam as string)?.trim().toLowerCase() || '';
+
+        const { data: branch } = await supabase
+            .from('branches')
+            .select('name, location, address')
+            .eq('id', branchId)
+            .maybeSingle();
+
+        const { data: billsData, error: billsError } = await supabase
+            .from('unpaid_bills')
+            .select('*')
+            .eq('branch_id', branchId)
+            .neq('status', 'paid')
+            .order('bill_date', { ascending: false });
+
+        if (billsError) throw billsError;
+
+        const relevantBills = (billsData || []).filter((bill: any) => {
+            if (!bill) return false;
+            if (bill.source_type === 'KYOGONG') return false;
+            const refType = (bill.reference_type || '').toLowerCase();
+            const allowed = !refType || refType === 'branch_customer_credit';
+            if (!allowed) return false;
+            if (!searchTerm) return true;
+            const billNumber = (bill.bill_number || '').toLowerCase();
+            const customerName = (bill.customer_name || '').toLowerCase();
+            const referenceCode = (bill.scan_reference || '').toLowerCase();
+            return (
+                customerName.includes(searchTerm) ||
+                billNumber.includes(searchTerm) ||
+                referenceCode.includes(searchTerm)
+            );
+        });
+
+        if (!relevantBills.length) {
+            throw new AppError('No outstanding customer credit bills found for the selected branch', 404);
+        }
+
+        const formatDate = (value?: string | null) => {
+            if (!value) return null;
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) return null;
+            return parsed.toISOString().split('T')[0];
+        };
+
+        const normalizedBills = relevantBills.map((bill: any, index: number) => {
+            const itemsArray = Array.isArray(bill.items) ? bill.items : [];
+            const normalizedItems = itemsArray.map((item: any, itemIndex: number) => {
+                const quantity = Number(item?.quantity ?? item?.qty ?? 0) || 0;
+                const unitPrice = Number(item?.unitPrice ?? item?.unit_price ?? item?.price ?? 0) || 0;
+                const total = Number(item?.total ?? item?.total_amount ?? quantity * unitPrice) || 0;
+
+                return {
+                    position: itemIndex + 1,
+                    description: item?.description || item?.name || `Item ${itemIndex + 1}`,
+                    quantity,
+                    unit_price: unitPrice,
+                    total,
+                };
+            });
+
+            const paidAmount = Number(bill.paid_amount || 0);
+            const totalAmount = Number(bill.total_amount || 0);
+            const balanceAmount = Number(bill.balance_amount ?? totalAmount - paidAmount);
+
+            return {
+                position: index + 1,
+                customer_name: bill.customer_name || 'Customer',
+                invoice_number: bill.bill_number || bill.id,
+                reference_code: bill.scan_reference || bill.bill_number || bill.id,
+                status: (bill.status || 'pending').toUpperCase(),
+                bill_date: formatDate(bill.bill_date) || formatDate(bill.created_at),
+                due_date: formatDate(bill.due_date),
+                payment_terms: bill.payment_terms || 'N/A',
+                outstanding_amount: balanceAmount,
+                total_amount: totalAmount,
+                paid_amount: paidAmount,
+                customer_phone: bill.customer_phone || null,
+                remarks: bill.remarks || null,
+                items: normalizedItems,
+            };
+        });
+
+        const totalOutstanding = normalizedBills.reduce((sum, bill) => sum + (bill.outstanding_amount || 0), 0);
+        const totalAmount = normalizedBills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
+        const uniqueCustomers = new Set(normalizedBills.map(bill => bill.customer_name || bill.invoice_number)).size;
+
+        const payload = {
+            generated_at: new Date().toISOString(),
+            branch: {
+                name: branch?.name || `Branch ${branchId}`,
+                location: branch?.location || branch?.address || null,
+            },
+            summary: {
+                total_bills: normalizedBills.length,
+                unique_customers: uniqueCustomers,
+                total_outstanding: totalOutstanding,
+                total_amount: totalAmount,
+            },
+            bills: normalizedBills,
+        };
+
+        const pythonResponse = await axios.post(
+            `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
+            {
+                reportType: 'customer_credit_outstanding',
+                data: payload,
+                filters: {
+                    branch_id: branchId,
+                    branch_name: branch?.name || undefined,
+                    total_bills: payload.summary.total_bills,
+                },
+                useRealData: false,
+            },
+            { responseType: 'arraybuffer' }
+        );
+
+        const filename = `Outstanding_Customer_Credits_${new Date().toISOString().split('T')[0]}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(Buffer.from(pythonResponse.data));
+    } catch (error) {
+        if (axios.isAxiosError(error)) {
+            logger.error('Failed to generate outstanding customer credit PDF', error);
+            return next(new AppError('Unable to generate outstanding credits PDF at this time', 502));
+        }
         next(error);
     }
 };

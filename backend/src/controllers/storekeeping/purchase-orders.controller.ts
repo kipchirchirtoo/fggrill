@@ -59,9 +59,15 @@ export const getPurchaseOrders = async (
                 .filter(i => i.po_id === order.id)
                 .map(i => {
                     const detail = (itemDetails || []).find(d => d.sku === i.item_id);
+                    const resolvedName = detail?.description || (detail as any)?.name || i.item_id;
                     return {
                         ...i,
-                        item: detail || null
+                        item: detail ? {
+                            ...detail,
+                            name: resolvedName
+                        } : null,
+                        item_name: resolvedName,
+                        unit_of_measure: detail?.unit_of_measure || i.unit_of_measure || null
                     };
                 });
 
@@ -122,10 +128,15 @@ export const getPurchaseOrder = async (
         // Merge
         const enrichedItems = (items || []).map(item => {
             const detail = itemDetails?.find(d => d.sku === item.item_id);
+            const resolvedName = detail?.description || (detail as any)?.name || item.item_id;
             return {
                 ...item,
-                item_name: detail?.description || item.item_id,
-                item: detail || null
+                item_name: resolvedName,
+                item: detail ? {
+                    ...detail,
+                    name: resolvedName
+                } : null,
+                unit_of_measure: detail?.unit_of_measure || item.unit_of_measure || null
             };
         });
 

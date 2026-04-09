@@ -22,6 +22,7 @@ interface StockItem {
   category: string;
   quantity: number;
   min_quantity: number;
+  reorder_level: number;
   unit: string;
   last_updated?: string;
 }
@@ -59,7 +60,8 @@ export default function BranchStockPage() {
           name: record.item?.item_name || 'Unknown Item',
           category: record.item?.category || 'Uncategorized',
           quantity: record.quantity || 0,
-          min_quantity: record.reorder_level || 10,
+          min_quantity: record.reorder_level ?? 10,
+          reorder_level: record.reorder_level ?? 10,
           unit: record.item?.unit_of_measure || 'units',
           last_updated: record.updated_at
         }));
@@ -104,7 +106,7 @@ export default function BranchStockPage() {
     (i.sku || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const lowStockItems = items.filter(i => i.quantity <= i.min_quantity);
+  const lowStockItems = items.filter(i => i.quantity <= i.reorder_level);
 
   const handleRequestStock = async (item: StockItem) => {
     try {
@@ -135,6 +137,7 @@ export default function BranchStockPage() {
       category: catalogItem.category,
       quantity: 0,
       min_quantity: 10,
+      reorder_level: 10,
       unit: catalogItem.unit_of_measure
     });
     setInitialAdjustmentType('INITIAL_STOCK');
@@ -415,7 +418,8 @@ export default function BranchStockPage() {
             sku: selectedStockItem.sku,
             name: selectedStockItem.name,
             quantity: selectedStockItem.quantity,
-            unit: selectedStockItem.unit
+            unit: selectedStockItem.unit,
+            reorder_level: selectedStockItem.reorder_level
           } : null}
           initialType={initialAdjustmentType}
           onSuccess={() => {

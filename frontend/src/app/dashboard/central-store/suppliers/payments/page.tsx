@@ -92,7 +92,7 @@ export default function PaymentsPage() {
 
     const fetchSuppliers = useCallback(async () => {
         try {
-            const res = await storeAPI.getSuppliers();
+            const res = await storeAPI.getSuppliers({ scope: 'global' });
             if (res.success) setSuppliers(res.data || []);
         } catch (e) {}
     }, []);

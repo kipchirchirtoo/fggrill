@@ -756,6 +756,13 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
+        href="/dashboard/branch-accounting/credit-bills/customer"
+        icon={Users}
+        label="Customer Credit Bills"
+        active={pathname.includes('/dashboard/branch-accounting/credit-bills/customer')}
+      />
+
+      <NavItem
         href="/dashboard/branch-accounting/payments"
         icon={CreditCard}
         label="Payments"
