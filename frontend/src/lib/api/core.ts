@@ -214,6 +214,46 @@ export function downloadBlob(blob: Blob, filename: string): void {
   window.URL.revokeObjectURL(url);
 }
 
+export function printBlob(blob: Blob): void {
+  // Create a blob URL
+  const url = window.URL.createObjectURL(blob);
+  
+  // Create an iframe to load the PDF
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = url;
+  
+  document.body.appendChild(iframe);
+  
+  // Wait for the PDF to load, then trigger print
+  iframe.onload = () => {
+    try {
+      // Try to print the iframe content
+      iframe.contentWindow?.print();
+      
+      // Clean up after printing (or if user cancels)
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (error) {
+      console.error('Print failed:', error);
+      // Fallback: open in new window and print
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.onload = () => {
+          printWindow.print();
+        };
+      }
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+    }
+  };
+}
+
 // ─── ApiClient Wrapper ────────────────────────────────────────────────────────
 
 /**

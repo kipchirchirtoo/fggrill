@@ -9,7 +9,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { IOSButton } from '@/components/ui/ios-button';
 import { cashierAPI } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { downloadBlob } from '@/lib/api/core';
+import { downloadBlob, printBlob } from '@/lib/api/core';
 import {
     ArrowLeft,
     Building2,
@@ -601,21 +601,21 @@ export default function BranchCustomerCreditPage() {
                                                 toast.error('Select a branch first.');
                                                 return;
                                             }
-                                            const toastId = toast.loading('Preparing branded outstanding report...');
+                                            const toastId = toast.loading('Preparing outstanding report for printing...');
                                             try {
                                                 const response = await cashierAPI.downloadOutstandingCustomerCredits({
                                                     branch_id: activeBranchId,
                                                     ...(search ? { search } : {}),
                                                 });
                                                 if (response.success && response.data) {
-                                                    downloadBlob(response.data, `Outstanding-Customer-Credits-${new Date().toISOString().split('T')[0]}.pdf`);
-                                                    toast.success('Branded outstanding report ready.', { id: toastId });
+                                                    printBlob(response.data);
+                                                    toast.success('Print dialog opened', { id: toastId });
                                                 } else {
-                                                    throw new Error(response.message || 'Download failed');
+                                                    throw new Error(response.message || 'Print failed');
                                                 }
                                             } catch (error: any) {
-                                                console.error('Outstanding report download failed:', error);
-                                                toast.error(error?.message || 'Failed to download branded outstanding report', { id: toastId });
+                                                console.error('Outstanding report print failed:', error);
+                                                toast.error(error?.message || 'Failed to print outstanding report', { id: toastId });
                                             }
                                         }}
                                         leftIcon={<Printer className="h-4 w-4" />}
@@ -676,19 +676,18 @@ export default function BranchCustomerCreditPage() {
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={async () => {
-                                                            const toastId = toast.loading('Preparing branded invoice...');
+                                                            const toastId = toast.loading('Preparing invoice for printing...');
                                                             try {
                                                                 const response = await cashierAPI.downloadUnpaidBillInvoice(bill.id);
                                                                 if (response.success && response.data) {
-                                                                    const filename = `${(bill.bill_number || bill.id)}.pdf`;
-                                                                    downloadBlob(response.data, filename);
-                                                                    toast.success('Invoice ready for download.', { id: toastId });
+                                                                    printBlob(response.data);
+                                                                    toast.success('Print dialog opened', { id: toastId });
                                                                 } else {
-                                                                    throw new Error(response.message || 'Download failed');
+                                                                    throw new Error(response.message || 'Print failed');
                                                                 }
                                                             } catch (error: any) {
-                                                                console.error('Invoice download failed:', error);
-                                                                toast.error(error?.message || 'Failed to download invoice PDF', { id: toastId });
+                                                                console.error('Invoice print failed:', error);
+                                                                toast.error(error?.message || 'Failed to print invoice', { id: toastId });
                                                             }
                                                         }}
                                                         leftIcon={<Printer className="h-3 w-3" />}

@@ -2062,7 +2062,10 @@ export const downloadCustomerCreditInvoice = async (req: Request, res: Response,
 
         const filename = `${invoiceNumber || 'Invoice'}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Content-Length', Buffer.from(pythonResponse.data).length.toString());
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.send(Buffer.from(pythonResponse.data));
     } catch (error: any) {
         if (axios.isAxiosError(error)) {
@@ -2211,7 +2214,10 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
 
         const filename = `Outstanding_Customer_Credits_${new Date().toISOString().split('T')[0]}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Content-Length', Buffer.from(pythonResponse.data).length.toString());
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.send(Buffer.from(pythonResponse.data));
     } catch (error) {
         if (axios.isAxiosError(error)) {
