@@ -22,6 +22,9 @@ export default function BranchRequestsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
     const [items, setItems] = useState<any[]>([]);
+    const [filteredItems, setFilteredItems] = useState<any[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showSearchResults, setShowSearchResults] = useState(false);
     const [requestItems, setRequestItems] = useState<{ item_sku: string; requested_quantity: number }[]>([]);
     const [requestReason, setRequestReason] = useState('');
     const [selectedRequest, setSelectedRequest] = useState<StockRequest | null>(null);
@@ -61,11 +64,53 @@ export default function BranchRequestsPage() {
     const fetchItems = useCallback(async () => {
         try {
             const response = await storeAPI.getMasterCatalog();
-            if (response.success) setItems(response.data || []);
+            if (response.success) {
+                setItems(response.data || []);
+                setFilteredItems(response.data || []);
+            }
         } catch (error) { console.error('Error:', error); }
     }, []);
 
     useEffect(() => { fetchRequests(); fetchItems(); }, [fetchRequests, fetchItems]);
+
+    // Close search results when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (!target.closest('.search-container')) {
+                setShowSearchResults(false);
+            }
+        };
+
+        if (showSearchResults) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showSearchResults]);
+
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const term = e.target.value.toLowerCase();
+        setSearchTerm(term);
+        
+        if (term === '') {
+            setFilteredItems(items);
+            setShowSearchResults(false);
+        } else {
+            const filtered = items.filter(i =>
+                (i.item?.item_name || i.item_name || '').toLowerCase().includes(term) ||
+                (i.item_sku || i.sku || '').toLowerCase().includes(term)
+            );
+            setFilteredItems(filtered);
+            setShowSearchResults(true);
+        }
+    };
+
+    const handleSelectItem = (sku: string) => {
+        addItem(sku);
+        setSearchTerm('');
+        setShowSearchResults(false);
+        setFilteredItems(items);
+    };
 
     const handleCreateRequest = async () => {
         if (requestItems.length === 0) { toast.error('Add at least one item'); return; }
@@ -262,33 +307,80 @@ export default function BranchRequestsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Find Item</label>
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                                    <div className="relative search-container">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 z-10" />
                                         <input
                                             type="text"
                                             placeholder="Search catalog..."
-                                            className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-200"
-                                            onChange={(e) => {
-                                                const term = e.target.value.toLowerCase();
-                                                const filtered = items.filter(i =>
-                                                    (i.item?.item_name || i.item_name || '').toLowerCase().includes(term) ||
-                                                    (i.item_sku || i.sku || '').toLowerCase().includes(term)
-                                                );
-                                            }}
+                                            value={searchTerm}
+                                            className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            onChange={handleSearchChange}
+                                            onFocus={() => searchTerm && setShowSearchResults(true)}
                                         />
+                                        
+                                        {/* Real-time Search Results Dropdown */}
+                                        {showSearchResults && (
+                                            <div className="absolute z-50 w-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                                {filteredItems.length === 0 ? (
+                                                    <div className="p-4 text-center text-sm text-stone-400">
+                                                        No items found matching "{searchTerm}"
+                                                    </div>
+                                                ) : (
+                                                    <div className="py-1">
+                                                        {filteredItems.map((item) => {
+                                                            const isAlreadyAdded = requestItems.find(i => i.item_sku === (item.sku || item.item_sku));
+                                                            return (
+                                                                <button
+                                                                    key={item.sku || item.item_sku}
+                                                                    onClick={() => handleSelectItem(item.sku || item.item_sku)}
+                                                                    disabled={!!isAlreadyAdded}
+                                                                    className={`w-full text-left px-4 py-2.5 hover:bg-stone-50 transition-colors border-b border-stone-50 last:border-b-0 ${
+                                                                        isAlreadyAdded ? 'opacity-50 cursor-not-allowed bg-stone-50' : ''
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="text-sm font-medium text-stone-800 truncate">
+                                                                                {item.item_name}
+                                                                            </p>
+                                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                                <span className="text-[10px] text-stone-400 font-mono">{item.sku || item.item_sku}</span>
+                                                                                <span className="text-[10px] text-stone-400">•</span>
+                                                                                <span className="text-[10px] text-stone-500">
+                                                                                    Central: <b className="font-mono">{item.quantity || 0}</b>
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                        {isAlreadyAdded && (
+                                                                            <span className="text-[10px] text-green-600 font-medium bg-green-50 px-2 py-1 rounded">
+                                                                                Added
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
-                                    <select
-                                        onChange={(e) => addItem(e.target.value)}
-                                        className="w-full p-2 border border-stone-200 rounded-lg text-sm bg-white"
-                                        value=""
-                                    >
-                                        <option value="">Select an item to add...</option>
-                                        {items.map((item) => (
-                                            <option key={item.sku} value={item.sku}>
-                                                {item.item_name} (Central: {item.quantity || 0})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    
+                                    {/* Fallback Dropdown (hidden when search is active) */}
+                                    {!showSearchResults && (
+                                        <select
+                                            onChange={(e) => addItem(e.target.value)}
+                                            className="w-full p-2 border border-stone-200 rounded-lg text-sm bg-white"
+                                            value=""
+                                        >
+                                            <option value="">Select an item to add...</option>
+                                            {filteredItems.map((item) => (
+                                                <option key={item.sku || item.item_sku} value={item.sku || item.item_sku}>
+                                                    {item.item_name} (Central: {item.quantity || 0})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Quick Actions</label>
@@ -438,14 +530,20 @@ export default function BranchRequestsPage() {
                                                     <th className="px-4 py-3">Item</th>
                                                     <th className="px-4 py-3 text-right text-amber-600">Requested</th>
                                                     <th className="px-4 py-3 text-right text-emerald-600">Approved</th>
+                                                    <th className="px-4 py-3 text-right text-purple-600">Delivered</th>
                                                     <th className="px-4 py-3 text-right text-blue-600">Distributed</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-stone-100">
                                                 {selectedRequest.items?.map((item: any) => {
-                                                    const isApproved = ['APPROVED', 'PARTIALLY_APPROVED', 'DELIVERED', 'RECEIVED', 'DISPATCHED'].includes(item.status);
                                                     const isRejected = item.status === 'REJECTED';
-                                                    const hasDistribution = item.dispatched_quantity != null && item.dispatched_quantity > 0;
+                                                    
+                                                    // Always show numbers if they exist for better audit trail
+                                                    const requestedQty = item.requested_quantity || 0;
+                                                    const approvedQty = item.approved_quantity;
+                                                    const deliveredQty = item.dispatched_quantity;
+                                                    const distributedQty = item.received_quantity;
+                                                    
                                                     return (
                                                         <tr key={item.id} className="hover:bg-stone-50/50">
                                                             <td className="px-4 py-3">
@@ -456,29 +554,39 @@ export default function BranchRequestsPage() {
                                                                     <p className="text-xs text-rose-500 mt-1">Reason: {item.rejection_reason}</p>
                                                                 )}
                                                             </td>
-                                                            {/* Requested */}
+                                                            {/* Requested - Always show */}
                                                             <td className="px-4 py-3 text-right">
                                                                 <span className="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
-                                                                    {item.requested_quantity}
+                                                                    {requestedQty}
                                                                 </span>
                                                             </td>
-                                                            {/* Approved */}
+                                                            {/* Approved - Show if exists or rejected */}
                                                             <td className="px-4 py-3 text-right">
                                                                 {isRejected ? (
                                                                     <span className="font-mono font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded">0</span>
-                                                                ) : isApproved ? (
+                                                                ) : approvedQty != null ? (
                                                                     <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                                                                        {item.approved_quantity ?? item.requested_quantity}
+                                                                        {approvedQty}
                                                                     </span>
                                                                 ) : (
                                                                     <span className="text-stone-300 font-mono">—</span>
                                                                 )}
                                                             </td>
-                                                            {/* Distributed */}
+                                                            {/* Delivered - Show if exists */}
                                                             <td className="px-4 py-3 text-right">
-                                                                {hasDistribution ? (
+                                                                {deliveredQty != null && deliveredQty > 0 ? (
+                                                                    <span className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
+                                                                        {deliveredQty}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-stone-300 font-mono">—</span>
+                                                                )}
+                                                            </td>
+                                                            {/* Distributed - Show if exists */}
+                                                            <td className="px-4 py-3 text-right">
+                                                                {distributedQty != null && distributedQty > 0 ? (
                                                                     <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                                                                        {item.dispatched_quantity}
+                                                                        {distributedQty}
                                                                     </span>
                                                                 ) : (
                                                                     <span className="text-stone-300 font-mono">—</span>
@@ -491,10 +599,11 @@ export default function BranchRequestsPage() {
                                         </table>
                                     </div>
                                     {/* Legend */}
-                                    <div className="flex items-center gap-4 mt-2 px-1">
-                                        <span className="flex items-center gap-1 text-[10px] text-amber-600"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Requested by you</span>
+                                    <div className="flex flex-wrap items-center gap-4 mt-2 px-1">
+                                        <span className="flex items-center gap-1 text-[10px] text-amber-600"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Requested by branch</span>
                                         <span className="flex items-center gap-1 text-[10px] text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Approved by auditor</span>
-                                        <span className="flex items-center gap-1 text-[10px] text-blue-600"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Distributed by central store</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-purple-600"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block" /> Delivered from central</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-blue-600"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Distributed at branch</span>
                                     </div>
                                 </div>
 

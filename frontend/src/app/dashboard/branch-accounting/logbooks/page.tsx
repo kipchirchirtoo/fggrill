@@ -19,7 +19,7 @@ import {
     XCircle,
     Eye
 } from 'lucide-react';
-import { cashierAPI, kyogongAPI } from '@/lib/api';
+import { auditAPI, kyogongAPI } from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function BranchLogbooksPage() {
@@ -61,7 +61,7 @@ export default function BranchLogbooksPage() {
 
             const response = isKyogong
                 ? await kyogongAPI.getShifts({ branch_id: branchId, status: statusParam })
-                : await cashierAPI.getPendingLogbooks({ branch_id: branchId, status: statusParam });
+                : await auditAPI.getPendingLogbooks({ branch_id: branchId, status: statusParam });
 
             if (response.success) {
                 setLogbooks(response.data);

@@ -145,6 +145,38 @@ export function CreateInvoiceModal({ isOpen, onClose, type, onSuccess }: CreateI
         setLoading(true);
 
         try {
+            // If it's a conference with hall booking, create conference booking first
+            if (type === 'conference' && formData.conference_hall_id && formData.conference_start_date && formData.conference_end_date) {
+                const conferenceBookingData = {
+                    conference_hall_id: formData.conference_hall_id,
+                    branch_id: activeBranchId,
+                    company_name: formData.customerName,
+                    customer_name: formData.customerName,
+                    customer_email: formData.customerEmail,
+                    customer_phone: '',
+                    start_date: formData.conference_start_date,
+                    end_date: formData.conference_end_date,
+                    num_participants: 0,
+                    amount_per_pax: 0,
+                    meal_plan_details: [],
+                    amenities_details: [],
+                    program_schedule: [],
+                    payment_mode: 'Invoice',
+                    notes: formData.notes,
+                    total_amount: calculateTotal()
+                };
+
+                const confResponse = await conferenceAPI.createBooking(conferenceBookingData);
+                
+                if (confResponse.success) {
+                    toast.success(`Conference booking created with invoice ${confResponse.data.invoice_number || 'N/A'}`);
+                    onSuccess();
+                    onClose();
+                    return;
+                }
+            }
+
+            // Otherwise create accounting invoice
             const invoiceData = {
                 branch_id: activeBranchId,
                 type: type.toUpperCase(), // CONFERENCE, HOTEL, RESTAURANT, GUEST

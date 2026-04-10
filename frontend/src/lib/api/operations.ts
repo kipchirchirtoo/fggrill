@@ -13,6 +13,7 @@ import {
 export const conferenceAPI = {
   getHalls: (branchId?: number) => fetchAPI<any[]>(`/conference/halls${buildQuery({ branch_id: branchId })}`),
   createHall: (data: any) => fetchAPI<any>('/conference/halls', { method: 'POST', body: JSON.stringify(data) }),
+  updateHall: (id: string, data: any) => fetchAPI<any>(`/conference/halls/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   checkAvailability: (hallId: string, start: string, end: string) => 
     fetchAPI<any>(`/conference/halls/${hallId}/availability${buildQuery({ start_date: start, end_date: end })}`),
 

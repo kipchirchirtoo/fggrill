@@ -77,15 +77,20 @@ export default function OrdersAuditPage() {
         setIsExporting(true);
         try {
             const { auditorReportsAPI } = await import('@/lib/api');
-            await auditorReportsAPI.exportBrandedPdf('branch_orders', {
+            const success = await auditorReportsAPI.exportBrandedPdf('branch_orders', {
                 branch_id: activeBranchId === 0 ? undefined : activeBranchId,
                 start_date: dateRange.startDate,
                 end_date: dateRange.endDate
             });
-            toast.success('PDF archive generated successfully');
-        } catch (e) {
-            console.error(e);
-            toast.error('Failed to generate PDF archive');
+            
+            if (success) {
+                toast.success('PDF archive downloaded successfully');
+            } else {
+                toast.error('Failed to download PDF archive');
+            }
+        } catch (e: any) {
+            console.error('PDF Export Error:', e);
+            toast.error(e?.message || 'Failed to generate PDF archive');
         } finally {
             setIsExporting(false);
         }

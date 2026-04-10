@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Calendar, FileText, Download, User, DollarSign, CreditCard, Banknote, FileDown, FileSpreadsheet } from 'lucide-react';
+import { Loader2, Calendar, FileText, Download, User, DollarSign, CreditCard, Banknote, FileDown, FileSpreadsheet, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -26,6 +26,8 @@ interface StaffAuditRecord {
     description: string;
     status: string;
     reference: string;
+    auditor_id?: string;
+    auditor_confirmed_at?: string;
 }
 
 interface StaffSummary {
@@ -41,6 +43,7 @@ export default function StaffAuditPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [records, setRecords] = useState<StaffAuditRecord[]>([]);
     const [summary, setSummary] = useState<StaffSummary[]>([]);
+    const [processingId, setProcessingId] = useState<string | null>(null);
 
     // Filters
     const [startDate, setStartDate] = useState(format(new Date(new Date().setDate(new Date().getDate() - 30)), 'yyyy-MM-dd'));
@@ -114,13 +117,19 @@ export default function StaffAuditPage() {
             case 'paid':
             case 'approved':
             case 'active':
+            case 'auditor_confirmed':
+            case 'accountant_confirmed':
                 return 'bg-green-100 text-green-800';
             case 'pending':
             case 'unpaid':
+            case 'pending_approval':
                 return 'bg-yellow-100 text-yellow-800';
             case 'rejected':
+            case 'cancelled':
             case 'defaulted':
                 return 'bg-red-100 text-red-800';
+            case 'deducted':
+                return 'bg-blue-100 text-blue-800';
             default:
                 return 'bg-gray-100 text-gray-800';
         }
@@ -130,9 +139,67 @@ export default function StaffAuditPage() {
         return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
     };
 
-    const totalCreditBills = (summary || []).reduce((sum, item) => sum + (item.total_credit_bills || 0), 0);
-    const totalAdvances = (summary || []).reduce((sum, item) => sum + (item.total_advances || 0), 0);
-    const totalLoans = (summary || []).reduce((sum, item) => sum + (item.total_loans || 0), 0);
+    const handleApprove = async (record: StaffAuditRecord) => {
+        if (!confirm(`Approve this ${record.type} of ${formatCurrency(record.amount)} for ${record.staff_name}?`)) {
+            return;
+        }
+
+        setProcessingId(record.id);
+        try {
+            if (record.type === 'Advance') {
+                await api.staff.simplePayroll.approveAdvance(record.id);
+                toast.success('Advance approved successfully');
+            } else if (record.type === 'Loan') {
+                await api.staff.simplePayroll.approveLoan(record.id);
+                toast.success('Loan approved successfully');
+            }
+            await fetchAuditData();
+        } catch (error: any) {
+            console.error('Approval failed:', error);
+            toast.error(error.message || 'Failed to approve');
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleReject = async (record: StaffAuditRecord) => {
+        if (!confirm(`Reject this ${record.type} of ${formatCurrency(record.amount)} for ${record.staff_name}?`)) {
+            return;
+        }
+
+        setProcessingId(record.id);
+        try {
+            if (record.type === 'Advance') {
+                await api.staff.simplePayroll.rejectAdvance(record.id);
+                toast.success('Advance rejected');
+            } else if (record.type === 'Loan') {
+                await api.staff.simplePayroll.rejectLoan(record.id);
+                toast.success('Loan rejected');
+            }
+            await fetchAuditData();
+        } catch (error: any) {
+            console.error('Rejection failed:', error);
+            toast.error(error.message || 'Failed to reject');
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const canApprove = (record: StaffAuditRecord) => {
+        // Only show approve button for pending or accountant_confirmed items
+        const approvableStatuses = ['pending', 'accountant_confirmed', 'pending_approval'];
+        return approvableStatuses.includes(record.status.toLowerCase()) && !record.auditor_confirmed_at;
+    };
+
+    const totalCreditBills = (records || [])
+        .filter(r => r.type === 'Credit Bill')
+        .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalAdvances = (records || [])
+        .filter(r => r.type === 'Advance')
+        .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalLoans = (records || [])
+        .filter(r => r.type === 'Loan')
+        .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
     const handleExport = async (exportFormat: 'pdf' | 'csv') => {
         setIsExporting(true);
@@ -345,12 +412,13 @@ export default function StaffAuditPage() {
                                                 <th className="px-6 py-4">Description</th>
                                                 <th className="px-6 py-4 text-right">Amount</th>
                                                 <th className="px-6 py-4 text-center">Status</th>
+                                                <th className="px-6 py-4 text-center">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
                                             {records.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                                                    <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                                                         No records found matching your filters.
                                                     </td>
                                                 </tr>
@@ -374,6 +442,52 @@ export default function StaffAuditPage() {
                                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
                                                                 {record.status}
                                                             </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            {(record.type === 'Advance' || record.type === 'Loan') && canApprove(record) ? (
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <button
+                                                                        onClick={() => handleApprove(record)}
+                                                                        disabled={processingId === record.id}
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                    >
+                                                                        {processingId === record.id ? (
+                                                                            <>
+                                                                                <Loader2 size={14} className="animate-spin" />
+                                                                                Processing...
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <CheckCircle size={14} />
+                                                                                Approve
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleReject(record)}
+                                                                        disabled={processingId === record.id}
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                    >
+                                                                        {processingId === record.id ? (
+                                                                            <>
+                                                                                <Loader2 size={14} className="animate-spin" />
+                                                                                Processing...
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <XCircle size={14} />
+                                                                                Reject
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            ) : record.auditor_confirmed_at ? (
+                                                                <span className="text-xs text-green-600 font-medium">✓ Approved</span>
+                                                            ) : (record.status.toLowerCase() === 'rejected' || record.status.toLowerCase() === 'cancelled') ? (
+                                                                <span className="text-xs text-red-600 font-medium">✗ Rejected</span>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400">-</span>
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 ))

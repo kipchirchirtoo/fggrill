@@ -102,11 +102,6 @@ const systemBase = {
   
   getConfigs: (category?: string) => fetchAPI<any>(`/system/configs${buildQuery({ category })}`),
   updateConfig: (category: string, data: any) => fetchAPI<void>(`/system/configs/${category}`, { method: 'PUT', body: JSON.stringify(data) }),
-
-  // Audit Context
-  getPendingLogbooks: (params?: any) => fetchAPI<any[]>(`/auditor/logbooks/pending${buildQuery(params)}`),
-  auditLogbook: (id: string | number, action: 'approve' | 'reject', notes?: string) => 
-    fetchAPI<void>(`/auditor/logbooks/${id}/audit`, { method: 'POST', body: JSON.stringify({ action, notes }) }),
 };
 
 export const systemAPI = {

@@ -24,6 +24,9 @@ class SchedulerService {
     // Every 5 minute tasks
     this.schedule5Minutes();
 
+    // Every 15 minute tasks
+    this.schedule15Minutes();
+
     logger.info('All scheduled jobs started');
 
     return Object.fromEntries(this.jobs);
@@ -153,6 +156,88 @@ class SchedulerService {
    */
   private schedule5Minutes() {
     // Currently no tasks needed every 5 minutes
+  }
+
+  /**
+   * Schedule tasks that run every 15 minutes
+   */
+  private schedule15Minutes() {
+    // Update conference hall statuses based on active bookings
+    const conferenceHallStatusUpdate = cron.schedule('*/15 * * * *', async () => {
+      try {
+        logger.info('Running conference hall status update');
+        await this.updateConferenceHallStatuses();
+        logger.info('Conference hall status update completed');
+      } catch (error) {
+        logger.error('Error in conference hall status update:', error);
+      }
+    });
+    this.jobs.set('conference-hall-status-update', conferenceHallStatusUpdate);
+  }
+
+  /**
+   * Update conference hall statuses based on current bookings
+   */
+  private async updateConferenceHallStatuses() {
+    const { supabase } = require('../config/supabase');
+    const now = new Date();
+    
+    try {
+      // Get all halls
+      const { data: halls, error: hallsError } = await supabase
+        .from('conference_halls')
+        .select('id, status, name');
+      
+      if (hallsError) {
+        logger.error('Error fetching conference halls:', hallsError);
+        return;
+      }
+      
+      let updatedCount = 0;
+      
+      for (const hall of halls || []) {
+        // Check if hall has any active bookings (ongoing right now)
+        const { data: activeBookings, error: bookingsError } = await supabase
+          .from('conference_hall_bookings')
+          .select('id, start_date, end_date, customer_name')
+          .eq('conference_hall_id', hall.id)
+          .eq('booking_status', 'confirmed')
+          .lte('start_date', now.toISOString())
+          .gte('end_date', now.toISOString());
+        
+        if (bookingsError) {
+          logger.error(`Error checking bookings for hall ${hall.id}:`, bookingsError);
+          continue;
+        }
+        
+        // Determine new status based on active bookings
+        const hasActiveBooking = activeBookings && activeBookings.length > 0;
+        const newStatus = hasActiveBooking ? 'occupied' : 'available';
+        
+        // Only update if status changed and not in maintenance/unavailable (manual overrides)
+        if (hall.status !== 'maintenance' && hall.status !== 'unavailable' && hall.status !== newStatus) {
+          const { error: updateError } = await supabase
+            .from('conference_halls')
+            .update({ status: newStatus })
+            .eq('id', hall.id);
+          
+          if (updateError) {
+            logger.error(`Error updating hall ${hall.id} status:`, updateError);
+          } else {
+            logger.info(`Hall "${hall.name}" status updated: ${hall.status} → ${newStatus}`);
+            updatedCount++;
+          }
+        }
+      }
+      
+      if (updatedCount > 0) {
+        logger.info(`Conference hall status update: ${updatedCount} halls updated`);
+      }
+      
+    } catch (error) {
+      logger.error('Error in conference hall status update:', error);
+      throw error;
+    }
   }
 
   /**

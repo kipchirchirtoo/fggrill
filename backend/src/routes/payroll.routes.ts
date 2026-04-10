@@ -18,8 +18,8 @@ import {
   partialPayCreditBill,
   getCreditBillPayments
 } from '../controllers/credit-bills.controller';
-import { getLoans, createLoan, approveLoan } from '../controllers/loans.controller';
-import { getAdvances, createAdvance, approveAdvance } from '../controllers/advances.controller';
+import { getLoans, createLoan, approveLoan, rejectLoan } from '../controllers/loans.controller';
+import { getAdvances, createAdvance, approveAdvance, rejectAdvance } from '../controllers/advances.controller';
 import { getPayrollSummary } from '../controllers/payroll-simple.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -148,8 +148,14 @@ router.post(
 
 router.post(
   '/loans/:id/approve',
-  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   approveLoan
+);
+
+router.post(
+  '/loans/:id/reject',
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  rejectLoan
 );
 
 // Staff Advances
@@ -167,8 +173,14 @@ router.post(
 
 router.post(
   '/advances/:id/approve',
-  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
   approveAdvance
+);
+
+router.post(
+  '/advances/:id/reject',
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
+  rejectAdvance
 );
 
 // Standardized migration action

@@ -123,7 +123,9 @@ export const simplePayrollAPI = {
   getAdvances: (params?: any) => fetchAPI<ApiResponse<any[]>>(`/payroll/advances${buildQuery(params)}`),
   createAdvance: (data: any) => fetchAPI<ApiResponse<any>>('/payroll/advances', { method: 'POST', body: JSON.stringify(data) }),
   approveAdvance: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/advances/${id}/approve`, { method: 'POST' }),
+  rejectAdvance: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/advances/${id}/reject`, { method: 'POST' }),
   approveLoan: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/loans/${id}/approve`, { method: 'POST' }),
+  rejectLoan: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/loans/${id}/reject`, { method: 'POST' }),
   triggerPendingBillsMigration: () => fetchAPI<ApiResponse<void>>('/payroll/trigger-migration', { method: 'POST' }),
 };
 

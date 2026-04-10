@@ -321,6 +321,46 @@ export const getBillDetails = async (
             }
         }
 
+        // Check if it's a Conference Invoice (starts with CNF)
+        if (searchId.startsWith('CNF')) {
+            const { data: booking, error: bookingError } = await supabase
+                .from('conference_hall_bookings')
+                .select('*')
+                .eq('invoice_number', searchId)
+                .single();
+
+            if (!bookingError && booking) {
+                const balance = booking.total_amount - (booking.amount_paid || 0);
+                
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'conference',
+                        booking: {
+                            id: booking.id,
+                            invoice_number: booking.invoice_number,
+                            company_name: booking.company_name || booking.customer_name,
+                            contact_person: booking.contact_person,
+                            phone: booking.customer_phone,
+                            email: booking.customer_email,
+                            start_date: booking.start_date,
+                            end_date: booking.end_date,
+                            status: booking.payment_status,
+                            items: [] // Conference bookings typically don't have line items
+                        },
+                        financials: {
+                            total_amount: booking.total_amount,
+                            amount_paid: booking.amount_paid || 0,
+                            balance: balance,
+                            currency: 'KES'
+                        },
+                        payment_status: booking.payment_status
+                    }
+                });
+                return;
+            }
+        }
+
         // Check if it's a POS transaction (starts with CS)
         if (searchId.startsWith('CS')) {
             const cleanId = searchId.startsWith('CS-') ? searchId : `CS-${searchId.slice(2)}`;
@@ -867,6 +907,93 @@ export const processCashierPayment = async (
             res.json({
                 success: true,
                 message: 'Invoice payment processed successfully',
+                data: payment
+            });
+            return;
+        }
+
+        // Check if it's a conference booking (starts with CNF)
+        if (bookingId.startsWith('CNF')) {
+            // 1. Fetch the conference booking by invoice_number
+            const { data: booking, error: bookingError } = await supabase
+                .from('conference_hall_bookings')
+                .select('id, total_amount, amount_paid, branch_id, customer_name')
+                .eq('invoice_number', bookingId)
+                .single();
+
+            if (bookingError || !booking) {
+                throw new AppError('Conference booking not found', 404);
+            }
+
+            // 2. Record Payment in Database
+            const isVerifiedMethod = method === 'cash';
+            const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
+
+            const { data: payment, error: paymentError } = await supabase
+                .from('payments')
+                .insert({
+                    conference_booking_id: booking.id,
+                    amount: amount,
+                    currency: 'KES',
+                    payment_method: method,
+                    status: initialStatus,
+                    reference: paymentRef,
+                    metadata: {
+                        processed_by: 'cashier',
+                        cashier_id: req.user?.id,
+                        processed_at: new Date().toISOString(),
+                        invoice_number: bookingId,
+                        verification_required: !isVerifiedMethod
+                    }
+                })
+                .select()
+                .single();
+
+            if (paymentError) {
+                throw new AppError(`Payment recording failed: ${paymentError.message}`, 500);
+            }
+
+            // 3. Update Conference Booking Status (Only if payment is completed)
+            if (initialStatus === 'completed') {
+                const currentPaid = Number(booking.amount_paid || 0);
+                const paymentAmount = Number(amount);
+                const totalAmount = Number(booking.total_amount);
+
+                const newPaidAmount = currentPaid + paymentAmount;
+                const newBalance = Math.max(0, totalAmount - newPaidAmount);
+                const isPaid = newBalance <= 0;
+                const newStatus = isPaid ? 'paid' : (newPaidAmount > 0 ? 'partial' : 'pending');
+
+                const { error: updateError } = await supabase
+                    .from('conference_hall_bookings')
+                    .update({
+                        amount_paid: newPaidAmount,
+                        payment_status: newStatus,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', booking.id);
+
+                if (updateError) throw new AppError(`Failed to update conference booking status: ${updateError.message}`, 500);
+
+                // Record cashier transaction
+                await supabase.from('cashier_transactions').insert({
+                    transaction_number: `CNF-${bookingId}`,
+                    branch_id: booking.branch_id || req.user?.branch_id,
+                    cashier_id: req.user?.id,
+                    transaction_type: 'payment',
+                    revenue_type: 'CONFERENCE',
+                    reference_type: 'conference_booking',
+                    reference_id: booking.id,
+                    payment_method: method,
+                    amount: amount,
+                    customer_name: booking.customer_name || 'Conference Client'
+                });
+            }
+
+            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
+            res.json({
+                success: true,
+                message: 'Conference payment processed successfully',
                 data: payment
             });
             return;

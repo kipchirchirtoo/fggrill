@@ -146,40 +146,49 @@ function CashierPageContent() {
     // Handle auto-loading of bills from query parameters (integration with CheckOutModal)
     useEffect(() => {
         const billId = searchParams.get('billId');
+        const invoice = searchParams.get('invoice'); // Conference invoice
         const method = searchParams.get('method');
 
-        if (billId) {
-            setScanInput(billId);
-            // Simulate lookup - we call directly the logic instead of relying on the form submit event
-            const lookupBill = async () => {
-                setIsLoading(true);
-                try {
-                    const response = await fetchAPI(`/cashier/bill/${billId}`) as any;
-                    if (response.success) {
-                        setBillData(response.data);
-                        setPaymentAmount(response.data.financials.balance.toString());
-                        toast.success('Bill auto-retrieved');
+        const idToLookup = invoice || billId;
 
-                        if (method) {
-                            setPaymentFlowChoice(method as any);
-                            setPaymentMethod(method === 'mpesa' ? 'mpesa' : (method === 'card' ? 'card' : 'cash'));
+        // Guard: only proceed if we have a valid identifier
+        if (!idToLookup?.trim()) return;
 
-                            if (method === 'mpesa') {
-                                handleAutoMpesaSearch(response.data.financials.balance);
-                            }
-                        }
-                    } else {
-                        toast.error('Bill not found via auto-lookup');
-                    }
-                } catch (error: any) {
-                    toast.error(error.message || 'Failed to auto-fetch bill');
-                } finally {
-                    setIsLoading(false);
-                    setScanInput('');
+        // AbortController to prevent double-fetch in React StrictMode
+        const controller = new AbortController();
+
+        // Wrap in async IIFE to prevent setState during render
+        (async () => {
+            setScanInput(idToLookup);
+            setIsLoading(true);
+            try {
+                // Use the updated lookupBillById function that handles both bills and conference invoices
+                await lookupBillById(idToLookup, controller.signal);
+
+                if (method) {
+                    setPaymentFlowChoice(method as any);
+                    setPaymentMethod(method === 'mpesa' ? 'mpesa' : (method === 'card' ? 'card' : 'cash'));
                 }
-            };
-            lookupBill();
-        }
+            } catch (error: any) {
+                // Ignore aborted requests (React StrictMode double-invoke)
+                if (error.name === 'AbortError') return;
+                
+                // Clear the invalid query param from URL to prevent infinite retry
+                if (typeof window !== 'undefined') {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('invoice');
+                    url.searchParams.delete('billId');
+                    window.history.replaceState({}, '', url.toString());
+                }
+                
+                toast.error(error.message || 'Failed to auto-fetch bill/invoice');
+            } finally {
+                setIsLoading(false);
+            }
+        })();
+
+        // Cleanup: abort the request if component unmounts or searchParams change
+        return () => controller.abort();
     }, [searchParams]);
 
     const fetchUnpaidBills = async () => {
@@ -354,28 +363,96 @@ function CashierPageContent() {
         }
     };
 
-    const lookupBillById = async (bookingId: string) => {
+    const lookupBillById = async (bookingId: string, signal?: AbortSignal) => {
         setIsLoading(true);
         try {
-            const response = await fetchAPI(`/cashier/bill/${bookingId}`) as any;
+            // First try to lookup as a regular bill
+            let response = await fetchAPI(`/cashier/bill/${bookingId}`, { signal }) as any;
+            
+            // If not found and starts with CNF-, try conference invoice
+            if (!response.success && bookingId.startsWith('CNF-')) {
+                response = await fetchAPI(`/conference/bookings/by-invoice/${bookingId}`, { signal }) as any;
+                
+                if (response.success) {
+                    // Transform conference booking to bill format
+                    const booking = response.data;
+                    const balance = booking.total_amount - (booking.amount_paid || 0);
+                    
+                    const transformedBill = {
+                        id: booking.id,
+                        bill_number: booking.invoice_number,
+                        booking_id: booking.id,
+                        customer_name: booking.company_name || booking.customer_name,
+                        contact_person: booking.contact_person,
+                        phone: booking.customer_phone,
+                        email: booking.customer_email,
+                        booking_type: 'conference',
+                        check_in: booking.start_date,
+                        check_out: booking.end_date,
+                        status: booking.payment_status,
+                        financials: {
+                            subtotal: booking.total_amount / 1.16,
+                            tax: booking.total_amount - (booking.total_amount / 1.16),
+                            total: booking.total_amount,
+                            total_amount: booking.total_amount,
+                            paid: booking.amount_paid || 0,
+                            amount_paid: booking.amount_paid || 0,
+                            balance: balance
+                        },
+                        items: [],
+                        payment_status: booking.payment_status,
+                        _conference_booking_id: booking.id,
+                        _is_conference: true
+                    };
+                    
+                    setBillData(transformedBill);
+                    setPaymentAmount(balance.toString());
+                    setScanInput('');
+                    setIsLoading(false);
+                    
+                    // Toast AFTER state is set to prevent flushSync crash
+                    toast.success('Conference invoice retrieved successfully');
+
+                    if (paymentFlowChoice === 'mpesa') {
+                        handleAutoMpesaSearch(balance);
+                    }
+                    return;
+                }
+            }
+            
             if (response.success) {
                 setBillData(response.data);
                 setPaymentAmount(response.data.financials.balance.toString());
+                setScanInput('');
+                setIsLoading(false);
+                
+                // Toast AFTER state is set to prevent flushSync crash
                 toast.success('Bill retrieved successfully');
 
                 if (paymentFlowChoice === 'mpesa') {
                     handleAutoMpesaSearch(response.data.financials.balance);
                 }
             } else {
-                toast.error('Bill not found');
+                // Clear state FIRST before showing error toast
                 setBillData(null);
+                setPaymentAmount('');
+                setScanInput('');
+                setIsLoading(false);
+                toast.error('Bill or invoice not found');
             }
         } catch (error: any) {
-            toast.error(error.message || 'Failed to fetch bill');
+            // Ignore aborted requests (React StrictMode or component unmount)
+            if (error.name === 'AbortError') {
+                setIsLoading(false);
+                return;
+            }
+            
+            // Clear state FIRST before showing error toast
             setBillData(null);
-        } finally {
-            setIsLoading(false);
+            setPaymentAmount('');
             setScanInput('');
+            setIsLoading(false);
+            toast.error(error.message || 'Failed to fetch bill/invoice');
         }
     };
 
@@ -412,7 +489,7 @@ function CashierPageContent() {
         }
 
         if (amount > billData.financials.balance) {
-            toast.error(`Amount exceeds balance! Max: KES ${billData.financials.balance.toLocaleString()}`);
+            toast.error(`Amount exceeds balance! Max: KES ${(billData.financials.balance ?? 0).toLocaleString()}`);
             return;
         }
 
@@ -427,7 +504,11 @@ function CashierPageContent() {
                 ? billData.order.order_number
                 : (billData.type === 'invoice'
                     ? billData.invoice.invoice_number
-                    : (billData.type === 'unpaid_bill' ? billData.bill.bill_number : billData.booking.id));
+                    : (billData.type === 'unpaid_bill' 
+                        ? billData.bill.bill_number 
+                        : (billData.type === 'conference' 
+                            ? billData.booking.invoice_number 
+                            : billData.booking.id)));
             const methodKey = paymentMethod === 'mpesa' ? 'mpesa_manual' : (paymentMethod === 'card' ? 'card_manual' : 'cash');
 
             // Detect if this is a Kyogong bill (pattern: PREFIX-YYYYMMDD-NNNN)
@@ -633,7 +714,13 @@ function CashierPageContent() {
         }
         setIsProcessing(true);
         try {
-            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'kyogong') ? billData.order.order_number : (billData.type === 'invoice' ? billData.invoice.invoice_number : billData.booking.id);
+            const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos' || billData.type === 'kyogong') 
+                ? billData.order.order_number 
+                : (billData.type === 'invoice' 
+                    ? billData.invoice.invoice_number 
+                    : (billData.type === 'conference' 
+                        ? billData.booking.invoice_number 
+                        : billData.booking.id));
             // Correct path: /payments/mpesa/...
             const response = await fetchAPI('/payments/mpesa/initiate', {
                 method: 'POST',
@@ -812,7 +899,11 @@ function CashierPageContent() {
 
                 // Refresh bill data
                 if (billData) {
-                    const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') ? billData.order.order_number : billData.booking.id;
+                    const identifier = (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') 
+                        ? billData.order.order_number 
+                        : (billData.type === 'conference' 
+                            ? billData.booking.invoice_number 
+                            : billData.booking.id);
                     const refresh = await fetchAPI(`/cashier/bill/${identifier}`) as any;
                     if (refresh.success) {
                         setBillData(refresh.data);
@@ -1277,7 +1368,7 @@ function CashierPageContent() {
                                                         <div>
                                                             <p className="text-[10px] font-bold text-emerald-800 uppercase">Payment Verified</p>
                                                             <p className="text-sm font-bold text-stone-900">{mpesaTransactionDetails.receipt} - {mpesaTransactionDetails.name}</p>
-                                                            <p className="text-xs text-stone-500">KES {mpesaTransactionDetails.amount.toLocaleString()}</p>
+                                                            <p className="text-xs text-stone-500">KES {(mpesaTransactionDetails.amount ?? 0).toLocaleString()}</p>
                                                         </div>
                                                         <button
                                                             onClick={() => {
@@ -1474,16 +1565,16 @@ function CashierPageContent() {
                                                 <div className="bg-stone-900 rounded-2xl p-6 text-white space-y-3">
                                                     <div className="flex justify-between text-stone-400 text-sm">
                                                         <span>Total Amount</span>
-                                                        <span className="font-bold text-white">KES {billData.financials.total_amount.toLocaleString()}</span>
+                                                        <span className="font-bold text-white">KES {(billData.financials.total_amount ?? 0).toLocaleString()}</span>
                                                     </div>
                                                     <div className="flex justify-between text-emerald-400 text-sm">
                                                         <span>Amount Paid</span>
-                                                        <span className="font-bold">- KES {billData.financials.amount_paid.toLocaleString()}</span>
+                                                        <span className="font-bold">- KES {(billData.financials.amount_paid ?? 0).toLocaleString()}</span>
                                                     </div>
                                                     <div className="flex justify-between text-xl font-black pt-3 border-t border-stone-800">
                                                         <span className="text-stone-300">Balance Due</span>
                                                         <span className={billData.financials.balance > 0 ? 'text-orange-500' : 'text-emerald-500'}>
-                                                            KES {billData.financials.balance.toLocaleString()}
+                                                            KES {(billData.financials.balance ?? 0).toLocaleString()}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1505,7 +1596,7 @@ function CashierPageContent() {
                                                         <div>
                                                             <label className="text-[10px] font-bold text-stone-400 uppercase mb-1 block">Amount Due</label>
                                                             <div className="text-xl font-black text-stone-900 bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                                                KES {billData.financials.balance.toLocaleString()}
+                                                                KES {(billData.financials.balance ?? 0).toLocaleString()}
                                                             </div>
                                                         </div>
                                                         <div>
@@ -1562,7 +1653,7 @@ function CashierPageContent() {
                                                         </div>
 
                                                         <div className="space-y-2">
-                                                            <p className="text-[10px] font-bold text-stone-400 uppercase">Found Transactions for KES {billData.financials.balance.toLocaleString()}</p>
+                                                            <p className="text-[10px] font-bold text-stone-400 uppercase">Found Transactions for KES {(billData.financials.balance ?? 0).toLocaleString()}</p>
                                                             {mpesaTransactionDetails ? (
                                                                 <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between group">
                                                                     <div>
@@ -1605,7 +1696,7 @@ function CashierPageContent() {
                                                         <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl text-center">
                                                             <CreditCard size={48} className="mx-auto text-blue-500 mb-4" />
                                                             <p className="text-sm font-bold text-blue-900">Paystack Terminal Ready</p>
-                                                            <p className="text-xs text-blue-600 mt-1">Initiating card payment for KES {billData.financials.balance.toLocaleString()}</p>
+                                                            <p className="text-xs text-blue-600 mt-1">Initiating card payment for KES {(billData.financials.balance ?? 0).toLocaleString()}</p>
                                                         </div>
                                                         <IOSButton
                                                             onClick={() => toast.info('Connecting to Paystack terminal...')}

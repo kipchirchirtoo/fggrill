@@ -30,15 +30,57 @@ export default function BranchInvoicesPage() {
     const fetchInvoices = async () => {
         setLoading(true);
         try {
+            // Fetch accounting invoices
             const response = await api.accounting.getInvoices();
+            
+            // Fetch conference bookings
+            const conferenceResponse = await api.conference.getBookings({ 
+                branch_id: activeBranchId,
+                status: 'confirmed' 
+            });
+            
+            let allInvoices: Invoice[] = [];
+            
+            // Map accounting invoices
             if (response.success) {
                 const mappedData = response.data.map((inv: any) => ({
                     ...inv,
                     subtotal: inv.subtotal || inv.total_amount || 0,
                     vat_amount: inv.vat_amount || 0
                 }));
-                setInvoices(mappedData);
+                allInvoices = [...allInvoices, ...mappedData];
             }
+            
+            // Map conference bookings to invoice format
+            if (conferenceResponse.success) {
+                const conferenceInvoices = conferenceResponse.data.map((booking: any) => ({
+                    id: booking.id,
+                    invoice_number: booking.invoice_number || `CNF-${booking.id.slice(0, 8)}`,
+                    invoice_date: booking.created_at || booking.start_date,
+                    customer: {
+                        customer_name: booking.company_name || booking.customer_name,
+                        email: booking.customer_email,
+                        phone: booking.customer_phone
+                    },
+                    total_amount: booking.total_amount,
+                    subtotal: booking.total_amount,
+                    vat_amount: 0,
+                    status: booking.payment_status === 'paid' ? 'paid' : 
+                            booking.payment_status === 'partial' ? 'partial' : 'unpaid',
+                    type: 'CONFERENCE',
+                    items: [],
+                    notes: `Conference: ${booking.start_date} to ${booking.end_date}`,
+                    branch_id: booking.branch_id
+                }));
+                allInvoices = [...allInvoices, ...conferenceInvoices];
+            }
+            
+            // Filter by active branch
+            if (activeBranchId) {
+                allInvoices = allInvoices.filter(inv => inv.branch_id === activeBranchId);
+            }
+            
+            setInvoices(allInvoices);
         } catch (error) {
             console.error('Error fetching invoices:', error);
             toast.error('Failed to load invoices');
@@ -49,7 +91,7 @@ export default function BranchInvoicesPage() {
 
     useEffect(() => {
         fetchInvoices();
-    }, []);
+    }, [activeBranchId]);
 
     const handleCreate = (type: 'conference' | 'hotel' | 'restaurant' | 'guest' | 'general') => {
         setCreateType(type);

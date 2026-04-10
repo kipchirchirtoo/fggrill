@@ -29,7 +29,7 @@ export const CashierLogbookVerification: React.FC<CashierLogbookVerificationProp
         setIsLoading(true);
         try {
             // @ts-ignore - status exists in the backend API but we need to update the frontend types if strictly checked
-            const res = await api.cashier.getPendingLogbooks({ status });
+            const res = await api.audit.getPendingLogbooks({ status });
             if (res.success) {
                 setLogbooks(res.data || []);
             }

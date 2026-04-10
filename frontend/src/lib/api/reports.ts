@@ -62,7 +62,7 @@ export const reportsAPI = {
 
 export const auditAPI = {
   // Appended for UI Compatibility
-  getDailyLogsStatus: (params?: any) => fetchAPI<any>('/auditor/daily-logs/status', { method: 'GET' }),
+  getDailyLogsStatus: (params?: any) => fetchAPI<any>(`/auditor/daily-logs${buildQuery(params)}`, { method: 'GET' }),
   verifyDailyLog: (id: any, data?: any) => fetchAPI<any>(`/auditor/daily-logs/${id}/verify`, { method: 'POST', body: JSON.stringify(data) }),
   getRoleMigrations: (params?: any) => fetchAPI<any[]>('/system/roles/migration', { method: 'GET' }),
   executeRoleMigration: (data: any) => fetchAPI<any>('/system/roles/migration/execute', { method: 'POST', body: JSON.stringify(data) }),
@@ -95,13 +95,18 @@ export const auditAPI = {
     end_date?: string; 
   }) => fetchAPI<any>(`/auditor/staff-audit${buildQuery(params)}`),
 
+  // Cashier Logbooks
+  getPendingLogbooks: (params?: any) => fetchAPI<any[]>(`/cashier/logbook/pending${buildQuery(params)}`),
+  auditLogbook: (id: string | number, action: 'approve' | 'reject', notes?: string) => 
+    fetchAPI<void>(`/cashier/logbook/${id}/audit`, { method: 'POST', body: JSON.stringify({ action, notes }) }),
+
   // Aliases and Extensions for Legacy Compliance
   getAuditTrail: (params?: any) => auditAPI.getAuditLogs(params),
   verifyFinances: (params?: any) => fetchAPI<any>(`/auditor/verify/finances${buildQuery(params)}`),
   getAnomalyDetail: (id: string) => fetchAPI<any>(`/auditor/anomalies/${id}`),
   clearAnomaly: (id: string, notes: string) => fetchAPI<void>(`/auditor/anomalies/${id}/clear`, { method: 'POST', body: JSON.stringify({ notes }) }),
   verifyRevenue: (params?: any) => fetchAPI<any>(`/auditor/verify/revenue${buildQuery(params)}`),
-  verifyBranchOrders: (params?: any) => fetchAPI<any>(`/auditor/verify/orders${buildQuery(params)}`),
+  verifyBranchOrders: (params?: any) => fetchAPI<any>(`/auditor/verify/branch-orders${buildQuery(params)}`),
   verifySoldItems: (params?: any) => fetchAPI<any>(`/auditor/verify/sold-items${buildQuery(params)}`),
   getBarStockAudits: (params?: any) => fetchAPI<any[]>(`/auditor/bar/stock-audits${buildQuery(params)}`),
   verifyBarStockTake: (id: string, status: string) => fetchAPI<void>(`/auditor/bar/stock-audits/${id}/verify`, { method: 'POST', body: JSON.stringify({ status }) }),
@@ -131,14 +136,35 @@ export const auditorReportsAPI = {
     }, PYTHON_SERVICE_URL);
     
     if (result.success && result.data && typeof window !== 'undefined') {
-      const url = window.URL.createObjectURL(result.data);
+      const blob = result.data;
+      
+      // Check if blob has content
+      if (blob.size === 0) {
+        console.error('Received empty blob from server');
+        throw new Error('Received empty PDF file from server');
+      }
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
-      a.download = `${reportType}_${Date.now()}.pdf`;
+      a.download = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Append to body, click, and cleanup
+      document.body.appendChild(a);
       a.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
       return true;
     }
-    return false;
+    
+    throw new Error('Failed to generate PDF report');
   },
 
   // Specialized Reports

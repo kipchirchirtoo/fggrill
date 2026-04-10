@@ -172,44 +172,104 @@ export default function BranchRequestDetailClient() {
                                         <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
                                             <tr>
                                                 <th className="px-4 py-3">Item</th>
-                                                <th className="px-4 py-3 text-right">Requested</th>
-                                                <th className="px-4 py-3 text-right">Approved</th>
+                                                <th className="px-4 py-3 text-right text-amber-600">Requested</th>
+                                                <th className="px-4 py-3 text-right text-emerald-600">Approved</th>
+                                                <th className="px-4 py-3 text-right text-purple-600">Delivered</th>
+                                                <th className="px-4 py-3 text-right text-blue-600">Distributed</th>
                                                 <th className="px-4 py-3 text-center">Status</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {request.items?.map((item: any) => (
-                                                <tr key={item.id} className="hover:bg-gray-50/50">
-                                                    <td className="px-4 py-3">
-                                                        <p className="font-medium text-gray-800">{item.item_name || item.item_sku}</p>
-                                                        {item.rejection_reason && (
-                                                            <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                                                                <AlertCircle className="h-3 w-3" />
-                                                                {item.rejection_reason}
-                                                            </p>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-mono">{item.requested_quantity}</td>
-                                                    <td className="px-4 py-3 text-right font-mono">
-                                                        {['APPROVED', 'PARTIALLY_APPROVED', 'DELIVERED', 'RECEIVED'].includes(item.status) ? (
-                                                            <span className="text-emerald-600 font-bold">{item.approved_quantity}</span>
-                                                        ) : (
-                                                            <span className="text-gray-300">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold uppercase ${item.status === 'APPROVED' || item.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-600' :
+                                            {request.items?.map((item: any) => {
+                                                const isRejected = item.status === 'REJECTED';
+                                                
+                                                // Always show numbers if they exist for better audit trail
+                                                const requestedQty = item.requested_quantity || 0;
+                                                const approvedQty = item.approved_quantity;
+                                                const deliveredQty = item.dispatched_quantity;
+                                                const distributedQty = item.received_quantity;
+                                                
+                                                return (
+                                                    <tr key={item.id} className="hover:bg-gray-50/50">
+                                                        <td className="px-4 py-3">
+                                                            <p className="font-medium text-gray-800">{item.item_name || item.item_sku}</p>
+                                                            <p className="text-[10px] text-gray-400 font-mono">{item.item_sku}</p>
+                                                            {item.rejection_reason && (
+                                                                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                                                                    <AlertCircle className="h-3 w-3" />
+                                                                    {item.rejection_reason}
+                                                                </p>
+                                                            )}
+                                                        </td>
+                                                        {/* Requested - Always show */}
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                                                                {requestedQty}
+                                                            </span>
+                                                        </td>
+                                                        {/* Approved - Show if exists or rejected */}
+                                                        <td className="px-4 py-3 text-right">
+                                                            {isRejected ? (
+                                                                <span className="font-mono font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded">0</span>
+                                                            ) : approvedQty != null ? (
+                                                                <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                                                                    {approvedQty}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-gray-300 font-mono">—</span>
+                                                            )}
+                                                        </td>
+                                                        {/* Delivered - Show if exists */}
+                                                        <td className="px-4 py-3 text-right">
+                                                            {deliveredQty != null && deliveredQty > 0 ? (
+                                                                <span className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
+                                                                    {deliveredQty}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-gray-300 font-mono">—</span>
+                                                            )}
+                                                        </td>
+                                                        {/* Distributed - Show if exists */}
+                                                        <td className="px-4 py-3 text-right">
+                                                            {distributedQty != null && distributedQty > 0 ? (
+                                                                <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                                                                    {distributedQty}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-gray-300 font-mono">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                                                                item.status === 'APPROVED' || item.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-600' :
                                                                 item.status === 'RECEIVED' ? 'bg-blue-50 text-blue-600' :
-                                                                    item.status === 'REJECTED' ? 'bg-red-50 text-red-600' :
-                                                                        'bg-amber-50 text-amber-600'
+                                                                item.status === 'REJECTED' ? 'bg-red-50 text-red-600' :
+                                                                'bg-amber-50 text-amber-600'
                                                             }`}>
-                                                            {item.status}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                                {item.status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
+                                </div>
+                                
+                                {/* Legend */}
+                                <div className="flex flex-wrap items-center gap-4 mt-3 px-1">
+                                    <span className="flex items-center gap-1 text-[10px] text-amber-600">
+                                        <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Requested by branch
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[10px] text-emerald-600">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Approved by auditor
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[10px] text-purple-600">
+                                        <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" /> Delivered from central
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[10px] text-blue-600">
+                                        <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Distributed at branch
+                                    </span>
                                 </div>
                             </IOSCard>
                         </div>

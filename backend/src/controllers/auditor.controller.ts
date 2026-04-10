@@ -2360,39 +2360,51 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
 
     logger.info('Fetching staff audit with filters:', { branch_id, start_date, end_date, staff_id });
 
-    // 1. Fetch Staff Credit Bills
+    // Build queries with proper joins to get staff names directly
+    // Join: staff_credit_bills -> staff_profiles -> users
     let creditQuery = supabase
       .from('staff_credit_bills')
       .select(`
-        *,
-        staff:staff_profiles!staff_id(
-          id, 
-          user:users!user_id(first_name, last_name, email)
-        )
+        id,
+        staff_id,
+        bill_date,
+        amount,
+        description,
+        status,
+        is_paid
       `)
       .order('bill_date', { ascending: false });
 
-    // 2. Fetch Staff Advances
+    // Join: staff_advances -> staff_profiles -> users
     let advancesQuery = supabase
       .from('staff_advances')
       .select(`
-        *,
-        staff:staff_profiles!staff_id(
-          id, 
-          user:users!user_id(first_name, last_name, email)
-        )
+        id,
+        staff_id,
+        request_date,
+        advance_date,
+        amount,
+        reason,
+        status,
+        auditor_id,
+        auditor_confirmed_at
       `)
       .order('advance_date', { ascending: false });
 
-    // 3. Fetch Staff Loans
+    // Join: staff_loans -> staff_profiles -> users
     let loansQuery = supabase
       .from('staff_loans')
       .select(`
-        *,
-        staff:staff_profiles!staff_id(
-          id, 
-          user:users!user_id(first_name, last_name, email)
-        )
+        id,
+        staff_id,
+        start_date,
+        loan_date,
+        total_amount,
+        remaining_balance,
+        reason,
+        status,
+        auditor_id,
+        auditor_confirmed_at
       `)
       .order('loan_date', { ascending: false });
 
@@ -2421,42 +2433,82 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       { data: loans, error: loansError }
     ] = await Promise.all([creditQuery, advancesQuery, loansQuery]);
 
-    if (creditError) throw creditError;
-    if (advancesError) throw advancesError;
-    if (loansError) throw loansError;
+    if (creditError) {
+      logger.error('Error fetching credit bills:', creditError);
+      throw creditError;
+    }
+    if (advancesError) {
+      logger.error('Error fetching advances:', advancesError);
+      throw advancesError;
+    }
+    if (loansError) {
+      logger.error('Error fetching loans:', loansError);
+      throw loansError;
+    }
+
+    // Collect all unique staff_ids to fetch names as fallback
+    const allStaffIds = new Set<string>();
+    creditBills?.forEach(b => b.staff_id && allStaffIds.add(b.staff_id));
+    advances?.forEach(a => a.staff_id && allStaffIds.add(a.staff_id));
+    loans?.forEach(l => l.staff_id && allStaffIds.add(l.staff_id));
+
+    logger.info(`Found ${allStaffIds.size} unique staff_ids to resolve`);
+
+    // Fetch staff names directly from staff_profiles (first_name, last_name are on the table)
+    const { data: staffData, error: staffError } = await supabase
+      .from('staff_profiles')
+      .select('id, first_name, last_name')
+      .in('id', Array.from(allStaffIds));
+
+    if (staffError) {
+      logger.error('Error fetching staff_profiles:', staffError);
+    }
+
+    logger.info(`Staff profiles query returned ${staffData?.length || 0} results`);
+
+    // Build name map from staff_profiles directly
+    const staffNameMap = new Map<string, string>();
+    staffData?.forEach(staff => {
+      const firstName = staff.first_name || '';
+      const lastName = staff.last_name || '';
+      if (firstName || lastName) {
+        staffNameMap.set(staff.id, `${firstName} ${lastName}`.trim());
+      }
+    });
+
+    logger.info(`Resolved names for ${staffNameMap.size} staff members from staff_profiles`);
 
     const unifiedRecords: any[] = [];
 
+    // Helper function to extract staff name - use staffNameMap
+    const getStaffName = (record: any): string => {
+      try {
+        const staffId = record.staff_id;
+        if (!staffId) return '—';
+
+        // Lookup from our staff name map
+        const name = staffNameMap.get(staffId);
+        if (name) {
+          return name;
+        }
+
+        return '—';
+      } catch (error) {
+        logger.error('Error extracting staff name:', error);
+        return '—';
+      }
+    };
+
     // Process Credit Bills
     creditBills?.forEach((bill: any) => {
-      // Handle nested user object safely
-      const user = bill.staff?.user;
-      const firstName = Array.isArray(user) ? user[0]?.first_name : user?.first_name;
-      const lastName = Array.isArray(user) ? user[0]?.last_name : user?.last_name;
-      let name = (firstName && lastName) ? `${firstName} ${lastName}` : null;
-
-      // If no staff name from relationship, try to extract from description
-      if (!name && bill.description) {
-        // Try to extract name from patterns like "Shift Credit - Shift #XXX - NAME"
-        const match = bill.description.match(/- ([A-Z\s]+)$/);
-        if (match) {
-          name = match[1].trim();
-        }
-      }
-
-      // Final fallback
-      if (!name) {
-        name = 'Unknown Staff';
-      }
-
       unifiedRecords.push({
         id: bill.id,
-        date: bill.bill_date || bill.date,
+        date: bill.bill_date,
         type: 'Credit Bill',
         amount: bill.amount,
-        staff_name: name,
+        staff_name: getStaffName(bill),
         staff_id: bill.staff_id,
-        description: bill.description,
+        description: bill.description || 'Staff credit bill',
         status: bill.status === 'pending' ? 'Unpaid' : bill.status === 'deducted' ? 'Deducted' : bill.status === 'paid_cash' ? 'Paid' : (bill.is_paid ? 'Paid' : 'Unpaid'),
         reference: bill.id.substring(0, 8).toUpperCase(),
         original_record: bill
@@ -2465,68 +2517,36 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
 
     // Process Advances
     advances?.forEach((adv: any) => {
-      const user = adv.staff?.user;
-      const firstName = Array.isArray(user) ? user[0]?.first_name : user?.first_name;
-      const lastName = Array.isArray(user) ? user[0]?.last_name : user?.last_name;
-      let name = (firstName && lastName) ? `${firstName} ${lastName}` : null;
-
-      // If no staff name from relationship, try to extract from reason
-      if (!name && adv.reason) {
-        const match = adv.reason.match(/- ([A-Z\s]+)$/);
-        if (match) {
-          name = match[1].trim();
-        }
-      }
-
-      // Final fallback
-      if (!name) {
-        name = 'Unknown Staff';
-      }
-
       unifiedRecords.push({
         id: adv.id,
-        date: adv.request_date,
+        date: adv.advance_date || adv.request_date,
         type: 'Advance',
         amount: adv.amount,
-        staff_name: name,
+        staff_name: getStaffName(adv),
         staff_id: adv.staff_id,
-        description: adv.reason,
+        description: adv.reason || 'Salary advance',
         status: adv.status, // approved, pending, rejected, paid
         reference: adv.id.substring(0, 8).toUpperCase(),
+        auditor_id: adv.auditor_id,
+        auditor_confirmed_at: adv.auditor_confirmed_at,
         original_record: adv
       });
     });
 
     // Process Loans
     loans?.forEach((loan: any) => {
-      const user = loan.staff?.user;
-      const firstName = Array.isArray(user) ? user[0]?.first_name : user?.first_name;
-      const lastName = Array.isArray(user) ? user[0]?.last_name : user?.last_name;
-      let name = (firstName && lastName) ? `${firstName} ${lastName}` : null;
-
-      // If no staff name from relationship, try to extract from reason
-      if (!name && loan.reason) {
-        const match = loan.reason.match(/- ([A-Z\s]+)$/);
-        if (match) {
-          name = match[1].trim();
-        }
-      }
-
-      // Final fallback
-      if (!name) {
-        name = 'Unknown Staff';
-      }
-
       unifiedRecords.push({
         id: loan.id,
-        date: loan.start_date,
+        date: loan.loan_date || loan.start_date,
         type: 'Loan',
         amount: loan.total_amount,
-        staff_name: name,
+        staff_name: getStaffName(loan),
         staff_id: loan.staff_id,
-        description: loan.reason,
+        description: loan.reason || 'Staff loan',
         status: loan.status, // active, paid, defaulted
         reference: loan.id.substring(0, 8).toUpperCase(),
+        auditor_id: loan.auditor_id,
+        auditor_confirmed_at: loan.auditor_confirmed_at,
         original_record: loan
       });
     });

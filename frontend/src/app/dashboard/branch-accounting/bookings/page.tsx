@@ -28,6 +28,7 @@ import {
 import { api, conferenceAPI, accountingAPI } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { toast } from 'sonner';
@@ -57,6 +58,7 @@ export default function BookingsManagementPage() {
 }
 
 function BookingsManagementContent() {
+    const { activeBranchId } = useBranch();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('hotel');
     const [hotelBookings, setHotelBookings] = useState<any[]>([]);
@@ -68,7 +70,7 @@ function BookingsManagementContent() {
 
     useEffect(() => {
         fetchData();
-    }, [activeTab]);
+    }, [activeTab, activeBranchId]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -84,7 +86,10 @@ function BookingsManagementContent() {
                     setRestaurantBookings(response.data);
                 }
             } else if (activeTab === 'conference') {
-                const response = await conferenceAPI.getBookings();
+                const response = await conferenceAPI.getBookings({ 
+                    branch_id: activeBranchId,
+                    status: 'confirmed' 
+                });
                 if (response.success) {
                     setConferenceBookings(response.data);
                 }

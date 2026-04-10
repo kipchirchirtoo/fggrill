@@ -75,6 +75,47 @@ export const createHall = async (
     }
 };
 
+// @desc    Update conference hall
+// @route   PATCH /api/conference/halls/:id
+// @access  Private (Admin/Manager)
+export const updateHall = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { name, capacity, base_price_per_day, base_price_per_hour, description, amenities, status } = req.body;
+
+        const updateData: any = {};
+        if (name !== undefined) updateData.name = name;
+        if (capacity !== undefined) updateData.capacity = capacity;
+        if (base_price_per_day !== undefined) updateData.base_price_per_day = base_price_per_day;
+        if (base_price_per_hour !== undefined) updateData.base_price_per_hour = base_price_per_hour;
+        if (description !== undefined) updateData.description = description;
+        if (amenities !== undefined) updateData.amenities = amenities;
+        if (status !== undefined) updateData.status = status;
+
+        const { data: hall, error } = await supabase
+            .from('conference_halls')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            data: hall
+        });
+
+        logger.info(`Conference hall updated: ${id}`);
+    } catch (error) {
+        next(error);
+    }
+};
+
 // @desc    Check conference hall availability
 // @route   GET /api/conference/halls/:id/availability
 // @access  Private
@@ -138,6 +179,7 @@ export const getConferenceBookings = async (
     try {
         const branchId = req.query.branch_id || req.user?.branch_id;
         const { status, startDate, endDate } = req.query;
+        const invoiceNumber = req.params.invoice_number;
 
         let query = supabase
             .from('conference_hall_bookings')
@@ -160,9 +202,47 @@ export const getConferenceBookings = async (
 
         if (error) throw error;
 
+        // Parse metadata from notes field
+        const enrichedBookings = (bookings || []).map(booking => {
+            if (booking.notes && booking.notes.includes('__METADATA__:')) {
+                try {
+                    const parts = booking.notes.split('__METADATA__:');
+                    const actualNotes = parts[0].trim();
+                    const metadataStr = parts[1];
+                    const metadata = JSON.parse(metadataStr);
+                    
+                    logger.info(`Parsed metadata for booking ${booking.id}: ${JSON.stringify(metadata)}`);
+                    
+                    return {
+                        ...booking,
+                        notes: actualNotes || null,
+                        ...metadata
+                    };
+                } catch (e) {
+                    logger.error(`Failed to parse metadata for booking ${booking.id}: ${e}`);
+                    // If parsing fails, return as is
+                    return booking;
+                }
+            }
+            return booking;
+        });
+
+        // If looking up by invoice number, filter and return single result
+        if (invoiceNumber) {
+            const booking = enrichedBookings.find(b => b.invoice_number === invoiceNumber);
+            if (!booking) {
+                throw new AppError('Conference booking not found', 404);
+            }
+            res.status(200).json({
+                success: true,
+                data: booking
+            });
+            return;
+        }
+
         res.status(200).json({
             success: true,
-            data: bookings
+            data: enrichedBookings
         });
     } catch (error) {
         next(error);
@@ -187,7 +267,6 @@ export const createConferenceBooking = async (
             customer_email,
             start_date,
             end_date,
-            activity_type,
             num_participants,
             amount_per_pax,
             meal_plan_details,
@@ -199,17 +278,16 @@ export const createConferenceBooking = async (
 
         const branch_id = req.body.branch_id || req.user?.branch_id;
         const created_by = req.user?.id;
-        const booked_by_name = req.user?.name || 'Staff';
 
-        if (!conference_hall_id || !start_date || !end_date || !customer_name) {
-            throw new AppError('Missing required booking fields', 400);
-        }
-
-        // Generate Invoice Number: CNF-YYYYMMDD-XXXX
+        // Generate Invoice Number for reference: CNF-YYYYMMDD-XXXX
         const today = new Date();
         const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
         const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
         const invoice_number = `CNF-${dateStr}-${randomStr}`;
+
+        if (!conference_hall_id || !start_date || !end_date || !customer_name) {
+            throw new AppError('Missing required booking fields', 400);
+        }
 
         // Check for existing bookings in that time range
         const { data: existing, error: checkError } = await supabase
@@ -270,38 +348,60 @@ export const createConferenceBooking = async (
             });
         }
 
+        // Store additional details in notes as JSON metadata
+        const metadata = {
+            invoice_number,
+            company_name,
+            contact_person,
+            num_participants,
+            amount_per_pax,
+            meal_plan_details,
+            amenities_details,
+            program_schedule,
+            payment_mode
+        };
+        
+        logger.info(`Conference booking metadata: ${JSON.stringify(metadata)}`);
+        
+        const notesWithMetadata = notes 
+            ? `${notes}\n\n__METADATA__:${JSON.stringify(metadata)}`
+            : `__METADATA__:${JSON.stringify(metadata)}`;
+
         const { data: booking, error } = await supabase
             .from('conference_hall_bookings')
             .insert([{
                 conference_hall_id,
                 branch_id,
-                company_name,
-                contact_person,
                 customer_name,
                 customer_phone,
                 customer_email,
                 start_date,
                 end_date,
-                activity_type,
-                num_participants,
-                amount_per_pax,
-                meal_plan_details,
-                program_schedule,
-                amenities_details,
-                payment_mode,
-                invoice_number,
+                invoice_number,  // Add invoice_number as a proper column
                 total_amount: calculatedTotal || req.body.total_amount || 0,
                 amount_paid: 0,
                 payment_status: 'pending',
                 booking_status: 'confirmed',
-                notes,
-                created_by,
-                booked_by_name
+                notes: notesWithMetadata,
+                created_by
             }])
             .select()
             .single();
 
         if (error) throw error;
+
+        // Update hall status to 'occupied' when booking is confirmed
+        const now = new Date();
+        const bookingStart = new Date(start_date);
+        const bookingEnd = new Date(end_date);
+        
+        // If booking starts today or is already ongoing, mark hall as occupied
+        if (bookingStart <= now && bookingEnd >= now) {
+            await supabase
+                .from('conference_halls')
+                .update({ status: 'occupied' })
+                .eq('id', conference_hall_id);
+        }
 
         // =====================================================
         // PHASE 2: KITCHEN INTEGRATION
@@ -316,7 +416,7 @@ export const createConferenceBooking = async (
                     order_number: orderNumber || `CNF-ORD-${booking.id.slice(0, 4)}`,
                     order_type: 'room_service', // Mapping to room_service for kitchen visibility
                     guest_name: company_name || customer_name,
-                    special_instructions: `CONFERENCE MEAL: ${activity_type || 'Event'} (PAX: ${num_participants}). Booking Ref: ${invoice_number}`,
+                    special_instructions: `CONFERENCE MEAL: ${company_name || customer_name} (PAX: ${num_participants}). Booking Ref: ${invoice_number}`,
                     total_amount: 0,
                     payment_method: payment_mode || 'Invoice',
                     payment_status: 'pending',
@@ -547,6 +647,66 @@ export const addConferencePayment = async (
             }
         });
 
+    } catch (error) {
+        next(error);
+    }
+};
+
+
+/**
+ * @desc    Auto-update conference hall statuses based on current bookings
+ * @route   POST /api/conference/halls/auto-update-status
+ * @access  Private (System/Admin)
+ */
+export const autoUpdateHallStatuses = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const now = new Date();
+        
+        // Get all halls
+        const { data: halls, error: hallsError } = await supabase
+            .from('conference_halls')
+            .select('id, status');
+        
+        if (hallsError) throw hallsError;
+        
+        for (const hall of halls || []) {
+            // Check if hall has any active bookings (ongoing right now)
+            const { data: activeBookings, error: bookingsError } = await supabase
+                .from('conference_hall_bookings')
+                .select('id, start_date, end_date')
+                .eq('conference_hall_id', hall.id)
+                .eq('booking_status', 'confirmed')
+                .lte('start_date', now.toISOString())
+                .gte('end_date', now.toISOString());
+            
+            if (bookingsError) {
+                logger.error(`Error checking bookings for hall ${hall.id}: ${bookingsError.message}`);
+                continue;
+            }
+            
+            // Update status based on active bookings
+            const newStatus = (activeBookings && activeBookings.length > 0) ? 'occupied' : 'available';
+            
+            // Only update if status changed and not in maintenance
+            if (hall.status !== 'maintenance' && hall.status !== newStatus) {
+                await supabase
+                    .from('conference_halls')
+                    .update({ status: newStatus })
+                    .eq('id', hall.id);
+                
+                logger.info(`Hall ${hall.id} status updated from ${hall.status} to ${newStatus}`);
+            }
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: 'Hall statuses updated successfully'
+        });
+        
     } catch (error) {
         next(error);
     }

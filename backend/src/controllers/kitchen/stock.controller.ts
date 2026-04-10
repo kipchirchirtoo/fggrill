@@ -13,7 +13,7 @@ export const getKitchenStock = async (req: Request, res: Response) => {
         let query = supabase
             .from('kitchen_stock')
             .select('*')
-            .order('item_name');
+            .order('item_sku');
 
         query = applyBranchFilter(query, req);
 
@@ -29,7 +29,30 @@ export const getKitchenStock = async (req: Request, res: Response) => {
 
         if (error) throw error;
 
-        res.json({ success: true, data });
+        // Fetch item names from inventory_items table
+        if (data && data.length > 0) {
+            const skus = data.map((item: any) => item.item_sku);
+            const { data: inventoryItems } = await supabase
+                .from('inventory_items')
+                .select('sku, item_name, description')
+                .in('sku', skus);
+
+            // Create a map of SKU to item name
+            const itemNameMap = new Map();
+            inventoryItems?.forEach((item: any) => {
+                itemNameMap.set(item.sku, item.item_name || item.description);
+            });
+
+            // Update item names in kitchen stock data
+            const mappedData = data.map((stock: any) => ({
+                ...stock,
+                item_name: itemNameMap.get(stock.item_sku) || stock.item_name || 'Unknown Item'
+            }));
+
+            res.json({ success: true, data: mappedData });
+        } else {
+            res.json({ success: true, data: [] });
+        }
     } catch (error: any) {
         console.error('Error fetching kitchen stock:', error);
         res.status(500).json({ success: false, message: error.message });
@@ -76,7 +99,30 @@ export const getKitchenLedger = async (req: Request, res: Response) => {
 
         if (error) throw error;
 
-        res.json({ success: true, data });
+        // Fetch item names from inventory_items table
+        if (data && data.length > 0) {
+            const skus = [...new Set(data.map((item: any) => item.item_sku))];
+            const { data: inventoryItems } = await supabase
+                .from('inventory_items')
+                .select('sku, item_name, description')
+                .in('sku', skus);
+
+            // Create a map of SKU to item name
+            const itemNameMap = new Map();
+            inventoryItems?.forEach((item: any) => {
+                itemNameMap.set(item.sku, item.item_name || item.description);
+            });
+
+            // Update item names in ledger data
+            const mappedData = data.map((ledger: any) => ({
+                ...ledger,
+                item_name: itemNameMap.get(ledger.item_sku) || ledger.item_name || 'Unknown Item'
+            }));
+
+            res.json({ success: true, data: mappedData });
+        } else {
+            res.json({ success: true, data: [] });
+        }
     } catch (error: any) {
         console.error('Error fetching kitchen ledger:', error);
         res.status(500).json({ success: false, message: error.message });

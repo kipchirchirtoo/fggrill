@@ -2,12 +2,14 @@ import express from 'express';
 import {
     getHalls,
     createHall,
+    updateHall,
     getConferenceBookings,
     createConferenceBooking,
     updateConferenceBookingStatus,
     getBookingInvoice,
     addConferencePayment,
-    checkHallAvailability
+    checkHallAvailability,
+    autoUpdateHallStatuses
 } from '../controllers/conference.controller';
 
 import {
@@ -28,9 +30,12 @@ router.use(protect);
 router.get('/halls', getHalls);
 router.get('/halls/:id/availability', checkHallAvailability);
 router.post('/halls', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), createHall);
+router.patch('/halls/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST]), updateHall);
+router.post('/halls/auto-update-status', autoUpdateHallStatuses);
 
 // Bookings management
 router.get('/bookings', getConferenceBookings);
+router.get('/bookings/by-invoice/:invoice_number', getConferenceBookings); // Lookup by invoice number
 router.post('/bookings', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST]), createConferenceBooking);
 router.patch('/bookings/:id/status', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST]), updateConferenceBookingStatus);
 router.get('/bookings/:id/invoice', getBookingInvoice);

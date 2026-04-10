@@ -173,38 +173,9 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
         doc.text(po.notes, margin, cursorY, { maxWidth: 170 });
     }
 
-    // 7. Bank Details + Branch
+    // 7. Footer Info
     cursorY += po.notes ? 20 : 20;
     if (cursorY > 230) { doc.addPage(); cursorY = 20; }
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(44, 62, 80);
-    doc.text('PAYMENT DETAILS:', margin, cursorY);
-    cursorY += 6;
-
-    autoTable(doc, {
-        startY: cursorY,
-        body: [
-            ['AC Name:', 'FAMOUS GATES LIMITED'],
-            ['AC No:', '2041305757'],
-            ['Bank:', 'ABSA BANK'],
-            ['Branch:', 'BOMET'],
-        ],
-        theme: 'plain',
-        styles: { fontSize: 9, cellPadding: 2 },
-        columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 35, textColor: [44, 62, 80] },
-            1: { cellWidth: 95 }
-        },
-        margin: { left: margin, right: margin }
-    });
-
-    if ((doc as any).lastAutoTable) {
-        cursorY = (doc as any).lastAutoTable.finalY + 5;
-    } else {
-        cursorY += 30;
-    }
 
     doc.setFontSize(9);
     doc.setFont('helvetica', 'italic');

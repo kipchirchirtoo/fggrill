@@ -41,6 +41,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { CashierModals } from '@/components/modals/CashierModals';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
+import { downloadConferenceInvoicePDF, printConferenceInvoicePDF } from '@/lib/conference-invoice-pdf';
 
 // Types
 interface Room {
@@ -540,9 +541,34 @@ export default function ReceptionDashboard(): JSX.Element {
                       <IOSCard key={hall.id} className="p-4 bg-white border-none shadow-sm">
                         <div className="flex justify-between items-start mb-2">
                           <h4 className="font-bold text-stone-900">{hall.name}</h4>
-                          <IOSBadge color={hall.status === 'available' ? 'success' : 'warning'}>
-                            {hall.status}
-                          </IOSBadge>
+                          <select
+                            value={hall.status}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value;
+                              try {
+                                await conferenceAPI.updateHall(hall.id, { status: newStatus });
+                                toast.success(`Hall status updated to ${newStatus}`);
+                                // Refresh halls
+                                const hallsRes = await conferenceAPI.getHalls(activeBranchId as any);
+                                if (hallsRes.success) {
+                                  setConferenceHalls(hallsRes.data || []);
+                                }
+                              } catch (error) {
+                                toast.error('Failed to update hall status');
+                              }
+                            }}
+                            className={`px-2 py-1 text-xs font-medium rounded-full border-none cursor-pointer ${
+                              hall.status === 'available' ? 'bg-emerald-50 text-emerald-700' :
+                              hall.status === 'occupied' ? 'bg-blue-50 text-blue-700' :
+                              hall.status === 'maintenance' ? 'bg-amber-50 text-amber-700' :
+                              'bg-stone-50 text-stone-700'
+                            }`}
+                          >
+                            <option value="available">Available</option>
+                            <option value="occupied">Occupied</option>
+                            <option value="maintenance">Maintenance</option>
+                            <option value="unavailable">Unavailable</option>
+                          </select>
                         </div>
                         <p className="text-sm text-stone-500 mb-3 line-clamp-2">{hall.description}</p>
                         <div className="flex items-center gap-4 text-xs text-stone-600">
@@ -610,22 +636,56 @@ export default function ReceptionDashboard(): JSX.Element {
                                 )}
                               </td>
                               <td className="px-4 py-3 flex gap-2">
-                                <IOSButton
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => window.open(`/api/conference/bookings/${b.id}/invoice`, '_blank')}
-                                  className="h-8 px-3 text-xs"
-                                >
-                                  Invoice
-                                </IOSButton>
-                                {b.payment_status !== 'paid' && (
+                                <div className="flex gap-1">
                                   <IOSButton
                                     size="sm"
-                                    onClick={() => {
-                                      setSelectedConferenceBooking(b);
-                                      setShowPaymentModal(true);
+                                    variant="secondary"
+                                    onClick={async () => {
+                                      try {
+                                        await downloadConferenceInvoicePDF(b);
+                                        toast.success('Invoice downloaded');
+                                      } catch (error) {
+                                        toast.error('Failed to download invoice');
+                                      }
                                     }}
-                                    className="h-8 px-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white border-none"
+                                    className="h-8 px-2 text-xs"
+                                    title="Download Invoice"
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                  </IOSButton>
+                                  <IOSButton
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={async () => {
+                                      try {
+                                        await printConferenceInvoicePDF(b);
+                                        toast.success('Invoice sent to printer');
+                                      } catch (error) {
+                                        toast.error('Failed to print invoice');
+                                      }
+                                    }}
+                                    className="h-8 px-2 text-xs"
+                                    title="Print Invoice"
+                                  >
+                                    <Receipt className="h-3.5 w-3.5" />
+                                  </IOSButton>
+                                </div>
+                                {b.payment_status !== 'paid' && b.invoice_number && (
+                                  <Link href={`/dashboard/cashier?invoice=${b.invoice_number}`}>
+                                    <IOSButton
+                                      size="sm"
+                                      className="h-8 px-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white border-none"
+                                    >
+                                      Pay
+                                    </IOSButton>
+                                  </Link>
+                                )}
+                                {b.payment_status !== 'paid' && !b.invoice_number && (
+                                  <IOSButton
+                                    size="sm"
+                                    disabled
+                                    className="h-8 px-3 text-xs opacity-50"
+                                    title="Invoice number not generated"
                                   >
                                     Pay
                                   </IOSButton>
