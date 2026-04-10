@@ -1,6 +1,7 @@
 import { Request } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from './logger';
+import { getRealIP, normalizeIP, getGeolocation, getDeviceFingerprint, checkIPReputation } from '../services/geolocation.service';
 
 interface LogAuthParams {
   email: string;
@@ -23,26 +24,64 @@ export const logAuthAttempt = async ({
   authMethod = 'password'
 }: LogAuthParams) => {
   try {
-    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    // Get real IP address (handles proxies, load balancers, etc.)
+    const rawIP = getRealIP(req);
+    const ipAddress = normalizeIP(rawIP);
+    
+    const userAgent = req.headers['user-agent'] || '';
 
-    // Simple device/browser parsing (In a real app, use a more robust parser)
-    const deviceInfo = {
-      userAgent,
-      platform: req.headers['sec-ch-ua-platform'] || 'Unknown'
-    };
+    // Get device fingerprint
+    const deviceInfo = getDeviceFingerprint(userAgent);
 
-    const { error } = await supabase.from('auth_logs').insert({
+    // Get geolocation data (async, don't block the request)
+    let geoData = null;
+    let ipReputation = null;
+    
+    try {
+      [geoData, ipReputation] = await Promise.all([
+        getGeolocation(ipAddress),
+        checkIPReputation(ipAddress)
+      ]);
+    } catch (geoError) {
+      logger.warn('Failed to fetch geolocation/reputation data:', geoError);
+    }
+
+    // Prepare log entry
+    const logEntry: any = {
       user_id: userId,
       email,
       status,
-      ip_address: typeof ipAddress === 'string' ? ipAddress : JSON.stringify(ipAddress),
+      ip_address: ipAddress,
       user_agent: userAgent,
       device_info: deviceInfo,
       auth_method: authMethod,
-      message,
+      message: message || (status === 'success' ? 'Login successful' : 'Login failed'),
       created_at: new Date().toISOString()
-    });
+    };
+
+    // Add geolocation data if available
+    if (geoData) {
+      logEntry.geo_country = geoData.country;
+      logEntry.geo_country_code = geoData.country_code;
+      logEntry.geo_region = geoData.region;
+      logEntry.geo_city = geoData.city;
+      logEntry.geo_latitude = geoData.latitude;
+      logEntry.geo_longitude = geoData.longitude;
+      logEntry.geo_timezone = geoData.timezone;
+      logEntry.geo_isp = geoData.isp;
+      logEntry.is_proxy = geoData.is_proxy;
+      logEntry.is_vpn = geoData.is_vpn;
+      logEntry.is_datacenter = geoData.is_datacenter;
+    }
+
+    // Add reputation data if available
+    if (ipReputation) {
+      logEntry.threat_score = ipReputation.threat_score;
+      logEntry.is_suspicious = ipReputation.is_suspicious;
+      logEntry.threat_reason = ipReputation.reason;
+    }
+
+    const { error } = await supabase.from('auth_logs').insert(logEntry);
 
     if (error) {
       logger.error('Failed to insert auth_log:', error);
@@ -94,7 +133,12 @@ export const recordAuditTrail = async (params: {
   req?: Request;
 }) => {
   try {
-    const ipAddress = params.req ? (params.req.ip || params.req.headers['x-forwarded-for'] || params.req.socket.remoteAddress) : null;
+    // Get real IP address if request is provided
+    let ipAddress = 'system';
+    if (params.req) {
+      const rawIP = getRealIP(params.req);
+      ipAddress = normalizeIP(rawIP);
+    }
     
     await supabase.from('audit_trail').insert({
       user_id: params.userId,
@@ -103,7 +147,7 @@ export const recordAuditTrail = async (params: {
       entity_id: params.entityId,
       old_values: params.oldValues,
       new_values: params.newValues,
-      ip_address: typeof ipAddress === 'string' ? ipAddress : JSON.stringify(ipAddress),
+      ip_address: ipAddress,
       user_agent: params.req?.headers['user-agent'],
       performed_at: new Date().toISOString()
     });

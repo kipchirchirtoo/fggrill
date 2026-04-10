@@ -272,10 +272,10 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/admin'}
       />
       <NavItem
-        href="/dashboard/superadmin/audit-logs"
+        href="/dashboard/super/admin/security"
         icon={ShieldCheck}
-        label="Audit & Security Logs"
-        active={pathname === '/dashboard/superadmin/audit-logs'}
+        label="Security Center"
+        active={pathname === '/dashboard/super/admin/security' || pathname === '/dashboard/superadmin/audit-logs'}
       />
       <NavItem
         href="/dashboard/superadmin/behavior-intelligence"
