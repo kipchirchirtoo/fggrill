@@ -1,5 +1,5 @@
 // Service Worker for Famous Gates Hotels
-const CACHE_NAME = 'fg-hotels-cache-v4';
+const CACHE_NAME = 'fg-hotels-cache-v5';
 const DB_NAME = 'fg-hotels-offline-v3';
 const DB_VERSION = 1;
 
@@ -63,8 +63,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API and RSC handling
-  if (url.pathname.startsWith('/api/') || url.searchParams.has('_rsc')) {
+  // API and RSC handling — bypass cache for all API calls (local and external)
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.searchParams.has('_rsc') ||
+    url.hostname !== self.location.hostname
+  ) {
     event.respondWith(fetch(request).catch(() => {
         return new Response(JSON.stringify({ error: 'Offline' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
     }));
@@ -89,4 +93,4 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-console.log('[SW] Service Worker v3 loaded');
+console.log('[SW] Service Worker v5 loaded');

@@ -1759,7 +1759,7 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
 
     // 2. Group by branch if no specific branch requested
     const branchSummaries: Record<string, any> = {};
-    if (!branch_id || branch_id === '0') {
+    if (!effectiveBranchId || effectiveBranchId === '0') {
       branches?.forEach(b => {
         const branchReqs = requests?.filter(r => r.requesting_branch_id === b.id) || [];
         branchSummaries[b.id] = {

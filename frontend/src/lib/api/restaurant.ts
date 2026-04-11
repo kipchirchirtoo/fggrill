@@ -115,7 +115,16 @@ export const restaurantAPI = {
   getTerminals: (branchId?: number) => fetchAPI<any>(`/restaurant/terminals${buildQuery({ branch_id: branchId })}`),
   getCategories: (branchId?: number) => restaurantAPI.getMenuCategories(branchId),
   getWastageItems: (params?: any) => fetchAPI<any[]>(`/restaurant/wastage/items${buildQuery(params)}`),
-  getMyOrders: () => fetchAPI<any[]>('/restaurant/my-orders'),
+  getMyOrders: (createdBy?: string, branchId?: number, filters?: { from_date?: string; to_date?: string; waiter_id?: string; status?: string }) =>
+    fetchAPI<any>(`/restaurant/orders${buildQuery({
+      created_by: createdBy || undefined,
+      branch_id: branchId,
+      from_date: filters?.from_date,
+      to_date: filters?.to_date,
+      waiter_id: filters?.waiter_id,
+      status: filters?.status,
+      limit: 200,
+    })}`),
 
   uploadMenuItemImage: (id: string, file: File) => {
     const formData = new FormData();

@@ -32,7 +32,7 @@ export const printBrandedBill = ({ billData, activeBranch, user, items, billType
     totalAmount: number
 }) => {
     const branch = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: 'P051503313Y', email: 'famousgatesbmt@gmail.com' } };
-    const companyName = (branch.name || 'FAMOUS GATES HOTELS').toUpperCase();
+    const companyName = 'FAMOUSGATE HOTELS';
     const companyAddress = branch.location || 'Bomet, Kenya';
     const companyPhone = branch.settings?.phone || '0706782828';
     const companyEmail = branch.settings?.email || 'famousgatesbmt@gmail.com';

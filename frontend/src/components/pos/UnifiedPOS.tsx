@@ -347,7 +347,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
             }));
             const totalAmount = orderData.total || orderData.total_amount;
             const b = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'famousgatesbmt@gmail.com' } };
-            const companyName = b.name.toUpperCase();
+            const companyName = 'FAMOUSGATE HOTELS';
+            const companyBranch = b.name && b.name.toUpperCase() !== 'FAMOUSGATE HOTELS' && b.name.toUpperCase() !== 'FAMOUS GATE HOTELS' && b.name.toUpperCase() !== 'FAMOUS GATES HOTELS' ? b.name.toUpperCase() : '';
             const companyAddress = b.location;
             const companyPhone = b.settings?.phone || '0706782828';
             const companyEmail = b.settings?.email || 'famousgatesbmt@gmail.com';
@@ -406,6 +407,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                 <img src="/fglogo.png" style="width: 24mm; height: 24mm; object-fit: contain;" onerror="this.style.display='none'">
                             </div>
                             <div class="bold header-title">${companyName}</div>
+                            ${companyBranch ? `<div>${companyBranch}</div>` : ''}
                             <div>${companyAddress}</div>
                             <div>Tel: ${companyPhone}</div>
                             <div class="bold receipt-type">${(orderData.status === 'pending' || orderData.status === 'kitchen_ready' ? 'PROFORMA BILL' : (orderData.receipt_type || 'CASH RECEIPT')).toUpperCase()}</div>
