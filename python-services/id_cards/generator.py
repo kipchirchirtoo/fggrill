@@ -88,19 +88,28 @@ class IDCardGenerator:
         c.setLineWidth(0.5*mm)
         c.circle(photo_cnt_x, photo_cnt_y, radius + 1*mm, fill=0, stroke=1)
         
-        # Photo Clipping
+        # Photo Clipping - Create circular mask
         path = c.beginPath()
         path.circle(photo_cnt_x, photo_cnt_y, radius)
         c.clipPath(path, stroke=0)
         
+        # Fill background with white first (for transparency)
+        c.setFillColor(colors.white)
+        c.circle(photo_cnt_x, photo_cnt_y, radius, fill=1, stroke=0)
+        
         # Draw Photo
         photo_path = data.get('photo_path')
+        photo_url = data.get('photo_url')
         img_obj = None
+        
+        print(f"[Generator] photo_path: {photo_path}")
+        print(f"[Generator] photo_url: {photo_url}")
         
         if photo_path:
             try:
                 if photo_path.startswith(('http://', 'https://')):
                     import urllib.request
+                    print(f"[Generator] Downloading from URL: {photo_path}")
                     # Add User-Agent to avoid 403 Forbidden on some servers
                     req = urllib.request.Request(
                         photo_path, 
@@ -110,20 +119,51 @@ class IDCardGenerator:
                     with urllib.request.urlopen(req, timeout=10) as response:
                         img_data = response.read()
                         img_obj = io.BytesIO(img_data)
+                        print(f"[Generator] Downloaded {len(img_data)} bytes")
                 elif os.path.exists(photo_path):
-                    img_obj = photo_path
+                    print(f"[Generator] Loading from file: {photo_path}")
+                    # Read file into BytesIO for ImageReader
+                    with open(photo_path, 'rb') as f:
+                        img_data = f.read()
+                        img_obj = io.BytesIO(img_data)
+                        print(f"[Generator] Loaded {len(img_data)} bytes from file")
+                else:
+                    print(f"[Generator] Photo path does not exist: {photo_path}")
             except Exception as e:
-                print(f"Error loading image: {e}")
-                pass
+                print(f"[Generator] Error loading image: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[Generator] No photo_path provided")
 
         if img_obj:
             try:
+                print(f"[Generator] Creating ImageReader from img_obj")
                 img = ImageReader(img_obj)
-                c.drawImage(img, photo_cnt_x - radius, photo_cnt_y - radius, 
-                          width=2*radius, height=2*radius, preserveAspectRatio=True, anchor='c')
-            except:
+                
+                # Get image dimensions
+                img_width, img_height = img.getSize()
+                print(f"[Generator] Image size: {img_width}x{img_height}")
+                
+                # Calculate position to center the image in the circle
+                x_pos = photo_cnt_x - radius
+                y_pos = photo_cnt_y - radius
+                size = 2 * radius
+                
+                print(f"[Generator] Drawing image at ({x_pos}, {y_pos}) with size {size}")
+                
+                # Draw image - fill the circle completely
+                c.drawImage(img, x_pos, y_pos, 
+                          width=size, height=size, 
+                          preserveAspectRatio=True, mask='auto')
+                print(f"[Generator] Image drawn successfully!")
+            except Exception as e:
+                print(f"[Generator] Error drawing image: {e}")
+                import traceback
+                traceback.print_exc()
                 self._draw_placeholder_photo(c, photo_cnt_x, photo_cnt_y, radius)
         else:
+            print("[Generator] No img_obj, drawing placeholder")
             self._draw_placeholder_photo(c, photo_cnt_x, photo_cnt_y, radius)
         c.restoreState()
 
@@ -247,7 +287,7 @@ class IDCardGenerator:
         # 4. QR Code (Left Side Bottom)
         # QR Data points to verification URL
         id_no = data.get('id_no', 'N/A')
-        verify_url = f"https://kyogongs.hirall.com/verify?id={id_no}"
+        verify_url = f"https://famousgate.hirall.com/verify?id={id_no}"
         
         qr_size = 18*mm
         qr_x = self.width - qr_size - 5*mm

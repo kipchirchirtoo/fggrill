@@ -179,6 +179,7 @@ export async function updateBranchStock(
           type: 'warning',
           category: 'stock',
           priority: 'medium',
+          branchId: branchId,
           actionUrl: `/dashboard/branch-store/stock-out?branch_id=${branchId}`,
           metadata: {
             branch_id: branchId,
@@ -288,6 +289,7 @@ export async function createStockRequest(
         type: 'info',
         category: 'stock',
         priority: priority === 'URGENT' ? 'urgent' : 'medium',
+        branchId: branchId,
         actionUrl: '/dashboard/auditor/approvals',
         metadata: {
           request_id: request.id,

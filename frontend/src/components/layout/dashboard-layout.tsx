@@ -95,7 +95,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                         <div className="w-9 h-9 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
                           <Image
                             src="/fglogo.png"
-                            alt="Kyogong"
+                            alt="FamousGate Hotels"
                             width={28}
                             height={28}
                             className="object-cover scale-150"
@@ -171,7 +171,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
                         <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center overflow-hidden">
                           <Image
                             src="/fglogo.png"
-                            alt="Kyogong"
+                            alt="FamousGate Hotels"
                             width={24}
                             height={24}
                             className="object-cover scale-150"

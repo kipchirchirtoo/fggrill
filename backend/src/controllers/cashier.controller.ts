@@ -3263,11 +3263,13 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
 
         if (updateError) throw updateError;
 
-        // Notify Auditor and Accountant
+        // Notify Auditor and Accountant — scoped to the cashier's branch
+        const cashierBranchId = req.user?.branch_id;
         const notificationData = {
             type: 'warning' as const,
             category: 'audit',
             priority: 'medium' as const,
+            branchId: cashierBranchId,
             actionUrl: `/dashboard/auditor/financial-verification`,
             metadata: { logbook_id: id, type: 'cashier_logbook', cashier_id }
         };

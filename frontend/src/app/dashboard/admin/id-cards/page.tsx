@@ -164,16 +164,17 @@ export default function IDCardsManagementPage() {
                 // Flatten the staff objects for easier consumption in the UI
                 const flattenedStaff = (res.data || []).map((s: any) => ({
                     ...s,
-                    first_name: s.user?.first_name || s.first_name || '',
-                    last_name: s.user?.last_name || s.last_name || '',
-                    email: s.user?.email || s.email || '',
-                    phone_number: s.user?.phone_number || s.phone || '',
+                    first_name: s.first_name || s.user?.first_name || '',
+                    last_name: s.last_name || s.user?.last_name || '',
+                    email: s.email || s.user?.email || '',
+                    phone_number: s.phone || s.user?.phone_number || '',
                     role: s.user?.role || s.role || 'Staff',
                     employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
                     id_number: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
                     start_date: s.start_date,
                     national_id: s.national_id || '',
-                    profile_photo: s.user?.avatar || s.profile_photo || null
+                    // Prioritize profile_photo from staff_profiles over user avatar
+                    profile_photo: s.profile_photo || s.user?.avatar || null
                 }));
                 setEmployees(flattenedStaff);
             }
@@ -250,6 +251,12 @@ export default function IDCardsManagementPage() {
 
     const handlePhotoUpload = async () => {
         if (!selectedFile || !uploadEmployee) return;
+
+        // Validate staff ID
+        if (!uploadEmployee.id || uploadEmployee.id === 'null' || uploadEmployee.id === null) {
+            toast.error('Invalid staff member ID. Please refresh and try again.');
+            return;
+        }
 
         setIsUploading(true);
         try {

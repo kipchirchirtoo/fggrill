@@ -121,6 +121,19 @@ export const idCardsAPI = {
     });
     return result.data;
   },
+  
+  preview: async (data: any, photo?: File) => {
+    const formData = new FormData();
+    formData.append('data', JSON.stringify(data));
+    if (photo) formData.append('photo', photo);
+
+    const result = await fetchPythonAPI<Blob>('/id-cards/preview', {
+      method: 'POST',
+      body: formData,
+      responseType: 'blob'
+    });
+    return result.data;
+  },
 };
 
 export const documentsAPI = {

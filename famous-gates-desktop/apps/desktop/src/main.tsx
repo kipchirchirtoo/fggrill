@@ -2,13 +2,14 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from 'sonner';
 import { router } from './routes/router';
 import { AppStateProvider } from './state/AppStateProvider';
 import { NetworkMonitor } from './components/NetworkMonitor';
 import { LicenseGate } from './components/LicenseGate';
 import { UpdateManager } from './components/UpdateManager';
 import './assets/styles/globals.css';
+// NOTE: No Toaster import here — the app is a full-screen iframe (SiteView).
+// Toasts live inside the Next.js app loaded by that iframe, not in this shell.
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,7 +31,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <NetworkMonitor />
           <UpdateManager />
           <RouterProvider router={router} />
-          <Toaster position="top-right" richColors closeButton />
+          {/* No <Toaster /> — it would be hidden under the full-screen SiteView iframe */}
         {/* </LicenseGate> */}
       </AppStateProvider>
     </QueryClientProvider>

@@ -182,8 +182,8 @@ export const getStaff = async (
       last_name: s.last_name || s.user?.last_name || '',
       email: s.email || s.user?.email || '',
       phone_number: s.phone || s.user?.phone_number || '',
-      avatar: s.user?.avatar || '',
-      profile_photo: s.user?.avatar || s.profile_photo,
+      avatar: s.profile_photo || s.user?.avatar || '', // Prioritize staff_profiles.profile_photo
+      profile_photo: s.profile_photo || s.user?.avatar || '', // Prioritize staff_profiles.profile_photo
       employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
       id_number: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase()
     }));
@@ -283,8 +283,8 @@ export const getStaffMember = async (
         last_name: staff.last_name || staff.user?.last_name || '',
         email: staff.email || staff.user?.email || '',
         phone_number: staff.phone || staff.user?.phone_number || '',
-        avatar: staff.user?.avatar || '',
-        profile_photo: staff.user?.avatar || staff.profile_photo,
+        avatar: staff.profile_photo || staff.user?.avatar || '', // Prioritize staff_profiles.profile_photo
+        profile_photo: staff.profile_photo || staff.user?.avatar || '', // Prioritize staff_profiles.profile_photo
         employee_id: staff.id_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase(),
         id_number: staff.id_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase()
       }
@@ -1937,13 +1937,26 @@ export const uploadStaffPhoto = async (
       return;
     }
 
-    logger.debug('Uploading staff photo:', { staffId: req.params.id, filename: file.originalname });
+    // Validate UUID format
+    const staffId = req.params.id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    if (!staffId || staffId === 'null' || staffId === 'undefined' || !uuidRegex.test(staffId)) {
+      logger.error('Invalid staff ID format:', staffId);
+      res.status(400).json({
+        success: false,
+        message: 'Invalid staff ID format. Expected a valid UUID.'
+      });
+      return;
+    }
 
-    // Get staff to find user_id
+    logger.debug('Uploading staff photo:', { staffId, filename: file.originalname });
+
+    // Verify staff exists
     const { data: staff, error: staffError } = await supabase
       .from('staff_profiles')
-      .select('user_id')
-      .eq('id', req.params.id)
+      .select('id, first_name, last_name')
+      .eq('id', staffId)
       .single();
 
     if (staffError || !staff) {
@@ -1955,9 +1968,9 @@ export const uploadStaffPhoto = async (
       return;
     }
 
-    // Upload to Supabase Storage using user_id for RLS compliance
+    // Upload to Supabase Storage in staff-photos bucket
     const fileExt = file.originalname.split('.').pop();
-    const fileName = `${staff.user_id}-${Date.now()}.${fileExt}`;
+    const fileName = `staff-photos/${staffId}-${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
       .from('profile')
@@ -1973,25 +1986,25 @@ export const uploadStaffPhoto = async (
 
     logger.info('Photo uploaded to storage:', data.path);
 
-    // Update user profile with photo path (avatar is in users table)
-    const { data: updatedUser, error: updateError } = await supabase
-      .from('users')
-      .update({ avatar: data.path })
-      .eq('id', staff.user_id)
+    // Update staff_profiles with photo path
+    const { data: updatedStaff, error: updateError } = await supabase
+      .from('staff_profiles')
+      .update({ profile_photo: data.path })
+      .eq('id', staffId)
       .select()
       .single();
 
     if (updateError) {
-      logger.error('Error updating user profile photo:', updateError);
+      logger.error('Error updating staff profile photo:', updateError);
       throw updateError;
     }
 
-    logger.info(`Staff photo updated successfully for user ${staff.user_id}`);
+    logger.info(`Staff photo updated successfully for staff ${staffId}`);
 
     res.status(200).json({
       success: true,
       data: {
-        user_id: staff.user_id,
+        staff_id: staffId,
         profile_photo: data.path,
         profile_photo_url: `${process.env.SUPABASE_PROJECT_URL}/storage/v1/object/public/profile/${data.path}`
       },

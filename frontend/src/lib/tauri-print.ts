@@ -131,8 +131,9 @@ export async function printHtml(
 /**
  * Open a blob URL (for jsPDF) in a printable overlay.
  * Uses an iframe overlay — works in both browser and Tauri (no data: URL window needed).
+ * The overlay includes Print and Download buttons.
  */
-export async function openBlobForPrint(blobUrl: string): Promise<void> {
+export async function openBlobForPrint(blobUrl: string, filename?: string): Promise<void> {
   // Detect if we're inside any iframe (Tauri RemoteWebView, or browser popup blocked)
   const isInsideIframe = (() => { try { return window.self !== window.top; } catch (_e) { return true; } })();
 
@@ -155,33 +156,76 @@ export async function openBlobForPrint(blobUrl: string): Promise<void> {
   if (existingFrame) existingFrame.remove();
   const existingOverlay = document.getElementById('__fg_pdf_overlay');
   if (existingOverlay) existingOverlay.remove();
-  const existingBtn = document.getElementById('__fg_pdf_close_btn');
-  if (existingBtn) existingBtn.remove();
+  const existingToolbar = document.getElementById('__fg_pdf_toolbar');
+  if (existingToolbar) existingToolbar.remove();
 
   const overlay = document.createElement('div');
   overlay.id = '__fg_pdf_overlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99998;';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99998;';
 
   const iframe = document.createElement('iframe');
   iframe.id = '__fg_pdf_frame';
   iframe.src = srcUrl;
-  iframe.style.cssText = 'position:fixed;top:5%;left:5%;width:90%;height:90%;z-index:99999;border:2px solid #333;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.4);background:white;';
+  iframe.style.cssText = 'position:fixed;top:48px;left:5%;width:90%;height:calc(90% - 48px);z-index:99999;border:none;border-radius:0 0 8px 8px;box-shadow:0 20px 60px rgba(0,0,0,0.4);background:white;';
+
+  // Toolbar with Print + Download + Close
+  const toolbar = document.createElement('div');
+  toolbar.id = '__fg_pdf_toolbar';
+  toolbar.style.cssText = 'position:fixed;top:5%;left:5%;width:90%;height:40px;z-index:100000;background:#1a1a1a;border-radius:8px 8px 0 0;display:flex;align-items:center;justify-content:space-between;padding:0 12px;gap:8px;';
+
+  const titleSpan = document.createElement('span');
+  titleSpan.textContent = filename ? `📄 ${filename}` : '📄 Document Preview';
+  titleSpan.style.cssText = 'color:#ccc;font-size:13px;font-family:system-ui,sans-serif;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+
+  const btnStyle = 'border:none;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:system-ui,sans-serif;';
+
+  const printBtn = document.createElement('button');
+  printBtn.innerHTML = '🖨 Print';
+  printBtn.style.cssText = btnStyle + 'background:#007AFF;color:white;';
+  printBtn.onclick = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (_) {
+      // If iframe print is blocked, open in new tab
+      const a = document.createElement('a');
+      a.href = srcUrl;
+      a.target = '_blank';
+      a.click();
+    }
+  };
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.innerHTML = '⬇ Download';
+  downloadBtn.style.cssText = btnStyle + 'background:#34C759;color:white;';
+  downloadBtn.onclick = () => {
+    const a = document.createElement('a');
+    a.href = srcUrl;
+    a.download = filename || 'document.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   const closeBtn = document.createElement('button');
-  closeBtn.id = '__fg_pdf_close_btn';
-  closeBtn.innerHTML = '✕ Close Preview';
-  closeBtn.style.cssText = 'position:fixed;top:2%;right:6%;z-index:100000;background:#111;color:white;border:none;padding:8px 20px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;';
+  closeBtn.innerHTML = '✕ Close';
+  closeBtn.style.cssText = btnStyle + 'background:#3a3a3a;color:#ccc;';
 
   const cleanup = () => {
     iframe.remove();
     overlay.remove();
-    closeBtn.remove();
+    toolbar.remove();
   };
 
   overlay.onclick = cleanup;
   closeBtn.onclick = cleanup;
 
+  toolbar.appendChild(titleSpan);
+  toolbar.appendChild(printBtn);
+  toolbar.appendChild(downloadBtn);
+  toolbar.appendChild(closeBtn);
+
   document.body.appendChild(overlay);
+  document.body.appendChild(toolbar);
   document.body.appendChild(iframe);
-  document.body.appendChild(closeBtn);
 }

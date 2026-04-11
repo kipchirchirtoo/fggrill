@@ -262,7 +262,7 @@ export const downloadDispatchPDF = async (dispatch: DispatchData) => {
 export const printDispatchPDF = async (dispatch: DispatchData) => {
     const doc = await generateDispatchPDF(dispatch);
     doc.autoPrint();
-    openBlobForPrint(doc.output('bloburl') as unknown as string);
+    await openBlobForPrint(doc.output('bloburl') as unknown as string);
 };
 
 // =========================================================

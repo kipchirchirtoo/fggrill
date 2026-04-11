@@ -420,7 +420,9 @@ class NotificationService {
   }
 
   /**
-   * Notify all users with a specific role
+   * Notify all users with a specific role, optionally scoped to a branch.
+   * When branchId is provided, only users in that branch receive the notification.
+   * This enforces branch-level data isolation for role-based notifications.
    */
   async notifyRole(
     role: string,
@@ -432,17 +434,25 @@ class NotificationService {
       priority?: 'low' | 'medium' | 'high' | 'urgent';
       actionUrl?: string;
       metadata?: any;
+      branchId?: number | string | null;
     }
   ): Promise<Notification | null> {
     try {
-      // Get all users with this role
-      const { data: users, error: usersError } = await supabase
+      // Build user query — always filter by role
+      let usersQuery = supabase
         .from('users')
         .select('id')
         .eq('role', role);
 
+      // Scope to branch when provided — prevents cross-branch notification leakage
+      if (options?.branchId != null) {
+        usersQuery = usersQuery.eq('branch_id', options.branchId);
+      }
+
+      const { data: users, error: usersError } = await usersQuery;
+
       if (usersError || !users || users.length === 0) {
-        logger.warn(`No users found with role: ${role}`);
+        logger.warn(`No users found with role: ${role}${options?.branchId != null ? ` in branch: ${options.branchId}` : ''}`);
         return null;
       }
 
@@ -461,7 +471,7 @@ class NotificationService {
 
       const createdNotifications = await this.bulkCreateNotifications(notifications);
       
-      logger.info(`Created ${createdNotifications.length} notifications for role: ${role}`);
+      logger.info(`Created ${createdNotifications.length} notifications for role: ${role}${options?.branchId != null ? ` (branch: ${options.branchId})` : ' (all branches)'}`);
       
       // Return the first notification as a representative
       return createdNotifications[0] || null;

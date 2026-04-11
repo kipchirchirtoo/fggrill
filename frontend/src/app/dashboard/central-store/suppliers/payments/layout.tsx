@@ -1,0 +1,13 @@
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Supplier Payments',
+}
+
+export default function Layout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return children
+}

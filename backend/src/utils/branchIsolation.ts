@@ -6,7 +6,8 @@ import { Request } from 'express';
  */
 export const isGlobalRole = (role: string | undefined): boolean => {
     if (!role) return false;
-    const globalRoles = ['super_admin', 'general_manager', 'auditor', 'hr_manager', 'central_storekeeper'];
+    // auditor and branch_accountant are branch-scoped — they must NOT be global
+    const globalRoles = ['super_admin', 'general_manager', 'hr_manager', 'central_storekeeper'];
     return globalRoles.includes(role.toLowerCase());
 };
 

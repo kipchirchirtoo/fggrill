@@ -179,5 +179,5 @@ export const downloadSupplierFolioPDF = async (supplier: SupplierData) => {
 export const printSupplierFolioPDF = async (supplier: SupplierData) => {
     const doc = await generateSupplierFolioPDF(supplier);
     doc.autoPrint();
-    openBlobForPrint(doc.output('bloburl') as unknown as string);
+    await openBlobForPrint(doc.output('bloburl') as unknown as string);
 };

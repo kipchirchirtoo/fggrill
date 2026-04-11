@@ -10,10 +10,10 @@ export { API_URL, PYTHON_API_URL, REPORTS_SERVICE_URL, PYTHON_SERVICE_URL };
 
 // ─── Auth Headers ────────────────────────────────────────────────────────────
 
-export const getHeaders = (): Record<string, string> => {
+export const getHeaders = (skipContentType = false): Record<string, string> => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   return {
-    'Content-Type': 'application/json',
+    ...(skipContentType ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 };
@@ -98,11 +98,20 @@ export async function fetchAPI<T>(
         if (bid) branchHeaders['x-branch-id'] = bid;
       }
 
+      // Skip Content-Type header for FormData (browser will set it with boundary)
+      const isFormData = options?.body instanceof FormData;
+      const baseHeaders = getHeaders(isFormData);
+
       const mergedHeaders: Record<string, string> = {
-        ...getHeaders(),
+        ...baseHeaders,
         ...branchHeaders,
         ...((options?.headers as Record<string, string>) || {}),
       };
+      
+      // Remove Content-Type if FormData (let browser set it)
+      if (isFormData && mergedHeaders['Content-Type']) {
+        delete mergedHeaders['Content-Type'];
+      }
 
       // ── Electron C# proxy (Node API only) ─────────────────────────────────
       if (!isPython && typeof window !== 'undefined' && (window as any).electronAPI?.invoke) {

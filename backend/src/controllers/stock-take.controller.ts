@@ -333,6 +333,7 @@ interface StockTakeNotification {
     category: 'stock_take';
     priority: 'medium';
     actionUrl: string;
+    branchId?: number;
     metadata: {
         stock_take_id: string;
         branch_id: number;
@@ -376,6 +377,7 @@ export const buildStockTakeNotificationPayload = async (
             type: 'info',
             category: 'stock_take',
             priority: 'medium',
+            branchId: branchId,
             actionUrl: `/dashboard/branch-store/stock-takes/${stockTakeId}`,
             metadata: {
                 stock_take_id: stockTakeId,
@@ -420,6 +422,7 @@ export const sendNotificationWithRetry = async (
                     type: notification.type,
                     category: notification.category,
                     priority: notification.priority,
+                    branchId: notification.branchId,
                     actionUrl: notification.actionUrl,
                     metadata: notification.metadata
                 }
@@ -553,7 +556,7 @@ export const submitStockTake = async (req: Request, res: Response) => {
                         metadata: { stock_count_id: id }
                     });
 
-                    // Notify auditor
+                    // Notify auditor — scoped to the branch of the stock count
                     notificationService.notifyRole(
                         'auditor',
                         'Stock Take Submission',
@@ -562,6 +565,7 @@ export const submitStockTake = async (req: Request, res: Response) => {
                             type: 'warning',
                             category: 'audit',
                             priority: 'medium',
+                            branchId: stockCount.branch_id,
                             actionUrl: `/dashboard/branch-store/stock-takes/${id}`,
                             metadata: { stock_count_id: id, type: 'stock_take' }
                         }

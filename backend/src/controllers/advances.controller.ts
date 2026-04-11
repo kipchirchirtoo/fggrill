@@ -130,6 +130,7 @@ export const approveAdvance = async (req: Request, res: Response, next: NextFunc
                     {
                         type: 'info',
                         category: 'payroll',
+                        branchId: data.branch_id,
                         metadata: {
                             advance_id: data.id,
                             staff_id: data.staff_id,

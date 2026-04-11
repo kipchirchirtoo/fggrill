@@ -165,10 +165,10 @@ export default function SecurityDashboardPage() {
 
   const getThreatBadge = (log: SecurityLog) => {
     const score = log.threat_score || 0;
-    if (score >= 60) return <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">High Risk</span>;
-    if (score >= 40) return <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-700">Medium Risk</span>;
-    if (score >= 20) return <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Low Risk</span>;
-    return <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">Clean</span>;
+    if (score >= 60) return <span className="px-2 py-1 text-xs rounded-full bg-stone-100 text-stone-900 font-medium">High Risk</span>;
+    if (score >= 40) return <span className="px-2 py-1 text-xs rounded-full bg-stone-100 text-stone-700 font-medium">Medium Risk</span>;
+    if (score >= 20) return <span className="px-2 py-1 text-xs rounded-full bg-stone-100 text-stone-600 font-medium">Low Risk</span>;
+    return <span className="px-2 py-1 text-xs rounded-full bg-stone-50 text-stone-500 font-medium">Clean</span>;
   };
 
   return (
@@ -176,63 +176,59 @@ export default function SecurityDashboardPage() {
       <DashboardLayout>
         <div className="p-6 space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold flex items-center gap-3">
-                <Shield className="w-8 h-8 text-blue-600" />
-                Security Center
-              </h1>
-              <p className="text-gray-600 mt-1">
+              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Security Center</h1>
+              <p className="text-stone-500 mt-0.5">
                 Comprehensive security monitoring and threat detection
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={fetchData}
-                className="px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                className="btn-secondary h-10 px-3"
               >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
               <div className="relative">
                 <button 
                   onClick={() => setShowExportMenu(!showExportMenu)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  className="btn-primary h-10"
                 >
-                  <Download className="w-4 h-4" />
-                  Export Report
-                  <ChevronDown className="w-4 h-4" />
+                  <Download className="h-4 w-4" />
+                  <span>Export Report</span>
+                  <ChevronDown className="h-4 w-4" />
                 </button>
                 {showExportMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-stone-100 z-50">
                     <button
                       onClick={() => handleExport('csv')}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b"
+                      className="w-full px-4 py-3 text-left hover:bg-stone-50 flex items-center gap-3 border-b border-stone-100"
                     >
-                      <Download className="w-4 h-4 text-green-600" />
+                      <Download className="h-4 w-4 text-stone-600" />
                       <div>
-                        <div className="font-medium text-sm">Export as CSV</div>
-                        <div className="text-xs text-gray-500">Spreadsheet format</div>
+                        <div className="font-medium text-sm text-stone-900">Export as CSV</div>
+                        <div className="text-xs text-stone-500">Spreadsheet format</div>
                       </div>
                     </button>
                     <button
                       onClick={() => handleExport('json')}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b"
+                      className="w-full px-4 py-3 text-left hover:bg-stone-50 flex items-center gap-3 border-b border-stone-100"
                     >
-                      <Download className="w-4 h-4 text-blue-600" />
+                      <Download className="h-4 w-4 text-stone-600" />
                       <div>
-                        <div className="font-medium text-sm">Export as JSON</div>
-                        <div className="text-xs text-gray-500">Structured data</div>
+                        <div className="font-medium text-sm text-stone-900">Export as JSON</div>
+                        <div className="text-xs text-stone-500">Structured data</div>
                       </div>
                     </button>
                     <button
                       onClick={() => handleExport('pdf')}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 rounded-b-lg"
+                      className="w-full px-4 py-3 text-left hover:bg-stone-50 flex items-center gap-3 rounded-b-lg"
                     >
-                      <Download className="w-4 h-4 text-red-600" />
+                      <Download className="h-4 w-4 text-stone-600" />
                       <div>
-                        <div className="font-medium text-sm">Export as PDF</div>
-                        <div className="text-xs text-gray-500">Printable report</div>
+                        <div className="font-medium text-sm text-stone-900">Export as PDF</div>
+                        <div className="text-xs text-stone-500">Branded report</div>
                       </div>
                     </button>
                   </div>
@@ -241,97 +237,50 @@ export default function SecurityDashboardPage() {
             </div>
           </div>
 
-          {/* Stats Cards */}
+          {/* Stats Cards - Stone Theme */}
           {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white p-6 rounded-lg shadow-sm border"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Logins Today</p>
-                    <p className="text-3xl font-bold mt-1">{stats.loginsToday}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Users className="w-6 h-6 text-blue-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-green-600">
-                  <TrendingUp className="w-4 h-4 mr-1" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Logins Today</p>
+                <p className="text-2xl font-semibold text-stone-900 mt-1">{stats.loginsToday}</p>
+                <div className="mt-2 flex items-center text-[11px] text-stone-500">
+                  <TrendingUp className="h-3 w-3 mr-1" />
                   <span>Active monitoring</span>
                 </div>
-              </motion.div>
+              </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white p-6 rounded-lg shadow-sm border"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Failed Logins</p>
-                    <p className="text-3xl font-bold mt-1">{stats.failedLoginsToday}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                    <XCircle className="w-6 h-6 text-red-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-red-600">
-                  <AlertTriangle className="w-4 h-4 mr-1" />
+              <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-amber-500">
+                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Failed Logins</p>
+                <p className="text-2xl font-semibold text-amber-600 mt-1">{stats.failedLoginsToday}</p>
+                <div className="mt-2 flex items-center text-[11px] text-stone-500">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
                   <span>{((stats.failedLoginsToday / (stats.loginsToday || 1)) * 100).toFixed(1)}% failure rate</span>
                 </div>
-              </motion.div>
+              </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-white p-6 rounded-lg shadow-sm border"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Suspicious Activity</p>
-                    <p className="text-3xl font-bold mt-1">{threatStats.suspicious}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <Eye className="w-6 h-6 text-orange-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-orange-600">
-                  <Shield className="w-4 h-4 mr-1" />
+              <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Suspicious Activity</p>
+                <p className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.suspicious}</p>
+                <div className="mt-2 flex items-center text-[11px] text-stone-500">
+                  <Shield className="h-3 w-3 mr-1" />
                   <span>{threatStats.vpn} VPN, {threatStats.proxy} Proxy</span>
                 </div>
-              </motion.div>
+              </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="bg-white p-6 rounded-lg shadow-sm border"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Critical Events</p>
-                    <p className="text-3xl font-bold mt-1">{stats.criticalEvents24h}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <AlertTriangle className="w-6 h-6 text-purple-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-gray-600">
-                  <Clock className="w-4 h-4 mr-1" />
+              <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Critical Events</p>
+                <p className="text-2xl font-semibold text-stone-900 mt-1">{stats.criticalEvents24h}</p>
+                <div className="mt-2 flex items-center text-[11px] text-stone-500">
+                  <Clock className="h-3 w-3 mr-1" />
                   <span>Last 24 hours</span>
                 </div>
-              </motion.div>
+              </div>
             </div>
           )}
 
-          {/* Tabs */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="border-b">
+          {/* Tabs - Stone Theme */}
+          <div className="bg-white rounded-lg shadow-sm border border-stone-100">
+            <div className="border-b border-stone-100">
               <div className="flex gap-4 px-6">
                 {[
                   { id: 'analytics', label: 'Analytics', icon: TrendingUp },
@@ -343,13 +292,13 @@ export default function SecurityDashboardPage() {
                   <button
                     key={tab.id}
                     onClick={() => setSelectedTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-4 py-4 border-b-2 transition-colors ${
+                    className={`flex items-center gap-2 px-4 py-4 border-b-2 transition-colors text-sm font-medium ${
                       selectedTab === tab.id
-                        ? 'border-blue-600 text-blue-600'
-                        : 'border-transparent text-gray-600 hover:text-gray-900'
+                        ? 'border-stone-900 text-stone-900'
+                        : 'border-transparent text-stone-500 hover:text-stone-900'
                     }`}
                   >
-                    <tab.icon className="w-4 h-4" />
+                    <tab.icon className="h-4 w-4" />
                     {tab.label}
                   </button>
                 ))}
@@ -357,24 +306,24 @@ export default function SecurityDashboardPage() {
             </div>
 
             {/* Filters */}
-            <div className="p-6 border-b bg-gray-50">
+            <div className="p-6 border-b border-stone-100 bg-stone-50/50">
               <div className="flex flex-wrap gap-4">
                 <div className="flex-1 min-w-[300px]">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-stone-400" />
                     <input
                       type="text"
                       placeholder="Search by email, IP address..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full pl-9 pr-4 py-2 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
                     />
                   </div>
                 </div>
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value as any)}
-                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="h-10 px-3 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
                 >
                   <option value="all">All Status</option>
                   <option value="success">Success Only</option>
@@ -383,7 +332,7 @@ export default function SecurityDashboardPage() {
                 <select
                   value={filterThreat}
                   onChange={(e) => setFilterThreat(e.target.value as any)}
-                  className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="h-10 px-3 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
                 >
                   <option value="all">All Threats</option>
                   <option value="suspicious">Suspicious Only</option>
@@ -422,59 +371,59 @@ function AccessControlTab({ logs, getThreatBadge }: { logs: SecurityLog[]; getTh
   return (
     <div className="space-y-4">
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50/50 border-b border-stone-100">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP Address</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Device</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Threat Level</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold text-stone-500 uppercase tracking-wider">Timestamp</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold text-stone-500 uppercase tracking-wider">User</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold text-stone-500 uppercase tracking-wider">IP Address</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold text-stone-500 uppercase tracking-wider">Location</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold text-stone-500 uppercase tracking-wider">Device</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold text-stone-500 uppercase tracking-wider">Status</th>
+              <th className="px-4 py-3 text-left text-[11px] font-bold text-stone-500 uppercase tracking-wider">Threat Level</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-stone-50">
             {logs.map(log => (
-              <tr key={log.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm text-gray-900">
+              <tr key={log.id} className="hover:bg-stone-50/50 transition-colors">
+                <td className="px-4 py-3 text-sm text-stone-900">
                   {new Date(log.created_at).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <div>
-                    <div className="font-medium text-gray-900">
+                    <div className="font-medium text-stone-900">
                       {log.user ? `${log.user.first_name} ${log.user.last_name}` : 'Unknown'}
                     </div>
-                    <div className="text-gray-500">{log.email}</div>
+                    <div className="text-stone-500 text-xs">{log.email}</div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm font-mono text-gray-900">
+                <td className="px-4 py-3 text-sm font-mono text-stone-900">
                   {log.ip_address}
-                  {log.is_vpn && <span className="ml-2 text-xs text-orange-600">(VPN)</span>}
-                  {log.is_proxy && <span className="ml-2 text-xs text-orange-600">(Proxy)</span>}
+                  {log.is_vpn && <span className="ml-2 text-xs text-stone-600">(VPN)</span>}
+                  {log.is_proxy && <span className="ml-2 text-xs text-stone-600">(Proxy)</span>}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-900">
+                <td className="px-4 py-3 text-sm text-stone-900">
                   {log.geo_city && log.geo_country ? (
                     <div className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-gray-400" />
+                      <MapPin className="h-3 w-3 text-stone-400" />
                       {log.geo_city}, {log.geo_country}
                     </div>
                   ) : (
-                    <span className="text-gray-400">Unknown</span>
+                    <span className="text-stone-400">Unknown</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
+                <td className="px-4 py-3 text-sm text-stone-600">
                   {log.device_info?.browser || 'Unknown'} / {log.device_info?.os || 'Unknown'}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {log.status === 'success' ? (
-                    <span className="flex items-center gap-1 text-green-600">
-                      <CheckCircle className="w-4 h-4" />
+                    <span className="flex items-center gap-1 text-stone-600">
+                      <CheckCircle className="h-4 w-4" />
                       Success
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-red-600">
-                      <XCircle className="w-4 h-4" />
+                    <span className="flex items-center gap-1 text-stone-900">
+                      <XCircle className="h-4 w-4" />
                       Failed
                     </span>
                   )}
@@ -498,54 +447,54 @@ function ThreatDetectionTab({ logs, threatStats }: { logs: SecurityLog[]; threat
   return (
     <div className="space-y-6">
       {/* Threat Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-          <div className="text-sm text-red-600 font-medium">High Threat</div>
-          <div className="text-2xl font-bold text-red-700 mt-1">{threatStats.highThreat}</div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-stone-900">
+          <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">High Threat</div>
+          <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.highThreat}</div>
         </div>
-        <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-          <div className="text-sm text-orange-600 font-medium">VPN Detected</div>
-          <div className="text-2xl font-bold text-orange-700 mt-1">{threatStats.vpn}</div>
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+          <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">VPN Detected</div>
+          <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.vpn}</div>
         </div>
-        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-          <div className="text-sm text-yellow-600 font-medium">Proxy Detected</div>
-          <div className="text-2xl font-bold text-yellow-700 mt-1">{threatStats.proxy}</div>
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+          <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Proxy Detected</div>
+          <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.proxy}</div>
         </div>
-        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-          <div className="text-sm text-purple-600 font-medium">Suspicious</div>
-          <div className="text-2xl font-bold text-purple-700 mt-1">{threatStats.suspicious}</div>
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+          <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Suspicious</div>
+          <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.suspicious}</div>
         </div>
       </div>
 
       {/* Suspicious Activity List */}
       <div>
-        <h3 className="text-lg font-semibold mb-4">Suspicious Activity</h3>
+        <h3 className="text-sm font-semibold text-stone-900 mb-4 uppercase tracking-wider">Suspicious Activity</h3>
         <div className="space-y-3">
           {suspiciousLogs.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Shield className="w-12 h-12 mx-auto mb-2 text-green-500" />
+            <div className="text-center py-8 text-stone-500">
+              <Shield className="h-12 w-12 mx-auto mb-2 text-stone-300" />
               <p>No suspicious activity detected</p>
             </div>
           ) : (
             suspiciousLogs.map(log => (
-              <div key={log.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div key={log.id} className="bg-stone-50 border border-stone-200 rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="w-5 h-5 text-red-600" />
-                      <span className="font-semibold text-red-900">{log.email}</span>
-                      <span className="text-sm text-red-600">
+                      <AlertTriangle className="h-5 w-5 text-stone-900" />
+                      <span className="font-semibold text-stone-900">{log.email}</span>
+                      <span className="text-sm text-stone-600">
                         Threat Score: {log.threat_score}/100
                       </span>
                     </div>
-                    <div className="text-sm text-red-700 space-y-1">
+                    <div className="text-sm text-stone-700 space-y-1">
                       <div>IP: {log.ip_address}</div>
                       <div>Location: {log.geo_city}, {log.geo_country}</div>
                       <div>Reason: {log.threat_reason || 'Suspicious pattern detected'}</div>
                       <div>Time: {new Date(log.created_at).toLocaleString()}</div>
                     </div>
                   </div>
-                  <button className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700">
+                  <button className="px-3 py-1 bg-stone-900 text-white text-sm rounded hover:bg-black transition-colors">
                     Block IP
                   </button>
                 </div>
@@ -574,14 +523,14 @@ function GeolocationTab({ logs, logsByCountry }: { logs: SecurityLog[]; logsByCo
   return (
     <div className="space-y-6">
       {/* IP Lookup Tool */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+      <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
         <button
           onClick={() => setShowIPLookup(!showIPLookup)}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+          className="flex items-center gap-2 text-sm font-semibold text-stone-700 hover:text-stone-900"
         >
-          <Search className="w-4 h-4" />
+          <Search className="h-4 w-4" />
           IP Address Lookup Tool
-          <ChevronDown className={`w-4 h-4 transition-transform ${showIPLookup ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`h-4 w-4 transition-transform ${showIPLookup ? 'rotate-180' : ''}`} />
         </button>
         {showIPLookup && (
           <div className="mt-4">
@@ -593,28 +542,28 @@ function GeolocationTab({ logs, logsByCountry }: { logs: SecurityLog[]; logsByCo
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Country List */}
         <div>
-          <h3 className="text-lg font-semibold mb-4">Access by Country</h3>
+          <h3 className="text-sm font-semibold text-stone-900 mb-4 uppercase tracking-wider">Access by Country</h3>
           <div className="space-y-2 max-h-[500px] overflow-y-auto">
             {countries.length > 0 ? (
               countries.map(({ country, count, suspicious }) => (
-                <div key={country} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={country} className="flex items-center justify-between p-3 bg-stone-50 border border-stone-100 rounded-lg">
                   <div className="flex items-center gap-3">
-                    <Globe className="w-5 h-5 text-gray-400" />
+                    <Globe className="h-5 w-5 text-stone-400" />
                     <div>
-                      <div className="font-medium">{country}</div>
-                      <div className="text-sm text-gray-500">{count} access attempts</div>
+                      <div className="font-medium text-stone-900">{country}</div>
+                      <div className="text-sm text-stone-500">{count} access attempts</div>
                     </div>
                   </div>
                   {suspicious > 0 && (
-                    <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">
+                    <span className="px-2 py-1 bg-stone-100 text-stone-900 text-xs rounded-full font-medium">
                       {suspicious} suspicious
                     </span>
                   )}
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Globe className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <div className="text-center py-8 text-stone-500">
+                <Globe className="h-12 w-12 mx-auto mb-2 opacity-30" />
                 <p>No geolocation data available</p>
               </div>
             )}
@@ -623,8 +572,8 @@ function GeolocationTab({ logs, logsByCountry }: { logs: SecurityLog[]; logsByCo
 
         {/* Interactive Map */}
         <div>
-          <h3 className="text-lg font-semibold mb-4">Geographic Distribution</h3>
-          <div className="bg-gray-900 rounded-lg h-[500px] overflow-hidden">
+          <h3 className="text-sm font-semibold text-stone-900 mb-4 uppercase tracking-wider">Geographic Distribution</h3>
+          <div className="bg-stone-900 rounded-lg h-[500px] overflow-hidden">
             <SecurityMap logs={logs} />
           </div>
         </div>
@@ -652,48 +601,48 @@ function ActiveSessionsTab({ logs }: { logs: SecurityLog[] }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Active Sessions ({sessions.length})</h3>
-        <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2">
-          <Ban className="w-4 h-4" />
+        <h3 className="text-sm font-semibold text-stone-900 uppercase tracking-wider">Active Sessions ({sessions.length})</h3>
+        <button className="px-4 py-2 bg-stone-900 text-white rounded-lg hover:bg-black flex items-center gap-2 text-sm transition-colors">
+          <Ban className="h-4 w-4" />
           Terminate All
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {sessions.map(session => (
-          <div key={session.id} className="bg-white border rounded-lg p-4">
+          <div key={session.id} className="bg-white border border-stone-100 rounded-lg p-4 shadow-sm">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center">
+                  <Users className="h-5 w-5 text-stone-600" />
                 </div>
                 <div>
-                  <div className="font-medium">{session.email}</div>
-                  <div className="text-sm text-gray-500">
+                  <div className="font-medium text-stone-900">{session.email}</div>
+                  <div className="text-sm text-stone-500">
                     {session.user ? `${session.user.first_name} ${session.user.last_name}` : 'Unknown User'}
                   </div>
                 </div>
               </div>
-              <button className="text-red-600 hover:text-red-700 text-sm">
+              <button className="text-stone-600 hover:text-stone-900 text-sm font-medium">
                 Terminate
               </button>
             </div>
 
             <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-gray-600">
-                <Server className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-stone-600">
+                <Server className="h-4 w-4" />
                 <span className="font-mono">{session.ip_address}</span>
               </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <MapPin className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-stone-600">
+                <MapPin className="h-4 w-4" />
                 <span>{session.geo_city}, {session.geo_country}</span>
               </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <Activity className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-stone-600">
+                <Activity className="h-4 w-4" />
                 <span>{session.device_info?.browser} on {session.device_info?.os}</span>
               </div>
-              <div className="flex items-center gap-2 text-gray-600">
-                <Clock className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-stone-600">
+                <Clock className="h-4 w-4" />
                 <span>Last active: {new Date(session.created_at).toLocaleString()}</span>
               </div>
             </div>

@@ -31,11 +31,14 @@ export const getStockRequests = async (
       `)
       .order('created_at', { ascending: false });
 
-    // Filter by user role and branch
-    if (userRole === 'bartender' && userBranchId) {
-      query = query.eq('bar_branch_id', userBranchId);
-    } else if (userRole === 'branch_storekeeper' && userBranchId) {
-      query = query.eq('store_branch_id', userBranchId);
+    // Filter by user role and branch — enforce strict branch isolation
+    if (userBranchId) {
+      // All branch-scoped roles (bartender, branch_storekeeper, branch_accountant, auditor, etc.)
+      // must only see requests for their own branch
+      const globalRoles = ['super_admin', 'general_manager', 'central_storekeeper'];
+      if (!globalRoles.includes(userRole || '')) {
+        query = query.eq('bar_branch_id', userBranchId);
+      }
     }
 
     // Apply filters

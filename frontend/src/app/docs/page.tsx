@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Metadata } from 'next';
 import {
     ArrowRight,
     Book,
@@ -10,6 +11,10 @@ import {
     Building2,
     CreditCard
 } from 'lucide-react';
+
+export const metadata: Metadata = {
+  title: 'Documentation',
+};
 
 export default function DocsPage() {
     return (

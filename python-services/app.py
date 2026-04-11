@@ -15,10 +15,12 @@ import pandas as pd
 try:
     from reports.pdf_generator import PDFReportGenerator
     from reports.branded_pdf_generator import BrandedPDFGenerator
+    from reports.security_report_generator import SecurityReportGenerator
 except ImportError:
     logging.warning("ReportLab not found. PDF generation will be disabled.")
     class PDFReportGenerator: pass
     class BrandedPDFGenerator: pass
+    class SecurityReportGenerator: pass
 
 from reports.excel_generator import ExcelReportGenerator
 from reports.data_fetcher import DataFetcher
@@ -53,12 +55,20 @@ from search.routes import search_bp, init_search_routes
 from behavior_intelligence.routes import behavior_bp
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {
-    "origins": ["http://localhost:3000", "https://kyogong.hirall.com", "https://www.kyogong.hirall.com", "https://api.hirall.com", "*"],
-    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "x-branch-id"],
-    "supports_credentials": True
-}})
+
+# Simplified CORS - single origin match prevents duplication
+from flask_cors import cross_origin
+
+# Global CORS with specific origins (no wildcards)
+CORS(app, 
+     origins=[
+         "http://localhost:3000",
+         "http://localhost:3001",
+         "http://127.0.0.1:3000",
+         "http://127.0.0.1:3001"
+     ],
+     supports_credentials=True,
+     expose_headers=["Content-Disposition"])
 
 # Register existing blueprints
 app.register_blueprint(receipts_bp)
@@ -99,6 +109,7 @@ budget_analytics = BudgetAnalytics()
 
 # Initialize branded report generators
 branded_pdf_generator = BrandedPDFGenerator()
+security_report_generator = SecurityReportGenerator()
 database_fetcher = DatabaseFetcher()
 report_scheduler = ReportScheduler()
 
@@ -134,7 +145,7 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'OK',
-        'service': 'Kyogong Restaurant - Management Services',
+        'service': 'FamousGate Hotels - Management Services',
         'version': '2.0.0',
         'features': ['branded_reports', 'automated_scheduling', 'real_database'],
         'timestamp': datetime.now().isoformat()
@@ -265,6 +276,32 @@ def generate_dispatch_note():
         )
     except Exception as e:
         logger.error(f"Error generating dispatch note: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reports/generate/security-report', methods=['POST'])
+def generate_security_report():
+    """Generate branded security analysis report"""
+    try:
+        data = request.get_json()
+        logger.info("Generating security analysis report")
+        
+        # Generate PDF
+        pdf_bytes = security_report_generator.generate_security_report(data)
+        
+        # Create response
+        from io import BytesIO
+        pdf_buffer = BytesIO(pdf_bytes)
+        pdf_buffer.seek(0)
+        
+        # Flask-CORS handles all CORS headers automatically
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'FG_Security_Report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        )
+    except Exception as e:
+        logger.error(f"Error generating security report: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reports/generate/pdf', methods=['POST'])
@@ -1525,6 +1562,6 @@ if __name__ == '__main__':
     start_email_scheduler()
     logger.info("Email automation scheduler started")
     
-    logger.info(f"Starting Kyogongs Unified Python Service on port {port}")
+    logger.info(f"Starting FamousGate Hotels Unified Python Service on port {port}")
     logger.info("Services: Reports, Finance, Accounting, Receipts, Email, Templates, Barcodes, Portals")
     app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_ENV') == 'development')

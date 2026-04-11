@@ -404,10 +404,20 @@ export const getApprovalHistory = async (req: Request, res: Response, next: Next
     try {
         const { entity_type, entity_id } = req.query;
 
+        // Enforce branch isolation for branch-scoped roles
+        const { isGlobalRole } = await import('../utils/branchIsolation');
+        const userBranchId = req.user?.branch_id;
+        const isCentral = isGlobalRole(req.user?.role);
+
         let query = supabase.from('audit_approvals').select('*, auditor:users(first_name, last_name)');
 
         if (entity_type) query = query.eq('entity_type', entity_type);
         if (entity_id) query = query.eq('entity_id', entity_id);
+
+        // Branch-scoped users only see their branch's approval history
+        if (!isCentral && userBranchId) {
+            query = query.eq('branch_id', userBranchId);
+        }
 
         const { data, error } = await query.order('performed_at', { ascending: false });
 
@@ -424,43 +434,72 @@ export const getApprovalHistory = async (req: Request, res: Response, next: Next
  */
 export const getPendingApprovals = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { branch_id } = req.query;
+        // Enforce branch isolation: use the authenticated user's branch_id as the source of truth.
+        // Super admins / general managers (is_central) may pass branch_id as a query param.
+        const userBranchId = req.user?.branch_id;
+        const isCentral = req.user?.is_central;
 
-        if (!branch_id) {
-            res.status(400).json({ success: false, message: 'branch_id is required' });
-            return;
+        let effectiveBranchId: number | null = null;
+
+        if (isCentral) {
+            // Central/global roles may query any branch
+            const qb = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
+            effectiveBranchId = qb;
+        } else {
+            // Branch-scoped roles (auditor, branch_accountant, etc.) are locked to their own branch
+            if (!userBranchId) {
+                res.status(400).json({ success: false, message: 'User has no branch assigned' });
+                return;
+            }
+            effectiveBranchId = userBranchId;
         }
 
-        // 1. Fetch pending from approval_requests
+        // 1. Fetch pending from approval_requests — filter by branch_id in metadata when available
+        // approval_requests has no direct branch_id column; filter via DB-level joins where possible
         const { data: requests, error: requestsError } = await supabase
             .from('approval_requests')
             .select('*')
             .eq('status', 'pending');
 
-        // 2. Fetch pending credit bills
-        const { data: bills, error: billsError } = await supabase
+        // 2. Fetch pending credit bills — filter at DB level
+        const billsQuery = supabase
             .from('staff_credit_bills')
             .select('*, staff:staff_profiles(branch_id)')
             .eq('status', 'pending');
 
-        // 3. Fetch pending staff advances
-        const { data: advances, error: advancesError } = await supabase
+        const { data: bills, error: billsError } = effectiveBranchId
+            ? await billsQuery.eq('staff_profiles.branch_id', effectiveBranchId)
+            : await billsQuery;
+
+        // 3. Fetch pending staff advances — filter at DB level via branch_id column
+        const advancesQuery = supabase
             .from('staff_advances')
             .select('*, staff:staff_profiles(branch_id)')
             .eq('status', 'pending');
 
-        // 4. Fetch pending staff loans
-        const { data: loans, error: loansError } = await supabase
+        const { data: advances, error: advancesError } = effectiveBranchId
+            ? await advancesQuery.eq('branch_id', effectiveBranchId)
+            : await advancesQuery;
+
+        // 4. Fetch pending staff loans — filter at DB level via branch_id column
+        const loansQuery = supabase
             .from('staff_loans')
             .select('*, staff:staff_profiles(branch_id)')
             .eq('status', 'pending_approval');
 
-        // 5. Fetch pending stock counts
-        const { data: stockCounts, error: stockCountsError } = await supabase
+        const { data: loans, error: loansError } = effectiveBranchId
+            ? await loansQuery.eq('branch_id', effectiveBranchId)
+            : await loansQuery;
+
+        // 5. Fetch pending stock counts — always filtered by branch
+        const stockCountsQuery = supabase
             .from('stock_counts')
             .select('*')
-            .eq('branch_id', branch_id)
             .eq('status', 'pending');
+
+        const { data: stockCounts, error: stockCountsError } = effectiveBranchId
+            ? await stockCountsQuery.eq('branch_id', effectiveBranchId)
+            : await stockCountsQuery;
 
         if (requestsError) throw requestsError;
         if (billsError) throw billsError;
@@ -468,18 +507,26 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         if (loansError) throw loansError;
         if (stockCountsError) throw stockCountsError;
 
-        // Filter by branch_id where applicable
-        const filteredBills = bills?.filter((b: any) => b.staff?.branch_id === Number(branch_id)) || [];
-        const filteredAdvances = advances?.filter((a: any) => a.staff?.branch_id === Number(branch_id)) || [];
-        const filteredLoans = loans?.filter((l: any) => l.staff?.branch_id === Number(branch_id)) || [];
+        // For approval_requests (no branch_id column): filter by branch_id stored in metadata
+        const filteredRequests = effectiveBranchId
+            ? (requests || []).filter((r: any) => {
+                const meta = r.metadata || {};
+                return meta.branch_id == null || Number(meta.branch_id) === effectiveBranchId;
+              })
+            : (requests || []);
+
+        // In-memory safety net for bills (DB join filter may not work on all Supabase versions)
+        const filteredBills = effectiveBranchId
+            ? (bills || []).filter((b: any) => b.staff?.branch_id === effectiveBranchId)
+            : (bills || []);
 
         // Combine into a flat list of pending items
         const pendingItems = [
-            ...(requests || []).map(r => ({ ...r, category: 'General Request' })),
-            ...filteredBills.map(b => ({ ...b, category: 'Credit Bill' })),
-            ...filteredAdvances.map(a => ({ ...a, category: 'Advance' })),
-            ...filteredLoans.map(l => ({ ...l, category: 'Loan' })),
-            ...(stockCounts || []).map(s => ({ ...s, category: 'Stock Take' }))
+            ...filteredRequests.map((r: any) => ({ ...r, category: 'General Request' })),
+            ...filteredBills.map((b: any) => ({ ...b, category: 'Credit Bill' })),
+            ...(advances || []).map((a: any) => ({ ...a, category: 'Advance' })),
+            ...(loans || []).map((l: any) => ({ ...l, category: 'Loan' })),
+            ...(stockCounts || []).map((s: any) => ({ ...s, category: 'Stock Take' }))
         ];
 
         res.status(200).json({
@@ -487,10 +534,10 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             count: pendingItems.length,
             data: pendingItems,
             summary: {
-                requests: requests?.length || 0,
+                requests: filteredRequests.length,
                 bills: filteredBills.length,
-                advances: filteredAdvances.length,
-                loans: filteredLoans.length,
+                advances: advances?.length || 0,
+                loans: loans?.length || 0,
                 stock_counts: stockCounts?.length || 0
             }
         });

@@ -45,7 +45,7 @@ class ReportScheduler:
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_user = os.getenv('SMTP_USER', '')
         self.smtp_password = os.getenv('SMTP_PASSWORD', '')
-        self.from_email = os.getenv('FROM_EMAIL', 'reports@kyogong.co.ke')
+        self.from_email = os.getenv('FROM_EMAIL', 'reports@famousgate.co.ke')
         
         # Supabase for scheduled reports
         self.supabase_url = os.getenv('SUPABASE_URL', '')

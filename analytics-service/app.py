@@ -30,7 +30,14 @@ app = FastAPI(
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:5000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -297,6 +304,28 @@ async def export_inventory(branch_id: Optional[str] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============ SECURITY REPORT GENERATION ============
+
+class SecurityReportRequest(BaseModel):
+    date_range: str
+    summary: dict
+    threat_analysis: dict
+    geographic_distribution: List[dict]
+    logs: List[dict]
+
+@app.post("/api/reports/generate/security-report")
+async def generate_security_report(request: SecurityReportRequest):
+    """Generate branded security report PDF"""
+    try:
+        file_path = await pdf_generator.generate_security_report(request.dict())
+        return FileResponse(
+            file_path,
+            media_type='application/pdf',
+            filename=f"FG_Security_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Register MAA Analytics Router
 app.include_router(maa_router, prefix="/api/analytics", tags=["MAA Analytics"])
 
@@ -304,7 +333,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
-        port=8001,
+        port=5001,
         reload=True,
         log_level="info"
     )

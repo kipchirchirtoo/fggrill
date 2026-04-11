@@ -210,11 +210,14 @@ export const generatePurchaseOrderPDF = async (po: PurchaseOrderData) => {
 
 export const downloadPurchaseOrderPDF = async (po: PurchaseOrderData) => {
     const doc = await generatePurchaseOrderPDF(po);
-    doc.save(`PO_${po.po_number}.pdf`);
+    // In Tauri (iframe context), doc.save() / <a download> is blocked.
+    // Use openBlobForPrint which handles the iframe case via a data URL overlay with a Download button.
+    await openBlobForPrint(doc.output('bloburl') as unknown as string, `PO_${po.po_number}.pdf`);
 };
 
 export const printPurchaseOrderPDF = async (po: PurchaseOrderData) => {
     const doc = await generatePurchaseOrderPDF(po);
     doc.autoPrint();
-    openBlobForPrint(doc.output('bloburl') as unknown as string);
+    // Must await — openBlobForPrint is async (fetches blob → converts to data URL)
+    await openBlobForPrint(doc.output('bloburl') as unknown as string, `PO_${po.po_number}.pdf`);
 };

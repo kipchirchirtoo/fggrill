@@ -415,7 +415,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
 
     logger.info(`Invoice created: ${invoice_number}`);
 
-    // Notify Auditor
+    // Notify Auditor — scoped to the same branch as the invoice
     getBranchName(req.user?.branch_id).then(branchName => {
       notificationService.notifyRole(
         'auditor',
@@ -425,6 +425,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
           type: 'info',
           category: 'finance',
           priority: 'medium',
+          branchId: req.user?.branch_id,
           actionUrl: '/dashboard/auditor/invoices',
           metadata: {
             invoice_id: data.id,
@@ -554,7 +555,7 @@ export const recordInvoicePayment = async (req: Request, res: Response, next: Ne
 
     logger.info(`Payment of ${amount} recorded for invoice ${invoice.invoice_number}`);
 
-    // Notify Accountant
+    // Notify Accountant — scoped to the same branch as the invoice
     notificationService.notifyRole(
       'accountant',
       'Payment Received',
@@ -563,6 +564,7 @@ export const recordInvoicePayment = async (req: Request, res: Response, next: Ne
         type: 'success',
         category: 'finance',
         priority: 'medium',
+        branchId: invoice.branch_id,
         actionUrl: '/dashboard/branch-accounting/invoices',
         metadata: { invoice_id: id }
       }
@@ -711,7 +713,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
 
     logger.info(`Bill created: ${bill_number}`);
 
-    // Notify Auditor
+    // Notify Auditor — scoped to the same branch as the bill
     getBranchName(req.user?.branch_id).then(branchName => {
       notificationService.notifyRole(
         'auditor',
@@ -721,6 +723,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
           type: 'info',
           category: 'finance',
           priority: 'medium',
+          branchId: req.user?.branch_id,
           actionUrl: '/dashboard/auditor/branch-audit/credit-bills',
           metadata: {
             bill_id: data.id,
@@ -850,7 +853,7 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
 
     logger.info(`Payment of ${amount} recorded for bill ${bill.bill_number}`);
 
-    // Notify Auditor
+    // Notify Auditor — scoped to the same branch as the bill payment
     notificationService.notifyRole(
       'auditor',
       'Bill Payment Recorded',
@@ -859,6 +862,7 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
         type: 'info',
         category: 'finance',
         priority: 'medium',
+        branchId: bill.branch_id,
         actionUrl: '/dashboard/auditor/expenses',
         metadata: { bill_id: id }
       }
@@ -901,6 +905,7 @@ export const submitInvoiceForAudit = async (req: Request, res: Response, next: N
       request_type: 'invoice',
       status: 'pending',
       requested_by: userId,
+      branch_id: invoice.branch_id,
       amount: invoice.total_amount,
       description: `Audit request for invoice ${invoice.invoice_number}`,
       notes,
@@ -911,7 +916,7 @@ export const submitInvoiceForAudit = async (req: Request, res: Response, next: N
 
     logger.info(`Invoice ${invoice.invoice_number} submitted for audit by ${userId}`);
 
-    // Notify Auditor
+    // Notify Auditor — scoped to the same branch as the invoice
     getBranchName(req.user?.branch_id).then(branchName => {
       notificationService.notifyRole(
         'auditor',
@@ -921,6 +926,7 @@ export const submitInvoiceForAudit = async (req: Request, res: Response, next: N
           type: 'warning',
           category: 'audit',
           priority: 'high',
+          branchId: req.user?.branch_id,
           actionUrl: '/dashboard/auditor/invoices',
           metadata: {
             invoice_id: id,
@@ -969,6 +975,7 @@ export const submitBillForAudit = async (req: Request, res: Response, next: Next
       request_type: 'bill',
       status: 'pending',
       requested_by: userId,
+      branch_id: bill.branch_id,
       amount: bill.total_amount,
       description: `Audit request for bill ${bill.bill_number}`,
       notes,
@@ -979,7 +986,7 @@ export const submitBillForAudit = async (req: Request, res: Response, next: Next
 
     logger.info(`Bill ${bill.bill_number} submitted for audit by ${userId}`);
 
-    // Notify Auditor
+    // Notify Auditor — scoped to the same branch as the bill
     getBranchName(req.user?.branch_id).then(branchName => {
       notificationService.notifyRole(
         'auditor',
@@ -989,6 +996,7 @@ export const submitBillForAudit = async (req: Request, res: Response, next: Next
           type: 'warning',
           category: 'audit',
           priority: 'high',
+          branchId: req.user?.branch_id,
           actionUrl: '/dashboard/auditor/branch-audit/credit-bills',
           metadata: {
             bill_id: id,

@@ -276,11 +276,11 @@ class InvoiceGenerator:
     
     def __init__(self, logo_path: str = None):
         self.logo_path = logo_path or os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.company_name = "Kyogongs"
+        self.company_name = "FamousGate Hotels"
         self.company_address = "Bomet, Kenya"
         self.company_phone = "0706 782 828"
-        self.company_email = "kyogongsbmt@gmail.com"
-        self.company_website = "www.kyogong.com"
+        self.company_email = "info@famousgate.co.ke"
+        self.company_website = "www.famousgate.hirall.com"
         
     def generate_invoice(self, invoice_data: Dict[str, Any]) -> bytes:
         """Generate a professional invoice PDF"""

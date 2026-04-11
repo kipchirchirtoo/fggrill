@@ -2,6 +2,7 @@
 from flask import Blueprint, request, send_file, jsonify
 import json
 import os
+import io
 import tempfile
 import requests
 from .generator import IDCardGenerator
@@ -15,14 +16,34 @@ def generate_id_card():
     Generate an ID card PDF
     Accepts JSON or Multipart (for photo upload)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         # Handle both JSON and Form Data (for files)
+        data = None
+        
         if request.is_json:
             data = request.get_json()
+            logger.info("[ID Card] Received JSON request")
+        elif request.form:
+            logger.info("[ID Card] Received Form Data request")
+            if 'data' in request.form:
+                # Data sent as JSON string in form field
+                data = json.loads(request.form['data'])
+            else:
+                # Data sent as individual form fields
+                data = request.form.to_dict()
         else:
-            data = request.form.to_dict()
-            if 'data' in data: # sometimes sent as a json string in a form field
-                data = json.loads(data['data'])
+            logger.error("[ID Card] No data received in request")
+            return jsonify({'error': 'No data provided', 'success': False}), 400
+        
+        if not data:
+            logger.error("[ID Card] Data is empty after parsing")
+            return jsonify({'error': 'Empty data received', 'success': False}), 400
+        
+        logger.info(f"[ID Card] Generating card for: {data.get('name', 'Unknown')}")
+        logger.info(f"[ID Card] Data keys: {list(data.keys())}")
         
         # Handle photo upload
         photo_file = request.files.get('photo')
@@ -39,9 +60,16 @@ def generate_id_card():
             # Download from URL
             try:
                 url = data['photo_url']
-                # If it's a supabase path but not full URL, construct it? 
-                # For now assume full URL or handle
-                response = requests.get(url, stream=True)
+                logger.info(f"[ID Card] Downloading photo from: {url}")
+                
+                # Add headers to avoid 403 Forbidden
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+                
+                response = requests.get(url, stream=True, timeout=10, headers=headers)
+                logger.info(f"[ID Card] Photo download response: HTTP {response.status_code}")
+                
                 if response.status_code == 200:
                     fd, temp_photo_path = tempfile.mkstemp(suffix='.jpg')
                     os.close(fd)
@@ -49,10 +77,19 @@ def generate_id_card():
                         for chunk in response.iter_content(1024):
                             f.write(chunk)
                     data['photo_path'] = temp_photo_path
+                    logger.info(f"[ID Card] Photo downloaded successfully to: {temp_photo_path}")
+                    logger.info(f"[ID Card] Photo file size: {os.path.getsize(temp_photo_path)} bytes")
+                else:
+                    logger.warning(f"[ID Card] Failed to download photo: HTTP {response.status_code}")
+                    logger.warning(f"[ID Card] Response content: {response.text[:200]}")
             except Exception as e:
-                print(f"Error downloading photo: {e}")
+                logger.error(f"[ID Card] Error downloading photo: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
 
+        logger.info("[ID Card] Calling generator.generate()")
         pdf_bytes = generator.generate(data)
+        logger.info(f"[ID Card] PDF generated successfully, size: {len(pdf_bytes)} bytes")
         
         # Cleanup temp file
         if temp_photo_path and os.path.exists(temp_photo_path):
@@ -65,6 +102,9 @@ def generate_id_card():
             download_name=f"ID_{data.get('id_no', 'Card')}.pdf"
         )
     except Exception as e:
+        logger.error(f"[ID Card] ERROR: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e), 'success': False}), 500
 
 @id_cards_bp.route('/api/id-cards/preview', methods=['POST'])
@@ -72,6 +112,3 @@ def preview_id_card():
     # Same as generate for now, or returns a low-res image if needed.
     # For now, let's keep it simple.
     return generate_id_card()
-
-# Add io import at top
-import io

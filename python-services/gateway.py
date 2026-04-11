@@ -6,7 +6,7 @@ import httpx
 import os
 from typing import Optional
 
-app = FastAPI(title="Kyogong Gateway", version="1.0.0")
+app = FastAPI(title="FamousGate Hotels Gateway", version="1.0.0")
 
 # Configure CORS
 app.add_middleware(
@@ -14,7 +14,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3001",
-        "https://kyogong.hirall.com",
+        "https://famousgate.hirall.com",
         "https://services.hirall.com",
         "https://api.hirall.com",
     ],

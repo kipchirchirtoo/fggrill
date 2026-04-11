@@ -162,6 +162,6 @@ export const downloadEmployeePDF = async (staff: StaffMember[], options?: PDFOpt
 export const printEmployeePDF = async (staff: StaffMember[], options?: PDFOptions) => {
     const doc = await generateEmployeePDF(staff, options);
     doc.autoPrint();
-    openBlobForPrint(doc.output('bloburl') as unknown as string);
+    await openBlobForPrint(doc.output('bloburl') as unknown as string);
 };
 

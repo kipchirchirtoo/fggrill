@@ -1656,7 +1656,22 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
  */
 export const getBranchOrdersVerification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { branch_id, status, start_date, end_date } = req.query;
+    const { status, start_date, end_date } = req.query;
+
+    // Enforce branch isolation: branch-scoped users can only see their own branch's requests
+    const { isGlobalRole } = await import('../utils/branchIsolation');
+    const userBranchId = req.user?.branch_id;
+    const isCentral = isGlobalRole(req.user?.role);
+
+    // Determine effective branch_id
+    let effectiveBranchId: string | undefined;
+    if (isCentral) {
+      // Global roles may filter by any branch via query param
+      effectiveBranchId = req.query.branch_id as string | undefined;
+    } else {
+      // Branch-scoped roles are locked to their own branch
+      effectiveBranchId = userBranchId ? String(userBranchId) : undefined;
+    }
 
     // 1. Fetch branches for names
     const { data: branches } = await supabase.from('branches').select('id, name');
@@ -1666,7 +1681,7 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (branch_id && branch_id !== '0') query = query.eq('requesting_branch_id', branch_id);
+    if (effectiveBranchId && effectiveBranchId !== '0') query = query.eq('requesting_branch_id', effectiveBranchId);
     if (status) query = query.eq('status', status);
     if (start_date) query = query.gte('created_at', start_date);
     if (end_date) query = query.lte('created_at', end_date);
