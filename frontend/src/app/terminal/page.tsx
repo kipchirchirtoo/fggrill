@@ -24,6 +24,14 @@ export default function MasterTerminalPage() {
     useEffect(() => {
         setMounted(true);
         const timer = setInterval(() => setTerminalTime(new Date()), 1000);
+        
+        // Auto-focus window for keyboard input on startup
+        if (typeof window !== 'undefined') {
+            window.focus();
+            // Also focus the document body to ensure keyboard events are captured
+            document.body.focus();
+        }
+        
         return () => clearInterval(timer);
     }, []);
 
@@ -216,8 +224,8 @@ export default function MasterTerminalPage() {
                 <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/80 backdrop-blur-[3px]" />
             </div>
 
-            {/* Backoffice link */}
-            <div className="absolute top-6 right-6 z-20">
+            {/* Backoffice link - Hidden on small screens */}
+            <div className="hidden sm:block absolute top-6 right-6 z-20">
                 <a
                     href="/login"
                     className="px-5 py-2.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-[10px] font-bold text-white/50 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2 group uppercase tracking-[0.15em]"
@@ -235,19 +243,21 @@ export default function MasterTerminalPage() {
                 className="z-10 flex flex-col items-center gap-10"
             >
                 {/* Header Information */}
-                <div className="flex flex-col items-center gap-2">
-                    <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-end">
-                            <h1 className="text-4xl font-bold tracking-tight text-white/90">
+                <div className="flex flex-col items-center gap-3 px-4">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                        {/* Time and Date - Now aligned horizontally */}
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-white/90">
                                 {terminalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </h1>
-                            <p className="text-[10px] text-white/40 uppercase tracking-widest font-medium">
+                            <div className="h-10 w-[1px] bg-white/20" />
+                            <p className="text-xs sm:text-sm text-white/50 uppercase tracking-wide font-medium">
                                 {terminalTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
                             </p>
                         </div>
 
                         {isElectron && (
-                            <div className="h-10 w-[1px] bg-white/10" />
+                            <div className="hidden sm:block h-10 w-[1px] bg-white/10" />
                         )}
 
                         {isElectron && (
@@ -276,7 +286,7 @@ export default function MasterTerminalPage() {
                 </div>
 
                 {/* PIN Area */}
-                <div className="flex flex-col items-center gap-8 w-full max-w-xs">
+                <div className="flex flex-col items-center gap-8 w-full max-w-[380px] px-4">
                     {/* PIN dots */}
                     <div className="flex flex-col items-center gap-4">
                         <div className="flex items-center gap-2">
@@ -312,8 +322,8 @@ export default function MasterTerminalPage() {
                         )}
                     </div>
 
-                    {/* PIN Pad */}
-                    <div className="grid grid-cols-3 gap-3 w-full">
+                    {/* PIN Pad - Bigger buttons with responsive sizing */}
+                    <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full">
                         {/* Letter keys */}
                         {[
                             { char: 'R', color: 'text-orange-400 active:bg-orange-500/20' },
@@ -326,7 +336,7 @@ export default function MasterTerminalPage() {
                                 onClick={() => handleNumberClick(char)}
                                 disabled={isAuthenticating}
                                 className={cn(
-                                    "h-[72px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/5 flex items-center justify-center text-2xl font-bold transition-colors disabled:opacity-30",
+                                    "h-[80px] sm:h-[90px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/5 flex items-center justify-center text-3xl sm:text-4xl font-bold transition-colors disabled:opacity-30 touch-manipulation",
                                     color
                                 )}
                             >
@@ -340,7 +350,7 @@ export default function MasterTerminalPage() {
                                 whileTap={{ scale: 0.85 }}
                                 onClick={() => handleNumberClick(num.toString())}
                                 disabled={isAuthenticating}
-                                className="h-[72px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/5 flex items-center justify-center text-2xl font-light text-white active:bg-white/20 transition-colors disabled:opacity-30"
+                                className="h-[80px] sm:h-[90px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/5 flex items-center justify-center text-3xl sm:text-4xl font-light text-white active:bg-white/20 transition-colors disabled:opacity-30 touch-manipulation"
                             >
                                 {num}
                             </motion.button>
@@ -348,7 +358,7 @@ export default function MasterTerminalPage() {
                         <motion.button
                             whileTap={{ scale: 0.85 }}
                             onClick={() => router.push('/dashboard/hr/terminal')}
-                            className="h-[72px] rounded-2xl bg-white/5 backdrop-blur-md border border-white/5 flex items-center justify-center text-[10px] font-bold text-white/30 uppercase tracking-wider transition-colors hover:text-white/50"
+                            className="h-[80px] sm:h-[90px] rounded-2xl bg-white/5 backdrop-blur-md border border-white/5 flex items-center justify-center text-[11px] sm:text-xs font-bold text-white/30 uppercase tracking-wider transition-colors hover:text-white/50 touch-manipulation"
                         >
                             Staff
                         </motion.button>
@@ -356,7 +366,7 @@ export default function MasterTerminalPage() {
                             whileTap={{ scale: 0.85 }}
                             onClick={() => handleNumberClick('0')}
                             disabled={isAuthenticating}
-                            className="h-[72px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/5 flex items-center justify-center text-2xl font-light text-white active:bg-white/20 transition-colors disabled:opacity-30"
+                            className="h-[80px] sm:h-[90px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/5 flex items-center justify-center text-3xl sm:text-4xl font-light text-white active:bg-white/20 transition-colors disabled:opacity-30 touch-manipulation"
                         >
                             0
                         </motion.button>
@@ -364,9 +374,9 @@ export default function MasterTerminalPage() {
                             whileTap={{ scale: 0.85 }}
                             onClick={handleDelete}
                             disabled={isAuthenticating}
-                            className="h-[72px] rounded-2xl bg-white/5 backdrop-blur-md border border-white/5 flex items-center justify-center text-white/40 active:bg-white/10 transition-colors disabled:opacity-30"
+                            className="h-[80px] sm:h-[90px] rounded-2xl bg-white/5 backdrop-blur-md border border-white/5 flex items-center justify-center text-white/40 active:bg-white/10 transition-colors disabled:opacity-30 touch-manipulation"
                         >
-                            <Delete className="h-5 w-5" />
+                            <Delete className="h-6 w-6 sm:h-7 sm:w-7" />
                         </motion.button>
                     </div>
                 </div>

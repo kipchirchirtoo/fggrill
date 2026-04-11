@@ -26,6 +26,11 @@ pub fn run() {
         .manage(state::AppState::default())
         // ── Setup ────────────────────────────────────────────────────────────
         .setup(|app| {
+            // Focus the main window on startup for keyboard input
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+            }
+            
             // Initialize local SQLite schema on first launch
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
