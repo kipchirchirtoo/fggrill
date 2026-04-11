@@ -7,7 +7,7 @@ export default function KyogongSportsBarPage() {
         <ProtectedRoute allowedRoles={[UserRole.KYOGONG_SPORTS_BAR_CASHIER, UserRole.SUPER_ADMIN]}>
             <KyogongPOSLayout
                 title="Sports Bar POS"
-                subtitle="Kyogong – Kyogong Branch"
+                subtitle="Famous Gates Hotels"
                 serviceType="bar"
                 salesPointCode="SPORTS_BAR"
                 allowedRole={UserRole.KYOGONG_SPORTS_BAR_CASHIER}

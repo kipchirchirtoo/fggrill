@@ -100,7 +100,7 @@ export default function LoginPage() {
             >
               <Image
                 src="/fglogo.png"
-                alt="Kyogong"
+                alt="Famous Gates Hotels"
                 width={56}
                 height={56}
                 className="object-cover scale-150"

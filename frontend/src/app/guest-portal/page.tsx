@@ -188,7 +188,7 @@ export default function GuestPortal() {
               <Home className="h-10 w-10 text-gray-800" />
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">Guest Portal</h1>
-            <p className="text-gray-400">Kyogong & Lounge</p>
+            <p className="text-gray-400">Famous Gates Hotels & Lounge</p>
           </div>
 
           <IOSCard className="p-6">

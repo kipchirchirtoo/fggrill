@@ -144,7 +144,7 @@ export default function EmployeePortal() {
                   <Image src="/fglogo.png" alt="FG" fill className="object-contain" priority />
                 </div>
                 <div className="hidden sm:block">
-                  <span className="font-black text-neutral-900 leading-tight block">Kyogong</span>
+                  <span className="font-black text-neutral-900 leading-tight block">Famous Gates Hotels</span>
                   <span className="text-[10px] uppercase tracking-tighter text-neutral-500 font-bold -mt-1 block">Staff Portal</span>
                 </div>
               </div>
@@ -415,7 +415,7 @@ export default function EmployeePortal() {
             <div className="max-w-2xl mx-auto">
               <div className="mb-8">
                 <h1 className="text-2xl font-bold text-neutral-900">Digital Identity</h1>
-                <p className="text-neutral-500">View and management your official Kyogong staff ID card.</p>
+                <p className="text-neutral-500">View and manage your official Famous Gates Hotels staff ID card.</p>
               </div>
               <IDCardWidget user={user} />
             </div>

@@ -658,7 +658,7 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
       <div>
         <h3 className="text-2xl font-black text-stone-900 mb-3 tracking-tight">Booking Confirmed!</h3>
         <p className="text-stone-500 text-sm max-w-[240px] mx-auto leading-relaxed">
-          Your stay at Kyogong is booked. We've sent the confirmation details to your email.
+          Your stay at Famous Gates Hotels is booked. We've sent the confirmation details to your email.
         </p>
       </div>
     </motion.div>

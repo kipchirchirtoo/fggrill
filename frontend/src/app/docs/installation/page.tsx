@@ -11,7 +11,7 @@ export default function InstallationDocs() {
                     <h1 className="text-3xl font-bold text-stone-900">Installation Guide</h1>
                 </div>
                 <p className="text-lg text-stone-600 max-w-3xl">
-                    Follow these steps to set up the Kyogong Management System on your local development environment or production server.
+                    Follow these steps to set up the Famous Gates Hotels Management System on your local development environment or production server.
                 </p>
             </div>
 

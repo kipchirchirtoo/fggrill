@@ -456,7 +456,7 @@ class InvoiceGenerator:
         payment_info = f"""
         <b>Payment Information:</b><br/>
         Bank: Kenya Commercial Bank<br/>
-        Account: Kyogongs Ltd<br/>
+        Account: Famous Gates Hotels Ltd<br/>
         Account No: 1234567890<br/>
         M-Pesa Paybill: 123456
         """
@@ -495,7 +495,7 @@ class InventoryReceiptGenerator:
     
     def __init__(self, logo_path: str = None):
         self.logo_path = logo_path or os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'public', 'fglogo.png')
-        self.company_name = "Kyogongs"
+        self.company_name = "Famous Gates Hotels"
         self.company_address = "Bomet, Kenya"
         
     def generate_inventory_receipt(self, receipt_data: Dict[str, Any]) -> bytes:

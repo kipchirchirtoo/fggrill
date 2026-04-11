@@ -190,8 +190,9 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
 
         const totalAmount = transactionData.total_amount;
         const b = activeBranch || { name: 'Famous Gates Hotels', location: 'Bomet, Kenya', settings: { phone: '0706782828', pin: '', email: 'famousgatesbmt@gmail.com' } };
-        const companyName = b.name.toUpperCase();
-        const companyAddress = b.location;
+        // Always print as Famous Gates Hotels regardless of branch DB name
+        const companyName = 'FAMOUS GATES HOTELS';
+        const companyAddress = b.location || 'Bomet, Kenya';
         const companyPhone = b.settings?.phone || '0706782828';
         const companyEmail = b.settings?.email || 'famousgatesbmt@gmail.com';
 
