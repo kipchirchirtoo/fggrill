@@ -156,7 +156,7 @@ export const staffAPI = {
   },
   clockIn: (data?: any) => fetchAPI<any>('/staff/attendance/clock-in', { method: 'POST', body: JSON.stringify(data) }),
   clockOut: (data?: any) => fetchAPI<any>('/staff/attendance/clock-out', { method: 'POST', body: JSON.stringify(data) }),
-  getStaffByIdentifier: (data: any) => fetchAPI<any>(`/staff/identifier/${data}`),
+  getStaffByIdentifier: (identifier: string) => fetchAPI<any>(`/staff/by-identifier/${encodeURIComponent(identifier)}`),
   getAttendance: (params?: any) => fetchAPI<any[]>(`/staff/attendance`, { method: 'GET' }),
   // Attendance summary for individual staff member
   getAttendanceSummary: (staffId?: string | number) => attendanceAPI.getSummary(staffId),

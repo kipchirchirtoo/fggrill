@@ -36,22 +36,23 @@ function VerifyContent() {
   const verify = async (id: string) => {
     try {
       setLoading(true);
-      const res = await staffAPI.getStaffMember(id);
+      // QR code encodes staff id_number — use identifier lookup (works with both staff ID and national ID)
+      const res = await staffAPI.getStaffByIdentifier(id);
       if (res.success && res.data) {
         const s = res.data;
         setStaff({
           ...s,
-          first_name:    s.first_name    || s.user?.first_name    || '',
-          last_name:     s.last_name     || s.user?.last_name     || '',
-          email:         s.email         || s.user?.email         || '',
-          phone:         s.phone         || s.user?.phone_number  || '',
-          position:      s.position      || s.role                || '',
-          profile_photo: s.profile_photo || s.user?.avatar        || null,
-          id_number:     s.id_number     || s.employee_id         || '',
-          national_id:   s.national_id   || '',
-          department:    s.department    || '',
-          status:        s.status        || 'active',
-          start_date:    s.start_date    || null,
+          first_name:    s.user?.first_name    || s.first_name    || '',
+          last_name:     s.user?.last_name     || s.last_name     || '',
+          email:         s.user?.email         || s.email         || '',
+          phone:         s.user?.phone_number  || s.phone         || '',
+          position:      s.role                || s.position      || '',
+          profile_photo: s.photo_url           || s.user?.avatar  || null,
+          id_number:     s.id_number           || '',
+          national_id:   s.national_id         || '',
+          department:    s.user?.department    || s.department    || '',
+          status:        s.status              || 'active',
+          start_date:    s.start_date          || null,
         });
       } else {
         setError('Staff member not found');

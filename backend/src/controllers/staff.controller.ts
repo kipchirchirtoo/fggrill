@@ -2125,20 +2125,60 @@ export const getStaffByIdentifier = async (
       return;
     }
 
-    const { data: staff, error } = await supabase
+    // Normalize identifier - remove hyphens, spaces, convert to uppercase
+    const normalizedId = identifier.replace(/[-\s]/g, '').toUpperCase();
+    
+    // Extract numeric part for flexible matching (e.g., "005" from "FG-005" or "FGH005")
+    const numericPart = normalizedId.replace(/[A-Z]/g, '');
+    
+    // Try exact match first (fast path)
+    let { data: staff, error } = await supabase
       .from('staff_profiles')
       .select(`
         *,
         user: users!user_id(id, first_name, last_name, email, phone_number, role, department)
       `)
-      .or(`id_number.eq."${identifier}",national_id.eq."${identifier}"`)
-      .single();
+      .or(`id_number.eq.${identifier},national_id.eq.${identifier}`)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    // If not found, try normalized matching
+    if (!staff) {
+      const { data: staffList, error: errorList } = await supabase
+        .from('staff_profiles')
+        .select(`
+          *,
+          user: users!user_id(id, first_name, last_name, email, phone_number, role, department)
+        `)
+        .eq('status', 'active');
+
+      if (!errorList && staffList && staffList.length > 0) {
+        // Priority 1: Exact normalized match (FG-005 matches FG005)
+        staff = staffList.find((s: any) => {
+          const staffIdNorm = (s.id_number || '').replace(/[-\s]/g, '').toUpperCase();
+          const nationalIdNorm = (s.national_id || '').replace(/[-\s]/g, '').toUpperCase();
+          return staffIdNorm === normalizedId || nationalIdNorm === normalizedId;
+        });
+
+        // Priority 2: If numeric part exists, match by numeric suffix (FG-005 matches FGH005)
+        if (!staff && numericPart && numericPart.length >= 2) {
+          staff = staffList.find((s: any) => {
+            const staffIdNorm = (s.id_number || '').replace(/[-\s]/g, '').toUpperCase();
+            const staffNumeric = staffIdNorm.replace(/[A-Z]/g, '');
+            // Match if numeric parts are equal and staff ID starts with FG
+            return staffNumeric === numericPart && staffIdNorm.startsWith('FG');
+          });
+        }
+      }
+    }
 
     if (error || !staff) {
+      logger.warn(`Staff not found with identifier: ${identifier} (normalized: ${normalizedId}, numeric: ${numericPart})`);
       res.status(404).json({ success: false, message: 'Staff member not found with this identifier' });
       return;
     }
 
+    logger.info(`Staff found: ${staff.first_name} ${staff.last_name} (${staff.id_number}) for identifier: ${identifier}`);
     res.status(200).json({
       success: true,
       data: staff
