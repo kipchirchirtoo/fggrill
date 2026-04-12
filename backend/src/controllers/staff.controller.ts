@@ -1143,7 +1143,7 @@ export const getAttendance = async (
   try {
     const { staff_id, branch_id, date, startDate, endDate, status } = req.query;
 
-    // If filtering by branch_id, first get staff_ids for that branch
+    // Get staff_ids for the branch filter
     let staffIds: string[] | null = null;
     if (branch_id) {
       const { data: branchStaff } = await supabase
@@ -1162,37 +1162,44 @@ export const getAttendance = async (
       .select('*')
       .order('attendance_date', { ascending: false });
 
-    if (staff_id) {
-      query = query.eq('staff_id', staff_id);
-    }
-
-    if (staffIds) {
-      query = query.in('staff_id', staffIds);
-    }
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
+    if (staff_id) query = query.eq('staff_id', staff_id);
+    if (staffIds) query = query.in('staff_id', staffIds);
+    if (status) query = query.eq('status', status);
     if (date) {
       query = query.eq('attendance_date', date);
     } else {
-      if (startDate) {
-        query = query.gte('attendance_date', startDate);
-      }
-      if (endDate) {
-        query = query.lte('attendance_date', endDate);
-      }
+      if (startDate) query = query.gte('attendance_date', startDate);
+      if (endDate) query = query.lte('attendance_date', endDate);
     }
 
     const { data, error } = await query;
-
     if (error) throw error;
+
+    const records = data || [];
+
+    // Join staff_profiles for names and staff ID
+    const ids = [...new Set(records.map((r: any) => r.staff_id).filter(Boolean))];
+    const { data: profiles } = ids.length
+      ? await supabase.from('staff_profiles').select('id, first_name, last_name, id_number, department, user_id').in('id', ids as string[])
+      : { data: [] };
+
+    // Build map by profile id AND by user_id as fallback
+    const profileById: Record<string, any> = {};
+    const profileByUserId: Record<string, any> = {};
+    for (const p of (profiles || [])) {
+      profileById[p.id] = p;
+      if (p.user_id) profileByUserId[p.user_id] = p;
+    }
+
+    const enriched = records.map((r: any) => ({
+      ...r,
+      staff: profileById[r.staff_id] || profileByUserId[r.staff_id] || null,
+    }));
 
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
-      data
+      count: enriched.length,
+      data: enriched
     });
   } catch (error) {
     next(error);
@@ -1613,7 +1620,7 @@ export const getLeaveRequests = async (
 
     const [profilesRes, approversRes] = await Promise.all([
       staffIds.length
-        ? supabase.from('staff_profiles').select('id, department, status, user_id').in('id', staffIds as string[])
+        ? supabase.from('staff_profiles').select('id, first_name, last_name, id_number, department, status, user_id, branch_id').in('id', staffIds as string[])
         : { data: [] },
       approverIds.length
         ? supabase.from('users').select('id, first_name, last_name').in('id', approverIds as string[])
@@ -1629,17 +1636,31 @@ export const getLeaveRequests = async (
     const userMap: Record<string, any> = Object.fromEntries((usersRes.data || []).map((u: any) => [u.id, u]));
     const approverMap: Record<string, any> = Object.fromEntries((approversRes.data || []).map((u: any) => [u.id, u]));
 
-    // Step 3: stitch together
-    const data = leaves.map((leave: any) => {
+    // Step 3: stitch together and filter by branch if needed
+    let data = leaves.map((leave: any) => {
       const profile = profileMap[leave.staff_id] || null;
       const user = profile ? (userMap[profile.user_id] || null) : null;
       const approver = leave.approved_by ? (approverMap[leave.approved_by] || null) : null;
+      
+      // Merge first_name/last_name from profile or user
+      const staffData = profile ? {
+        ...profile,
+        first_name: profile.first_name || user?.first_name || '',
+        last_name: profile.last_name || user?.last_name || '',
+        user
+      } : null;
+      
       return {
         ...leave,
-        staff: profile ? { ...profile, user } : null,
+        staff: staffData,
         approver,
       };
     });
+
+    // Filter by branch if specified
+    if (branch_id) {
+      data = data.filter((leave: any) => leave.staff?.branch_id === parseInt(branch_id as string));
+    }
 
     res.status(200).json({ success: true, count: data.length, data });
   } catch (error) {
@@ -1797,6 +1818,76 @@ export const rejectLeaveRequest = async (
   }
 };
 
+// @desc    Report to duty after leave
+// @route   PUT /api/staff/leave/:id/report-to-duty
+// @access  Private (Admin, Manager)
+export const reportToDuty = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { actual_return_date, report_notes } = req.body;
+    const userId = (req as any).user?.id;
+
+    // Verify leave exists and is approved
+    const { data: leave, error: fetchError } = await supabase
+      .from('staff_leave')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !leave) {
+      res.status(404).json({
+        success: false,
+        message: 'Leave request not found'
+      });
+      return;
+    }
+
+    if (leave.status !== 'approved') {
+      res.status(400).json({
+        success: false,
+        message: 'Can only report to duty for approved leave requests'
+      });
+      return;
+    }
+
+    if (leave.reported_to_duty) {
+      res.status(400).json({
+        success: false,
+        message: 'Employee has already reported to duty'
+      });
+      return;
+    }
+
+    // Update leave record with report to duty information
+    const { data, error } = await supabase
+      .from('staff_leave')
+      .update({
+        reported_to_duty: true,
+        actual_return_date: actual_return_date || new Date().toISOString().split('T')[0],
+        reported_at: new Date().toISOString(),
+        reported_by: userId,
+        report_notes: report_notes || null
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      message: 'Employee reported to duty successfully',
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Batch lock leave records for a period
 // @route   POST /api/staff/leave/lock
 // @access  Private (Admin, HR Manager)
@@ -1856,13 +1947,11 @@ export const getAttendanceReports = async (
 
     let filtered = records || [];
 
-    // Step 2: manual joins for staff profiles + users
+    // Step 2: join staff_profiles directly (first_name, last_name, department live there)
     const staffIds = [...new Set(filtered.map((r: any) => r.staff_id).filter(Boolean))];
-    const [profilesRes] = await Promise.all([
-      staffIds.length
-        ? supabase.from('staff_profiles').select('id, branch_id, rest_day, user_id').in('id', staffIds as string[])
-        : { data: [] },
-    ]);
+    const profilesRes = staffIds.length
+      ? await supabase.from('staff_profiles').select('id, first_name, last_name, department, branch_id, rest_day').in('id', staffIds as string[])
+      : { data: [] };
 
     const profileMap: Record<string, any> = Object.fromEntries((profilesRes.data || []).map((p: any) => [p.id, p]));
 
@@ -1871,17 +1960,9 @@ export const getAttendanceReports = async (
       filtered = filtered.filter((r: any) => profileMap[r.staff_id]?.branch_id === branchId);
     }
 
-    const userIds = [...new Set(Object.values(profileMap).map((p: any) => p.user_id).filter(Boolean))];
-    const usersRes = userIds.length
-      ? await supabase.from('users').select('id, first_name, last_name, department').in('id', userIds as string[])
-      : { data: [] };
-
-    const userMap: Record<string, any> = Object.fromEntries((usersRes.data || []).map((u: any) => [u.id, u]));
-
     filtered = filtered.map((r: any) => {
       const profile = profileMap[r.staff_id] || null;
-      const user = profile ? (userMap[profile.user_id] || null) : null;
-      return { ...r, staff: profile ? { ...profile, user } : null };
+      return { ...r, staff: profile };
     });
 
     // Compliance & Summaries
@@ -1893,8 +1974,10 @@ export const getAttendanceReports = async (
       if (totalHours > 12) {
         issues.push('Excessive daily hours (>12h)');
       }
-      if (!rec.is_approved) {
+      if (!rec.is_approved && rec.in_method === 'PIN') {
         issues.push('Pending supervisor approval (PIN clock-in)');
+      } else if (!rec.is_approved) {
+        issues.push('Pending supervisor approval');
       }
       return { ...rec, issues };
     });

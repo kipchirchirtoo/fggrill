@@ -45,11 +45,9 @@ interface AttendanceRecord {
     rejection_reason?: string;
     issues?: string[];
     staff?: {
-        user: {
-            first_name: string;
-            last_name: string;
-            department?: string;
-        }
+        first_name: string;
+        last_name: string;
+        department?: string;
     }
 }
 
@@ -123,7 +121,8 @@ export default function HRAttendancePage() {
 
         const headers = ['Staff Name', 'Department', 'Clock In', 'Clock Out', 'Normal Hours', 'OT Hours', 'Night Hours', 'Status'];
         const rows = records.map(r => [
-            `${r.staff?.user?.first_name} ${r.staff?.user?.last_name}`,
+            `${r.staff?.first_name || ''} ${r.staff?.last_name || ''}`.trim() || 'Unknown',
+            r.staff?.department || '',
             r.staff?.user?.department || '',
             r.clock_in,
             r.clock_out || '',
@@ -146,9 +145,9 @@ export default function HRAttendancePage() {
     };
 
     const filteredRecords = records.filter(r => {
-        const staffName = (r.staff?.user?.first_name + ' ' + r.staff?.user?.last_name).toLowerCase();
+        const staffName = `${r.staff?.first_name || ''} ${r.staff?.last_name || ''}`.trim().toLowerCase();
         const nameMatch = staffName.includes(searchQuery.toLowerCase());
-        const deptMatch = r.staff?.user?.department?.toLowerCase().includes(searchQuery.toLowerCase());
+        const deptMatch = r.staff?.department?.toLowerCase().includes(searchQuery.toLowerCase());
         const dutyMatch = !showOnlyOnDuty || !r.clock_out;
         return (nameMatch || deptMatch) && dutyMatch;
     });
@@ -344,7 +343,7 @@ export default function HRAttendancePage() {
                                             const totalOT = Number(record.hours_ot_weekday || 0) +
                                                 Number(record.hours_ot_rest || 0) +
                                                 Number(record.hours_ot_holiday || 0);
-                                            const staffName = record.staff?.user?.first_name + ' ' + record.staff?.user?.last_name;
+                                            const staffName = `${record.staff?.first_name || ''} ${record.staff?.last_name || ''}`.trim() || 'Unknown Staff';
 
                                             return (
                                                 <tr key={record.id} className="hover:bg-stone-50/50 transition-colors group">

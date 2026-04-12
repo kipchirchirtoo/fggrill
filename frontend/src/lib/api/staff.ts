@@ -104,6 +104,7 @@ const staffBase = {
   submitLeaveRequest: (data: any) => fetchAPI<LeaveRequest>('/staff/leave', { method: 'POST', body: JSON.stringify(data) }),
   approveLeaveRequest: (id: string | number) => fetchAPI<void>(`/staff/leave/${id}/approve`, { method: 'PUT' }),
   rejectLeaveRequest: (id: string | number) => fetchAPI<void>(`/staff/leave/${id}/reject`, { method: 'PUT' }),
+  reportToDuty: (id: string | number, data: any) => fetchAPI<void>(`/staff/leave/${id}/report-to-duty`, { method: 'PUT', body: JSON.stringify(data) }),
   
   getPerformanceReviews: (staffId?: string | number) => fetchAPI<any[]>(`/staff/performance${buildQuery({ staff_id: staffId })}`),
   submitPerformanceReview: (data: any) => fetchAPI<any>('/staff/performance', { method: 'POST', body: JSON.stringify(data) }),

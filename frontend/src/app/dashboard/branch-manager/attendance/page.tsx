@@ -7,7 +7,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/minimal/card";
 import { IOSBadge } from '@/components/ui/ios-badge';
-import { staffAPI, attendanceAnalyticsAPI } from '@/lib/api';
+import { staffAPI } from '@/lib/api';
 import {
   RefreshCw, Calendar, Users, Timer,
   Search, Download, ChevronRight, CheckCircle2, AlertCircle
@@ -27,12 +27,10 @@ interface AttendanceRecord {
   status: 'present' | 'absent' | 'late' | 'leave';
   notes?: string;
   staff?: {
-    id_number: string;
-    user: {
-      first_name: string;
-      last_name: string;
-      email: string;
-    };
+    first_name: string;
+    last_name: string;
+    id_number?: string;
+    department?: string;
   };
 }
 
@@ -51,16 +49,27 @@ export default function BranchAttendancePage() {
     if (!currentBranchId) return;
     setIsLoading(true);
     try {
-      const [attendanceRes, analyticsRes] = await Promise.all([
-        staffAPI.getAttendance({ branch_id: currentBranchId, date: selectedDate }),
-        attendanceAnalyticsAPI.analyze(currentBranchId, selectedDate)
-      ]);
+      const attendanceRes = await staffAPI.getAttendance({ branch_id: currentBranchId, date: selectedDate });
 
       if (attendanceRes.success) {
-        setAttendance(attendanceRes.data || []);
-      }
-      if (analyticsRes.success) {
-        setAnalytics(analyticsRes.summary);
+        const records = attendanceRes.data || [];
+        setAttendance(records);
+
+        // Compute stats from the data directly
+        const totalHours = records.reduce((sum: number, r: any) => {
+          if (r.clock_in && r.clock_out) {
+            const diff = (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
+            return sum + diff;
+          }
+          return sum;
+        }, 0);
+
+        setAnalytics({
+          total_staff: records.length,
+          present: records.filter((r: any) => r.status === 'present').length,
+          late: records.filter((r: any) => r.status === 'late').length,
+          total_hours: totalHours.toFixed(1),
+        });
       }
     } catch (error) {
       console.error('Error fetching attendance data:', error);
@@ -75,8 +84,8 @@ export default function BranchAttendancePage() {
   }, [fetchData]);
 
   const filteredAttendance = attendance.filter(a => {
-    const name = `${a.staff?.user.first_name} ${a.staff?.user.last_name}`.toLowerCase();
-    const id = a.staff?.id_number?.toLowerCase() || '';
+    const name = `${a.staff?.first_name || ''} ${a.staff?.last_name || ''}`.toLowerCase();
+    const id = (a.staff?.id_number || '').toLowerCase();
     return name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
   });
 
@@ -100,7 +109,7 @@ export default function BranchAttendancePage() {
     const csvData = filteredAttendance.map(a => [
       a.attendance_date,
       a.staff?.id_number || '',
-      `${a.staff?.user.first_name} ${a.staff?.user.last_name}`,
+      `${a.staff?.first_name || ''} ${a.staff?.last_name || ''}`.trim(),
       a.clock_in ? format(new Date(a.clock_in), 'HH:mm:ss') : '',
       a.clock_out ? format(new Date(a.clock_out), 'HH:mm:ss') : '',
       a.status,
@@ -128,6 +137,31 @@ export default function BranchAttendancePage() {
     try {
       toast.loading('Generating PDF report...');
 
+      // Use the attendance data we already have instead of fetching again
+      const reportData = {
+        total_staff: attendance.length,
+        present_count: attendance.filter(a => a.status === 'present').length,
+        late_count: attendance.filter(a => a.status === 'late').length,
+        absent_count: 0,
+        leave_count: attendance.filter(a => a.status === 'leave').length,
+        total_hours: attendance.reduce((sum, a) => {
+          if (a.clock_in && a.clock_out) {
+            const diff = (new Date(a.clock_out).getTime() - new Date(a.clock_in).getTime()) / 3600000;
+            return sum + diff;
+          }
+          return sum;
+        }, 0),
+        records: attendance.map(a => ({
+          date: a.attendance_date,
+          name: `${a.staff?.first_name || ''} ${a.staff?.last_name || ''}`.trim() || 'Unknown',
+          employee_id: a.staff?.id_number || '',
+          clock_in: a.clock_in,
+          clock_out: a.clock_out,
+          status: a.status,
+          notes: a.notes || ''
+        }))
+      };
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`, {
         method: 'POST',
         headers: {
@@ -141,7 +175,8 @@ export default function BranchAttendancePage() {
             end_date: selectedDate,
             branch_name: activeBranch?.name || 'Branch'
           },
-          useRealData: true
+          data: reportData,
+          useRealData: false
         }),
       });
 
@@ -278,13 +313,13 @@ export default function BranchAttendancePage() {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 font-semibold text-xs">
-                                {record.staff?.user.first_name?.[0]}{record.staff?.user.last_name?.[0]}
+                                {record.staff?.first_name?.[0]}{record.staff?.last_name?.[0]}
                               </div>
                               <div>
                                 <div className="text-sm font-medium text-stone-900">
-                                  {record.staff?.user.first_name} {record.staff?.user.last_name}
+                                  {record.staff?.first_name} {record.staff?.last_name}
                                 </div>
-                                <div className="text-[11px] text-stone-400">{record.staff?.user.email}</div>
+                                <div className="text-[11px] text-stone-400">{record.staff?.department || '-'}</div>
                               </div>
                             </div>
                           </td>
@@ -333,15 +368,15 @@ export default function BranchAttendancePage() {
                 <div className="space-y-6 py-4">
                   <div className="flex items-center gap-5 p-4 bg-stone-50 rounded-2xl border border-stone-100">
                     <div className="w-16 h-16 rounded-full bg-stone-200 flex items-center justify-center text-stone-700 font-bold text-xl shadow-sm">
-                      {selectedRecord.staff?.user.first_name?.[0]}{selectedRecord.staff?.user.last_name?.[0]}
+                      {selectedRecord.staff?.first_name?.[0]}{selectedRecord.staff?.last_name?.[0]}
                     </div>
                     <div>
                       <h4 className="text-xl font-bold text-stone-900 tracking-tight">
-                        {selectedRecord.staff?.user.first_name} {selectedRecord.staff?.user.last_name}
+                        {selectedRecord.staff?.first_name} {selectedRecord.staff?.last_name}
                       </h4>
-                      <p className="text-sm text-stone-500 font-medium">{selectedRecord.staff?.user.email}</p>
+                      <p className="text-sm text-stone-500 font-medium">{selectedRecord.staff?.department || '-'}</p>
                       <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-2 py-0.5 rounded">ID: {selectedRecord.staff?.id_number}</span>
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-2 py-0.5 rounded">ID: {selectedRecord.staff?.id_number || '-'}</span>
                         <IOSBadge color={getStatusColor(selectedRecord.status)} variant="light" size="sm">
                           {selectedRecord.status.toUpperCase()}
                         </IOSBadge>

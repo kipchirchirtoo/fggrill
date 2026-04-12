@@ -1251,6 +1251,12 @@ export function ConsolidatedNav() {
           label="Attendance"
           active={pathname === '/dashboard/branch-manager/attendance'}
         />
+        <NavItem
+          href="/dashboard/branch-manager/leave"
+          icon={Calendar}
+          label="Leave Management"
+          active={pathname === '/dashboard/branch-manager/leave'}
+        />
       </NavGroup>
 
       {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (

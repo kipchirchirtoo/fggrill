@@ -1,5 +1,5 @@
 // Service Worker for Famous Gates Hotels
-const CACHE_NAME = 'fg-hotels-cache-v5';
+const CACHE_NAME = 'fg-hotels-cache-v6';
 const DB_NAME = 'fg-hotels-offline-v3';
 const DB_VERSION = 1;
 
@@ -75,6 +75,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Dashboard/app routes — always network-first, never cache-fail with 408
+  if (url.pathname.startsWith('/dashboard') || url.pathname.startsWith('/admin')) {
+    event.respondWith(
+      fetch(request).catch(() => {
+        return caches.match('/offline.html').then(response => {
+          return response || new Response('Offline - please check your connection', {
+            status: 503,
+            headers: { 'Content-Type': 'text/html' }
+          });
+        });
+      })
+    );
+    return;
+  }
+
   // Static assets - Cache first
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
@@ -93,4 +108,4 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-console.log('[SW] Service Worker v5 loaded');
+console.log('[SW] Service Worker v6 loaded');

@@ -1365,23 +1365,49 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
             return data
             
         try:
-            # Fetch attendance records with staff and user info
-            query = self.client.table('staff_attendance').select('*, staff:staff_profiles(*, user:users(*))')
+            # Fetch attendance records first
+            query = self.client.table('staff_attendance').select('*')
             query = query.gte('attendance_date', start_date)
             query = query.lte('attendance_date', end_date)
             
-            # Filter by branch if provided
-            # Note: We need to filter by staff_profiles.branch_id
-            # Supabase JS client doesn't support deep filtering easily in select, 
-            # but we can try to use a filter string if needed, or stick to simple filter for now.
-            
             result = query.execute()
-            
             all_records = result.data or []
+            logger.info(f"Fetched {len(all_records)} attendance records for date range {start_date} to {end_date}")
+            
+            if not all_records:
+                logger.warning("No attendance records found for the date range")
+                return data
+            
+            # Get unique staff_ids
+            staff_ids = list(set(r.get('staff_id') for r in all_records if r.get('staff_id')))
+            logger.info(f"Found {len(staff_ids)} unique staff IDs")
+            
+            # Fetch staff profiles - try matching by both id and user_id
+            staff_profiles = {}
+            if staff_ids:
+                profiles_result = self.client.table('staff_profiles').select('*').in_('id', staff_ids).execute()
+                for p in (profiles_result.data or []):
+                    staff_profiles[p['id']] = p
+                    if p.get('user_id'):
+                        staff_profiles[p['user_id']] = p  # Also map by user_id as fallback
+                
+                logger.info(f"Fetched {len(profiles_result.data or [])} staff profiles")
+            
+            # Attach staff profile to each record
+            for record in all_records:
+                staff_id = record.get('staff_id')
+                record['staff'] = staff_profiles.get(staff_id, {})
             
             # Filter by branch manually if needed
             if branch_id:
-                all_records = [r for r in all_records if r.get('staff', {}).get('branch_id') == int(branch_id)]
+                logger.info(f"Filtering by branch_id: {branch_id}")
+                filtered = []
+                for r in all_records:
+                    staff_branch = r.get('staff', {}).get('branch_id')
+                    if staff_branch == int(branch_id):
+                        filtered.append(r)
+                all_records = filtered
+                logger.info(f"After branch filter: {len(all_records)} records")
             
             # Group by staff_id
             staff_data = {}
@@ -1424,13 +1450,12 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
                 total_seconds += s_info['total_seconds']
                 
                 staff = s_info['staff']
-                user = staff.get('user', {})
                 
                 # For the detailed records, we still list individual shifts
                 for record in s_info['records']:
                     data['records'].append({
                         'date': record.get('attendance_date'),
-                        'name': f"{user.get('first_name', '')} {user.get('last_name', '')}",
+                        'name': f"{staff.get('first_name', '')} {staff.get('last_name', '')}".strip() or 'Unknown',
                         'employee_id': staff.get('id_number', ''),
                         'clock_in': record.get('clock_in'),
                         'clock_out': record.get('clock_out'),

@@ -3,9 +3,9 @@
   "version": "1.0.4",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
-    "build": "next build",
-    "build:electron": "cross-env BUILD_FOR_ELECTRON=true next build",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next dev -p 3001",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next build",
+    "build:electron": "cross-env NODE_OPTIONS=--max-old-space-size=8192 BUILD_FOR_ELECTRON=true next build",
     "start": "next start",
     "lint": "next lint"
   },

@@ -65,7 +65,10 @@ CORS(app,
          "http://localhost:3000",
          "http://localhost:3001",
          "http://127.0.0.1:3000",
-         "http://127.0.0.1:3001"
+         "http://127.0.0.1:3001",
+         "https://famousgate.hirall.com",
+         "https://api.hirall.com",
+         "https://services.hirall.com"
      ],
      supports_credentials=True,
      expose_headers=["Content-Disposition"])

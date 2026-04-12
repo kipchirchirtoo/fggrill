@@ -17,6 +17,7 @@ import {
   updateLeaveRequest,
   approveLeaveRequest,
   rejectLeaveRequest,
+  reportToDuty,
   updateAttendance,
   approveAttendance,
   getAttendanceReports,
@@ -167,18 +168,23 @@ router.get('/:id/documents',
 );
 
 router.put('/leave/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
   updateLeaveRequest
 );
 
 router.put('/leave/:id/approve',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
   approveLeaveRequest
 );
 
 router.put('/leave/:id/reject',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
   rejectLeaveRequest
+);
+
+router.put('/leave/:id/report-to-duty',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR]),
+  reportToDuty
 );
 
 export default router;
