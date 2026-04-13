@@ -54,18 +54,28 @@ export const getItems = async (
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Get stats for the cards
-    const [totalRes, lowStockRes, outOfStockRes] = await Promise.all([
-      supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).eq('is_active', true),
-      supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).filter('quantity', 'lte', 'reorder_level'),
-      supabase.from('simple_items').select('sku', { count: 'exact', head: true }).eq('is_active', true).eq('quantity', 0)
-    ]);
+    // Get stats for the cards - fetch all items to calculate accurate stats
+    const { data: allItems, error: statsError } = await supabase
+      .from('simple_items')
+      .select('sku, quantity, reorder_level')
+      .eq('is_active', true);
+
+    if (statsError) throw statsError;
+
+    const total = allItems?.length || 0;
+    const outOfStock = allItems?.filter(item => (item.quantity || 0) === 0).length || 0;
+    const lowStock = allItems?.filter(item => {
+      const qty = item.quantity || 0;
+      const reorder = item.reorder_level || 10;
+      return qty > 0 && qty <= reorder;
+    }).length || 0;
+    const inStock = total - outOfStock;
 
     const stats = {
-      total: totalRes.count || 0,
-      lowStock: lowStockRes.count || 0,
-      outOfStock: outOfStockRes.count || 0,
-      inStock: (totalRes.count || 0) - (outOfStockRes.count || 0)
+      total,
+      lowStock,
+      outOfStock,
+      inStock
     };
 
     // Apply range

@@ -54,7 +54,7 @@ export default function InventoryPage() {
     try {
       const payload = { ...formData, quantity: isEdit ? (selectedItem?.quantity || 0) : 0 };
       const response = isEdit && selectedItem
-        ? await storeAPI.updateItem(selectedItem.id, payload)
+        ? await storeAPI.updateItem(selectedItem.sku, payload)
         : await storeAPI.createItem(payload);
 
       if (response.success) {
