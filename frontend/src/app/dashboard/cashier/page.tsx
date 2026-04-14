@@ -26,7 +26,7 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { CashierLogbook } from '@/components/cashier/cashier-logbook';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
-import { UserRole } from '@/lib/auth-context';
+import { UserRole, useAuth } from '@/lib/auth-context';
 
 import {
     saveOfflineTransaction,
@@ -40,6 +40,7 @@ import { POSReceipt } from '@/components/cashier/POSReceipt';
 
 function CashierPageContent() {
     const searchParams = useSearchParams();
+    const { user } = useAuth();
     const tabParam = searchParams.get('tab') as any;
     const [activeTab, setActiveTab] = useState<'station' | 'logbook' | 'insights'>(
         ['station', 'logbook', 'insights'].includes(tabParam) ? tabParam : 'station'
@@ -79,6 +80,7 @@ function CashierPageContent() {
     const [insightsData, setInsightsData] = useState<any>(null);
     const [forecastData, setForecastData] = useState<any>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const currentStaffName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Staff';
 
     const currentTotal = isPOSType ? cart.reduce((sum, i) => sum + i.line_total, 0) : (billData?.financials?.balance || 0);
     const changeDue = (parseFloat(cashGiven) || 0) - currentTotal;
@@ -533,7 +535,12 @@ function CashierPageContent() {
                         ...response.data,
                         transaction_ref: response.data.reference,
                         created_at: new Date().toISOString(),
-                        cashier_name: 'Current Cashier',
+                        cashier_name: currentStaffName,
+                        staff_label: (billData.order?.waiter_name || billData.order?.table_number) ? 'Waiter' : 'Cashier',
+                        served_by: billData.order?.waiter_name || undefined,
+                        table_number: billData.order?.table_number,
+                        room_number: billData.order?.room_number,
+                        customer_name: billData.order?.guest_name || billData.bill?.customer_name || billData.invoice?.customer_name || billData.booking?.guest_name || 'Walk-in',
                         total_amount: amount,
                         payment_method: paymentMethod,
                         items: billData.order?.items || []
@@ -804,10 +811,11 @@ function CashierPageContent() {
                         setSelectedTransaction({
                             ...response.data,
                             created_at: new Date().toISOString(),
-                            cashier_name: 'Staff',
+                            cashier_name: currentStaffName,
                             payment_method: 'MPESA',
                             items: [...cart],
                             total_amount: total,
+                            amount_paid: total,
                             mpesa_code: mpesaCode,
                             businessInfo: {
                                 name: 'FamousGateHotels',
@@ -834,10 +842,11 @@ function CashierPageContent() {
                     setSelectedTransaction({
                         ...response.data,
                         created_at: new Date().toISOString(),
-                        cashier_name: 'Staff',
+                        cashier_name: currentStaffName,
                         payment_method: 'CASH',
                         items: [...cart],
                         total_amount: total,
+                        amount_paid: total,
                         businessInfo: {
                             name: 'FamousGateHotels',
                             address: 'Bomet, Kenya',
@@ -936,8 +945,12 @@ function CashierPageContent() {
                 receipt_type: 'sale' as const,
                 receipt_number: receiptNumber,
                 date: selectedTransaction.created_at || new Date().toISOString(),
-                customer_name: selectedTransaction.customer_name || 'Walk-in',
-                cashier_name: selectedTransaction.cashier_name || 'Staff',
+                table_number: selectedTransaction.table_number,
+                room_number: selectedTransaction.room_number,
+                customer_name: selectedTransaction.customer_name || (selectedTransaction.table_number ? `Table ${selectedTransaction.table_number}` : 'Walk-in'),
+                cashier_name: selectedTransaction.cashier_name || currentStaffName,
+                staff_label: selectedTransaction.staff_label,
+                served_by: selectedTransaction.served_by,
                 items: items.map((item: any) => ({
                     name: item.name || item.item_name || 'Item',
                     quantity: item.qty || item.quantity || 1,
@@ -1003,8 +1016,11 @@ function CashierPageContent() {
                     receipt_number: billData.order.order_number,
                     date: billData.order.created_at || new Date().toISOString(),
                     table_number: billData.order.table_number,
-                    customer_name: billData.order.guest_name || 'Walk-in',
-                    cashier_name: 'Staff',
+                    room_number: billData.order.room_number,
+                    customer_name: billData.order.guest_name || (billData.order.table_number ? `Table ${billData.order.table_number}` : 'Walk-in'),
+                    cashier_name: currentStaffName,
+                    staff_label: (billData.order.waiter_name || billData.order.table_number) ? 'Waiter' : 'Cashier',
+                    served_by: billData.order.waiter_name || undefined,
                     items: (billData.order.items || []).map((item: any) => ({
                         name: item.name,
                         quantity: item.quantity || item.qty,

@@ -6,6 +6,8 @@ import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { procurementAPI, storeAPI } from '@/lib/api';
+import { downloadPurchaseOrderPDF } from '@/lib/purchase-order-pdf';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -15,12 +17,13 @@ import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
+
 import { IOSButton } from '@/components/ui/ios-button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
     Building2, Phone, Mail, MapPin, Landmark, Calendar,
     FileText, Truck, CreditCard, History, BarChart3,
-    ShieldCheck, ArrowLeft, Download, Plus, AlertCircle, RefreshCw, Check
+    ShieldCheck, ArrowLeft, Download, Plus, AlertCircle, RefreshCw, Check, Loader2, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -57,9 +60,33 @@ interface LedgerEntry {
     description: string;
 }
 
+interface CatalogItem {
+    id?: string;
+    sku?: string;
+    item_name?: string;
+    name?: string;
+    description?: string;
+    unit_of_measure?: string;
+    unit?: string;
+    category?: string;
+    last_purchase_price?: number;
+    cost_price?: number;
+    unit_cost?: number;
+}
+
+interface POItem {
+    item_id: string;
+    quantity: number;
+    unit_price: number;
+    name: string;
+    unit: string;
+    category: string;
+}
+
 export default function SupplierDetailPage() {
     const { id } = useParams();
     const { user } = useAuth();
+
     const [supplier, setSupplier] = useState<Supplier | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
@@ -78,15 +105,17 @@ export default function SupplierDetailPage() {
     const [exportModalOpen, setExportModalOpen] = useState(false);
 
     // PO Form Date
-    const [poItems, setPoItems] = useState<{ item_id: string; quantity: number; unit_price: number; name: string }[]>([]);
+    const [poItems, setPoItems] = useState<POItem[]>([]);
     const [poFormData, setPoFormData] = useState({
         expected_delivery_date: '',
         special_instructions: '',
         payment_terms: '30 Days',
         delivery_terms: 'DDP'
     });
-    const [availableItems, setAvailableItems] = useState<any[]>([]);
-    const [selectedItemId, setSelectedItemId] = useState('');
+    const [itemSearch, setItemSearch] = useState('');
+    const [itemSearchResults, setItemSearchResults] = useState<CatalogItem[]>([]);
+    const [itemSearchLoading, setItemSearchLoading] = useState(false);
+    const [highlightedItemIndex, setHighlightedItemIndex] = useState(-1);
 
     // Export Form Data
     const [exportDates, setExportDates] = useState({
@@ -94,18 +123,97 @@ export default function SupplierDetailPage() {
         end_date: new Date().toISOString().split('T')[0]
     });
 
-    const fetchItems = async () => {
-        const res = await storeAPI.getItems({ limit: 1000 });
-        if (res.success && res.data) {
-            setAvailableItems(res.data);
+    useEffect(() => {
+        if (!poModalOpen) {
+            setItemSearch('');
+            setItemSearchResults([]);
+            setItemSearchLoading(false);
+            setHighlightedItemIndex(-1);
+            return;
         }
+
+        const trimmedSearch = itemSearch.trim();
+
+        if (trimmedSearch.length < 2) {
+            setItemSearchResults([]);
+            setItemSearchLoading(false);
+            setHighlightedItemIndex(-1);
+            return;
+        }
+
+        const timeoutId = window.setTimeout(async () => {
+            try {
+                setItemSearchLoading(true);
+                const res = await storeAPI.getMasterCatalog({ search: trimmedSearch });
+                if (res.success && res.data) {
+                    setItemSearchResults(res.data);
+                    setHighlightedItemIndex(res.data.length > 0 ? 0 : -1);
+                } else {
+                    setItemSearchResults([]);
+                    setHighlightedItemIndex(-1);
+                }
+            } catch (error) {
+                setItemSearchResults([]);
+                setHighlightedItemIndex(-1);
+                toast.error('Failed to search inventory items');
+            } finally {
+                setItemSearchLoading(false);
+            }
+        }, 300);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [itemSearch, poModalOpen]);
+
+    const addItemToPO = (item: CatalogItem) => {
+        const itemId = item.sku || item.id;
+        if (!itemId) return;
+
+        if (poItems.some(existingItem => existingItem.item_id === itemId)) {
+            toast.error('This item is already added to the purchase order');
+            return;
+        }
+
+        setPoItems(prev => [...prev, {
+            item_id: itemId,
+            name: item.item_name || item.name || item.description || itemId,
+            unit: item.unit_of_measure || item.unit || '—',
+            category: item.category || 'uncategorized',
+            quantity: 1,
+            unit_price: Number(item.last_purchase_price ?? item.cost_price ?? item.unit_cost ?? 0),
+        }]);
+        setItemSearch('');
+        setItemSearchResults([]);
+        setItemSearchLoading(false);
+        setHighlightedItemIndex(-1);
     };
 
-    useEffect(() => {
-        if (poModalOpen) {
-            fetchItems();
+    const handleItemSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (itemSearchResults.length === 0) {
+            return;
         }
-    }, [poModalOpen]);
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setHighlightedItemIndex(prev => (prev < itemSearchResults.length - 1 ? prev + 1 : 0));
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setHighlightedItemIndex(prev => (prev > 0 ? prev - 1 : itemSearchResults.length - 1));
+        }
+
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (highlightedItemIndex >= 0 && highlightedItemIndex < itemSearchResults.length) {
+                addItemToPO(itemSearchResults[highlightedItemIndex]);
+            }
+        }
+
+        if (event.key === 'Escape') {
+            setItemSearchResults([]);
+            setHighlightedItemIndex(-1);
+        }
+    };
 
     const handleCreatePO = async () => {
         if (poItems.length === 0) {
@@ -131,6 +239,9 @@ export default function SupplierDetailPage() {
                     payment_terms: '30 Days',
                     delivery_terms: 'DDP'
                 });
+                setItemSearch('');
+                setItemSearchResults([]);
+                setHighlightedItemIndex(-1);
                 fetchData(); // Refresh data
             } else {
                 toast.error(res.message || 'Failed to create PO');
@@ -144,152 +255,32 @@ export default function SupplierDetailPage() {
     };
 
     const handleExportStatement = async () => {
-        try {
-            if (!exportDates.start_date || !exportDates.end_date) {
-                toast.error('Please select both start and end dates');
-                return;
-            }
-            if (!supplier) {
-                toast.error('Supplier data not loaded');
-                return;
-            }
-
-            toast.info('Generating statement...');
-
-            // Dynamic import keeps jsPDF out of the initial bundle
-            const jsPDFModule = await import('jspdf');
-            const jsPDF = jsPDFModule.default;
-            const autoTableModule = await import('jspdf-autotable');
-            const autoTable = autoTableModule.default;
-
-            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            const pageW = doc.internal.pageSize.getWidth();
-            const start = new Date(exportDates.start_date);
-            const end = new Date(exportDates.end_date);
-
-            // ── Header ──────────────────────────────────────────────
-            doc.setFillColor(30, 41, 59); // slate-800
-            doc.rect(0, 0, pageW, 28, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(16);
-            doc.setFont('helvetica', 'bold');
-            doc.text('FAMOUS GATES HOTELS', 14, 11);
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            doc.text('SUPPLIER ACCOUNT STATEMENT', 14, 18);
-            doc.setFontSize(8);
-            doc.text(`Period: ${start.toLocaleDateString()} – ${end.toLocaleDateString()}`, 14, 24);
-            doc.text(`Generated: ${new Date().toLocaleString()}`, pageW - 14, 24, { align: 'right' });
-
-            // ── Supplier Info ───────────────────────────────────────
-            doc.setTextColor(30, 41, 59);
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'bold');
-            doc.text(supplier.name, 14, 36);
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 116, 139);
-            const infoLines: string[] = [];
-            if (supplier.supplier_code) infoLines.push(`Code: ${supplier.supplier_code}`);
-            if (supplier.contact_person) infoLines.push(`Contact: ${supplier.contact_person}`);
-            if (supplier.phone) infoLines.push(`Phone: ${supplier.phone}`);
-            if (supplier.email) infoLines.push(`Email: ${supplier.email}`);
-            if ((supplier as any).tax_id || supplier.supplier_pin) infoLines.push(`KRA PIN: ${(supplier as any).tax_id || supplier.supplier_pin}`);
-            doc.text(infoLines.join('   |   '), 14, 42);
-
-            // ── Summary Row ─────────────────────────────────────────
-            const totalInvoiced = invoices.reduce((s: number, inv: any) => s + (parseFloat(inv.total_amount) || 0), 0);
-            const totalPaid = payments.reduce((s: number, p: any) => s + (parseFloat(p.amount) || 0), 0);
-            const balance = totalInvoiced - totalPaid;
-            const fmt = (n: number) => `KES ${n.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
-
-            doc.setFillColor(248, 250, 252);
-            doc.roundedRect(14, 47, pageW - 28, 14, 2, 2, 'F');
-            doc.setTextColor(30, 41, 59);
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            const colW = (pageW - 28) / 3;
-            doc.text('TOTAL INVOICED',    14 + colW * 0 + colW / 2, 53, { align: 'center' });
-            doc.text('TOTAL PAID',        14 + colW * 1 + colW / 2, 53, { align: 'center' });
-            doc.text('OUTSTANDING BALANCE', 14 + colW * 2 + colW / 2, 53, { align: 'center' });
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.text(fmt(totalInvoiced), 14 + colW * 0 + colW / 2, 58, { align: 'center' });
-            doc.text(fmt(totalPaid),     14 + colW * 1 + colW / 2, 58, { align: 'center' });
-            doc.setTextColor(balance > 0 ? 220 : 22, balance > 0 ? 38 : 163, balance > 0 ? 38 : 74);
-            doc.text(fmt(balance),       14 + colW * 2 + colW / 2, 58, { align: 'center' });
-
-            // ── Ledger Table ────────────────────────────────────────
-            const filteredLedger = ledger.filter((e: LedgerEntry) => {
-                const d = new Date(e.transaction_date);
-                return d >= start && d <= end;
-            });
-
-            const tableRows = filteredLedger.map((e: LedgerEntry) => [
-                new Date(e.transaction_date).toLocaleDateString(),
-                e.reference_number || '—',
-                e.transaction_type?.replace(/_/g, ' ').toUpperCase() || '—',
-                e.description || '—',
-                e.debit_amount  > 0 ? fmt(e.debit_amount)  : '',
-                e.credit_amount > 0 ? fmt(e.credit_amount) : '',
-                fmt(e.running_balance ?? 0)
-            ]);
-
-            if (tableRows.length === 0) {
-                tableRows.push(['', '', 'No transactions in selected period', '', '', '', '']);
-            }
-
-            doc.setTextColor(30, 41, 59);
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'bold');
-            doc.text('TRANSACTION LEDGER', 14, 68);
-
-            autoTable(doc, {
-                startY: 71,
-                head: [['Date', 'Reference', 'Type', 'Description', 'Debit (KES)', 'Credit (KES)', 'Balance (KES)']],
-                body: tableRows,
-                styles: { fontSize: 7, cellPadding: 2 },
-                headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [248, 250, 252] },
-                columnStyles: {
-                    0: { cellWidth: 20 },
-                    1: { cellWidth: 25 },
-                    2: { cellWidth: 25 },
-                    3: { cellWidth: 55 },
-                    4: { cellWidth: 22, halign: 'right' },
-                    5: { cellWidth: 22, halign: 'right' },
-                    6: { cellWidth: 22, halign: 'right' },
-                },
-                margin: { left: 14, right: 14 },
-            });
-
-            // ── Footer ──────────────────────────────────────────────
-            const finalY = (doc as any).lastAutoTable?.finalY ?? 200;
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'italic');
-            doc.setTextColor(148, 163, 184);
-            doc.text(
-                'This statement is computer-generated and does not require a signature.',
-                pageW / 2, finalY + 8, { align: 'center' }
-            );
-
-            // ── Trigger Download ─────────────────────────────────────
-            const filename = `Statement_${supplier.name.replace(/\s+/g, '_')}_${exportDates.start_date}_to_${exportDates.end_date}.pdf`;
-            doc.save(filename);
-
-            setExportModalOpen(false);
-            toast.success('Statement downloaded successfully');
-        } catch (error) {
-            console.error('Export Error:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Failed to export statement';
-            toast.error(errorMessage);
+        if (!supplier) {
+            toast.error('Supplier data not loaded');
+            return;
         }
+
+        toast.promise(procurementAPI.exportSupplierStatement({
+            supplier_id: supplier.id,
+            from_date: exportDates.start_date,
+            to_date: exportDates.end_date,
+        }), {
+            loading: 'Generating statement...',
+            success: 'Statement downloaded successfully',
+            error: 'Failed to generate statement',
+        });
     };
 
     const handleDownloadPO = async (poId: string, poNumber: string) => {
         try {
             toast.info(`Downloading PO ${poNumber}...`);
-            await accountingAPI.downloadPurchaseOrder(poId);
+            const res = await procurementAPI.getPurchaseOrder(poId);
+            if (!res.success || !res.data) {
+                toast.error(res.message || 'Failed to load PO');
+                return;
+            }
+
+            await downloadPurchaseOrderPDF(res.data);
             toast.success('Download complete');
         } catch (error) {
             console.error('Download Error:', error);
@@ -300,27 +291,18 @@ export default function SupplierDetailPage() {
     const handleApprovePO = async (poId: string, poNumber: string) => {
         try {
             toast.info(`Approving PO ${poNumber}...`);
-            await procurementAPI.approvePurchaseOrder(poId);
+            const res = await procurementAPI.approvePurchaseOrder(poId);
+            if (!res.success) {
+                toast.error(res.message || 'Failed to approve PO');
+                return;
+            }
+
             toast.success('PO Approved');
             fetchData();
         } catch (error) {
             console.error('Approval Error:', error);
             toast.error('Failed to approve PO');
         }
-    };
-
-    const addItemToPO = () => {
-        if (!selectedItemId) return;
-        const item = availableItems.find(i => (i.id || i.sku) === selectedItemId);
-        if (!item) return;
-
-        setPoItems([...poItems, {
-            item_id: item.id || item.sku,
-            name: item.name || item.item_name,
-            quantity: 1,
-            unit_price: item.last_purchase_price || item.cost_price || item.unit_cost || 0
-        }]);
-        setSelectedItemId('');
     };
 
     const removePOItem = (index: number) => {
@@ -857,18 +839,62 @@ export default function SupplierDetailPage() {
 
                                 <div className="border-t pt-4">
                                     <h4 className="font-semibold mb-2">Order Items</h4>
-                                    <div className="flex gap-2 mb-4">
-                                        <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                                            <SelectTrigger className="flex-1"><SelectValue placeholder="Select Item to Add" /></SelectTrigger>
-                                            <SelectContent>
-                                                {availableItems.map(item => (
-                                                    <SelectItem key={item.id || item.sku} value={item.id || item.sku}>
-                                                        {item.name || item.item_name} ({item.unit || item.unit_of_measure})
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Button onClick={addItemToPO} disabled={!selectedItemId}>Add</Button>
+                                    <div className="mb-4 space-y-2">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                                            <Input
+                                                value={itemSearch}
+                                                onChange={e => setItemSearch(e.target.value)}
+                                                onKeyDown={handleItemSearchKeyDown}
+                                                placeholder="Search master inventory by item name, SKU, or description"
+                                                className="pl-9 pr-9"
+                                            />
+                                            {itemSearchLoading && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-stone-400" />}
+                                        </div>
+                                        <div className="rounded-md border bg-white">
+                                            {itemSearch.trim().length < 2 ? (
+                                                <div className="px-3 py-2 text-sm text-stone-500">Type at least 2 characters to search master inventory</div>
+                                            ) : itemSearchLoading ? (
+                                                <div className="px-3 py-2 text-sm text-stone-500">Searching items...</div>
+                                            ) : itemSearchResults.length === 0 ? (
+                                                <div className="px-3 py-2 text-sm text-stone-500">No items found</div>
+                                            ) : (
+                                                <div className="max-h-60 overflow-y-auto">
+                                                    {itemSearchResults.map((item, index) => {
+                                                        const itemId = item.sku || item.id || `${item.item_name || item.name || index}`;
+                                                        const isSelected = poItems.some(poItem => poItem.item_id === (item.sku || item.id));
+                                                        const isHighlighted = index === highlightedItemIndex;
+
+                                                        return (
+                                                            <button
+                                                                key={itemId}
+                                                                type="button"
+                                                                onMouseEnter={() => setHighlightedItemIndex(index)}
+                                                                onClick={() => addItemToPO(item)}
+                                                                className={`flex w-full items-start justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0 ${
+                                                                    isHighlighted ? 'bg-stone-100' : 'bg-white'
+                                                                } ${isSelected ? 'opacity-70' : ''}`}
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <div className="font-medium text-stone-900">{item.item_name || item.name || item.description || 'Unnamed item'}</div>
+                                                                    <div className="text-xs text-stone-500">
+                                                                        {(item.sku || 'No SKU')} · {(item.unit_of_measure || item.unit || 'No unit')} · {(item.category || 'uncategorized')}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex shrink-0 items-center gap-2">
+                                                                    {typeof item.last_purchase_price === 'number' || typeof item.cost_price === 'number' || typeof item.unit_cost === 'number' ? (
+                                                                        <span className="text-xs text-stone-500">
+                                                                            KES {Number(item.last_purchase_price ?? item.cost_price ?? item.unit_cost ?? 0).toLocaleString()}
+                                                                        </span>
+                                                                    ) : null}
+                                                                    {isSelected && <IOSBadge variant="light">Selected</IOSBadge>}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <div className="max-h-[200px] overflow-y-auto border rounded-md">
@@ -876,6 +902,7 @@ export default function SupplierDetailPage() {
                                             <thead className="bg-stone-50">
                                                 <tr>
                                                     <th className="text-left p-2">Item</th>
+                                                    <th className="text-left p-2 w-[120px]">Unit</th>
                                                     <th className="text-right p-2 w-[100px]">Qty</th>
                                                     <th className="text-right p-2 w-[120px]">Price</th>
                                                     <th className="text-right p-2 w-[120px]">Total</th>
@@ -884,10 +911,14 @@ export default function SupplierDetailPage() {
                                             </thead>
                                             <tbody>
                                                 {poItems.length === 0 ? (
-                                                    <tr><td colSpan={5} className="p-4 text-center text-stone-400">No items added</td></tr>
+                                                    <tr><td colSpan={6} className="p-4 text-center text-stone-400">No items added</td></tr>
                                                 ) : poItems.map((item, idx) => (
                                                     <tr key={idx} className="border-b">
-                                                        <td className="p-2">{item.name}</td>
+                                                        <td className="p-2">
+                                                            <div className="font-medium">{item.name}</div>
+                                                            <div className="text-xs text-stone-500 uppercase">{item.category}</div>
+                                                        </td>
+                                                        <td className="p-2 text-stone-600">{item.unit}</td>
                                                         <td className="p-2">
                                                             <Input type="number" min="1" className="h-8 text-right" value={item.quantity} onChange={e => updatePOItem(idx, 'quantity', Number(e.target.value))} />
                                                         </td>

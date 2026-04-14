@@ -117,11 +117,10 @@ class ReceiptGenerator:
         if receipt_data.get('customer_name'):
             c.drawString(5*mm, y, f"Customer: {receipt_data['customer_name']}")
             y -= 4 * mm
-        if receipt_data.get('served_by'):
-            c.drawString(5*mm, y, f"Served by: {receipt_data['served_by']}")
-            y -= 4 * mm
-        elif receipt_data.get('cashier_name'):
-            c.drawString(5*mm, y, f"Cashier: {receipt_data['cashier_name']}")
+        staff_label = receipt_data.get('staff_label')
+        staff_name = receipt_data.get('served_by') or receipt_data.get('cashier_name')
+        if staff_name:
+            c.drawString(5*mm, y, f"{staff_label or ('Waiter' if receipt_data.get('table_number') else 'Cashier')}: {staff_name}")
             y -= 4 * mm
         
         y -= 3 * mm

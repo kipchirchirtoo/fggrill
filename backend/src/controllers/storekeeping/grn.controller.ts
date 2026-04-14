@@ -3,6 +3,28 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
+const generateGRNNumber = async (): Promise<string> => {
+    const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+    const prefix = `GRN${datePart}`;
+
+    const { data: existingNumbers, error } = await supabase
+        .from('store_grn')
+        .select('grn_number')
+        .like('grn_number', `${prefix}%`)
+        .order('grn_number', { ascending: false })
+        .limit(1);
+
+    if (error) {
+        logger.error('Error generating GRN number from store_grn:', error);
+        throw new AppError('Failed to generate GRN number', 500);
+    }
+
+    const lastNumber = existingNumbers?.[0]?.grn_number;
+    const lastSequence = lastNumber ? Number(lastNumber.slice(prefix.length)) || 0 : 0;
+
+    return `${prefix}${String(lastSequence + 1).padStart(4, '0')}`;
+};
+
 // @desc    Get all Goods Received Notes
 // @route   GET /api/storekeeping/grn
 // @access  Private
@@ -156,11 +178,7 @@ export const createGRN = async (
             throw new AppError('Supplier and items are required', 400);
         }
 
-        // Generate GRN number
-        const { data: grn_number, error: numberError } = await supabase
-            .rpc('generate_grn_number');
-
-        if (numberError) throw numberError;
+        const grn_number = await generateGRNNumber();
 
         // Calculate totals
         const total_items = items.length;

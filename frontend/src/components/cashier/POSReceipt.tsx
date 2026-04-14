@@ -44,6 +44,8 @@ export const POSReceipt: React.FC<ReceiptProps> = (props) => {
     const subtotal = totalAmount / 1.16; // Assuming 16% VAT inclusive
     const tax = totalAmount - subtotal;
     const receiptNumber = transaction.transaction_ref || transaction.receipt_number || 'N/A';
+    const staffLabel = transaction.staff_label || (transaction.table_number ? 'Waiter' : 'Cashier');
+    const staffName = transaction.served_by || transaction.cashier_name || 'Staff';
 
     return (
         <div id="pos-receipt" className="p-2 bg-white text-black font-mono text-[10px] w-[80mm] leading-tight mx-auto">
@@ -66,7 +68,7 @@ export const POSReceipt: React.FC<ReceiptProps> = (props) => {
                 {transaction.room_number && <p>Room: {transaction.room_number}</p>}
                 {transaction.customer_name && <p>Customer: {transaction.customer_name}</p>}
 
-                <p>Cashier: {transaction.cashier_name || transaction.served_by || 'Staff'}</p>
+                <p>{staffLabel}: {staffName}</p>
             </div>
 
             {/* Items */}

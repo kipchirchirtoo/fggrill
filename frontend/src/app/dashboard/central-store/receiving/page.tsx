@@ -163,7 +163,7 @@ export default function GoodsReceivingPage() {
             const item = allCatalogItems.find(i => i.sku === skuParam);
             if (item) {
                 addItemToSession({
-                    id: item.id,
+                    id: item.sku || item.id,
                     name: item.item_name,
                     sku: item.sku,
                     unit: item.unit_of_measure
@@ -278,7 +278,8 @@ export default function GoodsReceivingPage() {
 
     const addItemToSession = (item: any, via: 'scan' | 'manual' = 'manual') => {
         setScannedItems(prev => {
-            const existingIndex = prev.findIndex(i => i.item_id === item.id);
+            const resolvedItemId = item.sku || item.item_id || item.id;
+            const existingIndex = prev.findIndex(i => i.item_id === resolvedItemId);
             if (existingIndex >= 0) {
                 // Increment
                 const updated = [...prev];
@@ -292,7 +293,7 @@ export default function GoodsReceivingPage() {
                 // Add new
                 const newItem: ScannedItem = {
                     id: Math.random().toString(36).substr(2, 9),
-                    item_id: item.id,
+                    item_id: resolvedItemId,
                     item_name: item.name || item.item_name,
                     sku: item.sku || item.item_code,
                     unit: item.unit || item.unit_of_measure || 'piece',
@@ -589,7 +590,7 @@ export default function GoodsReceivingPage() {
                                                                 key={item.id || `catalog-${item.sku}-${idx}`}
                                                                 onClick={() => {
                                                                     addItemToSession({
-                                                                        id: item.id,
+                                                                        id: item.sku || item.id,
                                                                         name: item.item_name,
                                                                         sku: item.sku,
                                                                         unit: item.unit_of_measure

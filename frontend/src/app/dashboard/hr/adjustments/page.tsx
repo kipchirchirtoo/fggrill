@@ -444,7 +444,9 @@ export default function PayrollAdjustmentsPage() {
                                                             </td>
                                                             <td className="px-5 py-3.5 text-center">
                                                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+                                                                    adj.status === 'approved' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
                                                                     adj.status === 'applied' ? 'bg-blue-50 border-blue-100 text-blue-600' :
+                                                                    adj.status === 'rejected' ? 'bg-red-50 border-red-100 text-red-600' :
                                                                     adj.status === 'pending' ? 'bg-amber-50 border-amber-100 text-amber-600' :
                                                                     'bg-stone-50 border-stone-100 text-stone-400'
                                                                 }`}>{adj.status}</span>
@@ -453,7 +455,7 @@ export default function PayrollAdjustmentsPage() {
                                                                 {new Date(adj.created_at).toLocaleDateString()}
                                                             </td>
                                                             <td className="px-5 py-3.5 text-right">
-                                                                {adj.status === 'pending' && canManage && (
+                                                                {adj.status !== 'applied' && adj.status !== 'cancelled' && canManage && (
                                                                     <button
                                                                         onClick={() => handleVoid(adj.id)}
                                                                         className="p-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"

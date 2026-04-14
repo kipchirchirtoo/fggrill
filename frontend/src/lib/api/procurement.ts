@@ -4,6 +4,42 @@ import { fetchAPI, buildQuery, getHeaders, API_URL } from './core';
 // PROCUREMENT API
 // =====================================
 
+const PO_PAYMENT_TERM_MAP: Record<string, string> = {
+  immediate: 'cash',
+  '7 days': 'credit_7_days',
+  '14 days': 'credit_15_days',
+  '15 days': 'credit_15_days',
+  '30 days': 'credit_30_days',
+  '45 days': 'credit_45_days',
+  '60 days': 'credit_60_days',
+  '90 days': 'credit_90_days',
+  cash: 'cash',
+  credit_7_days: 'credit_7_days',
+  credit_15_days: 'credit_15_days',
+  credit_30_days: 'credit_30_days',
+  credit_45_days: 'credit_45_days',
+  credit_60_days: 'credit_60_days',
+  credit_90_days: 'credit_90_days',
+  advance_payment: 'advance_payment',
+};
+
+const normalizePurchaseOrderPayload = (data: any) => {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  const paymentTermsKey = typeof data.payment_terms === 'string'
+    ? data.payment_terms.trim().toLowerCase()
+    : '';
+
+  return {
+    ...data,
+    payment_terms: paymentTermsKey
+      ? (PO_PAYMENT_TERM_MAP[paymentTermsKey] ?? data.payment_terms)
+      : data.payment_terms,
+  };
+};
+
 export const procurementAPI = {
   // Supplier Aliases (Anti-Regression Adapters)
   getSuppliers: (params?: { status?: string; category?: string; search?: string }) => fetchAPI<any>(`/suppliers${buildQuery(params)}`),
@@ -20,8 +56,8 @@ export const procurementAPI = {
   }) =>
     fetchAPI<any>(`/procurement/purchase-orders${buildQuery(params)}`),
   getPurchaseOrder:  (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`),
-  createPurchaseOrder: (data: any) => fetchAPI<any>('/procurement/purchase-orders', { method: 'POST', body: JSON.stringify(data) }),
-  updatePurchaseOrder: (id: string, data: any) => fetchAPI<any>(`/procurement/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  createPurchaseOrder: (data: any) => fetchAPI<any>('/procurement/purchase-orders', { method: 'POST', body: JSON.stringify(normalizePurchaseOrderPayload(data)) }),
+  updatePurchaseOrder: (id: string, data: any) => fetchAPI<any>(`/procurement/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify(normalizePurchaseOrderPayload(data)) }),
   approvePurchaseOrder:(id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/approve`, { method: 'PUT' }),
   cancelPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/cancel`,  { method: 'PUT' }),
   deletePurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`,         { method: 'DELETE' }),

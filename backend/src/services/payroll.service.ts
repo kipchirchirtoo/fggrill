@@ -109,7 +109,7 @@ export class PayrollService {
         .in('staff_id', staffIds)
         .eq('month', String(month))
         .eq('year', year)
-        .in('status', ['pending', 'applied', 'Pending', 'Applied', 'APPLIED', 'PENDING']),
+        .in('status', ['approved', 'applied', 'Approved', 'Applied', 'APPROVED', 'APPLIED']),
     ]);
 
     // Group everything by staff_id

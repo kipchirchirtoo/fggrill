@@ -43,7 +43,7 @@ async function processStaffPayroll(
                 .eq('status', 'deducted')
                 .like('remarks', `%payroll ${month}/${year}%`),
             supabase.from('staff_payroll_adjustments')
-                .update({ status: 'pending', payroll_id: null })
+                .update({ status: 'approved', payroll_id: null })
                 .eq('payroll_id', existingPayrollId),
         ]);
     }
@@ -55,7 +55,7 @@ async function processStaffPayroll(
         .eq('staff_id', staffId)
         .eq('month', String(month))
         .eq('year', year)
-        .eq('status', 'pending');
+        .eq('status', 'approved');
 
     let nssf = 0, shif = 0, housingLevy = 0, paye = 0;
     let totalAllowances = 0, totalBonuses = 0;
