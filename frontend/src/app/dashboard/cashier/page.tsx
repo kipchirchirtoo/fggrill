@@ -27,6 +27,9 @@ import { CashierLogbook } from '@/components/cashier/cashier-logbook';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole, useAuth } from '@/lib/auth-context';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
+import { KeyboardShortcutOverlay, useKeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
+import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 import {
     saveOfflineTransaction,
@@ -41,6 +44,7 @@ import { POSReceipt } from '@/components/cashier/POSReceipt';
 function CashierPageContent() {
     const searchParams = useSearchParams();
     const { user } = useAuth();
+    const shortcutOverlay = useKeyboardShortcutOverlay('cashier');
     const tabParam = searchParams.get('tab') as any;
     const [activeTab, setActiveTab] = useState<'station' | 'logbook' | 'insights'>(
         ['station', 'logbook', 'insights'].includes(tabParam) ? tabParam : 'station'
@@ -84,6 +88,73 @@ function CashierPageContent() {
 
     const currentTotal = isPOSType ? cart.reduce((sum, i) => sum + i.line_total, 0) : (billData?.financials?.balance || 0);
     const changeDue = (parseFloat(cashGiven) || 0) - currentTotal;
+
+    // ========== KEYBOARD SHORTCUTS ==========
+    
+    // Focus scan input (F2 or /)
+    useKeyboardShortcut(['f2', '/'], () => {
+        inputRef.current?.focus();
+    }, { enabled: activeTab === 'station' });
+
+    // Process payment (Ctrl+P)
+    useKeyboardShortcut('ctrl+p', () => {
+        if (billData && !isProcessing) {
+            handlePayment();
+        }
+    }, { enabled: activeTab === 'station' && !!billData && !isProcessing });
+
+    // Clear cart/bill (Ctrl+N)
+    useKeyboardShortcut('ctrl+n', () => {
+        if (isPOSType) {
+            setCart([]);
+            toast.success('Cart cleared');
+        } else if (billData) {
+            setBillData(null);
+            setScanInput('');
+            setPaymentAmount('');
+            setCashGiven('');
+            setMpesaCode('');
+            toast.success('Bill cleared');
+        }
+    }, { enabled: activeTab === 'station' && (isPOSType || !!billData) });
+
+    // M-Pesa mode (Ctrl+M)
+    useKeyboardShortcut('ctrl+m', () => {
+        setPaymentMethod('mpesa');
+        setPaymentFlowChoice('mpesa');
+        toast.success('Switched to M-Pesa');
+    }, { enabled: activeTab === 'station' });
+
+    // Cash mode (Ctrl+1)
+    useKeyboardShortcut('ctrl+1', () => {
+        setPaymentMethod('cash');
+        setPaymentFlowChoice('cash');
+        toast.success('Switched to Cash');
+    }, { enabled: activeTab === 'station' });
+
+    // M-Pesa payment (Ctrl+2)
+    useKeyboardShortcut('ctrl+2', () => {
+        setPaymentMethod('mpesa');
+        setPaymentFlowChoice('mpesa');
+        toast.success('Switched to M-Pesa');
+    }, { enabled: activeTab === 'station' });
+
+    // Card payment (Ctrl+3)
+    useKeyboardShortcut('ctrl+3', () => {
+        setPaymentMethod('card');
+        setPaymentFlowChoice('card');
+        toast.success('Switched to Card');
+    }, { enabled: activeTab === 'station' });
+
+    // View logbook (Alt+L)
+    useKeyboardShortcut('alt+l', () => {
+        setActiveTab('logbook');
+    });
+
+    // View insights (Alt+I)
+    useKeyboardShortcut('alt+i', () => {
+        setActiveTab('insights');
+    });
 
     // Auto M-Pesa search for POS cart
     useEffect(() => {
@@ -1157,7 +1228,7 @@ function CashierPageContent() {
                             <div className="flex bg-stone-100 p-1 rounded-lg">
                                 <button
                                     onClick={() => setActiveTab('station')}
-                                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'station' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'}`}
+                                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${activeTab === 'station' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'}`}
                                 >
                                     Payment Station
                                 </button>
@@ -1169,15 +1240,17 @@ function CashierPageContent() {
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('logbook')}
-                                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'logbook' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'}`}
+                                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${activeTab === 'logbook' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'}`}
                                 >
                                     Shift Logbook
+                                    <ShortcutBadge shortcut="alt+l" variant="compact" className="opacity-50" />
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('insights')}
-                                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${activeTab === 'insights' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'}`}
+                                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${activeTab === 'insights' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-900'}`}
                                 >
                                     AI Insights
+                                    <ShortcutBadge shortcut="alt+i" variant="compact" className="opacity-50" />
                                 </button>
                             </div>
                             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border ${isOffline ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
@@ -1202,6 +1275,7 @@ function CashierPageContent() {
                                             <h3 className="text-xl font-bold text-stone-900">M-Pesa</h3>
                                             <p className="text-stone-400 text-xs font-medium mt-1">Instant STK & Verification</p>
                                         </div>
+                                        <ShortcutBadge shortcut="ctrl+m" variant="compact" className="opacity-50" />
                                     </button>
 
                                     <button
@@ -1215,6 +1289,7 @@ function CashierPageContent() {
                                             <h3 className="text-xl font-bold text-stone-900">Cash</h3>
                                             <p className="text-stone-400 text-xs font-medium mt-1">Money & Change Flow</p>
                                         </div>
+                                        <ShortcutBadge shortcut="ctrl+1" variant="compact" className="opacity-50" />
                                     </button>
 
                                     <button
@@ -1228,6 +1303,7 @@ function CashierPageContent() {
                                             <h3 className="text-xl font-bold text-stone-900">Card</h3>
                                             <p className="text-stone-400 text-xs font-medium mt-1">Secure Paystack Terminal</p>
                                         </div>
+                                        <ShortcutBadge shortcut="ctrl+3" variant="compact" className="opacity-50" />
                                     </button>
                                 </div>
                             ) : (
@@ -1640,9 +1716,9 @@ function CashierPageContent() {
                                                         <IOSButton
                                                             onClick={handlePayment}
                                                             disabled={isProcessing || changeDue < 0}
-                                                            className="w-full bg-stone-900 h-12 text-lg"
+                                                            className="w-full bg-stone-900 h-12 text-lg flex items-center justify-center gap-2"
                                                         >
-                                                            {isProcessing ? <Loader2 className="animate-spin" /> : 'Confirm Cash Received'}
+                                                            {isProcessing ? <Loader2 className="animate-spin" /> : <>Confirm Cash Received <ShortcutBadge shortcut="ctrl+p" variant="inline" /></>}
                                                         </IOSButton>
                                                     </div>
                                                 ) : paymentFlowChoice === 'mpesa' ? (
@@ -1911,6 +1987,13 @@ function CashierPageContent() {
                         />
                     )}
                 </AnimatePresence>
+
+                {/* Keyboard Shortcut Help Overlay */}
+                <KeyboardShortcutOverlay
+                    isOpen={shortcutOverlay.isOpen}
+                    onClose={shortcutOverlay.close}
+                    currentModule="cashier"
+                />
             </DashboardLayout>
         </ProtectedRoute >
     );

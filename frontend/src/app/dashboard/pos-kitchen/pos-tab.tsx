@@ -11,6 +11,9 @@ import {
   Search, ChefHat, Plus, Minus, X, ShoppingCart,
   Soup, FileText, RefreshCw
 } from 'lucide-react';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
+import { KeyboardShortcutOverlay, useKeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
+import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 interface MenuItem {
   id: string;
@@ -64,6 +67,7 @@ interface POSTabProps {
 export function POSTab({ onOrderCreated }: POSTabProps) {
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
+  const shortcutOverlay = useKeyboardShortcutOverlay('pos');
 
   // Menu state
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -407,8 +411,88 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
   const subtotal = Math.round(total / 1.16);
   const tax = total - subtotal;
 
+  // ========== KEYBOARD SHORTCUTS ==========
+  
+  // Focus search (F2 or /)
+  useKeyboardShortcut(['f2', '/'], () => {
+    const searchInput = document.querySelector('input[placeholder*="Search menu"]') as HTMLInputElement;
+    searchInput?.focus();
+  });
+
+  // Send to kitchen (Ctrl+S)
+  useKeyboardShortcut('ctrl+s', () => {
+    if (cart.length > 0 && !isSubmitting && (orderType !== 'dine_in' || selectedWaiterId)) {
+      handleCreateOrder();
+    }
+  }, { enabled: cart.length > 0 && !isSubmitting });
+
+  // Generate bill (Ctrl+P)
+  useKeyboardShortcut('ctrl+p', () => {
+    if (cart.length > 0 && (orderType !== 'dine_in' || selectedWaiterId)) {
+      const selectedWaiter = waiters.find(w => w.id === selectedWaiterId);
+      const waiterName = selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined;
+      handleGenerateBill({
+        id: 'current-cart',
+        order_number: `ORD-${Date.now().toString().slice(-6)}`,
+        order_type: orderType,
+        table_number: orderType === 'dine_in' ? tableNumber : undefined,
+        room_number: orderType === 'room_service' ? roomNumber : undefined,
+        status: 'pending',
+        total: total,
+        created_at: new Date().toISOString(),
+        payment_method: paymentMethod,
+        waiter_id: selectedWaiterId || undefined,
+        waiter_name: waiterName,
+        items: cart.map(item => ({ name: item.name, quantity: item.quantity, unit_price: item.price }))
+      } as TodayOrder);
+    }
+  }, { enabled: cart.length > 0 });
+
+  // New order / Clear cart (Ctrl+N)
+  useKeyboardShortcut('ctrl+n', () => {
+    if (cart.length > 0) {
+      clearCart();
+    }
+  }, { enabled: cart.length > 0 });
+
+  // Dine-in mode (Ctrl+D)
+  useKeyboardShortcut('ctrl+d', () => {
+    setOrderType('dine_in');
+  });
+
+  // Takeaway mode (Ctrl+T)
+  useKeyboardShortcut('ctrl+t', () => {
+    setOrderType('takeaway');
+  });
+
+  // Room service mode (Ctrl+R)
+  useKeyboardShortcut('ctrl+r', () => {
+    setOrderType('room_service');
+  });
+
+  // Cash payment (Ctrl+1)
+  useKeyboardShortcut('ctrl+1', () => {
+    setPaymentMethod('cash');
+  });
+
+  // M-Pesa payment (Ctrl+2)
+  useKeyboardShortcut('ctrl+2', () => {
+    setPaymentMethod('mpesa');
+  });
+
+  // Card payment (Ctrl+3)
+  useKeyboardShortcut('ctrl+3', () => {
+    setPaymentMethod('card');
+  });
+
+  // Recall order (Ctrl+H)
+  useKeyboardShortcut('ctrl+h', () => {
+    setShowRecallModal(true);
+  });
+
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-full">
+    <>
+      <div className="flex flex-col lg:flex-row gap-4 h-full">
       {/* Menu Items */}
       <div className="flex-1 overflow-hidden">
         <div className="bg-white border border-gray-200 rounded-lg flex flex-col min-h-0">
@@ -431,7 +515,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search menu items..."
+                placeholder="Search menu items... (F2 or /)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full h-11 pl-9 pr-3 text-sm bg-stone-50 border border-stone-200 rounded-lg text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:bg-white"
@@ -440,7 +524,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
           </div>
 
           <div className="p-4 border-b border-gray-200 bg-stone-50/50">
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar items-center">
               <button
                 className={`px-4 py-1.5 text-sm rounded-full whitespace-nowrap transition-all ${selectedCategory === 'all'
                   ? 'bg-amber-500 text-white shadow-sm'
@@ -503,18 +587,36 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
 
             {/* Order Type */}
             <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar pb-1">
-              {(['dine_in', 'takeaway', 'room_service'] as const).map((type) => (
-                <button
-                  key={type}
-                  className={`px-4 py-2 text-xs font-semibold rounded-full whitespace-nowrap transition-all ${orderType === type
-                    ? 'bg-stone-800 text-white shadow-sm'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                    }`}
-                  onClick={() => setOrderType(type)}
-                >
-                  {type === 'dine_in' ? 'Dine In' : type === 'takeaway' ? 'Takeaway' : 'Room Service'}
-                </button>
-              ))}
+              <button
+                className={`px-4 py-2 text-xs font-semibold rounded-full whitespace-nowrap transition-all flex items-center gap-1 ${orderType === 'dine_in'
+                  ? 'bg-stone-800 text-white shadow-sm'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                onClick={() => setOrderType('dine_in')}
+              >
+                <span>Dine In</span>
+                <ShortcutBadge shortcut="ctrl+d" variant="compact" className={orderType === 'dine_in' ? 'opacity-70' : 'opacity-50'} />
+              </button>
+              <button
+                className={`px-4 py-2 text-xs font-semibold rounded-full whitespace-nowrap transition-all flex items-center gap-1 ${orderType === 'takeaway'
+                  ? 'bg-stone-800 text-white shadow-sm'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                onClick={() => setOrderType('takeaway')}
+              >
+                <span>Takeaway</span>
+                <ShortcutBadge shortcut="ctrl+t" variant="compact" className={orderType === 'takeaway' ? 'opacity-70' : 'opacity-50'} />
+              </button>
+              <button
+                className={`px-4 py-2 text-xs font-semibold rounded-full whitespace-nowrap transition-all flex items-center gap-1 ${orderType === 'room_service'
+                  ? 'bg-stone-800 text-white shadow-sm'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                onClick={() => setOrderType('room_service')}
+              >
+                <span>Room Service</span>
+                <ShortcutBadge shortcut="ctrl+r" variant="compact" className={orderType === 'room_service' ? 'opacity-70' : 'opacity-50'} />
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3 mt-4">
@@ -629,18 +731,36 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
             <div className="bg-stone-50 p-3 rounded-lg border border-stone-100">
               <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">Payment Method</p>
               <div className="flex gap-2">
-                {(['cash', 'mpesa', 'card'] as const).map((method) => (
-                  <button
-                    key={method}
-                    className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${paymentMethod === method
-                      ? 'bg-white text-stone-900 shadow-sm border border-stone-200 ring-2 ring-amber-400/50'
-                      : 'bg-stone-200/50 text-stone-600 border border-transparent hover:bg-stone-200'
-                      }`}
-                    onClick={() => setPaymentMethod(method)}
-                  >
-                    {method === 'mpesa' ? 'M-Pesa' : method.charAt(0).toUpperCase() + method.slice(1)}
-                  </button>
-                ))}
+                <button
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex flex-col items-center gap-0.5 ${paymentMethod === 'cash'
+                    ? 'bg-white text-stone-900 shadow-sm border border-stone-200 ring-2 ring-amber-400/50'
+                    : 'bg-stone-200/50 text-stone-600 border border-transparent hover:bg-stone-200'
+                    }`}
+                  onClick={() => setPaymentMethod('cash')}
+                >
+                  <span>Cash</span>
+                  <ShortcutBadge shortcut="ctrl+1" variant="compact" className="opacity-60" />
+                </button>
+                <button
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex flex-col items-center gap-0.5 ${paymentMethod === 'mpesa'
+                    ? 'bg-white text-stone-900 shadow-sm border border-stone-200 ring-2 ring-amber-400/50'
+                    : 'bg-stone-200/50 text-stone-600 border border-transparent hover:bg-stone-200'
+                    }`}
+                  onClick={() => setPaymentMethod('mpesa')}
+                >
+                  <span>M-Pesa</span>
+                  <ShortcutBadge shortcut="ctrl+2" variant="compact" className="opacity-60" />
+                </button>
+                <button
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex flex-col items-center gap-0.5 ${paymentMethod === 'card'
+                    ? 'bg-white text-stone-900 shadow-sm border border-stone-200 ring-2 ring-amber-400/50'
+                    : 'bg-stone-200/50 text-stone-600 border border-transparent hover:bg-stone-200'
+                    }`}
+                  onClick={() => setPaymentMethod('card')}
+                >
+                  <span>Card</span>
+                  <ShortcutBadge shortcut="ctrl+3" variant="compact" className="opacity-60" />
+                </button>
               </div>
             </div>
 
@@ -657,6 +777,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                   <>
                     <ChefHat className="h-5 w-5" />
                     <span>Send to Kitchen</span>
+                    <ShortcutBadge shortcut="ctrl+s" variant="inline" />
                   </>
                 )}
               </button>
@@ -679,10 +800,6 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                     const selectedWaiter = waiters.find(w => w.id === selectedWaiterId);
                     const waiterName = selectedWaiter ? `${selectedWaiter.first_name} ${selectedWaiter.last_name}` : undefined;
                     
-                    // console.log('[POS Bill Button] Selected waiter:', selectedWaiter);
-                    // console.log('[POS Bill Button] Waiter name:', waiterName);
-                    // console.log('[POS Bill Button] User:', user);
-                    
                     handleGenerateBill({
                       id: 'current-cart',
                       order_number: `ORD-${Date.now().toString().slice(-6)}`,
@@ -699,19 +816,25 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
                     } as TodayOrder);
                   }}
                   disabled={cart.length === 0}
-                  className="bg-white border-2 border-stone-200 text-stone-700 font-bold h-11 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="bg-white border-2 border-stone-200 text-stone-700 font-bold h-11 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50 flex flex-col items-center justify-center gap-0.5 py-1"
                 >
-                  <FileText className="h-4 w-4" />
-                  <span>Bill</span>
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="h-4 w-4" />
+                    <span>Bill</span>
+                  </div>
+                  <ShortcutBadge shortcut="ctrl+p" variant="compact" className="opacity-60" />
                 </button>
 
                 <button
                   onClick={clearCart}
                   disabled={cart.length === 0}
-                  className="bg-white border-2 border-red-100 text-red-500 font-bold h-11 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="bg-white border-2 border-red-100 text-red-500 font-bold h-11 rounded-xl active:scale-[0.98] transition-all disabled:opacity-50 flex flex-col items-center justify-center gap-0.5 py-1"
                 >
-                  <X className="h-4 w-4" />
-                  <span>Clear</span>
+                  <div className="flex items-center gap-1.5">
+                    <X className="h-4 w-4" />
+                    <span>Clear</span>
+                  </div>
+                  <ShortcutBadge shortcut="ctrl+n" variant="compact" className="opacity-60" />
                 </button>
               </div>
 
@@ -722,6 +845,7 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
               >
                 <RefreshCw className="h-4 w-4" />
                 <span>Recall Bill</span>
+                <ShortcutBadge shortcut="ctrl+h" variant="inline" />
               </button>
             </div>
           </div>
@@ -928,6 +1052,13 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Keyboard Shortcut Help Overlay */}
+      <KeyboardShortcutOverlay
+        isOpen={shortcutOverlay.isOpen}
+        onClose={shortcutOverlay.close}
+        currentModule="pos"
+      />
+    </>
   );
 }

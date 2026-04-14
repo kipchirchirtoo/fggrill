@@ -42,6 +42,10 @@ import { IOSCard } from '@/components/ui/ios-card';
 import { CashierModals } from '@/components/modals/CashierModals';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
 import { downloadConferenceInvoicePDF, printConferenceInvoicePDF } from '@/lib/conference-invoice-pdf';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
+import { KeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
+import { useKeyboardShortcutOverlay } from '@/hooks/useKeyboardShortcut';
+import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 // Types
 interface Room {
@@ -95,6 +99,7 @@ interface Notification {
 export default function ReceptionDashboard(): JSX.Element {
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
+  const shortcutOverlay = useKeyboardShortcutOverlay();
 
   // Modal states
   const [showCheckInModal, setShowCheckInModal] = useState(false);
@@ -306,6 +311,16 @@ export default function ReceptionDashboard(): JSX.Element {
     !searchQuery || r.room_number.includes(searchQuery) || r.guest_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Keyboard shortcuts
+  useKeyboardShortcut('ctrl+n', () => setShowReservationModal(true), { enabled: true });
+  useKeyboardShortcut('ctrl+i', () => setShowCheckInModal(true), { enabled: true });
+  useKeyboardShortcut('ctrl+o', () => setShowCheckOutModal(true), { enabled: true });
+  useKeyboardShortcut('ctrl+r', fetchDashboardData, { enabled: true });
+  useKeyboardShortcut(['/', 'f2'], () => {
+    const input = document.querySelector<HTMLInputElement>('input[placeholder*="Search"]');
+    if (input) { input.focus(); input.select(); }
+  }, { enabled: true });
+
   return (
     <ProtectedRoute allowedRoles={[UserRole.RECEPTIONIST, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
       <DashboardLayout>
@@ -315,7 +330,7 @@ export default function ReceptionDashboard(): JSX.Element {
             <div>
               <h1 className="text-2xl font-bold text-stone-900">Front Desk Dashboard</h1>
               <p className="text-stone-500 text-sm">
-                {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} • {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} • {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} • Press ? for shortcuts
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -344,8 +359,8 @@ export default function ReceptionDashboard(): JSX.Element {
                   <Wallet className="h-5 w-5" />
                 </button>
               </div>
-              <IOSButton onClick={() => setShowReservationModal(true)} className="bg-[#3C3C43] hover:bg-[#000000] text-white">
-                <PlusCircle className="h-4 w-4 mr-2" /> New Booking
+              <IOSButton onClick={() => setShowReservationModal(true)} className="bg-[#3C3C43] hover:bg-[#000000] text-white flex items-center gap-1">
+                <PlusCircle className="h-4 w-4 mr-2" /> New Booking <ShortcutBadge shortcut="ctrl+n" variant="inline" />
               </IOSButton>
             </div>
           </div>
@@ -472,7 +487,9 @@ export default function ReceptionDashboard(): JSX.Element {
                             <div className="text-right">
                               <p className="text-xs font-bold text-stone-900">{arrival.check_in_time}</p>
                               <Link href="/dashboard/reception/checkin">
-                                <button className="text-[10px] text-blue-600 font-bold uppercase mt-1">Check In</button>
+                                <button className="text-[10px] text-blue-600 font-bold uppercase mt-1 flex items-center gap-1">
+                                  Check In <ShortcutBadge shortcut="ctrl+i" variant="compact" className="opacity-60" />
+                                </button>
                               </Link>
                             </div>
                           </div>
@@ -506,7 +523,9 @@ export default function ReceptionDashboard(): JSX.Element {
                             <div className="text-right">
                               <p className="text-xs font-bold text-stone-900">{departure.check_out_time}</p>
                               <Link href="/dashboard/reception/checkin">
-                                <button className="text-[10px] text-rose-600 font-bold uppercase mt-1">Check Out</button>
+                                <button className="text-[10px] text-rose-600 font-bold uppercase mt-1 flex items-center gap-1">
+                                  Check Out <ShortcutBadge shortcut="ctrl+o" variant="compact" className="opacity-60" />
+                                </button>
                               </Link>
                             </div>
                           </div>
@@ -930,8 +949,8 @@ export default function ReceptionDashboard(): JSX.Element {
                   Activity History & Logs
                 </h2>
                 <div className="flex gap-2">
-                  <IOSButton variant="secondary" size="sm" onClick={() => fetchDashboardData()}>
-                    <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+                  <IOSButton variant="secondary" size="sm" onClick={() => fetchDashboardData()} className="flex items-center gap-1">
+                    <RefreshCw className="h-4 w-4 mr-2" /> Refresh <ShortcutBadge shortcut="ctrl+r" variant="compact" className="opacity-50" />
                   </IOSButton>
                 </div>
               </div>
@@ -1099,6 +1118,12 @@ export default function ReceptionDashboard(): JSX.Element {
               window.location.reload();
             }
           }}
+        />
+
+        <KeyboardShortcutOverlay
+          isOpen={shortcutOverlay.isOpen}
+          onClose={shortcutOverlay.close}
+          currentModule="reception"
         />
       </DashboardLayout>
     </ProtectedRoute>

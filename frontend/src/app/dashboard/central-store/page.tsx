@@ -10,8 +10,12 @@ import {
   Building2, Apple, Beer, Box, Navigation, ChevronRight, BarChart3
 } from 'lucide-react';
 import Link from 'next/link';
+import { KeyboardShortcutOverlay, useKeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
+import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 export default function CentralStoreDashboard() {
+  const shortcutOverlay = useKeyboardShortcutOverlay('centralStore');
   const [stats, setStats] = useState({ totalItems: 0, lowStock: 0, inTransit: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -23,8 +27,6 @@ export default function CentralStoreDashboard() {
         const data = dashboardRes.data || {};
         const stats = data.stats || {};
 
-        // Handle potentially nested stats or direct values
-        // lowStockItems comes as an array from the specific controller endpoint
         const lowStockCount = Array.isArray(data.lowStockItems)
           ? data.lowStockItems.length
           : (data.lowStockItems || stats.lowStock || 0);
@@ -41,11 +43,16 @@ export default function CentralStoreDashboard() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Refresh shortcut (F5 alternative)
+  useKeyboardShortcut('ctrl+r', () => {
+    fetchData();
+  }, { preventDefault: true });
+
   const sections = [
     {
       title: "Inventory Control",
       links: [
-        { href: '/dashboard/central-store/inventory', icon: Package, label: 'Master Catalog', desc: 'Global inventory' },
+        { href: '/dashboard/central-store/inventory', icon: Package, label: 'Master Catalog', desc: 'Global inventory', shortcut: 'Alt+I' },
         { href: '/dashboard/central-store/foodstuffs', icon: Apple, label: 'Foodstuffs', desc: 'Kitchen & Dry store' },
         { href: '/dashboard/central-store/bar-items', icon: Beer, label: 'Bar Store', desc: 'Beverages & Liquor' },
       ]
@@ -75,19 +82,20 @@ export default function CentralStoreDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Central Store</h1>
-              <p className="text-stone-500 mt-0.5">Inventory and logistics distribution center</p>
+              <p className="text-stone-500 mt-0.5">Inventory and logistics distribution center • Press ? for shortcuts</p>
             </div>
             <button
               onClick={fetchData}
               disabled={isLoading}
-              className="btn-secondary self-start sm:self-auto"
+              className="btn-secondary self-start sm:self-auto flex items-center gap-2"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
+              <ShortcutBadge shortcut="ctrl+r" variant="compact" className="opacity-60" />
             </button>
           </div>
 
-          {/* Stats Grid - Using standardized stat-card class */}
+          {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {statCards.map((stat, i) => (
               <div key={i} className="stat-card">
@@ -116,6 +124,9 @@ export default function CentralStoreDashboard() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-stone-800 text-[14px] truncate">{link.label}</p>
                         <p className="text-[11px] text-stone-400 truncate">{link.desc}</p>
+                        {link.shortcut && (
+                          <p className="text-[10px] text-stone-400 mt-0.5 font-mono">{link.shortcut}</p>
+                        )}
                       </div>
                       <ChevronRight className="h-4 w-4 text-stone-300 group-hover:text-stone-400 shrink-0 transition-colors" />
                     </div>
@@ -158,6 +169,12 @@ export default function CentralStoreDashboard() {
             </Link>
           </div>
         </div>
+
+        <KeyboardShortcutOverlay
+          isOpen={shortcutOverlay.isOpen}
+          onClose={shortcutOverlay.close}
+          currentModule="centralStore"
+        />
       </DashboardLayout>
     </ProtectedRoute>
   );

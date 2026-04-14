@@ -18,6 +18,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useBranch, BranchSelector } from '@/lib/branch-context';
 import { toast } from 'sonner';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
+import { KeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
+import { useKeyboardShortcutOverlay } from '@/hooks/useKeyboardShortcut';
+import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 export default function AuditorDashboard() {
     const [isLoading, setIsLoading] = useState(true);
@@ -32,6 +36,7 @@ export default function AuditorDashboard() {
     const [watchList, setWatchList] = useState<any[]>([]);
     const router = useRouter();
     const { activeBranchId } = useBranch();
+    const shortcutOverlay = useKeyboardShortcutOverlay();
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -77,6 +82,12 @@ export default function AuditorDashboard() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    // Keyboard shortcuts
+    useKeyboardShortcut('ctrl+r', fetchData, { enabled: true });
+    useKeyboardShortcut('ctrl+e', () => router.push('/dashboard/auditor/audit-reports'), { enabled: true });
+    useKeyboardShortcut('/', () => router.push('/dashboard/auditor/search'), { enabled: true });
+    useKeyboardShortcut('ctrl+f', () => router.push('/dashboard/auditor/revenue-oversight'), { enabled: true });
 
     const auditModules = [
         {
@@ -131,6 +142,7 @@ export default function AuditorDashboard() {
             desc: 'Wastage & usage oversight',
             icon: Scale,
             href: '/dashboard/auditor/audit-reports',
+            shortcut: 'ctrl+e',
         },
         {
             title: 'Kitchen Flow',
@@ -158,7 +170,7 @@ export default function AuditorDashboard() {
                             </div>
                             <div>
                                 <h1 className="page-title text-stone-900">Audit Control</h1>
-                                <p className="page-subtitle">High-integrity verification and system compliance oversight</p>
+                                <p className="page-subtitle">High-integrity verification and system compliance oversight • Press ? for shortcuts</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -166,11 +178,12 @@ export default function AuditorDashboard() {
                             <button
                                 onClick={fetchData}
                                 disabled={isLoading}
-                                className="btn-secondary"
-                                title="Refresh Dashboard"
+                                className="btn-secondary flex items-center gap-1"
+                                title="Refresh Dashboard (Ctrl+R)"
                             >
                                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                                 <span className="hidden sm:inline">Refresh</span>
+                                <ShortcutBadge shortcut="ctrl+r" variant="compact" className="opacity-50 hidden sm:inline-flex" />
                             </button>
                         </div>
                     </div>
@@ -224,7 +237,7 @@ export default function AuditorDashboard() {
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                 {auditModules.map((module, i) => (
                                     <Link key={i} href={module.href}>
-                                        <div className="action-card group">
+                                        <div className="action-card group relative">
                                             <div className="action-card-icon group-hover:bg-stone-900 group-hover:text-white transition-colors">
                                                 <module.icon className="h-5 w-5" />
                                             </div>
@@ -235,9 +248,23 @@ export default function AuditorDashboard() {
                                                     {module.badge}
                                                 </span>
                                             )}
+                                            {module.shortcut && (
+                                                <ShortcutBadge shortcut={module.shortcut} variant="compact" className="mt-1 opacity-50" />
+                                            )}
                                         </div>
                                     </Link>
                                 ))}
+                                {/* Search shortcut card */}
+                                <Link href="/dashboard/auditor/search">
+                                    <div className="action-card group relative">
+                                        <div className="action-card-icon group-hover:bg-stone-900 group-hover:text-white transition-colors">
+                                            <Search className="h-5 w-5" />
+                                        </div>
+                                        <p className="action-card-label">Search</p>
+                                        <p className="text-[11px] text-stone-400 mt-0.5">Find any record</p>
+                                        <ShortcutBadge shortcut="/" variant="compact" className="mt-1 opacity-50" />
+                                    </div>
+                                </Link>
                             </div>
 
                             <div className="section-header pt-6">
@@ -322,6 +349,12 @@ export default function AuditorDashboard() {
                         </div>
                     </div>
                 </div>
+
+                <KeyboardShortcutOverlay
+                    isOpen={shortcutOverlay.isOpen}
+                    onClose={shortcutOverlay.close}
+                    currentModule="auditor"
+                />
             </DashboardLayout>
         </ProtectedRoute>
     );
