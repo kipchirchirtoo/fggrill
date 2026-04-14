@@ -242,9 +242,55 @@ export const createGRN = async (
             throw itemsError;
         }
 
+        // 3. AUTO-APPROVE GRN and update stock immediately
+        logger.info(`Auto-approving GRN ${grn_number}...`);
+        
+        // Update each item's stock in simple_items
+        for (const item of grnItems) {
+            const sku = item.item_id;
+            const qty = Number(item.quantity_accepted || item.quantity_received);
+            
+            if (qty > 0) {
+                // Get current stock
+                const { data: currentItem } = await supabase
+                    .from('simple_items')
+                    .select('quantity')
+                    .eq('sku', sku)
+                    .single();
+                
+                const currentQty = Number(currentItem?.quantity || 0);
+                const newQty = currentQty + qty;
+                
+                // Update stock
+                await supabase
+                    .from('simple_items')
+                    .update({
+                        quantity: newQty,
+                        cost_price: item.unit_price || undefined
+                    })
+                    .eq('sku', sku);
+                
+                logger.info(`Updated ${sku}: ${currentQty} + ${qty} = ${newQty}`);
+            }
+        }
+        
+        // Mark GRN as approved
+        await supabase
+            .from('store_grn')
+            .update({
+                grn_approved: true,
+                approved_by_id: userId,
+                approved_at: new Date().toISOString(),
+                status: 'completed'
+            })
+            .eq('id', newGRN.id);
+
+        logger.info(`GRN ${grn_number} auto-approved and stock updated`);
+
         res.status(201).json({
             success: true,
-            data: newGRN
+            message: 'Goods received and stock updated successfully',
+            data: { ...newGRN, grn_approved: true, status: 'completed' }
         });
     } catch (error) {
         logger.error('Error creating GRN:', error);

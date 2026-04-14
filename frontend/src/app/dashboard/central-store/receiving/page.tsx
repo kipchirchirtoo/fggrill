@@ -364,8 +364,9 @@ export default function GoodsReceivingPage() {
 
             const res = await procurementAPI.createGRN(payload);
             if (res.success) {
-                toast.success('Goods Received Successfully');
-                router.push('/dashboard/central-store/procurement/grn');
+                toast.success('Goods received and stock updated successfully!');
+                // Redirect to inventory page instead of GRN list
+                router.push('/dashboard/central-store/inventory');
             }
         } catch (err) {
             console.error(err);
