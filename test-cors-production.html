@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test - Production</title>
+</head>
+<body>
+    <h1>Testing CORS for api.hirall.com</h1>
+    <button onclick="testCORS()">Test Login Endpoint</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testCORS() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('https://api.hirall.com/api/auth/login', {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': 'https://famousgate.hirall.com',
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type,Authorization'
+                    }
+                });
+                
+                const headers = {};
+                response.headers.forEach((value, key) => {
+                    headers[key] = value;
+                });
+                
+                resultEl.textContent = JSON.stringify({
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: headers
+                }, null, 2);
+                
+                if (headers['access-control-allow-origin']) {
+                    resultEl.textContent += '\n\n✅ CORS is configured!';
+                } else {
+                    resultEl.textContent += '\n\n❌ CORS headers missing - backend needs restart!';
+                }
+            } catch (error) {
+                resultEl.textContent = '❌ Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

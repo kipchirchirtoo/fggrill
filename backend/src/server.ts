@@ -62,83 +62,65 @@ import startupService from './services/startup.service';
 
 // Initialize app with Socket.IO
 initializeApp().then(({ app, httpServer }) => {
+  // Health check endpoint - MUST be first to respond even during cold starts
+  app.get('/health', (req, res) => {
+    res.status(200).json({ ok: true, timestamp: new Date().toISOString() });
+  });
+
   // Middleware
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // CORS configuration - allow all localhost/127.0.0.1 origins in development
-  app.use(cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl)
+  // CORS configuration - MUST be before all other middleware
+  const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow requests with no origin (mobile apps, curl, Postman)
       if (!origin) return callback(null, true);
 
-      // Allow specific origins
+      // Exact match origins
       const allowedOrigins = [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:3001',
         'https://famousgate.hirall.com',
         'https://api.hirall.com',
         'https://services.hirall.com',
-        'pos://terminal.html' // Electron POS app
+        'https://famousgatehotels.com',
+        'https://www.famousgatehotels.com'
       ];
 
-      // Add FRONTEND_URL from env if it exists
-      if (process.env.FRONTEND_URL) {
-        allowedOrigins.push(process.env.FRONTEND_URL);
-      }
-
-      // Add landing page URLs from env if they exist
-      if (process.env.LANDING_PAGE_URL) {
-        allowedOrigins.push(process.env.LANDING_PAGE_URL);
-      }
-      if (process.env.LANDING_PAGE_PRODUCTION_URL) {
-        allowedOrigins.push(process.env.LANDING_PAGE_PRODUCTION_URL);
-      }
-
+      // Check exact matches
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      // Allow all localhost and 127.0.0.1 origins (any port)
-      if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+      // Allow any subdomain of hirall.com (case-insensitive)
+      if (/^https:\/\/([a-z0-9-]+\.)*hirall\.com$/i.test(origin)) {
         return callback(null, true);
       }
 
-      // Allow any subdomain of hirall.com
-      if (origin.match(/^https:\/\/([a-z0-9-]+\.)*hirall\.com$/)) {
+      // Allow localhost (development only) - case-insensitive
+      if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
         return callback(null, true);
       }
 
-      // Allow famousgatehotels.com and its subdomains
-      if (origin.match(/^https:\/\/(www\.)?famousgatehotels\.com$/)) {
+      // Allow Electron custom protocols
+      if (/^(pos|app):\/\//i.test(origin)) {
         return callback(null, true);
       }
 
-      // Allow Electron custom protocol origins (pos://, app://, etc.)
-      if (origin.match(/^(pos|app):\/\//)) {
-        return callback(null, true);
-      }
-
-      callback(null, false);
+      // Reject all others
+      return callback(new Error('CORS not allowed'), false);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Branch-ID', 'X-Request-Time', 'x-request-time', 'Cache-Control', 'Pragma', 'Expires']
-  }));
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Branch-ID', 'X-Request-Time', 'x-request-time', 'Cache-Control', 'Pragma', 'Expires'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 600 // Cache preflight for 10 minutes
+  };
 
-  // Override any wildcard CORS header injected by the hosting platform (Render, etc.)
-  // Duplicate Access-Control-Allow-Origin headers cause browser CORS failures.
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-      // Force a single specific origin — removes any platform-injected '*'
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
-    next();
-  });
+  // Apply CORS to all routes
+  app.use(cors(corsOptions));
+
+  // Explicitly handle OPTIONS preflight with same config
+  app.options('*', cors(corsOptions));
 
   // Relaxed Helmet for development
   app.use(helmet({
@@ -167,8 +149,15 @@ initializeApp().then(({ app, httpServer }) => {
   // API routes
   app.use('/api', routes);
 
-  // Error handling
-  app.use(errorHandler);
+  // Error handling with CORS headers (ensures CORS works even on errors)
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    errorHandler(err, req, res, next);
+  });
 
   // Handle unhandled routes
   app.use((req, res) => {

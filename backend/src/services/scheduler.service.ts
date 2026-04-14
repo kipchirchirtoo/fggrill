@@ -8,9 +8,15 @@ class SchedulerService {
 
   /**
    * Start all scheduled jobs
+   * IMPORTANT: This method should only be called ONCE during server startup
+   * to prevent duplicate job registration
    */
   startAll() {
-    this.stopAll(); // Clear any existing jobs first
+    // Prevent duplicate initialization
+    if (this.jobs.size > 0) {
+      logger.warn('Scheduler already initialized, skipping duplicate startAll()');
+      return Object.fromEntries(this.jobs);
+    }
 
     // Daily tasks
     this.scheduleDaily();

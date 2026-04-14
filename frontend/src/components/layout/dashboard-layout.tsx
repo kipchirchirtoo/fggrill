@@ -54,7 +54,8 @@ export function DashboardLayout(props: DashboardLayoutProps) {
     };
 
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
+    // Reduced from 30s to 2 minutes to prevent aggressive polling
+    const interval = setInterval(fetchUnreadCount, 2 * 60 * 1000);
     return () => clearInterval(interval);
   }, [user]);
 

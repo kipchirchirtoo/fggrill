@@ -24,7 +24,7 @@ export function NotificationListener() {
         };
         registerServiceWorker();
 
-        // Poll for new notifications every 30 seconds
+        // Poll for new notifications every 2 minutes (reduced from 30s)
         const checkForNewNotifications = async () => {
             try {
                 const response = await notificationsAPI.getUnreadCount();
@@ -47,7 +47,7 @@ export function NotificationListener() {
         };
 
         const initialTimeout = setTimeout(checkForNewNotifications, 2000);
-        const interval = setInterval(checkForNewNotifications, 30000);
+        const interval = setInterval(checkForNewNotifications, 2 * 60 * 1000); // 2 minutes
 
         return () => {
             clearTimeout(initialTimeout);
