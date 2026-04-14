@@ -19,8 +19,7 @@ import { useRouter } from 'next/navigation';
 import { useBranch, BranchSelector } from '@/lib/branch-context';
 import { toast } from 'sonner';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { KeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
-import { useKeyboardShortcutOverlay } from '@/hooks/useKeyboardShortcut';
+import { KeyboardShortcutOverlay, useKeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
 import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 export default function AuditorDashboard() {

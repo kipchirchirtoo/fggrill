@@ -12,8 +12,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { KeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
-import { useKeyboardShortcutOverlay } from '@/hooks/useKeyboardShortcut';
+import { KeyboardShortcutOverlay, useKeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
 import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 export default function BranchStoreDashboard() {

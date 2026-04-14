@@ -43,8 +43,7 @@ import { CashierModals } from '@/components/modals/CashierModals';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
 import { downloadConferenceInvoicePDF, printConferenceInvoicePDF } from '@/lib/conference-invoice-pdf';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { KeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
-import { useKeyboardShortcutOverlay } from '@/hooks/useKeyboardShortcut';
+import { KeyboardShortcutOverlay, useKeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
 import { ShortcutBadge } from '@/components/ui/ShortcutBadge';
 
 // Types
