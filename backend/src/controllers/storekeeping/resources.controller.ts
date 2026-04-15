@@ -492,10 +492,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
       // Safe audit log creation - if it fails, don't revert the update
       try {
         const { error } = await supabase.rpc('create_audit_log', {
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
+        const { error: auditError } = await supabase.rpc('create_audit_log', {
           p_user_id: userId,
           p_action: 'UPDATE',
           p_entity_type: 'SUPPLIER',
@@ -506,6 +503,11 @@ export const updateSupplier = async (req: Request, res: Response) => {
           p_description: `Updated supplier profile: ${data.name}`,
           p_supplier_id: id
         });
+        
+        if (auditError) {
+          console.error('Database error:', auditError);
+          throw auditError;
+        }
       } catch (auditError) {
         logger.warn('Failed to create audit log for supplier update', auditError);
       }

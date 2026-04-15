@@ -557,22 +557,27 @@ export const dispatchItems = async (
         if (driver_id.startsWith('staff-')) {
           const staffId = driver_id.replace('staff-', '');
           const { data: staff , error } = await supabase.from('staff_profiles')
-          if (error) {
-            console.error('Database error:', error);
-            throw error;
-          }
+          const { data: staff, error: staffError } = await supabase.from('staff_profiles')
             .select('first_name, last_name, phone').eq('id', staffId).single();
+          
+          if (staffError) {
+            console.error('Database error:', staffError);
+            throw staffError;
+          }
+          
           if (staff) {
             resolvedDriverName = `${staff.first_name || ''} ${staff.last_name || ''}`.trim();
             if (!resolvedDriverPhone) resolvedDriverPhone = staff.phone || '';
           }
         } else {
-          const { data: driver , error } = await supabase.from('drivers')
-          if (error) {
-            console.error('Database error:', error);
-            throw error;
-          }
+          const { data: driver, error: driverError } = await supabase.from('drivers')
             .select('name, phone').eq('id', driver_id).single();
+          
+          if (driverError) {
+            console.error('Database error:', driverError);
+            throw driverError;
+          }
+          
           if (driver) {
             resolvedDriverName = driver.name;
             if (!resolvedDriverPhone) resolvedDriverPhone = driver.phone || '';

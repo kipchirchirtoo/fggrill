@@ -103,10 +103,6 @@ export const logSecurityEvent = async (params: {
 }) => {
   try {
     const { error } = await supabase.from('security_events').insert({
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       event_type: params.eventType,
       severity: params.severity,
       user_id: params.userId,
@@ -117,6 +113,7 @@ export const logSecurityEvent = async (params: {
     });
 
     if (error) {
+      console.error('Database error:', error);
       logger.error('Failed to insert security_event:', error);
     }
   } catch (err) {

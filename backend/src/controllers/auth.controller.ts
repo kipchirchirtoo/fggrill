@@ -585,10 +585,6 @@ export const updateDetails = async (
     // If email is being updated, update auth email as well
     if (req.body.email && req.body.email !== user.email) {
       const { error: emailUpdateError } = await supabase.auth.admin.updateUserById(
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
         user.id,
         { email: req.body.email }
       );

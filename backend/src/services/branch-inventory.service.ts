@@ -742,16 +742,16 @@ export async function dispatchItems(
 
         // Add to in-transit
         const { error: transitError } = await supabase.from('in_transit_stock').insert({
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
-          dispatch_id: dispatchId,
-          item_sku: item.item_sku,
-          quantity: item.dispatched_quantity
-        });
+        const { error: transitError } = await supabase
+          .from('in_transit_stock')
+          .insert({
+            dispatch_id: dispatchId,
+            item_sku: item.item_sku,
+            quantity: item.dispatched_quantity
+          });
 
         if (transitError) {
+          console.error('Database error:', transitError);
           logger.error(`Error adding item ${item.item_sku} to in-transit:`, transitError);
           throw transitError;
         }
