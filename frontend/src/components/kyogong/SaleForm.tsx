@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { Loader2, X as XIcon, ShoppingCart, CheckCircle, Printer, Banknote, Smartphone, CreditCard } from 'lucide-react';
 import { kyogongAPI } from '@/lib/api/kyogong';
 import CashPaymentModal from './CashPaymentModal';
+import { useAuth } from '@/lib/auth-context';
+import { useBranch } from '@/lib/branch-context';
 
 interface DynamicService {
     id: number;
