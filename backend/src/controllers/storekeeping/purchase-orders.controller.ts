@@ -313,7 +313,11 @@ export const createPurchaseOrder = async (
             if (itemsError) {
                 console.error('CRITICAL: PO Items Insert Error:', JSON.stringify(itemsError, null, 2));
                 // Cleanup: Delete the PO header if items failed
-                await supabase.from('store_purchase_orders').delete().eq('id', newPO.id);
+                const { error } = await supabase.from('store_purchase_orders').delete().eq('id', newPO.id);
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                 throw new AppError(`Error adding items to PO: ${itemsError.message}`, 500);
             }
 
@@ -416,7 +420,11 @@ export const receivePurchaseOrder = async (
         // Determine destination branch.
         let targetBranchId = req.user?.branch_id;
         if (!targetBranchId) {
-            const { data: central } = await supabase.from('branches').select('id').eq('is_central_store', true).single();
+            const { data: central , error } = await supabase.from('branches').select('id').eq('is_central_store', true).single();
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
             if (central) {
                 targetBranchId = central.id;
             } else {

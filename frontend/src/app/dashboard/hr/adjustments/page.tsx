@@ -101,6 +101,7 @@ export default function PayrollAdjustmentsPage() {
                 description: form.description,
                 month: selectedMonth,
                 year: Number(selectedYear),
+                status: 'approved' // Auto-approve adjustments from HR module
             });
             if (res.success) {
                 toast.success('Adjustment added');

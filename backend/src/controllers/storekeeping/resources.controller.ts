@@ -139,7 +139,11 @@ export const createDriver = async (req: Request, res: Response) => {
 
     if (existingStaff) {
        // Just update them to be a driver instead of creating a new driver record
-       await supabase.from('staff_profiles').update({ department: 'driver' }).eq('id', existingStaff.id);
+       const { error } = await supabase.from('staff_profiles').update({ department: 'driver' }).eq('id', existingStaff.id);
+       if (error) {
+         console.error('Database error:', error);
+         throw error;
+       }
        return res.json({ success: true, data: existingStaff, message: 'Existing staff updated to driver' });
     }
 
@@ -329,7 +333,11 @@ export const createSupplier = async (req: Request, res: Response) => {
     // Generate supplier code if not provided
     let finalSupplierCode = supplier_code_val;
     if (!finalSupplierCode) {
-      const { count } = await supabase.from('store_suppliers').select('*', { count: 'exact', head: true });
+      const { count , error } = await supabase.from('store_suppliers').select('*', { count: 'exact', head: true });
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       const nextNum = (count || 0) + 1;
       finalSupplierCode = `SUP-${nextNum.toString().padStart(4, '0')}`;
     }
@@ -483,7 +491,11 @@ export const updateSupplier = async (req: Request, res: Response) => {
     if (userId) {
       // Safe audit log creation - if it fails, don't revert the update
       try {
-        await supabase.rpc('create_audit_log', {
+        const { error } = await supabase.rpc('create_audit_log', {
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
           p_user_id: userId,
           p_action: 'UPDATE',
           p_entity_type: 'SUPPLIER',
@@ -964,7 +976,11 @@ export const createStockTake = async (req: Request, res: Response) => {
     }
 
     if (countItems.length > 0) {
-      await supabase.from('stock_count_items').insert(countItems);
+      const { error } = await supabase.from('stock_count_items').insert(countItems);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
     }
 
     res.status(201).json({ success: true, data: count });
@@ -1176,7 +1192,11 @@ export const generateWorksheet = async (req: Request, res: Response) => {
       }
     } else {
       const bId = branch_id || user?.branch_id || 1;
-      const { data: branch } = await supabase.from('branches').select('name').eq('id', bId).single();
+      const { data: branch , error } = await supabase.from('branches').select('name').eq('id', bId).single();
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       if (branch) branchName = branch.name;
 
       let query = supabase.from('store_items').select('*').eq('is_active', true);
@@ -1235,7 +1255,7 @@ export const completeStockTake = async (req: Request, res: Response) => {
     const updatedCount = (updatedCounts && updatedCounts.length > 0) ? updatedCounts[0] : count;
 
     // Create approval request for auditor
-    await supabase.from('approval_requests').insert({
+    const { error } = await supabase.from('approval_requests').insert({
       request_type: 'stock_take',
       status: 'pending',
       branch_id: count.branch_id,
@@ -1243,6 +1263,14 @@ export const completeStockTake = async (req: Request, res: Response) => {
       description: `Stock count submission review: ${count.count_number || id}`,
       metadata: { stock_count_id: id }
     });
+
+    if (error) {
+
+      console.error('Database error:', error);
+
+      throw error;
+
+    }
 
     res.json({
       success: true,

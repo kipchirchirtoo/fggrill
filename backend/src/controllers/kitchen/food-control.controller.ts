@@ -112,13 +112,21 @@ export const updateFoodControl = async (
         if (error) throw error;
 
         // Log update
-        await supabase.from('kitchen_food_control_logs').insert({
+        const { error } = await supabase.from('kitchen_food_control_logs').insert({
             rule_id: data.id,
             action: 'UPDATE',
             old_data: oldRule,
             new_data: data,
             changed_by: (req as any).user?.id
         });
+
+        if (error) {
+
+          console.error('Database error:', error);
+
+          throw error;
+
+        }
 
         res.status(200).json({ success: true, data });
     } catch (error) {
@@ -155,12 +163,20 @@ export const deleteFoodControl = async (
 
         // Log deletion
         if (oldRule) {
-            await supabase.from('kitchen_food_control_logs').insert({
+            const { error } = await supabase.from('kitchen_food_control_logs').insert({
                 rule_id: Number(id),
                 action: 'DELETE',
                 old_data: oldRule,
                 changed_by: (req as any).user?.id
             });
+
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
         }
 
         res.status(200).json({ success: true, message: 'Food control rule deleted' });

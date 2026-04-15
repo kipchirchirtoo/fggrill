@@ -13,7 +13,11 @@ async function testUpdate() {
     const billId = '34403140-73da-403f-bbd9-610843797cac'; // BILL000001
 
     // Fetch current
-    const { data: bill } = await supabase.from('unpaid_bills').select('*').eq('id', billId).single();
+    const { data: bill , error } = await supabase.from('unpaid_bills').select('*').eq('id', billId).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     console.log('Current bill:', bill);
 
     if (bill) {
@@ -46,7 +50,11 @@ async function testUpdate() {
     console.log('\nTesting accounting_ar_invoices update...');
     const invId = '1f31c82e-23a0-4580-bcaf-8281bcf74661'; // INV-1770999425477
 
-    const { data: inv } = await supabase.from('accounting_ar_invoices').select('*').eq('id', invId).single();
+    const { data: inv , error } = await supabase.from('accounting_ar_invoices').select('*').eq('id', invId).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     console.log('Current invoice:', inv);
 
     if (inv) {

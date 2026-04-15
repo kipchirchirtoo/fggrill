@@ -97,7 +97,8 @@ const staffBase = {
   getStaffMember: (id: string | number) => fetchAPI<StaffMember>(`/staff/${id}`),
   createStaffMember: (data: any) => fetchAPI<StaffMember>('/staff', { method: 'POST', body: JSON.stringify(data) }),
   updateStaffMember: (id: string | number, data: any) => fetchAPI<StaffMember>(`/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteStaffMember: (id: string | number) => fetchAPI<void>(`/staff/${id}/archive`, { method: 'POST' }),
+  deleteStaffMember: (id: string | number) => fetchAPI<void>(`/staff/${id}`, { method: 'DELETE' }),
+  archiveStaff: (id: string | number, notes: string) => fetchAPI<StaffMember>(`/staff/${id}/archive`, { method: 'POST', body: JSON.stringify({ notes }) }),
   
   // Leave & Performance
   getLeaveRequests: (params?: any) => fetchAPI<LeaveRequest[]>(`/staff/leave${buildQuery(params)}`),

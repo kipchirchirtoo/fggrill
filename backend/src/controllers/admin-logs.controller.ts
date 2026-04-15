@@ -117,6 +117,8 @@ export const getUnifiedLogs = async (req: Request, res: Response, next: NextFunc
       default:
         return res.status(400).json({ success: false, message: 'Invalid category' });
     }
+    
+    // Note: Error handling for these query builders is done when query is executed below
 
     // Apply common filters
     if (startDate) query = query.gte(orderBy, startDate);

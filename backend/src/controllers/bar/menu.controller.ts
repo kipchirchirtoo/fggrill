@@ -255,6 +255,10 @@ export const uploadDrinkImage = async (req: Request, res: Response, next: NextFu
     const path = `menu-items/${id}/${Date.now()}-${fileName || 'image.jpg'}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .from('menu-items')
       .upload(path, buffer, {
         contentType: contentType || 'image/jpeg',

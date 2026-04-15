@@ -12,11 +12,19 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function debugProfiles() {
     console.log('--- All Users ---');
-    const { data: users } = await supabase.from('users').select('id, email, first_name, last_name, role');
+    const { data: users , error } = await supabase.from('users').select('id, email, first_name, last_name, role');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     console.log(users);
 
     console.log('--- All Staff Profiles ---');
-    const { data: staff } = await supabase.from('staff_profiles').select('id, user_id');
+    const { data: staff , error } = await supabase.from('staff_profiles').select('id, user_id');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     console.log(staff);
 }
 

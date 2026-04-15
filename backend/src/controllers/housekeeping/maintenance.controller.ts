@@ -9,7 +9,11 @@ import { ICreateMaintenanceRequest, HKMaintenanceStatus, HKRoomStatus } from '..
 
 async function getStaffProfileId(userId: string | undefined): Promise<string | null> {
   if (!userId) return null;
-  const { data } = await supabase.from('hk_staff_profiles').select('id').eq('user_id', userId).single();
+  const { data , error } = await supabase.from('hk_staff_profiles').select('id').eq('user_id', userId).single();
+  if (error) {
+    console.error('Database error:', error);
+    throw error;
+  }
   return data?.id || null;
 }
 

@@ -162,7 +162,11 @@ async function main() {
 
         if (existingCat) {
             catId = existingCat.id;
-            await supabase.from('restaurant_menu_categories').update({ is_bar: true }).eq('id', catId);
+            const { error } = await supabase.from('restaurant_menu_categories').update({ is_bar: true }).eq('id', catId);
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
         } else {
             const { data: newCat, error } = await supabase
                 .from('restaurant_menu_categories')

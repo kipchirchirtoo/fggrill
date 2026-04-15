@@ -4,6 +4,7 @@ import {
   getStaffMember,
   createStaffMember,
   updateStaffMember,
+  deleteStaffMember,
   getRoles,
   createStaffSchedule,
   processPayroll,
@@ -144,6 +145,11 @@ router.get('/:id',
 router.put('/:id',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
   updateStaffMember
+);
+
+router.delete('/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]),
+  deleteStaffMember
 );
 
 router.post('/:id/archive',

@@ -342,6 +342,10 @@ export async function generateProcurementIntelligencePDF(
 
   // ── Connection Test ──
   const { count: userCount, error: userError } = await supabase.from('users').select('*', { count: 'exact', head: true });
+  if (error) {
+    console.error('Database error:', error);
+    throw error;
+  }
   logger.info(`Connection Test: Users Count = ${userCount}, Error = ${JSON.stringify(userError)}`);
 
   // ── 1. Fetch invoices — three-level fallback ──────────────────────────────

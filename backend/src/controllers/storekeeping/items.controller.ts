@@ -307,7 +307,7 @@ export const createItem = async (
           // Generate order number for this stock-in
           const orderNum = await generateOrderNumber('STKIN');
 
-          await supabase.from('stock_history').insert({
+          const { error } = await supabase.from('stock_history').insert({
             item_sku: existingItem.sku,
             change_type: 'IN',
             quantity_change: quantity - existingItem.quantity,
@@ -317,6 +317,18 @@ export const createItem = async (
             reference: orderNum,
             user_id: req.user?.id
           });
+
+
+          if (error) {
+
+
+            console.error('Database error:', error);
+
+
+            throw error;
+
+
+          }
         }
 
         res.status(200).json({ success: true, data, reactivated: true });
@@ -364,7 +376,7 @@ export const createItem = async (
 
     // Log initial stock with order number
     if (quantity > 0) {
-      await supabase.from('stock_history').insert({
+      const { error } = await supabase.from('stock_history').insert({
         item_sku: sku,
         change_type: 'IN',
         quantity_change: quantity,
@@ -374,6 +386,14 @@ export const createItem = async (
         reference: stockInOrderNum,
         user_id: req.user?.id
       });
+
+      if (error) {
+
+        console.error('Database error:', error);
+
+        throw error;
+
+      }
     }
 
     logger.info(`Item created: ${sku} (auto-generated: ${isAutoSku})`);
@@ -431,7 +451,7 @@ export const updateItem = async (
       const diff = quantity - currentItem.quantity;
       const type = diff > 0 ? 'IN' : 'OUT';
 
-      await supabase.from('stock_history').insert({
+      const { error } = await supabase.from('stock_history').insert({
         item_sku: req.params.id,
         change_type: type,
         quantity_change: Math.abs(diff),
@@ -442,6 +462,18 @@ export const updateItem = async (
         notes: notes,
         user_id: req.user.id
       });
+
+
+      if (error) {
+
+
+        console.error('Database error:', error);
+
+
+        throw error;
+
+
+      }
     }
 
     res.status(200).json({
@@ -507,7 +539,7 @@ export const addStock = async (
     const orderNum = await generateOrderNumber('STKIN');
 
     // Log stock history with order number
-    await supabase.from('stock_history').insert({
+    const { error } = await supabase.from('stock_history').insert({
       item_sku: currentItem.sku,
       change_type: 'IN',
       quantity_change: parseInt(quantity),
@@ -518,6 +550,14 @@ export const addStock = async (
       notes: notes || reference || null,
       user_id: req.user?.id || null
     });
+
+    if (error) {
+
+      console.error('Database error:', error);
+
+      throw error;
+
+    }
 
     logger.info(`Stock added: ${currentItem.sku} +${quantity} (now ${newQuantity}) [${orderNum}]`);
 

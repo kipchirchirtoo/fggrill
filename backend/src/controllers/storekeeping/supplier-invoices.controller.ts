@@ -211,7 +211,11 @@ export const createInvoice = async (
                 .insert(invItems);
 
             if (itemsError) {
-                await supabase.from('store_supplier_invoices').delete().eq('id', newInvoice.id);
+                const { error } = await supabase.from('store_supplier_invoices').delete().eq('id', newInvoice.id);
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                 throw itemsError;
             }
         }

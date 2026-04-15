@@ -201,13 +201,21 @@ export class PaymentsController {
 
       const usersMap = new Map();
       if (userIds.size > 0) {
-        const { data: users } = await supabase.from('users').select('id, first_name, last_name, role, email').in('id', Array.from(userIds));
+        const { data: users , error } = await supabase.from('users').select('id, first_name, last_name, role, email').in('id', Array.from(userIds));
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         users?.forEach((u: any) => usersMap.set(u.id, { id: u.id, full_name: `${u.first_name} ${u.last_name}`.trim(), role: u.role, email: u.email }));
       }
 
       const branchesMap = new Map();
       if (branchIds.size > 0) {
-        const { data: branches } = await supabase.from('branches').select('id, name, location').in('id', Array.from(branchIds));
+        const { data: branches , error } = await supabase.from('branches').select('id, name, location').in('id', Array.from(branchIds));
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         branches?.forEach((b: any) => branchesMap.set(b.id, b));
       }
 

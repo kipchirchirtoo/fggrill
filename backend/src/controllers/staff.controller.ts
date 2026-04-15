@@ -152,10 +152,10 @@ export const getStaff = async (
     // Apply generic branch isolation
     query = applyBranchFilter(query, req);
 
+    // Note: branch_id filtering is handled by applyBranchFilter above
+    // Adding explicit branch_id filter here causes conflicts for branch-scoped users
+    
     // Add extra optional filters
-    if (req.query.branch_id) {
-      query = query.eq('branch_id', req.query.branch_id);
-    }
     if (req.query.department) {
       query = query.eq('department', req.query.department);
     }
@@ -449,6 +449,43 @@ export const createStaffMember = async (
     if (staffError) {
       logger.error('Error creating staff profile:', staffError);
       logger.error('Staff profile payload:', staffData);
+      
+      // Provide specific error messages for common issues
+      if (staffError.code === '23502') {
+        // NOT NULL constraint violation
+        const match = staffError.message.match(/column "(\w+)"/);
+        const column = match ? match[1] : 'unknown';
+        res.status(400).json({
+          success: false,
+          message: `Missing required field: ${column}`,
+          error: 'MISSING_REQUIRED_FIELD',
+          details: staffError.message
+        });
+        return;
+      }
+      
+      if (staffError.code === '23505') {
+        // Unique constraint violation
+        res.status(400).json({
+          success: false,
+          message: 'A staff member with this information already exists',
+          error: 'DUPLICATE_STAFF',
+          details: staffError.message
+        });
+        return;
+      }
+      
+      if (staffError.code === '23503') {
+        // Foreign key constraint violation
+        res.status(400).json({
+          success: false,
+          message: 'Invalid reference: branch_id or supervisor_id does not exist',
+          error: 'INVALID_REFERENCE',
+          details: staffError.message
+        });
+        return;
+      }
+      
       throw new Error(`Failed to create staff profile: ${staffError.message}`);
     }
 
@@ -748,11 +785,19 @@ export const updateStaffMember = async (
       try {
         // First check if the auth user exists
         const { data: authUser, error: authCheckError } = await supabase.auth.admin.getUserById(staff.user_id);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
 
         if (authCheckError) {
           logger.warn(`Auth user not found for staff ${req.params.id}, skipping email update:`, authCheckError);
         } else if (authUser) {
           const { error: emailError } = await supabase.auth.admin.updateUserById(
+          if (error) {
+            console.error('Database error:', error);
+            throw error;
+          }
             staff.user_id,
             { email }
           );
@@ -914,7 +959,7 @@ export const archiveStaff = async (
     if (updateError) throw updateError;
 
     // Create history entry
-    await supabase.from('staff_employment_history').insert([{
+    const { error: historyError } = await supabase.from('staff_employment_history').insert([{
       staff_id: req.params.id,
       change_type: 'termination',
       old_value: staff.status,
@@ -923,12 +968,65 @@ export const archiveStaff = async (
       created_by: sanitizeUUID(req.user?.id)
     }]);
 
+    if (historyError) {
+      logger.error('Error creating history entry:', historyError);
+    }
+
     res.status(200).json({
       success: true,
       data: updatedStaff,
       message: 'Staff member archived/terminated successfully'
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete staff member (Permanent removal)
+// @route   DELETE /api/staff/:id
+// @access  Private (Super Admin only)
+export const deleteStaffMember = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Check if staff member exists
+    const { data: staff, error: getError } = await supabase
+      .from('staff_profiles')
+      .select('id, first_name, last_name, email')
+      .eq('id', id)
+      .single();
+
+    if (getError || !staff) {
+      res.status(404).json({ 
+        success: false, 
+        message: 'Staff member not found' 
+      });
+      return;
+    }
+
+    // Delete staff member (CASCADE will handle related records)
+    const { error: deleteError } = await supabase
+      .from('staff_profiles')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      logger.error('Error deleting staff member:', deleteError);
+      throw new Error(`Failed to delete staff member: ${deleteError.message}`);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Staff member ${staff.first_name} ${staff.last_name} deleted successfully`
+    });
+
+    logger.info(`Staff member deleted: ${staff.first_name} ${staff.last_name} (${id})`);
+  } catch (error) {
+    logger.error('Error in deleteStaffMember:', error);
     next(error);
   }
 };
@@ -1417,7 +1515,11 @@ export const updateAttendance = async (
       return;
     }
 
-    const { data: oldRecord } = await supabase.from('staff_attendance').select('*').eq('id', id).single();
+    const { data: oldRecord , error } = await supabase.from('staff_attendance').select('*').eq('id', id).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (!oldRecord) {
       res.status(404).json({ success: false, message: 'Record not found' });
       return;
@@ -2056,6 +2158,10 @@ export const uploadStaffPhoto = async (
     const fileName = `staff-photos/${staffId}-${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .from('profile')
       .upload(fileName, file.buffer, {
         contentType: file.mimetype,
@@ -2132,6 +2238,10 @@ export const uploadStaffDocument = async (
     const fileName = `${req.params.id}-${documentType}-${Date.now()}.${fileExt}`;
 
     const { data: storageData, error: storageError } = await supabase.storage
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .from('staff-documents')
       .upload(fileName, file.buffer, {
         contentType: file.mimetype,

@@ -97,7 +97,7 @@ export const migratePendingBills = async () => {
                     const waiterUser = notifyWaiter?.user ? (Array.isArray(notifyWaiter.user) ? notifyWaiter.user[0] : notifyWaiter.user) : null;
 
                     if (waiterUser?.id) {
-                        await supabase.from('notifications').insert({
+                        const { error } = await supabase.from('notifications').insert({
                             user_id: waiterUser.id,
                             type: 'pending_bill_migrated',
                             title: 'Order Migrated to Unpaid Bills',
@@ -105,6 +105,14 @@ export const migratePendingBills = async () => {
                             link: '/dashboard/staff/credit-bills',
                             is_read: false
                         });
+
+                        if (error) {
+
+                          console.error('Database error:', error);
+
+                          throw error;
+
+                        }
                     }
 
                     logger.info(`Successfully migrated order ${order.order_number} to credit bill`);

@@ -122,7 +122,7 @@ async function processAccountingPayment(
       .single();
 
     if (bankAcc) {
-      await supabase.from('accounting_bank_transactions').insert({
+      const { error } = await supabase.from('accounting_bank_transactions').insert({
         bank_account_id: bankAcc.id,
         transaction_date: new Date().toISOString().split('T')[0],
         debit_amount: type === 'invoice' ? paymentAmount : 0,
@@ -132,12 +132,28 @@ async function processAccountingPayment(
         reconciled: false
       });
 
+      if (error) {
+
+        console.error('Database error:', error);
+
+        throw error;
+
+      }
+
       // Update balance
       const balanceChange = type === 'invoice' ? paymentAmount : -paymentAmount;
-      await supabase.from('accounting_bank_accounts').update({
+      const { error } = await supabase.from('accounting_bank_accounts').update({
         current_balance: (bankAcc.current_balance || 0) + balanceChange,
         updated_at: new Date().toISOString()
       }).eq('id', bankAcc.id);
+
+      if (error) {
+
+        console.error('Database error:', error);
+
+        throw error;
+
+      }
     }
   } catch (error) {
     logger.error(`Error in processAccountingPayment (${type}):`, error);
@@ -248,7 +264,7 @@ export const confirmPayment = async (
       if (success && paymentIntent.folioId) {
         // Record payment in folio transactions
         try {
-          await supabase.from('folio_transactions').insert({
+          const { error } = await supabase.from('folio_transactions').insert({
             folio_id: paymentIntent.folioId,
             type: 'payment',
             description: `Payment via ${paymentIntent.paymentMethod}`,
@@ -257,6 +273,14 @@ export const confirmPayment = async (
             reference_number: paymentIntent.id,
             created_by: req.user?.id,
           });
+
+          if (error) {
+
+            console.error('Database error:', error);
+
+            throw error;
+
+          }
 
           // Update folio balance
           const { data: folio } = await supabase
@@ -585,7 +609,7 @@ export const mpesaCallback = async (
         .single();
 
       if (!updateResError && updateRes) {
-        await supabase.from('cashier_transactions').insert({
+        const { error } = await supabase.from('cashier_transactions').insert({
           transaction_number: `POS-${updateRes.transaction_ref}`,
           branch_id: updateRes.branch_id,
           cashier_id: updateRes.cashier_id,
@@ -598,6 +622,14 @@ export const mpesaCallback = async (
           payment_reference: metadata.mpesaReceiptNumber || payment.reference,
           customer_name: updateRes.customer_name
         });
+
+        if (error) {
+
+          console.error('Database error:', error);
+
+          throw error;
+
+        }
       }
     }
 

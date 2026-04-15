@@ -54,7 +54,9 @@ export function KyogongPOSLayout({
             const res = await kyogongAPI.getCurrentShift();
             if (res.success && res.data) {
                 setActiveShift(res.data);
-                fetchTransactions(res.data.id);
+                if (res.data.id) {
+                    fetchTransactions(res.data.id);
+                }
             } else {
                 setActiveShift(null);
             }
@@ -66,6 +68,10 @@ export function KyogongPOSLayout({
     };
 
     const fetchTransactions = async (shiftId: string) => {
+        if (!shiftId) {
+            console.warn('Cannot fetch transactions: shiftId is undefined');
+            return;
+        }
         try {
             const res = await kyogongAPI.getShiftTransactions(shiftId);
             if (res.success) setTransactions(res.data || []);
@@ -75,7 +81,9 @@ export function KyogongPOSLayout({
     const handleShiftOpened = (shift: any) => {
         setActiveShift(shift);
         setActiveTab('pos');
-        fetchTransactions(shift.id);
+        if (shift?.id) {
+            fetchTransactions(shift.id);
+        }
     };
 
     const handleShiftClosed = () => {

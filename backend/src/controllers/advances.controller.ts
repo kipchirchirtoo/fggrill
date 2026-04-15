@@ -53,13 +53,16 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
         if (error) throw error;
 
         const staffIds = [...new Set((data || []).map((a: any) => a.staff_id).filter(Boolean))];
-        const { data: staffProfiles } = staffIds.length > 0
+        const { data: staffProfiles, error: staffError } = staffIds.length > 0
             ? await supabase.from('staff_profiles').select('id, role, first_name, last_name, user_id').in('id', staffIds)
-            : { data: [] };
+            : { data: [], error: null };
+        if (staffError) throw staffError;
+        
         const userIds = (staffProfiles || []).map((s: any) => s.user_id).filter(Boolean);
-        const { data: users } = userIds.length > 0
+        const { data: users, error: usersError } = userIds.length > 0
             ? await supabase.from('users').select('id, first_name, last_name').in('id', userIds)
-            : { data: [] };
+            : { data: [], error: null };
+        if (usersError) throw usersError;
 
         const staffMap = new Map((staffProfiles || []).map((s: any) => [s.id, s]));
         const userMap = new Map((users || []).map((u: any) => [u.id, u]));

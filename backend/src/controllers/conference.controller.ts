@@ -320,7 +320,11 @@ export const createConferenceBooking = async (
         const end = new Date(end_date);
         const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
 
-        const { data: hall } = await supabase.from('conference_halls').select('*').eq('id', conference_hall_id).single();
+        const { data: hall , error } = await supabase.from('conference_halls').select('*').eq('id', conference_hall_id).single();
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         if (hall) {
             if (diffHours >= 8) {
                 calculatedTotal += Math.ceil(diffHours / 24) * (hall.base_price_per_day || 0);
@@ -409,7 +413,11 @@ export const createConferenceBooking = async (
         if (meal_plan_details && Array.isArray(meal_plan_details) && meal_plan_details.length > 0) {
             try {
                 // Generate order number for kitchen
-                const { data: orderNumber } = await supabase.rpc('generate_order_number');
+                const { data: orderNumber , error } = await supabase.rpc('generate_order_number');
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
 
                 // Create a generic restaurant order for the conference
                 const orderData = {
@@ -442,7 +450,11 @@ export const createConferenceBooking = async (
                         special_instructions: `Meal Type: ${meal.name}`
                     }));
 
-                    await supabase.from('restaurant_order_items').insert(orderItems);
+                    const { error } = await supabase.from('restaurant_order_items').insert(orderItems);
+                    if (error) {
+                      console.error('Database error:', error);
+                      throw error;
+                    }
                 } else {
                     logger.error(`Failed to trigger kitchen order for conference: ${orderError?.message}`);
                 }
@@ -620,7 +632,7 @@ export const addConferencePayment = async (
 
         // 4. Record in cashier_transactions for logbook visibility
         try {
-            await supabase.from('cashier_transactions').insert({
+            const { error } = await supabase.from('cashier_transactions').insert({
                 transaction_number: reference || `CNF-PAY-${Date.now()}`,
                 branch_id: req.user?.branch_id || booking.branch_id,
                 cashier_id: req.user?.id,
@@ -633,6 +645,14 @@ export const addConferencePayment = async (
                 payment_reference: reference || 'CASH',
                 customer_name: booking.company_name || booking.customer_name
             });
+
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
         } catch (txnError: any) {
             logger.error(`Error recording cashier transaction: ${txnError.message}`);
         }

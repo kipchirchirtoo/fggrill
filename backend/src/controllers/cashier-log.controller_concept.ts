@@ -25,6 +25,10 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                     // Here we'll just Insert a new record if it looks new.
 
                     const { error } = await supabase.from('staff_credit_bills').insert({
+                    if (error) {
+                      console.error('Database error:', error);
+                      throw error;
+                    }
                         staff_id: bill.staff_id,
                         amount: bill.amount,
                         description: `Cashier Logbook Credit: ${bill.reference || 'No Ref'}`,

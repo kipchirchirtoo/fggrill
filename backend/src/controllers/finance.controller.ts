@@ -849,7 +849,11 @@ export const getRevenueByBranch = async (
     const end = endDate as string || new Date().toISOString();
 
     // Get all branches
-    const { data: branches } = await supabase.from('branches').select('id, name, code');
+    const { data: branches , error } = await supabase.from('branches').select('id, name, code');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     // 1. Restaurant Revenue
     const { data: restaurantRevenue } = await supabase
@@ -1634,7 +1638,11 @@ export const saveDailyLog = async (req: Request, res: Response, next: NextFuncti
 
     // 2. Clear and recreate lines
     if (log.id) {
-      await supabase.from('finance_daily_log_lines').delete().eq('log_id', log.id);
+      const { error } = await supabase.from('finance_daily_log_lines').delete().eq('log_id', log.id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
 
       if (lines && lines.length > 0) {
         const linesWithLogId = lines.map((l: any) => {

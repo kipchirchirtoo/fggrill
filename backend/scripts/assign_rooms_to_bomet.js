@@ -44,7 +44,11 @@ async function main() {
             console.error('Error creating branch:', createError);
 
             // Fallback: Check if ANY branch exists to assign to?
-            const { data: allBranches } = await supabase.from('branches').select('id, name').limit(1);
+            const { data: allBranches , error } = await supabase.from('branches').select('id, name').limit(1);
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
             if (allBranches && allBranches.length > 0) {
                 console.log(`Fallback: Assigning to first available branch: ${allBranches[0].name}`);
                 bometBranch = allBranches[0];
@@ -72,7 +76,11 @@ async function main() {
     console.log(`Assigning all rooms to ${bometBranch.name}...`);
 
     // Fetch all room IDs first to avoid RLS/Filter issues just in case
-    const { data: allRooms } = await supabase.from('rooms').select('id');
+    const { data: allRooms , error } = await supabase.from('rooms').select('id');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     if (!allRooms || allRooms.length === 0) {
         console.log('No rooms found to update.');

@@ -229,7 +229,11 @@ export const createUsageRecord = async (
 
     } catch (stockError) {
       // Rollback usage record if stock update fails
-      await supabase.from('kitchen_usage_records').delete().eq('id', data.id);
+      const { error } = await supabase.from('kitchen_usage_records').delete().eq('id', data.id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       throw stockError;
     }
 

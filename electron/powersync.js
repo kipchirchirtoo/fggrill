@@ -3,17 +3,18 @@ const path = require('path');
 const { app } = require('electron');
 
 // ──────────────────────────────────────────
-// Hardcoded Credentials (Permanent Fix)
+// Hardcoded Credentials (Client-Safe Keys Only)
 // ──────────────────────────────────────────
 const HARDCODED_SUPABASE_URL = 'https://utsvlihpudfraxzcmtle.supabase.co';
 const HARDCODED_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0c3ZsaWhwdWRmcmF4emNtdGxlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5MTYzMzIsImV4cCI6MjA3OTQ5MjMzMn0.wPONqSZvgQQyrssA4wTbBfaUJO5HrV_XtA2AD7PaweA';
-const HARDCODED_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0c3ZsaWhwdWRmcmF4emNtdGxlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzkxNjMzMiwiZXhwIjoyMDc5NDkyMzMyfQ.AhnRNBw6l3HBOTEIMrlUbGQEf9FJdyTaQrRQJW7IBNY';
+// SECURITY FIX: Removed HARDCODED_SERVICE_ROLE_KEY - service_role key should NEVER be in client code
+// All privileged operations must use anon key + user JWT or be moved to server-side API
 const HARDCODED_POWERSYNC_URL = 'https://699224f042bd91af920c6b3c.powersync.journeyapps.com';
 
 // Force hardcoded values
 process.env.VITE_SUPABASE_URL = HARDCODED_SUPABASE_URL;
 process.env.VITE_SUPABASE_ANON_KEY = HARDCODED_ANON_KEY;
-process.env.SUPABASE_SERVICE_ROLE_KEY = HARDCODED_SERVICE_ROLE_KEY;
+// SECURITY FIX: Do NOT set SUPABASE_SERVICE_ROLE_KEY in client environment
 process.env.NEXT_PUBLIC_SUPABASE_URL = HARDCODED_SUPABASE_URL;
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = HARDCODED_ANON_KEY;
 process.env.VITE_POWERSYNC_URL = HARDCODED_POWERSYNC_URL;

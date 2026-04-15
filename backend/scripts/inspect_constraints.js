@@ -43,6 +43,10 @@ async function inspectConstraints() {
 
         // Fallback: try to select from a known table to see if connection works
         const { data: testData, error: testError } = await supabase.from('hk_staff_profiles').select('id, user_id').limit(1);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         console.log('Test select:', testData, testError);
         return;
     }

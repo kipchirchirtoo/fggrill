@@ -313,7 +313,11 @@ export const updateTaskStatus = async (
     // Handle status transitions
     if (status === HKTaskStatus.IN_PROGRESS) {
       updateData.started_at = task.started_at || new Date().toISOString();
-      await supabase.from('rooms').update({ hk_status: 'cleaning_in_progress' }).eq('id', task.room_id);
+      const { error } = await supabase.from('rooms').update({ hk_status: 'cleaning_in_progress' }).eq('id', task.room_id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
     }
 
     if (status === HKTaskStatus.PAUSED) {
@@ -330,15 +334,27 @@ export const updateTaskStatus = async (
         updateData.actual_duration_minutes = Math.round((Date.now() - new Date(task.started_at).getTime()) / 60000);
       }
       const roomStatus = task.requires_inspection ? 'inspected' : 'vacant_clean';
-      await supabase.from('rooms').update({ hk_status: roomStatus, last_cleaned_at: new Date().toISOString() }).eq('id', task.room_id);
+      const { error } = await supabase.from('rooms').update({ hk_status: roomStatus, last_cleaned_at: new Date().toISOString() }).eq('id', task.room_id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
     }
 
     if (status === HKTaskStatus.INSPECTION_PASSED) {
-      await supabase.from('rooms').update({ hk_status: 'vacant_clean', last_inspected_at: new Date().toISOString() }).eq('id', task.room_id);
+      const { error } = await supabase.from('rooms').update({ hk_status: 'vacant_clean', last_inspected_at: new Date().toISOString() }).eq('id', task.room_id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
     }
 
     if (status === HKTaskStatus.INSPECTION_FAILED || status === HKTaskStatus.REWORK_REQUIRED) {
-      await supabase.from('rooms').update({ hk_status: 'vacant_dirty' }).eq('id', task.room_id);
+      const { error } = await supabase.from('rooms').update({ hk_status: 'vacant_dirty' }).eq('id', task.room_id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
     }
 
     const { data: updatedTask, error: updateError } = await supabase
@@ -352,11 +368,19 @@ export const updateTaskStatus = async (
 
     // Update staff availability
     if (['completed', 'pending_inspection', 'inspection_passed', 'cancelled', 'skipped'].includes(status) && task.assigned_to) {
-      await supabase.from('hk_staff_profiles').update({
+      const { error } = await supabase.from('hk_staff_profiles').update({
         current_task_id: null,
         current_room_number: null,
         is_available: true
       }).eq('id', task.assigned_to);
+
+      if (error) {
+
+        console.error('Database error:', error);
+
+        throw error;
+
+      }
     }
 
     res.status(200).json({ success: true, data: updatedTask });
@@ -412,7 +436,11 @@ export const assignTask = async (
 
     if (error) throw error;
 
-    await supabase.from('rooms').update({ assigned_attendant_id: assignedTo }).eq('id', task.room_id);
+    const { error } = await supabase.from('rooms').update({ assigned_attendant_id: assignedTo }).eq('id', task.room_id);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     res.status(200).json({ success: true, data: task });
     logger.info(`Task ${task.task_number} assigned to ${staff.staff_code}`);
@@ -523,12 +551,20 @@ export const autoAssignTasks = async (
 
     // Execute assignments
     for (const { taskId, staffId } of assignments) {
-      await supabase.from('hk_tasks').update({
+      const { error } = await supabase.from('hk_tasks').update({
         assigned_to: staffId,
         assigned_at: new Date().toISOString(),
         assigned_by: req.user?.id,
         status: 'assigned'
       }).eq('id', taskId);
+
+      if (error) {
+
+        console.error('Database error:', error);
+
+        throw error;
+
+      }
     }
 
     res.status(200).json({

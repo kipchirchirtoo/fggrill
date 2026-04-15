@@ -414,7 +414,11 @@ export const updateDispatchStatus = async (
                 if (dispatch?.items) {
                     for (const item of dispatch.items) {
                         // Deduct from central warehouse stock
-                        await supabase.rpc('update_branch_stock', {
+                        const { error } = await supabase.rpc('update_branch_stock', {
+                        if (error) {
+                          console.error('Database error:', error);
+                          throw error;
+                        }
                             p_branch_id: dispatch.from_branch_id,
                             p_item_sku: item.item_sku,
                             p_quantity_change: -item.dispatched_quantity
@@ -502,7 +506,11 @@ export const dispatchItems = async (
         let resolvedDriverPhone = driver_phone || '';
 
         if (vehicle_id && !resolvedVehicleNumber) {
-            const { data: vehicle } = await supabase.from('vehicles')
+            const { data: vehicle , error } = await supabase.from('vehicles')
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
                 .select('registration_number').eq('id', vehicle_id).single();
             if (vehicle) resolvedVehicleNumber = vehicle.registration_number;
         }
@@ -510,14 +518,22 @@ export const dispatchItems = async (
         if (driver_id && !resolvedDriverName) {
             if (driver_id.startsWith('staff-')) {
                 const staffId = driver_id.replace('staff-', '');
-                const { data: staff } = await supabase.from('staff_profiles')
+                const { data: staff , error } = await supabase.from('staff_profiles')
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                     .select('first_name, last_name, phone').eq('id', staffId).single();
                 if (staff) {
                     resolvedDriverName = `${staff.first_name || ''} ${staff.last_name || ''}`.trim();
                     if (!resolvedDriverPhone) resolvedDriverPhone = staff.phone || '';
                 }
             } else {
-                const { data: driver } = await supabase.from('drivers')
+                const { data: driver , error } = await supabase.from('drivers')
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                     .select('name, phone').eq('id', driver_id).single();
                 if (driver) {
                     resolvedDriverName = driver.name;

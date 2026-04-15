@@ -6,7 +6,11 @@ import * as XLSX from 'xlsx';
 
 // Helper to check edit lock
 const checkEditLock = async (isManager: boolean): Promise<void> => {
-  const { data: config } = await supabase.from('simple_app_config').select('edit_lock').eq('id', 1).single();
+  const { data: config , error } = await supabase.from('simple_app_config').select('edit_lock').eq('id', 1).single();
+  if (error) {
+    console.error('Database error:', error);
+    throw error;
+  }
   if (config?.edit_lock && !isManager) {
     throw { status: 403, message: "Transfers are disabled as the warehouse is being maintained. Please try again later." };
   }
@@ -233,7 +237,11 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
         }
 
         // Check config for allow_uploads
-        const { data: config } = await supabase.from('simple_app_config').select('allow_uploads, allow_upload_deletions').eq('id', 1).single();
+        const { data: config , error } = await supabase.from('simple_app_config').select('allow_uploads, allow_upload_deletions').eq('id', 1).single();
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         
         if (!config?.allow_uploads) {
              res.status(400).json({ detail: "Uploads are disabled in the app configuration." });
@@ -293,11 +301,19 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
             if (allowDeletions) {
                 // Deactivate items not in excel
                 // Fetch all active skus
-                const { data: allItems } = await supabase.from('simple_items').select('sku').eq('is_active', true);
+                const { data: allItems , error } = await supabase.from('simple_items').select('sku').eq('is_active', true);
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                 if (allItems) {
                     const skusToDeactivate = allItems.filter(i => !excelSkus.has(i.sku)).map(i => i.sku);
                     if (skusToDeactivate.length > 0) {
-                        await supabase.from('simple_items').update({ is_active: false }).in('sku', skusToDeactivate);
+                        const { error } = await supabase.from('simple_items').update({ is_active: false }).in('sku', skusToDeactivate);
+                        if (error) {
+                          console.error('Database error:', error);
+                          throw error;
+                        }
                     }
                 }
             }
@@ -320,7 +336,11 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
                  // Find User ID
                  // Note: This assumes we can find user by email. 
                  // In Supabase Auth, users table usually mirrors auth.users
-                 const { data: user } = await supabase.from('users').select('id').eq('email', email).single();
+                 const { data: user , error } = await supabase.from('users').select('id').eq('email', email).single();
+                 if (error) {
+                   console.error('Database error:', error);
+                   throw error;
+                 }
                  
                  if (!user) {
                      logger.warn(`Shop user ${email} not found during import.`);
@@ -330,17 +350,29 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
                  // Ensure Item exists
                  // Original logic creates inactive item if missing.
                  // We will check if item exists first
-                 const { data: item } = await supabase.from('simple_items').select('sku').eq('sku', sku).single();
+                 const { data: item , error } = await supabase.from('simple_items').select('sku').eq('sku', sku).single();
+                 if (error) {
+                   console.error('Database error:', error);
+                   throw error;
+                 }
                  if (!item) {
                      // Create inactive item default
                      const rp = parseFloat((row as any)['Retail Price'] || '0');
-                     await supabase.from('simple_items').insert({
+                     const { error } = await supabase.from('simple_items').insert({
                          sku,
                          description: (row as any)['Description'] || '',
                          retail_price: isNaN(rp) ? 0 : rp,
                          quantity: 0,
                          is_active: false
                      });
+
+                     if (error) {
+
+                       console.error('Database error:', error);
+
+                       throw error;
+
+                     }
                      logger.warn(`Created inactive item ${sku} from shop stock import.`);
                  }
 
@@ -380,7 +412,11 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
                      });
                      
                      if (idsToDelete.length > 0) {
-                         await supabase.from('simple_shop_items').delete().in('id', idsToDelete);
+                         const { error } = await supabase.from('simple_shop_items').delete().in('id', idsToDelete);
+                         if (error) {
+                           console.error('Database error:', error);
+                           throw error;
+                         }
                      }
                  }
              }

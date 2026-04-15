@@ -9,7 +9,11 @@ async function verifyFix() {
 
     try {
         // 1. Get Room 123 details
-        const { data: room } = await supabase.from('rooms').select('id, room_number, status, room_type_id, branch_id').eq('room_number', '123').single();
+        const { data: room , error } = await supabase.from('rooms').select('id, room_number, status, room_type_id, branch_id').eq('room_number', '123').single();
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         if (!room) throw new Error('Room 123 not found');
 
         console.log(`Initial Room 123 Status: ${room.status}`);
@@ -51,7 +55,11 @@ async function verifyFix() {
         await bookingService.updateRoomStatus(room.id, RoomStatus.AVAILABLE);
 
         await bookingService.createBooking(futureBookingRequest as any);
-        let { data: roomAfterFuture } = await supabase.from('rooms').select('status').eq('id', room.id).single();
+        let { data: roomAfterFuture , error } = await supabase.from('rooms').select('status').eq('id', room.id).single();
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         console.log(`Room status after future booking: ${roomAfterFuture?.status}`);
         if (roomAfterFuture?.status === RoomStatus.AVAILABLE) {
             console.log('SUCCESS: Room status remained AVAILABLE for future booking.');
@@ -80,7 +88,11 @@ async function verifyFix() {
         };
 
         await bookingService.createBooking(todayBookingRequest as any);
-        let { data: roomAfterToday } = await supabase.from('rooms').select('status').eq('id', room.id).single();
+        let { data: roomAfterToday , error } = await supabase.from('rooms').select('status').eq('id', room.id).single();
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         console.log(`Room status after today's booking: ${roomAfterToday?.status}`);
         if (roomAfterToday?.status === RoomStatus.RESERVED) {
             console.log('SUCCESS: Room status updated to RESERVED for today\'s booking.');
@@ -90,17 +102,37 @@ async function verifyFix() {
 
         // 4. Cleanup
         console.log('\n--- Cleaning up test bookings ---');
-        const { data: testGuests } = await supabase.from('guests').select('id').ilike('email', '%@example.com');
+        const { data: testGuests , error } = await supabase.from('guests').select('id').ilike('email', '%@example.com');
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         if (testGuests) {
             for (const g of testGuests) {
-                const { data: res } = await supabase.from('reservations').select('id').eq('guest_id', g.id);
+                const { data: res , error } = await supabase.from('reservations').select('id').eq('guest_id', g.id);
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                 if (res) {
                     for (const r of res) {
-                        await supabase.from('folios').delete().eq('reservation_id', r.id);
-                        await supabase.from('reservations').delete().eq('id', r.id);
+                        const { error } = await supabase.from('folios').delete().eq('reservation_id', r.id);
+                        if (error) {
+                          console.error('Database error:', error);
+                          throw error;
+                        }
+                        const { error } = await supabase.from('reservations').delete().eq('id', r.id);
+                        if (error) {
+                          console.error('Database error:', error);
+                          throw error;
+                        }
                     }
                 }
-                await supabase.from('guests').delete().eq('id', g.id);
+                const { error } = await supabase.from('guests').delete().eq('id', g.id);
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
             }
         }
 

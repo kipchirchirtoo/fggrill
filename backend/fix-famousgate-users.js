@@ -64,6 +64,10 @@ async function fixAllUsers() {
       continue;
     }
     const { error } = await supabase.from('users').insert({
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       email:         u.email,
       first_name:    u.first_name,
       last_name:     u.last_name,

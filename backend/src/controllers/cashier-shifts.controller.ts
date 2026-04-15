@@ -523,7 +523,7 @@ export const closeShift = async (
                     if (isNaN(amountPaid) || amountPaid <= 0) continue;
 
                     // A. Record the payment itself for audit trail
-                    await supabase.from('staff_credit_bills').insert({
+                    const { error } = await supabase.from('staff_credit_bills').insert({
                         staff_id: bill.staff_id,
                         amount: amountPaid,
                         description: `Shift Payment - Shift #${shift.shift_number} - ${bill.name}`,
@@ -531,6 +531,14 @@ export const closeShift = async (
                         status: 'paid_cash',
                         paid_in_shift_id: shift.id
                     });
+
+                    if (error) {
+
+                      console.error('Database error:', error);
+
+                      throw error;
+
+                    }
 
                     // B. SETTLE FIFO: Find pending credits ordered by oldest first
                     const { data: credits, error: fetchError } = await supabase

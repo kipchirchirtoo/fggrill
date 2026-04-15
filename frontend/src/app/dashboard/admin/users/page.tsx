@@ -1048,10 +1048,10 @@ export default function AdminUsersPage() {
                           value={formData.pos_pin}
                           onChange={(e) => setFormData({ ...formData, pos_pin: e.target.value.toUpperCase() })}
                           className={`border-none p-0 h-auto focus-visible:ring-0 text-lg font-mono ${formErrors.pos_pin ? 'text-red-500' : ''}`}
-                          placeholder="e.g. R123"
-                          maxLength={4}
+                          placeholder="e.g. R1234"
+                          maxLength={5}
                         />
-                        <p className="text-[10px] text-gray-400 mt-1">Waiters: RXXX | Bar: BXXX | Cashiers: CXXX</p>
+                        <p className="text-[10px] text-gray-400 mt-1">Waiters: RXXXX | Bar: BXXXX | Cashiers: CXXXX</p>
                         {formErrors.pos_pin && <p className="text-red-500 text-[10px] mt-1">{formErrors.pos_pin}</p>}
                       </div>
                     </div>

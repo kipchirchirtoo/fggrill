@@ -171,9 +171,17 @@ export const getDraftPayroll = async (
       if (payrollItems.length > 0) {
         // Delete old items for these records first to avoid duplicates on recalculation
         const recordIds = (upsertedRecords || []).map(r => r.id);
-        await supabase.from('staff_payroll_items').delete().in('payroll_id', recordIds);
+        const { error } = await supabase.from('staff_payroll_items').delete().in('payroll_id', recordIds);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         
         const { error: itemsError } = await supabase.from('staff_payroll_items').insert(payrollItems);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         if (itemsError) logger.error(`Error saving payroll items: ${itemsError.message}`);
       }
     } else {
@@ -201,12 +209,36 @@ export const getDraftPayroll = async (
       net: acc.net + parseFloat(r.net_pay)
     }), { basic: 0, gross: 0, deductions: 0, net: 0 }) || { basic: 0, gross: 0, deductions: 0, net: 0 };
 
-    await supabase.from('payroll_runs').update({
+    const { error } = const { error } = await supabase.from('payroll_runs').update({
       total_basic_salary: totals.basic,
       total_gross_pay: totals.gross,
       total_deductions: totals.deductions,
       total_net_pay: totals.net,
     }).eq('id', run.id);
+
+
+    if (error) {
+
+
+      console.error('Database error:', error);
+
+
+      throw error;
+
+
+    }
+
+
+    if (error) {
+
+
+      console.error('Database error:', error);
+
+
+      throw error;
+
+
+    }
 
     const updatedRun = { ...run, ...totals };
 
@@ -297,21 +329,49 @@ export const approvePayroll = async (
 
           // Update the source record status based on table type
           if (item.source_table === 'staff_credit_bills') {
-            await supabase.from('staff_credit_bills').update({ status: 'deducted', paid_via_payroll_run_id: runId }).eq('id', item.source_id);
+            const { error } = await supabase.from('staff_credit_bills').update({ status: 'deducted', paid_via_payroll_run_id: runId }).eq('id', item.source_id);
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
           } else if (item.source_table === 'staff_payroll_adjustments') {
-            await supabase.from('staff_payroll_adjustments').update({ status: 'applied', payroll_id: runId }).eq('id', item.source_id);
+            const { error } = await supabase.from('staff_payroll_adjustments').update({ status: 'applied', payroll_id: runId }).eq('id', item.source_id);
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
           } else if (item.source_table === 'staff_advances') {
-            await supabase.from('staff_advances').update({ status: 'deducted', deducted_in_payroll_id: runId }).eq('id', item.source_id);
+            const { error } = await supabase.from('staff_advances').update({ status: 'deducted', deducted_in_payroll_id: runId }).eq('id', item.source_id);
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
           } else if (item.source_table === 'unpaid_bills') {
-             await supabase.from('unpaid_bills').update({ status: 'deducted' }).eq('id', item.source_id);
+             const { error } = await supabase.from('unpaid_bills').update({ status: 'deducted' }).eq('id', item.source_id);
+             if (error) {
+               console.error('Database error:', error);
+               throw error;
+             }
           } else if (item.source_table === 'staff_loans') {
-            const { data: loan } = await supabase.from('staff_loans').select('remaining_balance').eq('id', item.source_id).single();
+            const { data: loan , error } = await supabase.from('staff_loans').select('remaining_balance').eq('id', item.source_id).single();
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
             if (loan) {
                const newBalance = Math.max(0, parseFloat(loan.remaining_balance) - parseFloat(item.amount));
-               await supabase.from('staff_loans').update({ 
+               const { error } = await supabase.from('staff_loans').update({ 
                  remaining_balance: newBalance,
                  status: newBalance <= 0 ? 'paid' : 'active'
                }).eq('id', item.source_id);
+
+               if (error) {
+
+                 console.error('Database error:', error);
+
+                 throw error;
+
+               }
             }
           }
         }
@@ -677,7 +737,11 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
     let branchName = 'All Branches';
     const effectiveBranchId = branch_id && branch_id !== '0' ? branch_id : run.branch_id;
     if (effectiveBranchId) {
-      const { data: branch } = await supabase.from('branches').select('name').eq('id', effectiveBranchId).single();
+      const { data: branch , error } = await supabase.from('branches').select('name').eq('id', effectiveBranchId).single();
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       if (branch?.name) branchName = branch.name;
     }
 

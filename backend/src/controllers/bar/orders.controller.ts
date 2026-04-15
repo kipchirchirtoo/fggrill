@@ -116,7 +116,11 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
 
     if (itemsError) {
       // Rollback - delete order (simplified rollback)
-      await supabase.from('bar_orders').delete().eq('id', order.id);
+      const { error } = await supabase.from('bar_orders').delete().eq('id', order.id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       throw itemsError;
     }
 
@@ -187,7 +191,11 @@ export const updateOrderStatus = async (req: Request, res: Response, next: NextF
             // or create a specific RPC later.
 
             // Basic decrement:
-            await supabase.rpc('decrement_bar_stock', {
+            const { error } = await supabase.rpc('decrement_bar_stock', {
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
               p_drink_id: item.drink_id,
               p_branch_id: currentOrder.branch_id,
               p_quantity: item.quantity

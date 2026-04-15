@@ -39,6 +39,10 @@ const DialogContent = React.forwardRef<
         className
       )}
       aria-describedby={undefined}
+      onCloseAutoFocus={(e) => {
+        // Prevent focus trap warning by allowing default focus behavior
+        e.preventDefault();
+      }}
       {...props}
     >
       {children}

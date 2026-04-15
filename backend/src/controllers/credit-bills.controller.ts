@@ -145,7 +145,7 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
             }
 
             // Record full payment in payments table
-            await supabase.from('staff_credit_bill_payments').insert({
+            const { error } = await supabase.from('staff_credit_bill_payments').insert({
                 credit_bill_id: id,
                 amount: bill.amount,
                 payment_method: 'cash',
@@ -154,6 +154,14 @@ export const updateCreditBillStatus = async (req: Request, res: Response, next: 
                 shift_id: updateData.paid_in_shift_id || null,
                 notes: 'Full settlement'
             });
+
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
         }
 
         const { data, error } = await supabase

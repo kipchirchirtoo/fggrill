@@ -238,7 +238,11 @@ export const createGRN = async (
 
         if (itemsError) {
             // Cleanup on error (manual rollback)
-            await supabase.from('store_grn').delete().eq('id', newGRN.id);
+            const { error } = await supabase.from('store_grn').delete().eq('id', newGRN.id);
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
             throw itemsError;
         }
 

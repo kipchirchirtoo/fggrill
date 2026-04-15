@@ -89,6 +89,7 @@ export const exportExceptionSummary = async (req: Request, res: Response, next: 
   try {
     const { branch_ids, start_date, end_date, branch_name = 'All Branches' } = req.query as any;
 
+    // Build query (error handling done when executed below)
     let q = supabase.from('audit_exceptions').select('*, branch:branches(name)').order('created_at', { ascending: false });
     q = branchFilter(q, branch_ids);
     if (start_date) q = q.gte('created_at', start_date);
@@ -100,7 +101,11 @@ export const exportExceptionSummary = async (req: Request, res: Response, next: 
     const raisedByIds = [...new Set((exceptionsRaw || []).map((e: any) => e.raised_by).filter(Boolean))];
     const raisedByMap: Record<string, any> = {};
     if (raisedByIds.length > 0) {
-      const { data: raisedUsers } = await supabase.from('users').select('id, first_name, last_name').in('id', raisedByIds);
+      const { data: raisedUsers , error } = await supabase.from('users').select('id, first_name, last_name').in('id', raisedByIds);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       (raisedUsers || []).forEach((u: any) => { raisedByMap[u.id] = u; });
     }
     const exceptions = (exceptionsRaw || []).map((e: any) => ({
@@ -424,7 +429,11 @@ export const exportStockVarianceReport = async (req: Request, res: Response, nex
     const [{ data: stock }, { data: movements }] = await Promise.all([stockQ, movQ]);
 
     const itemSkus = [...new Set((stock || []).map((s: any) => s.item_sku).filter(Boolean))];
-    const { data: items } = await supabase.from('simple_items').select('sku, item_name, unit_of_measure, category, cost_price').in('sku', itemSkus as string[]);
+    const { data: items , error } = await supabase.from('simple_items').select('sku, item_name, unit_of_measure, category, cost_price').in('sku', itemSkus as string[]);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     const itemMap: Record<string, any> = Object.fromEntries((items || []).map((i: any) => [i.sku, i]));
 
     const wb = new ExcelJS.Workbook();

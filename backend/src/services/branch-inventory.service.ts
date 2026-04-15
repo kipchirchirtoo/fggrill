@@ -145,7 +145,7 @@ export async function updateBranchStock(
   if (updateError) throw updateError;
 
   // Log movement
-  await supabase.from('branch_stock_movements').insert({
+  const { error } = await supabase.from('branch_stock_movements').insert({
     branch_id: branchId,
     item_sku: itemSku,
     movement_type: movementType,
@@ -158,6 +158,14 @@ export async function updateBranchStock(
     notes,
     performed_by: userId
   });
+
+  if (error) {
+
+    console.error('Database error:', error);
+
+    throw error;
+
+  }
 
   // Notify Auditor for specific movement types
   if (movementType === 'STOCK_OUT') {
@@ -734,6 +742,10 @@ export async function dispatchItems(
 
         // Add to in-transit
         const { error: transitError } = await supabase.from('in_transit_stock').insert({
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
           dispatch_id: dispatchId,
           item_sku: item.item_sku,
           quantity: item.dispatched_quantity

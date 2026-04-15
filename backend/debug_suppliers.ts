@@ -15,14 +15,22 @@ async function debugSuppliers() {
     console.table(suppliers);
 
     // Also check branches to see what IDs mean
-    const { data: branches } = await supabase.from('branches').select('id, name');
+    const { data: branches , error } = await supabase.from('branches').select('id, name');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     console.log('\n--- Branches ---');
     console.table(branches);
 
     // Check users to see who added them
     if (suppliers && suppliers.length > 0) {
       const uids = suppliers.map(s => s.created_by_id).filter(Boolean);
-      const { data: users } = await supabase.from('users').select('id, first_name, last_name').in('id', uids);
+      const { data: users , error } = await supabase.from('users').select('id, first_name, last_name').in('id', uids);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       console.log('\n--- Users who added suppliers ---');
       console.table(users);
     }

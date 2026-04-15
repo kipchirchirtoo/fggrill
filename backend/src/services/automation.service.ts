@@ -288,7 +288,11 @@ class AutomationService {
           created_at: new Date().toISOString()
         };
 
-        await supabase.from('staff_payroll').upsert(payrollData, { onConflict: 'staff_id, month, year' });
+        const { error } = await supabase.from('staff_payroll').upsert(payrollData, { onConflict: 'staff_id, month, year' });
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
       }
 
       logger.info(`Generated payroll for ${employees?.length || 0} employees`);

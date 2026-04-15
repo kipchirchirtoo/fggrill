@@ -25,6 +25,10 @@ async function migrateData() {
                 continue;
             }
             const { error } = await supabase.from('staff_payroll_adjustments').insert({
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
                 staff_id: adv.staff_id,
                 type: 'deduction',
                 category: 'advance',
@@ -55,6 +59,10 @@ async function migrateData() {
             }
             // Migrate the installment amount
             const { error } = await supabase.from('staff_payroll_adjustments').insert({
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
                 staff_id: loan.staff_id,
                 type: 'deduction',
                 category: 'loan_installment',
@@ -84,6 +92,10 @@ async function migrateData() {
                 continue;
             }
             const { error } = await supabase.from('staff_payroll_adjustments').insert({
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
                 staff_id: bill.staff_id,
                 type: 'deduction',
                 category: 'credit_bill',

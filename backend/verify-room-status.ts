@@ -27,7 +27,11 @@ async function verifyRoomStatusImplementation() {
         console.log('\n--- Testing transition: Available -> Reserved ---');
         await bookingService.updateRoomStatus(roomId, RoomStatus.RESERVED, null, 'Test: Available -> Reserved');
 
-        let { data: room } = await supabase.from('rooms').select('status').eq('id', roomId).single();
+        let { data: room , error } = await supabase.from('rooms').select('status').eq('id', roomId).single();
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         console.log(`Current status: ${room?.status}`);
         if (room?.status !== RoomStatus.RESERVED) throw new Error('Failed to update status to Reserved');
 

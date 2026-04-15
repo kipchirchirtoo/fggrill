@@ -5,7 +5,11 @@ import { UserRole } from '../../models/User';
 
 // Helper to check edit lock
 const checkEditLock = async (isManager: boolean): Promise<void> => {
-  const { data: config } = await supabase.from('simple_app_config').select('edit_lock').eq('id', 1).single();
+  const { data: config , error } = await supabase.from('simple_app_config').select('edit_lock').eq('id', 1).single();
+  if (error) {
+    console.error('Database error:', error);
+    throw error;
+  }
   if (config?.edit_lock && !isManager) {
     throw { status: 403, message: "Transfers are disabled as the warehouse is being maintained. Please try again later." };
   }
@@ -233,7 +237,11 @@ export const completeTransfer = async (
     // If uuid format, assume ID. If not, assume username (if we had username lookup).
     // Supabase usually uses UUIDs.
 
-    const { data: item } = await supabase.from('simple_items').select('*').eq('sku', sku).single();
+    const { data: item , error } = await supabase.from('simple_items').select('*').eq('sku', sku).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (!item) {
         res.status(404).json({ detail: "Item not found." });
         return;

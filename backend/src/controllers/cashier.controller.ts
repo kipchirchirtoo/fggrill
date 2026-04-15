@@ -580,7 +580,11 @@ export const getBillDetails = async (
             }
 
             // 4. Check accounting_ar_invoices
-            const { data: arInvoice } = await supabase.from('accounting_ar_invoices')
+            const { data: arInvoice , error } = await supabase.from('accounting_ar_invoices')
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
                 .select('*, customer:accounting_customers(id, customer_name, email, phone)')
                 .eq('id', bookingId).maybeSingle();
             if (arInvoice) {
@@ -614,7 +618,11 @@ export const getBillDetails = async (
             }
 
             // 5. Check finance_invoices
-            const { data: finInvoice } = await supabase.from('finance_invoices').select('*').eq('id', bookingId).maybeSingle();
+            const { data: finInvoice , error } = await supabase.from('finance_invoices').select('*').eq('id', bookingId).maybeSingle();
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
             if (finInvoice) {
                 res.json({
                     success: true,
@@ -751,7 +759,7 @@ async function linkPaymentToActiveShift(
 
         if (!shift) return;
 
-        await supabase.from('cashier_shift_transactions').insert({
+        const { error } = await supabase.from('cashier_shift_transactions').insert({
             shift_id: shift.id,
             transaction_id: paymentId,
             transaction_ref: paymentRef,
@@ -759,6 +767,18 @@ async function linkPaymentToActiveShift(
             amount,
             transaction_time: new Date().toISOString()
         });
+
+
+        if (error) {
+
+
+          console.error('Database error:', error);
+
+
+          throw error;
+
+
+        }
     } catch {
         // Non-critical — don't fail the payment if shift linking fails
     }
@@ -889,7 +909,7 @@ export const processCashierPayment = async (
                 }
 
                 // Record cashier transaction
-                await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({
                     transaction_number: `PAY-${Date.now()}`,
                     branch_id: req.user?.branch_id,
                     cashier_id: req.user?.id,
@@ -901,6 +921,14 @@ export const processCashierPayment = async (
                     amount: amount,
                     customer_name: 'Invoice Customer'
                 });
+
+                if (error) {
+
+                  console.error('Database error:', error);
+
+                  throw error;
+
+                }
             }
 
             await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
@@ -976,7 +1004,7 @@ export const processCashierPayment = async (
                 if (updateError) throw new AppError(`Failed to update conference booking status: ${updateError.message}`, 500);
 
                 // Record cashier transaction
-                await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({
                     transaction_number: `CNF-${bookingId}`,
                     branch_id: booking.branch_id || req.user?.branch_id,
                     cashier_id: req.user?.id,
@@ -988,6 +1016,14 @@ export const processCashierPayment = async (
                     amount: amount,
                     customer_name: booking.customer_name || 'Conference Client'
                 });
+
+                if (error) {
+
+                  console.error('Database error:', error);
+
+                  throw error;
+
+                }
             }
 
             await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
@@ -1233,7 +1269,7 @@ export const processCashierPayment = async (
                     .eq('id', transaction.id);
 
                 // Record legacy transaction for logbook
-                await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({
                     transaction_number: `POS-${transaction.transaction_ref}`,
                     branch_id: transaction.branch_id,
                     cashier_id: req.user?.id,
@@ -1245,6 +1281,14 @@ export const processCashierPayment = async (
                     amount: amount,
                     customer_name: transaction.customer_name
                 });
+
+                if (error) {
+
+                  console.error('Database error:', error);
+
+                  throw error;
+
+                }
             }
 
             await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
@@ -1307,7 +1351,7 @@ export const processCashierPayment = async (
                         .eq('id', transaction.id);
 
                     // Record cashier transaction
-                    await supabase.from('cashier_transactions').insert({
+                    const { error } = await supabase.from('cashier_transactions').insert({
                         transaction_number: `KYG-${transaction.transaction_number}`,
                         branch_id: transaction.branch_id,
                         cashier_id: req.user?.id,
@@ -1319,6 +1363,14 @@ export const processCashierPayment = async (
                         amount: amount,
                         customer_name: transaction.customer_name || 'Walk-in'
                     });
+
+                    if (error) {
+
+                      console.error('Database error:', error);
+
+                      throw error;
+
+                    }
                 }
 
                 await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
@@ -1398,7 +1450,7 @@ export const processCashierPayment = async (
                 if (updateError) throw new AppError(`Failed to update bill status: ${updateError.message}`, 500);
 
                 // Record cashier transaction
-                await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({
                     transaction_number: `BILL-${bill.bill_number}`,
                     branch_id: bill.branch_id,
                     cashier_id: req.user?.id,
@@ -1410,6 +1462,14 @@ export const processCashierPayment = async (
                     amount: amount,
                     customer_name: bill.customer_name
                 });
+
+                if (error) {
+
+                  console.error('Database error:', error);
+
+                  throw error;
+
+                }
             }
 
             await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
@@ -3161,7 +3221,11 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
 
         // 2. Clear and recreate lines (simple replacement strategy)
         if (logbook.id) {
-            await supabase.from('cashier_logbook_lines').delete().eq('logbook_id', logbook.id);
+            const { error } = await supabase.from('cashier_logbook_lines').delete().eq('logbook_id', logbook.id);
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
 
             const allLines = [
                 ...(credit_bills || []).map((l: any) => ({ ...l, logbook_id: logbook.id, section: 'credit_bill' })),
@@ -3193,7 +3257,7 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                                 .maybeSingle();
 
                             if (!existing) {
-                                await supabase.from('staff_credit_bills').insert({
+                                const { error } = await supabase.from('staff_credit_bills').insert({
                                     staff_id: bill.staff_id,
                                     amount: bill.amount,
                                     bill_date: today,
@@ -3201,6 +3265,14 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                                     status: 'pending',
                                     source_logbook_id: logbook.id
                                 });
+
+                                if (error) {
+
+                                  console.error('Database error:', error);
+
+                                  throw error;
+
+                                }
                             }
                         } catch (err) {
                             console.error('Failed to sync credit bill to payroll:', err);
@@ -3557,7 +3629,7 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 .eq('id', id);
 
             // 2. Record Payment
-            await supabase.from('payments').insert({
+            const { error } = await supabase.from('payments').insert({
                 pos_transaction_id: transaction.id,
                 amount: transaction.total_amount,
                 currency: 'KES',
@@ -3571,8 +3643,16 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 }
             });
 
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
+
             // 3. Record Logbook Transaction
-            await supabase.from('cashier_transactions').insert({
+            const { error } = await supabase.from('cashier_transactions').insert({
                 transaction_number: `POS-${transaction.transaction_ref}`,
                 branch_id: transaction.branch_id,
                 cashier_id: req.user?.id || transaction.cashier_id,
@@ -3584,6 +3664,14 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 amount: transaction.total_amount,
                 customer_name: transaction.customer_name
             });
+
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
 
             res.json({
                 success: true,
@@ -3601,7 +3689,7 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 .eq('id', id);
 
             // Record legacy transaction
-            await supabase.from('cashier_transactions').insert({
+            const { error } = await supabase.from('cashier_transactions').insert({
                 transaction_number: `POS-${transaction.transaction_ref}`,
                 branch_id: transaction.branch_id,
                 cashier_id: transaction.cashier_id,
@@ -3613,6 +3701,14 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 amount: transaction.total_amount,
                 customer_name: transaction.customer_name
             });
+
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
 
             res.json({
                 success: true,

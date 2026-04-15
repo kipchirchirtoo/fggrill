@@ -74,6 +74,7 @@ import paymentsRoutes from './payments.routes';
 import payrollPoliciesRoutes from './payroll-policies.routes';
 import adminLogsRoutes from './admin-logs.routes';
 import adminAiRoutes from './admin-ai.route';
+import searchRoutes from './search.routes';
 
 const router = express.Router();
 
@@ -171,6 +172,7 @@ router.use('/payments-verification', paymentsRoutes);
 router.use('/payroll-policies', payrollPoliciesRoutes);
 router.use('/admin-logs', adminLogsRoutes);
 router.use('/admin-ai', adminAiRoutes);
+router.use('/search', searchRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

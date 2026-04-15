@@ -14,7 +14,11 @@ async function testInsert() {
     console.log('--- Testing stock_count_items insert ---');
 
     // 1. Get the existing audit ID
-    const { data: audit } = await supabase.from('stock_counts').select('id').limit(1).single();
+    const { data: audit , error } = await supabase.from('stock_counts').select('id').limit(1).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (!audit) {
         console.error('No audit found to test with');
         return;
@@ -23,6 +27,10 @@ async function testInsert() {
     // 2. Try to insert an item with a random UUID (should fail if FK exists)
     const randomId = '00000000-0000-0000-0000-000000000000';
     const { data, error } = await supabase.from('stock_count_items').insert([{
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
         stock_count_id: audit.id,
         item_id: randomId,
         system_quantity: 0,
@@ -37,7 +45,11 @@ async function testInsert() {
     } else {
         console.log('Insert succeeded! No FK constraint on item_id.');
         // Clean up
-        await supabase.from('stock_count_items').delete().eq('item_id', randomId);
+        const { error } = await supabase.from('stock_count_items').delete().eq('item_id', randomId);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
     }
 }
 

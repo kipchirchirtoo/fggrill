@@ -77,8 +77,16 @@ async function verifyFolioFix() {
 
         // Cleanup
         console.log('\n--- Cleaning up ---');
-        await supabase.from('reservations').delete().eq('id', booking.id);
-        if (lazyFolio) await supabase.from('folios').delete().eq('id', lazyFolio.id);
+        const { error } = await supabase.from('reservations').delete().eq('id', booking.id);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
+        if (lazyFolio) const { error } = await supabase.from('folios').delete().eq('id', lazyFolio.id);
+ if (error) {
+   console.error('Database error:', error);
+   throw error;
+ }
         console.log('Cleanup complete');
 
     } catch (error) {

@@ -98,7 +98,7 @@ export const updateStock = async (req: Request, res: Response, next: NextFunctio
     const branchId = (req as any).user?.branch_id; // We need branch_id for logs even if item doesn't have it
 
     if (branchId) {
-      await supabase.from('bar_stock_records').insert({
+      const { error } = await supabase.from('bar_stock_records').insert({
         branch_id: branchId,
         drink_id: id,
         record_type: changeQuantity > 0 ? 'received' : 'stock_taking', // Simplification
@@ -107,6 +107,14 @@ export const updateStock = async (req: Request, res: Response, next: NextFunctio
         recorded_by: userId,
         notes: `${reason || 'Manual Update'} - ${notes || ''}`
       });
+
+      if (error) {
+
+        console.error('Database error:', error);
+
+        throw error;
+
+      }
     }
 
     logger.info(`Bar Stock updated for ${id}: ${oldQuantity} -> ${quantity}`);

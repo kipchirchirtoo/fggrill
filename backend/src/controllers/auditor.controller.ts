@@ -562,7 +562,11 @@ export const flagItem = async (req: Request, res: Response, next: NextFunction):
 
     // Optional: Update the entity itself to show it's flagged
     if (entity_type === 'invoice') {
-      await supabase.from('accounting_ar_invoices').update({ is_flagged: true }).eq('id', entity_id);
+      const { error } = await supabase.from('accounting_ar_invoices').update({ is_flagged: true }).eq('id', entity_id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
     }
 
     res.status(201).json({ success: true, data });
@@ -616,7 +620,11 @@ export const resolveWatchlistItem = async (req: Request, res: Response, next: Ne
 
     // If resolved, we might want to unflag the entity
     if ((status === 'resolved' || status === 'dismissed') && data.entity_type === 'invoice') {
-      await supabase.from('accounting_ar_invoices').update({ is_flagged: false }).eq('id', data.entity_id);
+      const { error } = await supabase.from('accounting_ar_invoices').update({ is_flagged: false }).eq('id', data.entity_id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
     }
 
     res.status(200).json({ success: true, data });
@@ -635,7 +643,11 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     const { branch_id, start_date, end_date } = req.query;
 
     // 1. Fetch branches for names
-    const { data: branches } = await supabase.from('branches').select('id, name');
+    const { data: branches , error } = await supabase.from('branches').select('id, name');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     // 2. Fetch orders, payments, and POS transactions
     let restQuery = supabase.from('restaurant_orders').select('*'); // items fetched separately to avoid schema cache FK issues
@@ -760,7 +772,11 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
 
     const rawStockReqs = await stockReqQuery;
     const reqIds = rawStockReqs.data?.map(r => r.id) || [];
-    const { data: reqItems } = await supabase.from('stock_request_items').select('*').in('request_id', reqIds);
+    const { data: reqItems , error } = await supabase.from('stock_request_items').select('*').in('request_id', reqIds);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     const itemsByReq = (reqItems || []).reduce((acc: any, item) => {
       if (!acc[item.request_id]) acc[item.request_id] = [];
@@ -828,10 +844,18 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 
     // 1. Get all payments for the date (remove branch_id filter as it doesn't exist on payments)
     const { data: rawPayments, error: payError } = await supabase.from('payments').select('*')
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
-    const { data: poolSales } = await supabase.from('restaurant_pool_token_sales')
+    const { data: poolSales , error } = await supabase.from('restaurant_pool_token_sales')
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .select('*, cashier:users(id, first_name, last_name)')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
@@ -1187,15 +1211,27 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
     })).slice(-15); // Show last 15 days
 
     // 3. Yield Optimization Stats
-    const { count: totalRooms } = await supabase.from('rooms').select('*', { count: 'exact', head: true });
-    const { count: occupiedRooms } = await supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('status', 'occupied');
+    const { count: totalRooms , error } = await supabase.from('rooms').select('*', { count: 'exact', head: true });
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
+    const { count: occupiedRooms , error } = await supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('status', 'occupied');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     const occupancy = totalRooms ? Math.round((occupiedRooms || 0) / totalRooms * 100) : 0;
 
     const fbOrders = (restRes.data?.length || 0) + (barRes.data?.length || 0) + (poolRes.data?.length || 0);
     const avgOrderValue = fbOrders ? Math.round((restRev + barRev + poolRev) / fbOrders) : 0;
 
     // 4. Leakage & Anomalies Detection
-    const { data: exceptions } = await supabase.from('audit_exceptions')
+    const { data: exceptions , error } = await supabase.from('audit_exceptions')
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .select('*')
       .eq('status', 'open')
       .gte('detected_at', start)
@@ -1203,7 +1239,11 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       .order('detected_at', { ascending: false })
       .limit(10);
 
-    const { data: voidedOrders } = await supabase.from('restaurant_orders')
+    const { data: voidedOrders , error } = await supabase.from('restaurant_orders')
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .select('id, total_amount, order_number, table_number, created_at')
       .eq('status', 'cancelled')
       .is('auditor_id', null)
@@ -1211,7 +1251,11 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       .order('created_at', { ascending: false })
       .limit(10);
 
-    const { data: voidedBarOrders } = await supabase.from('bar_orders')
+    const { data: voidedBarOrders , error } = await supabase.from('bar_orders')
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       .select('id, total, order_number, created_at')
       .eq('status', 'cancelled')
       .is('auditor_id', null)
@@ -1312,7 +1356,11 @@ export const getStockLevelsVerification = async (req: Request, res: Response, ne
     const { branch_id } = req.query;
 
     // 1. Fetch branches for names
-    const { data: branches } = await supabase.from('branches').select('id, name');
+    const { data: branches , error } = await supabase.from('branches').select('id, name');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     // 2. Fetch current stock levels
     let stockQuery = supabase.from('branch_stock').select('*');
@@ -1450,7 +1498,11 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
     // Fetch branch name
     let branchName = 'All Branches';
     if (branch_id && branch_id !== '0') {
-      const { data: branch } = await supabase.from('branches').select('name').eq('id', branch_id).single();
+      const { data: branch , error } = await supabase.from('branches').select('name').eq('id', branch_id).single();
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       if (branch) branchName = branch.name;
     }
 
@@ -1674,7 +1726,11 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
     }
 
     // 1. Fetch branches for names
-    const { data: branches } = await supabase.from('branches').select('id, name');
+    const { data: branches , error } = await supabase.from('branches').select('id, name');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     let query = supabase
       .from('stock_requests')
@@ -1807,7 +1863,11 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
     const { branch_id, start_date, end_date } = req.query;
 
     // 1. Fetch branches for names
-    const { data: branches } = await supabase.from('branches').select('id, name');
+    const { data: branches , error } = await supabase.from('branches').select('id, name');
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
 
     const startDateStr = start_date as string || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const endDateStr = end_date as string || new Date().toISOString();
@@ -2062,7 +2122,11 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
       }
 
       // Also log movement - Use branch_stock_movements table
-      await supabase.from('branch_stock_movements').insert([{
+      const { error } = await supabase.from('branch_stock_movements').insert([{
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
         item_sku: item.item_id, // For bar items, we use ID as SKU in movements for now
         branch_id: count.branch_id,
         quantity: item.physical_quantity - item.system_quantity,
@@ -2076,6 +2140,10 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
 
     // 3. Mark the count as verified
     const { error: verifyError } = await supabase.from('stock_counts').update({
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       status: 'verified',
       verified_by: userId,
       verified_at: new Date().toISOString(),

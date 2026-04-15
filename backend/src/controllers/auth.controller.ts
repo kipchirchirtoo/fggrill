@@ -36,6 +36,10 @@ export const register = async (
 
     // Create user in Supabase auth
     const { data: authUser, error: authError } = await supabase.auth.signUp({
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       email,
       password,
     });
@@ -66,7 +70,11 @@ export const register = async (
 
     if (profileError) {
       // Rollback auth user creation
-      await supabase.auth.admin.deleteUser(authUser.user.id);
+      const { error } = await supabase.auth.admin.deleteUser(authUser.user.id);
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       throw profileError;
     }
 
@@ -137,7 +145,7 @@ export const login = async (
         logger.warn(`Auto-healing missing public.users row for ${email}`);
         const meta = authData.user.user_metadata || {};
         const emailPrefix = email.split('@')[0];
-        await supabase.from('users').insert({
+        const { error } = await supabase.from('users').insert({
           id:         authData.user.id,
           email,
           first_name: meta.first_name || emailPrefix || 'User',
@@ -146,7 +154,19 @@ export const login = async (
           status:     'active',
           created_at: new Date().toISOString(),
         });
+
+        if (error) {
+
+          console.error('Database error:', error);
+
+          throw error;
+
+        }
         const refetch = await supabase.from('users').select('*').eq('id', authData.user.id).single();
+        if (refetch.error) {
+          console.error('Database error:', refetch.error);
+          throw refetch.error;
+        }
         profile = refetch.data;
         profileError = refetch.error;
       }
@@ -213,13 +233,17 @@ export const login = async (
 
         // Auto-heal: check if user exists in Supabase Auth and create the public.users row
         try {
-          const { data: authList } = await supabase.auth.admin.listUsers();
+          const { data: authList , error } = await supabase.auth.admin.listUsers();
+          if (error) {
+            console.error('Database error:', error);
+            throw error;
+          }
           const authUser = authList?.users?.find((u: any) => u.email === email);
           if (authUser) {
             logger.warn(`Auto-healing missing public.users row for ${email} (found in auth.users)`);
             const meta = authUser.user_metadata || {};
             const emailPrefix = email.split('@')[0];
-            await supabase.from('users').insert({
+            const { error } = await supabase.from('users').insert({
               id:         authUser.id,
               email,
               first_name: meta.first_name || emailPrefix || 'User',
@@ -228,6 +252,14 @@ export const login = async (
               status:     'active',
               created_at: new Date().toISOString(),
             });
+
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
             // Re-query after insert
             const { data: requeried } = await supabase
               .from('users')
@@ -384,7 +416,8 @@ export const refreshToken = async (
       return;
     }
 
-    // Refresh session with Supabase
+    // SECURITY FIX: Use refreshSession which is the correct method for token refresh
+    // getSession() is vulnerable to client-side spoofing
     const { data: { session }, error: refreshError } = await supabase.auth.refreshSession({
       refresh_token: refreshToken
     });
@@ -514,9 +547,10 @@ export const updateDetails = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // SECURITY FIX: Use getUser() instead of getSession() to prevent client-side spoofing
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
+    if (userError || !user) {
       res.status(401).json({
         success: false,
         message: 'Not authorized'
@@ -540,7 +574,7 @@ export const updateDetails = async (
     const { data: updatedUser, error: updateError } = await supabase
       .from('users')
       .update(fieldsToUpdate)
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .select()
       .single();
 
@@ -549,9 +583,13 @@ export const updateDetails = async (
     }
 
     // If email is being updated, update auth email as well
-    if (req.body.email && req.body.email !== session.user.email) {
+    if (req.body.email && req.body.email !== user.email) {
       const { error: emailUpdateError } = await supabase.auth.admin.updateUserById(
-        session.user.id,
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
+        user.id,
         { email: req.body.email }
       );
 
@@ -580,9 +618,10 @@ export const updatePassword = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // SECURITY FIX: Use getUser() instead of getSession() to prevent client-side spoofing
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
+    if (userError || !user) {
       res.status(401).json({
         success: false,
         message: 'Not authorized'
@@ -592,6 +631,10 @@ export const updatePassword = async (
 
     // Update password
     const { error: updateError } = await supabase.auth.updateUser({
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       password: req.body.newPassword
     });
 
@@ -603,14 +646,14 @@ export const updatePassword = async (
     await supabase
       .from('users')
       .update({ password_changed_at: new Date().toISOString() })
-      .eq('id', session.user.id);
+      .eq('id', user.id);
 
     res.status(200).json({
       success: true,
       message: 'Password updated successfully'
     });
 
-    logger.info(`User updated password: ${session.user.email}`);
+    logger.info(`User updated password: ${user.email}`);
   } catch (error) {
     next(error);
   }

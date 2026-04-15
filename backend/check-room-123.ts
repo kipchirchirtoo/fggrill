@@ -4,14 +4,22 @@ import { supabase } from './src/config/database';
 import db from './src/db';
 
 async function check() {
-    const { data: room } = await supabase.from('rooms').select('id, room_number, status').eq('room_number', '123').single();
+    const { data: room , error } = await supabase.from('rooms').select('id, room_number, status').eq('room_number', '123').single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (!room) {
         console.log('Room 123 not found');
         return;
     }
     console.log('Room 123 Status:', room.status);
 
-    const { data: res } = await supabase.from('reservations').select('id, check_in_date, check_out_date, status, guests(first_name, last_name)').eq('room_id', room.id);
+    const { data: res , error } = await supabase.from('reservations').select('id, check_in_date, check_out_date, status, guests(first_name, last_name)').eq('room_id', room.id);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     console.log('Reservations for Room 123:');
     if (res) {
         res.forEach((r: any) => {

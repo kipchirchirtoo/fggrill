@@ -312,7 +312,7 @@ export const fulfillStockRequest = async (
           // Log to bar_stock_records
           // Using try-catch to ignore error if bar_stock_records setup is incomplete or table missing FK
           try {
-            await supabase.from('bar_stock_records').insert({
+            const { error } = await supabase.from('bar_stock_records').insert({
               branch_id: request.bar_branch_id,
               drink_id: item.inventory_item_id, // Assuming we mapped this FK to match or use text link
               record_type: 'received',
@@ -321,6 +321,14 @@ export const fulfillStockRequest = async (
               recorded_by: userId,
               notes: `Received from Request ${request.request_number}`
             });
+
+            if (error) {
+
+              console.error('Database error:', error);
+
+              throw error;
+
+            }
           } catch (logError) {
             logger.warn('Failed to log bar stock record', logError);
           }

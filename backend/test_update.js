@@ -20,6 +20,10 @@ async function testUpdate() {
 
     // Fetch current
     const { data: bill, error: fetchError } = await supabase.from('unpaid_bills').select('*').eq('id', billId).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (fetchError) {
         console.error('Fetch bill failed:', fetchError);
     } else {
@@ -55,6 +59,10 @@ async function testUpdate() {
     const invId = '1f31c82e-23a0-4580-bcaf-8281bcf74661'; // INV-1770999425477
 
     const { data: inv, error: fetchInvError } = await supabase.from('accounting_ar_invoices').select('*').eq('id', invId).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (fetchInvError) {
         console.error('Fetch invoice failed:', fetchInvError);
     } else {

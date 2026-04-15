@@ -34,7 +34,11 @@ async function main() {
         softDrinkCat = newCat;
     } else {
         // Ensure it is bar
-        await supabase.from('restaurant_menu_categories').update({ is_bar: true }).eq('id', softDrinkCat.id);
+        const { error } = await supabase.from('restaurant_menu_categories').update({ is_bar: true }).eq('id', softDrinkCat.id);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
     }
 
     console.log('Soft Drinks Category ID:', softDrinkCat.id);

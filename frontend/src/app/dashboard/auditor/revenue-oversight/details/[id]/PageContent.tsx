@@ -43,7 +43,7 @@ export default function AnomalyDetailPage() {
         if (!id || !type) return;
         setIsLoading(true);
         try {
-            const res = await auditAPI.getAnomalyDetail({ id, type });
+            const res = await auditAPI.getAnomalyDetail(id);
             if (res.success) {
                 setData(res.data);
             } else {
@@ -103,11 +103,7 @@ export default function AnomalyDetailPage() {
     const handleVerifySubmit = async () => {
         setIsSubmittingVerify(true);
         try {
-            const res = await auditAPI.clearAnomaly({
-                id,
-                type: type || 'unknown',
-                notes: verifyNotes
-            });
+            const res = await auditAPI.clearAnomaly(id, verifyNotes);
 
             if (res.success) {
                 toast.success('Transaction verified and cleared');

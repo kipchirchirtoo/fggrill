@@ -547,7 +547,7 @@ export const submitStockTake = async (req: Request, res: Response) => {
                     if (updateError) throw updateError;
 
                     // Create approval request for auditor
-                    await supabase.from('approval_requests').insert({
+                    const { error } = await supabase.from('approval_requests').insert({
                         request_type: 'stock_take',
                         status: 'pending',
                         branch_id: stockCount.branch_id,
@@ -555,6 +555,14 @@ export const submitStockTake = async (req: Request, res: Response) => {
                         description: `Stock count submission review: ${stockCount.count_number || id}`,
                         metadata: { stock_count_id: id }
                     });
+
+                    if (error) {
+
+                      console.error('Database error:', error);
+
+                      throw error;
+
+                    }
 
                     // Notify auditor — scoped to the branch of the stock count
                     notificationService.notifyRole(

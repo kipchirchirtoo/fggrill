@@ -159,7 +159,11 @@ export const updateRoomStatus = async (
     if (error) throw error;
 
     // Log status change
-    await supabase.from('hk_room_status_history').insert([{
+    const { error } = await supabase.from('hk_room_status_history').insert([{
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       room_id: id,
       previous_status: previousStatus,
       new_status: status,
@@ -199,7 +203,11 @@ export const bulkUpdateRoomStatus = async (
 
     // Log status changes
     for (const roomId of roomIds) {
-      await supabase.from('hk_room_status_history').insert([{
+      const { error } = await supabase.from('hk_room_status_history').insert([{
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
         room_id: roomId,
         new_status: status,
         changed_by: req.user?.id,

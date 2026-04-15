@@ -49,7 +49,8 @@ export function AddAdjustmentDialog({ open, onOpenChange, onSuccess, initialStaf
                 ...formData,
                 amount: Number(formData.amount),
                 month: String(formData.month),
-                year: Number(formData.year)
+                year: Number(formData.year),
+                status: 'approved' // Auto-approve adjustments from HR module
             });
 
             if (res.success) {

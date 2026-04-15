@@ -103,6 +103,10 @@ export const logSecurityEvent = async (params: {
 }) => {
   try {
     const { error } = await supabase.from('security_events').insert({
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
       event_type: params.eventType,
       severity: params.severity,
       user_id: params.userId,
@@ -140,7 +144,7 @@ export const recordAuditTrail = async (params: {
       ipAddress = normalizeIP(rawIP);
     }
     
-    await supabase.from('audit_trail').insert({
+    const { error } = await supabase.from('audit_trail').insert({
       user_id: params.userId,
       action: params.action,
       entity_type: params.entityType,
@@ -151,6 +155,18 @@ export const recordAuditTrail = async (params: {
       user_agent: params.req?.headers['user-agent'],
       performed_at: new Date().toISOString()
     });
+
+    
+    if (error) {
+
+    
+      console.error('Database error:', error);
+
+    
+      throw error;
+
+    
+    }
   } catch (err) {
     logger.error('Error recording audit trail:', err);
   }

@@ -413,9 +413,11 @@ export default function AdminStaffPage() {
           setAddModalOpen(open);
         }}>
           <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-            <DialogTitle className="text-xl font-semibold border-b pb-4">Add Staff Member</DialogTitle>
+            <DialogHeader className="border-b pb-4">
+              <DialogTitle className="text-xl font-semibold">Add Staff Member</DialogTitle>
+            </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto px-1">
+            <div className="flex-1 overflow-y-auto px-1 py-4">
               {/* Wizard Step Indicator */}
               <WizardStepIndicator
                 steps={[
@@ -587,7 +589,7 @@ export default function AdminStaffPage() {
             </div>
 
             {/* Sticky Footer with Navigation */}
-            <div className="border-t bg-white p-4 flex gap-3 sticky bottom-0">
+            <div className="border-t bg-white p-4 flex gap-3">
               {wizardStep > 1 && (
                 <IOSButton
                   variant="secondary"

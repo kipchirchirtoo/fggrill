@@ -50,6 +50,10 @@ async function seedData() {
         });
     }
     const { error: orderError } = await supabase.from('restaurant_orders').insert(orders);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (orderError) console.error('Error seeding restaurant_orders:', orderError.message);
     else console.log('Seeded 5 restaurant_orders.');
 
@@ -69,6 +73,10 @@ async function seedData() {
     // Check if table uses created_at or action_timestamp. Assuming action_timestamp based on previous controller files.
     // Actually, let's try action_timestamp first.
     const { error: logError } = await supabase.from('audit_logs').insert(logs);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (logError) {
         console.error('Error seeding audit_logs (trying created_at instead):', logError.message);
         // Fallback if needed, but 'store_procurement_audit_logs' used action_timestamp. 
@@ -90,6 +98,10 @@ async function seedData() {
             });
         }
         const { error: moveError } = await supabase.from('store_stock_movements').insert(movements);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         if (moveError) console.error('Error seeding store_stock_movements:', moveError.message);
         else console.log('Seeded 5 store_stock_movements.');
     }
@@ -106,6 +118,10 @@ async function seedData() {
             last_updated: new Date().toISOString()
         }];
         const { error: invError } = await supabase.from('store_inventory').insert(inventory);
+        if (error) {
+          console.error('Database error:', error);
+          throw error;
+        }
         if (invError) console.error('Error seeding store_inventory (likely a view or restricted):', invError.message);
         else console.log('Seeded 1 store_inventory record.');
     }

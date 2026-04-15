@@ -32,9 +32,11 @@ export const connectDB = async (): Promise<void> => {
   logger.info('Attempting to connect to Supabase...');
 
   try {
-    // Test the connection by checking auth status
-    const { data: sessionData, error: configError } = await supabase.auth.getSession();
+    // SECURITY FIX: Use getUser() instead of getSession() to prevent client-side spoofing
+    // Test the connection by verifying auth configuration
+    const { data: userData, error: configError } = await supabase.auth.getUser();
 
+    // Note: getUser() may return null user if no session exists, which is fine for connection test
     if (configError) {
       throw configError;
     }
@@ -52,7 +54,7 @@ export const connectDB = async (): Promise<void> => {
     }
 
     logger.info('Supabase Connected successfully');
-    logger.debug('Connection test result:', { session: sessionData, dbTest: dbData });
+    logger.debug('Connection test result:', { user: userData?.user?.id || 'no session', dbTest: dbData });
   } catch (error) {
     if (error instanceof Error) {
       logger.error('Error connecting to Supabase:', error.message);

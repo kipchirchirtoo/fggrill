@@ -7,7 +7,11 @@ async function testRestaurantPayment() {
     const orderNumber = `ORD${new Date().toISOString().slice(2, 10).replace(/-/g, '')}9999`;
 
     // Get a user ID for created_by
-    const { data: user } = await supabase.from('users').select('id').limit(1).single();
+    const { data: user , error } = await supabase.from('users').select('id').limit(1).single();
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     if (!user) throw new Error('No user found');
 
     const { data: order, error: orderError } = await supabase
@@ -91,8 +95,16 @@ async function testRestaurantPayment() {
     }
 
     // Cleanup
-    await supabase.from('payments').delete().eq('restaurant_order_id', order.id);
-    await supabase.from('restaurant_orders').delete().eq('id', order.id);
+    const { error } = await supabase.from('payments').delete().eq('restaurant_order_id', order.id);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
+    const { error } = await supabase.from('restaurant_orders').delete().eq('id', order.id);
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
     console.log('Cleanup complete');
 }
 

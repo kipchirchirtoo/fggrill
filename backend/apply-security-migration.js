@@ -46,6 +46,10 @@ async function applyMigration() {
         if (error) {
           // Try direct execution if RPC fails
           const { error: directError } = await supabase.from('_migrations').insert({
+          if (error) {
+            console.error('Database error:', error);
+            throw error;
+          }
             name: `013_security_statement_${i}`,
             executed_at: new Date().toISOString()
           });

@@ -305,11 +305,19 @@ export const handleApprovalRequest = async (req: Request, res: Response, next: N
         const entityStatus = status === 'approved' ? 'approved' : 'unpaid'; // Revert to unpaid if rejected
 
         if (request.request_type === 'invoice') {
-            await supabase.from('accounting_ar_invoices')
+            const { error } = await supabase.from('accounting_ar_invoices')
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
                 .update({ status: entityStatus, updated_at: new Date().toISOString() })
                 .eq('id', metadata.invoice_id);
         } else if (request.request_type === 'bill') {
-            await supabase.from('accounting_ap_bills')
+            const { error } = await supabase.from('accounting_ap_bills')
+            if (error) {
+              console.error('Database error:', error);
+              throw error;
+            }
                 .update({ status: entityStatus, updated_at: new Date().toISOString() })
                 .eq('id', metadata.bill_id);
         } else if (request.request_type === 'stock_take') {
@@ -318,20 +326,28 @@ export const handleApprovalRequest = async (req: Request, res: Response, next: N
                 const stockCountId = metadata.stock_count_id;
                 // We'd ideally call BranchInventoryService here or trigger a background job
                 // For now, update stock_counts status
-                await supabase.from('stock_counts')
+                const { error } = await supabase.from('stock_counts')
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                     .update({ status: 'approved', updated_at: new Date().toISOString() })
                     .eq('id', stockCountId);
 
                 logger.info(`Stock take ${stockCountId} approved and adjustments pending/applied`);
             } else {
-                await supabase.from('stock_counts')
+                const { error } = await supabase.from('stock_counts')
+                if (error) {
+                  console.error('Database error:', error);
+                  throw error;
+                }
                     .update({ status: 'rejected', updated_at: new Date().toISOString() })
                     .eq('id', metadata.stock_count_id);
             }
         }
 
         // 4. Log to audit trail
-        await supabase.from('audit_trail').insert({
+        const { error } = await supabase.from('audit_trail').insert({
             user_id: auditorId,
             action: `AUDIT_${status.toUpperCase()}`,
             entity_type: request.request_type,
@@ -339,6 +355,14 @@ export const handleApprovalRequest = async (req: Request, res: Response, next: N
             new_values: { status, notes },
             performed_at: new Date().toISOString()
         });
+
+        if (error) {
+
+          console.error('Database error:', error);
+
+          throw error;
+
+        }
 
         // 5. Notify original requester
         if (request.requested_by) {
@@ -409,6 +433,7 @@ export const getApprovalHistory = async (req: Request, res: Response, next: Next
         const userBranchId = req.user?.branch_id;
         const isCentral = isGlobalRole(req.user?.role);
 
+        // Build query (error handling done when executed below)
         let query = supabase.from('audit_approvals').select('*, auditor:users(first_name, last_name)');
 
         if (entity_type) query = query.eq('entity_type', entity_type);

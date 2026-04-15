@@ -441,20 +441,30 @@ class NotificationService {
       // Build user query — always filter by role
       let usersQuery = supabase
         .from('users')
-        .select('id')
+        .select('id, email, branch_id')
         .eq('role', role);
 
       // Scope to branch when provided — prevents cross-branch notification leakage
       if (options?.branchId != null) {
         usersQuery = usersQuery.eq('branch_id', options.branchId);
+        logger.info(`Filtering notifications for role '${role}' to branch_id: ${options.branchId}`);
+      } else {
+        logger.info(`Sending notifications to ALL users with role '${role}' (no branch filter)`);
       }
 
       const { data: users, error: usersError } = await usersQuery;
 
-      if (usersError || !users || users.length === 0) {
+      if (usersError) {
+        logger.error(`Error fetching users for role '${role}':`, usersError);
+        return null;
+      }
+
+      if (!users || users.length === 0) {
         logger.warn(`No users found with role: ${role}${options?.branchId != null ? ` in branch: ${options.branchId}` : ''}`);
         return null;
       }
+
+      logger.info(`Found ${users.length} user(s) with role '${role}'${options?.branchId != null ? ` in branch ${options.branchId}` : ''}: ${users.map(u => `${u.email} (branch: ${u.branch_id})`).join(', ')}`);
 
       // Create individual notifications for each user
       const notifications = users.map(user => ({

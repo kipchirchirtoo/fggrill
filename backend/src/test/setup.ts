@@ -15,8 +15,9 @@ const supabase = createClient(
 
 beforeAll(async () => {
   try {
-    // Test connection
-    const { data, error } = await supabase.auth.getSession();
+    // SECURITY FIX: Use getUser() instead of getSession() to prevent client-side spoofing
+    // Test connection by verifying auth configuration
+    const { data, error } = await supabase.auth.getUser();
     if (error) throw error;
     logger.info('Connected to test Supabase instance');
   } catch (error) {

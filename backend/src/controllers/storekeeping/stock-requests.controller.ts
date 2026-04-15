@@ -75,7 +75,13 @@ export const getStockRequests = async (
         if (!isCentralRole) {
             branchId = req.user?.branch_id || null;
             if (!branchId) {
-                res.status(400).json({ success: false, message: 'Branch ID required' });
+                res.status(400).json({ 
+                    success: false, 
+                    message: 'Branch ID required. Your user profile does not have a branch assigned. Please contact your administrator.',
+                    error: 'MISSING_BRANCH_ID',
+                    user_role: req.user?.role,
+                    user_id: req.user?.id
+                });
                 return;
             }
         }
