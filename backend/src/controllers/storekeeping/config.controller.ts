@@ -336,10 +336,10 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
                  // Find User ID
                  // Note: This assumes we can find user by email. 
                  // In Supabase Auth, users table usually mirrors auth.users
-                 const { data: user , error } = await supabase.from('users').select('id').eq('email', email).single();
-                 if (error) {
-                   console.error('Database error:', error);
-                   throw error;
+                 const { data: user , error: userError } = await supabase.from('users').select('id').eq('email', email).single();
+                 if (userError) {
+                   console.error('Database error:', userError);
+                   throw userError;
                  }
                  
                  if (!user) {
@@ -350,15 +350,15 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
                  // Ensure Item exists
                  // Original logic creates inactive item if missing.
                  // We will check if item exists first
-                 const { data: item , error } = await supabase.from('simple_items').select('sku').eq('sku', sku).single();
-                 if (error) {
-                   console.error('Database error:', error);
-                   throw error;
+                 const { data: item , error: itemError } = await supabase.from('simple_items').select('sku').eq('sku', sku).single();
+                 if (itemError) {
+                   console.error('Database error:', itemError);
+                   throw itemError;
                  }
                  if (!item) {
                      // Create inactive item default
                      const rp = parseFloat((row as any)['Retail Price'] || '0');
-                     const { error } = await supabase.from('simple_items').insert({
+                     const { error: createError } = await supabase.from('simple_items').insert({
                          sku,
                          description: (row as any)['Description'] || '',
                          retail_price: isNaN(rp) ? 0 : rp,
@@ -366,11 +366,11 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
                          is_active: false
                      });
 
-                     if (error) {
+                     if (createError) {
 
-                       console.error('Database error:', error);
+                       console.error('Database error:', createError);
 
-                       throw error;
+                       throw createError;
 
                      }
                      logger.warn(`Created inactive item ${sku} from shop stock import.`);
@@ -381,7 +381,7 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
 
                  // Upsert Shop Item
                  // We need the ID to update properly if using UPSERT on (shop_user_id, item_sku) constraint
-                 const { error } = await supabase
+                 const { error: upsertError } = await supabase
                     .from('simple_shop_items')
                     .upsert({
                         shop_user_id: user.id,
@@ -389,7 +389,7 @@ export const importDataExcel = async (req: Request, res: Response, next: NextFun
                         quantity: parseInt(quantity) || 0
                     }, { onConflict: 'shop_user_id,item_sku' });
 
-                 if (error) logger.error(`Error importing shop item ${key}:`, error);
+                 if (upsertError) logger.error(`Error importing shop item ${key}:`, upsertError);
              }
 
              // Handle Deletions

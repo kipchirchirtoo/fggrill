@@ -643,10 +643,10 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
     const { branch_id, start_date, end_date } = req.query;
 
     // 1. Fetch branches for names
-    const { data: branches , error } = await supabase.from('branches').select('id, name');
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { data: branches, error: branchesError } = await supabase.from('branches').select('id, name');
+    if (branchesError) {
+      console.error('Database error:', branchesError);
+      throw branchesError;
     }
 
     // 2. Fetch orders, payments, and POS transactions
@@ -772,10 +772,10 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
 
     const rawStockReqs = await stockReqQuery;
     const reqIds = rawStockReqs.data?.map(r => r.id) || [];
-    const { data: reqItems , error } = await supabase.from('stock_request_items').select('*').in('request_id', reqIds);
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { data: reqItems, error: reqItemsError } = await supabase.from('stock_request_items').select('*').in('request_id', reqIds);
+    if (reqItemsError) {
+      console.error('Database error:', reqItemsError);
+      throw reqItemsError;
     }
 
     const itemsByReq = (reqItems || []).reduce((acc: any, item) => {
@@ -844,23 +844,16 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 
     // 1. Get all payments for the date (remove branch_id filter as it doesn't exist on payments)
     const { data: rawPayments, error: payError } = await supabase.from('payments').select('*')
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
-    const { data: poolSales , error } = await supabase.from('restaurant_pool_token_sales')
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
+    const { data: poolSales, error: poolSalesError } = await supabase.from('restaurant_pool_token_sales')
       .select('*, cashier:users(id, first_name, last_name)')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
     if (payError) throw payError;
+    if (poolSalesError) throw poolSalesError;
 
     // 2. Collect IDs for related entities to infer branch and cashier
     const bookingIds = [...new Set(rawPayments?.map(p => p.booking_id).filter(Boolean))];
@@ -1211,15 +1204,15 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
     })).slice(-15); // Show last 15 days
 
     // 3. Yield Optimization Stats
-    const { count: totalRooms , error } = await supabase.from('rooms').select('*', { count: 'exact', head: true });
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { count: totalRooms, error: totalRoomsError } = await supabase.from('rooms').select('*', { count: 'exact', head: true });
+    if (totalRoomsError) {
+      console.error('Database error:', totalRoomsError);
+      throw totalRoomsError;
     }
-    const { count: occupiedRooms , error } = await supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('status', 'occupied');
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { count: occupiedRooms, error: occupiedRoomsError } = await supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('status', 'occupied');
+    if (occupiedRoomsError) {
+      console.error('Database error:', occupiedRoomsError);
+      throw occupiedRoomsError;
     }
     const occupancy = totalRooms ? Math.round((occupiedRooms || 0) / totalRooms * 100) : 0;
 
@@ -1227,11 +1220,7 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
     const avgOrderValue = fbOrders ? Math.round((restRev + barRev + poolRev) / fbOrders) : 0;
 
     // 4. Leakage & Anomalies Detection
-    const { data: exceptions , error } = await supabase.from('audit_exceptions')
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
+    const { data: exceptions, error: exceptionsError } = await supabase.from('audit_exceptions')
       .select('*')
       .eq('status', 'open')
       .gte('detected_at', start)
@@ -1239,11 +1228,12 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       .order('detected_at', { ascending: false })
       .limit(10);
 
-    const { data: voidedOrders , error } = await supabase.from('restaurant_orders')
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    if (exceptionsError) {
+      console.error('Database error:', exceptionsError);
+      throw exceptionsError;
     }
+
+    const { data: voidedOrders, error: voidedOrdersError } = await supabase.from('restaurant_orders')
       .select('id, total_amount, order_number, table_number, created_at')
       .eq('status', 'cancelled')
       .is('auditor_id', null)
@@ -1251,16 +1241,22 @@ export const getRevenueOversight = async (req: Request, res: Response, next: Nex
       .order('created_at', { ascending: false })
       .limit(10);
 
-    const { data: voidedBarOrders , error } = await supabase.from('bar_orders')
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    if (voidedOrdersError) {
+      console.error('Database error:', voidedOrdersError);
+      throw voidedOrdersError;
     }
+
+    const { data: voidedBarOrders, error: voidedBarOrdersError } = await supabase.from('bar_orders')
       .select('id, total, order_number, created_at')
       .eq('status', 'cancelled')
       .is('auditor_id', null)
       .gte('created_at', start)
       .limit(5);
+
+    if (voidedBarOrdersError) {
+      console.error('Database error:', voidedBarOrdersError);
+      throw voidedBarOrdersError;
+    }
 
     const pendingBills = billRes.data?.filter(b => b.status === 'unpaid' || b.status === 'partial') || [];
 
@@ -1726,10 +1722,10 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
     }
 
     // 1. Fetch branches for names
-    const { data: branches , error } = await supabase.from('branches').select('id, name');
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { data: branches, error: branchesError2 } = await supabase.from('branches').select('id, name');
+    if (branchesError2) {
+      console.error('Database error:', branchesError2);
+      throw branchesError2;
     }
 
     let query = supabase
@@ -1742,15 +1738,15 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
     if (start_date) query = query.gte('created_at', start_date);
     if (end_date) query = query.lte('created_at', end_date);
 
-    const { data: rawRequests, error } = await query;
-    if (error) throw error;
+    const { data: rawRequests, error: requestsError } = await query;
+    if (requestsError) throw requestsError;
 
     // Fetch related data manually to avoid schema cache relationship issues
     const requestIds = rawRequests?.map(r => r.id) || [];
     const userIds = [...new Set([
-      ...rawRequests?.map(r => r.created_by),
-      ...rawRequests?.map(r => r.reviewed_by),
-      ...rawRequests?.map(r => r.approved_by)
+      ...(rawRequests?.map(r => r.created_by) || []),
+      ...(rawRequests?.map(r => r.reviewed_by) || []),
+      ...(rawRequests?.map(r => r.approved_by) || [])
     ].filter(Boolean))];
     const branchIds = [...new Set(rawRequests?.map(r => r.requesting_branch_id).filter(Boolean))];
 
@@ -2122,11 +2118,7 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
       }
 
       // Also log movement - Use branch_stock_movements table
-      const { error } = await supabase.from('branch_stock_movements').insert([{
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
+      const { error: movementError } = await supabase.from('branch_stock_movements').insert([{
         item_sku: item.item_id, // For bar items, we use ID as SKU in movements for now
         branch_id: count.branch_id,
         quantity: item.physical_quantity - item.system_quantity,
@@ -2136,14 +2128,15 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
         notes: `Bar Audit Adjustment: ${notes || ''}`,
         performed_by: userId
       }]);
+
+      if (movementError) {
+        console.error('Database error:', movementError);
+        throw movementError;
+      }
     }
 
     // 3. Mark the count as verified
     const { error: verifyError } = await supabase.from('stock_counts').update({
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       status: 'verified',
       verified_by: userId,
       verified_at: new Date().toISOString(),

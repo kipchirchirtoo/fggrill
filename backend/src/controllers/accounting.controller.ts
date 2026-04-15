@@ -386,11 +386,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
 
     // If it's a conference invoice, also create a booking record for visibility in conference management
     if (type === 'CONFERENCE' && conference_hall_id) {
-        const { error } = await supabase.from('conference_hall_bookings').insert([{
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
+        const { error: conferenceError } = await supabase.from('conference_bookings').insert([{
             conference_hall_id,
             branch_id: req.user?.branch_id,
             customer_name: customer_name,
@@ -405,28 +401,35 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
             created_by: req.user?.id,
             notes: `Auto-generated from Invoice ${invoice_number}. ${notes || ''}`
         }]);
+        
+        if (conferenceError) {
+          console.error('Database error:', conferenceError);
+          throw conferenceError;
+        }
     }
 
     // Link Hotel Booking if provided
     if (hotel_booking_id) {
-        const { error } = await supabase.from('bookings')
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
+        const { error: bookingError } = await supabase.from('bookings')
             .update({ invoice_id: data.id })
             .eq('id', hotel_booking_id);
+        
+        if (bookingError) {
+          console.error('Database error:', bookingError);
+          throw bookingError;
+        }
     }
 
     // Link Restaurant Reservation if provided
     if (restaurant_reservation_id) {
-        const { error } = await supabase.from('restaurant_reservations')
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
+        const { error: reservationError } = await supabase.from('restaurant_reservations')
             .update({ invoice_id: data.id })
             .eq('id', restaurant_reservation_id);
+        
+        if (reservationError) {
+          console.error('Database error:', reservationError);
+          throw reservationError;
+        }
     }
 
     logger.info(`Invoice created: ${invoice_number}`);
@@ -548,7 +551,7 @@ export const recordInvoicePayment = async (req: Request, res: Response, next: Ne
 
     // 3. Record bank transaction if account provided
     if (bank_account_id) {
-      const { error } = await supabase.from('accounting_bank_transactions').insert({
+      const { error: bankTxnError } = await supabase.from('accounting_bank_transactions').insert({
         bank_account_id,
         transaction_date: payment_date || new Date().toISOString().split('T')[0],
         debit_amount: paymentAmount,
@@ -559,32 +562,26 @@ export const recordInvoicePayment = async (req: Request, res: Response, next: Ne
         branch_id: req.user?.branch_id
       });
 
-      if (error) {
-
-        console.error('Database error:', error);
-
-        throw error;
-
+      if (bankTxnError) {
+        console.error('Database error:', bankTxnError);
+        throw bankTxnError;
       }
 
       // Update bank balance
-      const { data: bankAcc , error } = await supabase.from('accounting_bank_accounts').select('current_balance').eq('id', bank_account_id).single();
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
+      const { data: bankAcc, error: bankAccError } = await supabase.from('accounting_bank_accounts').select('current_balance').eq('id', bank_account_id).single();
+      if (bankAccError) {
+        console.error('Database error:', bankAccError);
+        throw bankAccError;
       }
       if (bankAcc) {
-        const { error } = await supabase.from('accounting_bank_accounts').update({
+        const { error: bankUpdateError } = await supabase.from('accounting_bank_accounts').update({
           current_balance: (bankAcc.current_balance || 0) + paymentAmount,
           updated_at: new Date().toISOString()
         }).eq('id', bank_account_id);
 
-        if (error) {
-
-          console.error('Database error:', error);
-
-          throw error;
-
+        if (bankUpdateError) {
+          console.error('Database error:', bankUpdateError);
+          throw bankUpdateError;
         }
       }
     }
@@ -866,7 +863,7 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
 
     // 3. Record bank transaction if account provided
     if (bank_account_id) {
-      const { error } = await supabase.from('accounting_bank_transactions').insert({
+      const { error: bankTxnError2 } = await supabase.from('accounting_bank_transactions').insert({
         bank_account_id,
         transaction_date: payment_date || new Date().toISOString().split('T')[0],
         debit_amount: 0,
@@ -877,32 +874,26 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
         branch_id: req.user?.branch_id
       });
 
-      if (error) {
-
-        console.error('Database error:', error);
-
-        throw error;
-
+      if (bankTxnError2) {
+        console.error('Database error:', bankTxnError2);
+        throw bankTxnError2;
       }
 
       // Update bank balance
-      const { data: bankAcc , error } = await supabase.from('accounting_bank_accounts').select('current_balance').eq('id', bank_account_id).single();
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
+      const { data: bankAcc, error: bankAccError2 } = await supabase.from('accounting_bank_accounts').select('current_balance').eq('id', bank_account_id).single();
+      if (bankAccError2) {
+        console.error('Database error:', bankAccError2);
+        throw bankAccError2;
       }
       if (bankAcc) {
-        const { error } = await supabase.from('accounting_bank_accounts').update({
+        const { error: bankUpdateError2 } = await supabase.from('accounting_bank_accounts').update({
           current_balance: (bankAcc.current_balance || 0) - paymentAmount,
           updated_at: new Date().toISOString()
         }).eq('id', bank_account_id);
 
-        if (error) {
-
-          console.error('Database error:', error);
-
-          throw error;
-
+        if (bankUpdateError2) {
+          console.error('Database error:', bankUpdateError2);
+          throw bankUpdateError2;
         }
       }
     }
@@ -958,10 +949,6 @@ export const submitInvoiceForAudit = async (req: Request, res: Response, next: N
 
     // 3. Create approval request
     const { error: approvalError } = await supabase.from('approval_requests').insert({
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       request_type: 'invoice',
       status: 'pending',
       requested_by: userId,
@@ -1032,10 +1019,6 @@ export const submitBillForAudit = async (req: Request, res: Response, next: Next
 
     // 3. Create approval request
     const { error: approvalError } = await supabase.from('approval_requests').insert({
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       request_type: 'bill',
       status: 'pending',
       requested_by: userId,
@@ -1491,10 +1474,10 @@ export const matchTransactions = async (req: Request, res: Response, next: NextF
     const now = new Date().toISOString();
 
     // Identify which ID is a bank transaction and which is an order
-    const { data: bankTxn , error } = await supabase.from('accounting_bank_transactions').select('id').in('id', transactionIds).single();
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { data: bankTxn, error: bankTxnError3 } = await supabase.from('accounting_bank_transactions').select('id').in('id', transactionIds).single();
+    if (bankTxnError3) {
+      console.error('Database error:', bankTxnError3);
+      throw bankTxnError3;
     }
 
     if (!bankTxn) {
@@ -1505,50 +1488,37 @@ export const matchTransactions = async (req: Request, res: Response, next: NextF
     const otherIds = transactionIds.filter(id => id !== bankTxn.id);
 
     // Update bank transaction
-    const { error } = await supabase.from('accounting_bank_transactions').update({
+    const { error: reconcileError } = await supabase.from('accounting_bank_transactions').update({
       reconciled: true,
       updated_at: now
     }).eq('id', bankTxn.id);
 
-    if (error) {
-
-      console.error('Database error:', error);
-
-      throw error;
-
+    if (reconcileError) {
+      console.error('Database error:', reconcileError);
+      throw reconcileError;
     }
 
     // Update orders
-    const { error } = await supabase.from('restaurant_orders').update({
+    const { error: restOrderError } = await supabase.from('restaurant_orders').update({
       reconciled: true,
       reconciled_at: now,
       matched_transaction_id: bankTxn.id
     }).in('id', otherIds);
 
-    if (error) {
-
-      console.error('Database error:', error);
-
-      throw error;
-
+    if (restOrderError) {
+      console.error('Database error:', restOrderError);
+      throw restOrderError;
     }
 
-    const { error } = await supabase.from('bar_orders').update({
+    const { error: barOrderError } = await supabase.from('bar_orders').update({
       reconciled: true,
       reconciled_at: now,
       matched_transaction_id: bankTxn.id
     }).in('id', otherIds);
 
-
-    if (error) {
-
-
-      console.error('Database error:', error);
-
-
-      throw error;
-
-
+    if (barOrderError) {
+      console.error('Database error:', barOrderError);
+      throw barOrderError;
     }
 
     res.status(200).json({ success: true, message: 'Transactions matched and reconciled successfully' });

@@ -580,13 +580,14 @@ export const getBillDetails = async (
             }
 
             // 4. Check accounting_ar_invoices
-            const { data: arInvoice , error } = await supabase.from('accounting_ar_invoices')
-            if (error) {
-              console.error('Database error:', error);
-              throw error;
-            }
+            const { data: arInvoice, error: arInvoiceError } = await supabase.from('accounting_ar_invoices')
                 .select('*, customer:accounting_customers(id, customer_name, email, phone)')
                 .eq('id', bookingId).maybeSingle();
+            
+            if (arInvoiceError) {
+              console.error('Database error:', arInvoiceError);
+              throw arInvoiceError;
+            }
             if (arInvoice) {
                 res.json({
                     success: true,
@@ -618,10 +619,10 @@ export const getBillDetails = async (
             }
 
             // 5. Check finance_invoices
-            const { data: finInvoice , error } = await supabase.from('finance_invoices').select('*').eq('id', bookingId).maybeSingle();
-            if (error) {
-              console.error('Database error:', error);
-              throw error;
+            const { data: finInvoice, error: finInvoiceError } = await supabase.from('finance_invoices').select('*').eq('id', bookingId).maybeSingle();
+            if (finInvoiceError) {
+              console.error('Database error:', finInvoiceError);
+              throw finInvoiceError;
             }
             if (finInvoice) {
                 res.json({
@@ -3629,7 +3630,7 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 .eq('id', id);
 
             // 2. Record Payment
-            const { error } = await supabase.from('payments').insert({
+            const { error: paymentError } = await supabase.from('payments').insert({
                 pos_transaction_id: transaction.id,
                 amount: transaction.total_amount,
                 currency: 'KES',
@@ -3643,16 +3644,16 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 }
             });
 
-            if (error) {
+            if (paymentError) {
 
-              console.error('Database error:', error);
+              console.error('Database error:', paymentError);
 
-              throw error;
+              throw paymentError;
 
             }
 
             // 3. Record Logbook Transaction
-            const { error } = await supabase.from('cashier_transactions').insert({
+            const { error: txnError } = await supabase.from('cashier_transactions').insert({
                 transaction_number: `POS-${transaction.transaction_ref}`,
                 branch_id: transaction.branch_id,
                 cashier_id: req.user?.id || transaction.cashier_id,
@@ -3665,11 +3666,11 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 customer_name: transaction.customer_name
             });
 
-            if (error) {
+            if (txnError) {
 
-              console.error('Database error:', error);
+              console.error('Database error:', txnError);
 
-              throw error;
+              throw txnError;
 
             }
 

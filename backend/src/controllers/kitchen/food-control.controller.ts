@@ -112,7 +112,7 @@ export const updateFoodControl = async (
         if (error) throw error;
 
         // Log update
-        const { error } = await supabase.from('kitchen_food_control_logs').insert({
+        const { error: logError } = await supabase.from('kitchen_food_control_logs').insert({
             rule_id: data.id,
             action: 'UPDATE',
             old_data: oldRule,
@@ -120,9 +120,9 @@ export const updateFoodControl = async (
             changed_by: (req as any).user?.id
         });
 
-        if (error) {
+        if (logError) {
 
-          console.error('Database error:', error);
+          console.error('Database error:', logError);
 
           throw error;
 

@@ -191,15 +191,16 @@ export const updateOrderStatus = async (req: Request, res: Response, next: NextF
             // or create a specific RPC later.
 
             // Basic decrement:
-            const { error } = await supabase.rpc('decrement_bar_stock', {
-            if (error) {
-              console.error('Database error:', error);
-              throw error;
-            }
+            const { error: stockError } = await supabase.rpc('decrement_bar_stock', {
               p_drink_id: item.drink_id,
               p_branch_id: currentOrder.branch_id,
               p_quantity: item.quantity
             });
+
+            if (stockError) {
+              console.error('Database error:', stockError);
+              throw stockError;
+            }
 
             // Fallback if RPC doesn't exist (I haven't created it yet):
             // Implementation note: I should create this RPC.

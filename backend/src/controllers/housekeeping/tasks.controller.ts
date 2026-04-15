@@ -436,10 +436,10 @@ export const assignTask = async (
 
     if (error) throw error;
 
-    const { error } = await supabase.from('rooms').update({ assigned_attendant_id: assignedTo }).eq('id', task.room_id);
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { error: roomUpdateError } = await supabase.from('rooms').update({ assigned_attendant_id: assignedTo }).eq('id', task.room_id);
+    if (roomUpdateError) {
+      console.error('Database error:', roomUpdateError);
+      throw roomUpdateError;
     }
 
     res.status(200).json({ success: true, data: task });

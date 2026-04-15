@@ -209,7 +209,7 @@ export const getDraftPayroll = async (
       net: acc.net + parseFloat(r.net_pay)
     }), { basic: 0, gross: 0, deductions: 0, net: 0 }) || { basic: 0, gross: 0, deductions: 0, net: 0 };
 
-    const { error } = const { error } = await supabase.from('payroll_runs').update({
+    const { error } = await supabase.from('payroll_runs').update({
       total_basic_salary: totals.basic,
       total_gross_pay: totals.gross,
       total_deductions: totals.deductions,

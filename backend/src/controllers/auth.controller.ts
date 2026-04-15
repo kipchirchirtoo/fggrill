@@ -36,10 +36,6 @@ export const register = async (
 
     // Create user in Supabase auth
     const { data: authUser, error: authError } = await supabase.auth.signUp({
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       email,
       password,
     });
@@ -627,10 +623,6 @@ export const updatePassword = async (
 
     // Update password
     const { error: updateError } = await supabase.auth.updateUser({
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       password: req.body.newPassword
     });
 

@@ -544,19 +544,20 @@ export const dispatchItems = async (
       let resolvedDriverPhone = driver_phone || '';
 
       if (vehicle_id && !resolvedVehicleNumber) {
-        const { data: vehicle , error } = await supabase.from('vehicles')
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
+        const { data: vehicle, error: vehicleError } = await supabase.from('vehicles')
           .select('registration_number').eq('id', vehicle_id).single();
+        
+        if (vehicleError) {
+          console.error('Database error:', vehicleError);
+          throw vehicleError;
+        }
+        
         if (vehicle) resolvedVehicleNumber = vehicle.registration_number;
       }
 
       if (driver_id && !resolvedDriverName) {
         if (driver_id.startsWith('staff-')) {
           const staffId = driver_id.replace('staff-', '');
-          const { data: staff , error } = await supabase.from('staff_profiles')
           const { data: staff, error: staffError } = await supabase.from('staff_profiles')
             .select('first_name, last_name, phone').eq('id', staffId).single();
           

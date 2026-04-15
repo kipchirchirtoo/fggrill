@@ -741,7 +741,6 @@ export async function dispatchItems(
         );
 
         // Add to in-transit
-        const { error: transitError } = await supabase.from('in_transit_stock').insert({
         const { error: transitError } = await supabase
           .from('in_transit_stock')
           .insert({

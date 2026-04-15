@@ -414,15 +414,16 @@ export const updateDispatchStatus = async (
                 if (dispatch?.items) {
                     for (const item of dispatch.items) {
                         // Deduct from central warehouse stock
-                        const { error } = await supabase.rpc('update_branch_stock', {
-                        if (error) {
-                          console.error('Database error:', error);
-                          throw error;
-                        }
+                        const { error: stockError } = await supabase.rpc('update_branch_stock', {
                             p_branch_id: dispatch.from_branch_id,
                             p_item_sku: item.item_sku,
                             p_quantity_change: -item.dispatched_quantity
                         });
+
+                        if (stockError) {
+                          console.error('Database error:', stockError);
+                          throw stockError;
+                        }
 
                         // Add to in-transit stock
                         await supabase

@@ -785,24 +785,17 @@ export const updateStaffMember = async (
       try {
         // First check if the auth user exists
         const { data: authUser, error: authCheckError } = await supabase.auth.admin.getUserById(staff.user_id);
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
 
         if (authCheckError) {
           logger.warn(`Auth user not found for staff ${req.params.id}, skipping email update:`, authCheckError);
         } else if (authUser) {
           const { error: emailError } = await supabase.auth.admin.updateUserById(
-          if (error) {
-            console.error('Database error:', error);
-            throw error;
-          }
             staff.user_id,
             { email }
           );
 
           if (emailError) {
+            console.error('Database error:', emailError);
             logger.error('Error updating email in auth:', emailError);
             // Don't throw - continue with other updates
             logger.warn('Continuing with staff profile update despite auth email update failure');
@@ -1515,10 +1508,10 @@ export const updateAttendance = async (
       return;
     }
 
-    const { data: oldRecord , error } = await supabase.from('staff_attendance').select('*').eq('id', id).single();
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    const { data: oldRecord , error: fetchError } = await supabase.from('staff_attendance').select('*').eq('id', id).single();
+    if (fetchError) {
+      console.error('Database error:', fetchError);
+      throw fetchError;
     }
     if (!oldRecord) {
       res.status(404).json({ success: false, message: 'Record not found' });
@@ -1545,14 +1538,14 @@ export const updateAttendance = async (
       updated_at: new Date().toISOString()
     };
 
-    const { data, error } = await supabase
+    const { data, error: updateError } = await supabase
       .from('staff_attendance')
       .update(updateData)
       .eq('id', id)
       .select()
       .single();
 
-    if (error) throw error;
+    if (updateError) throw updateError;
 
     // Log the audit
     await AttendanceService.logAttendanceEdit(id, req.user?.id || '', oldRecord, updateData, reason);
@@ -2158,10 +2151,6 @@ export const uploadStaffPhoto = async (
     const fileName = `staff-photos/${staffId}-${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       .from('profile')
       .upload(fileName, file.buffer, {
         contentType: file.mimetype,
@@ -2238,10 +2227,6 @@ export const uploadStaffDocument = async (
     const fileName = `${req.params.id}-${documentType}-${Date.now()}.${fileExt}`;
 
     const { data: storageData, error: storageError } = await supabase.storage
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
       .from('staff-documents')
       .upload(fileName, file.buffer, {
         contentType: file.mimetype,

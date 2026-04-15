@@ -320,10 +320,10 @@ export const createConferenceBooking = async (
         const end = new Date(end_date);
         const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
 
-        const { data: hall , error } = await supabase.from('conference_halls').select('*').eq('id', conference_hall_id).single();
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
+        const { data: hall , error: hallError } = await supabase.from('conference_halls').select('*').eq('id', conference_hall_id).single();
+        if (hallError) {
+          console.error('Database error:', hallError);
+          throw hallError;
         }
         if (hall) {
             if (diffHours >= 8) {
@@ -371,7 +371,7 @@ export const createConferenceBooking = async (
             ? `${notes}\n\n__METADATA__:${JSON.stringify(metadata)}`
             : `__METADATA__:${JSON.stringify(metadata)}`;
 
-        const { data: booking, error } = await supabase
+        const { data: booking, error: bookingError } = await supabase
             .from('conference_hall_bookings')
             .insert([{
                 conference_hall_id,
@@ -392,7 +392,7 @@ export const createConferenceBooking = async (
             .select()
             .single();
 
-        if (error) throw error;
+        if (bookingError) throw bookingError;
 
         // Update hall status to 'occupied' when booking is confirmed
         const now = new Date();

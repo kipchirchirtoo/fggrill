@@ -4,6 +4,7 @@ import * as BranchInventoryService from '../../services/branch-inventory.service
 import { logger } from '../../utils/logger';
 import notificationService from '../../services/notification.service';
 import { UserRole } from '../../models/User';
+import pool from '../../db';
 
 // =====================================================
 // VEHICLES 
@@ -491,7 +492,6 @@ export const updateSupplier = async (req: Request, res: Response) => {
     if (userId) {
       // Safe audit log creation - if it fails, don't revert the update
       try {
-        const { error } = await supabase.rpc('create_audit_log', {
         const { error: auditError } = await supabase.rpc('create_audit_log', {
           p_user_id: userId,
           p_action: 'UPDATE',
@@ -527,7 +527,6 @@ export const updateSupplier = async (req: Request, res: Response) => {
 };
 
 export const deleteSupplier = async (req: Request, res: Response) => {
-  const { pool } = require('../../config/pg');
   let client;
 
   try {
@@ -539,7 +538,7 @@ export const deleteSupplier = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid supplier ID format' });
     }
 
-    client = await pool.connect();
+    client = await pool.getClient();
 
     // Start explicit transaction to ensure session variable persists for the DO block
     await client.query('BEGIN');

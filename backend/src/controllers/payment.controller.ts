@@ -122,7 +122,7 @@ async function processAccountingPayment(
       .single();
 
     if (bankAcc) {
-      const { error } = await supabase.from('accounting_bank_transactions').insert({
+      const { error: bankTxnError } = await supabase.from('accounting_bank_transactions').insert({
         bank_account_id: bankAcc.id,
         transaction_date: new Date().toISOString().split('T')[0],
         debit_amount: type === 'invoice' ? paymentAmount : 0,
@@ -132,26 +132,26 @@ async function processAccountingPayment(
         reconciled: false
       });
 
-      if (error) {
+      if (bankTxnError) {
 
-        console.error('Database error:', error);
+        console.error('Database error:', bankTxnError);
 
-        throw error;
+        throw bankTxnError;
 
       }
 
       // Update balance
       const balanceChange = type === 'invoice' ? paymentAmount : -paymentAmount;
-      const { error } = await supabase.from('accounting_bank_accounts').update({
+      const { error: balanceError } = await supabase.from('accounting_bank_accounts').update({
         current_balance: (bankAcc.current_balance || 0) + balanceChange,
         updated_at: new Date().toISOString()
       }).eq('id', bankAcc.id);
 
-      if (error) {
+      if (balanceError) {
 
-        console.error('Database error:', error);
+        console.error('Database error:', balanceError);
 
-        throw error;
+        throw balanceError;
 
       }
     }

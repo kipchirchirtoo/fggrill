@@ -159,11 +159,7 @@ export const updateRoomStatus = async (
     if (error) throw error;
 
     // Log status change
-    const { error } = await supabase.from('hk_room_status_history').insert([{
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
+    const { error: historyError } = await supabase.from('hk_room_status_history').insert([{
       room_id: id,
       previous_status: previousStatus,
       new_status: status,
@@ -171,6 +167,11 @@ export const updateRoomStatus = async (
       reason: reason || null,
       metadata: { notes }
     }]);
+
+    if (historyError) {
+      console.error('Database error:', historyError);
+      throw historyError;
+    }
 
     res.status(200).json({ success: true, data: updated });
     logger.info(`Room ${room.room_number} status changed from ${previousStatus} to ${status}`);
@@ -203,16 +204,17 @@ export const bulkUpdateRoomStatus = async (
 
     // Log status changes
     for (const roomId of roomIds) {
-      const { error } = await supabase.from('hk_room_status_history').insert([{
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
+      const { error: historyError } = await supabase.from('hk_room_status_history').insert([{
         room_id: roomId,
         new_status: status,
         changed_by: req.user?.id,
         reason: reason || 'Bulk update'
       }]);
+
+      if (historyError) {
+        console.error('Database error:', historyError);
+        throw historyError;
+      }
     }
 
     res.status(200).json({ success: true, count: rooms?.length || 0, data: rooms });

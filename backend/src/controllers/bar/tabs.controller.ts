@@ -80,18 +80,13 @@ export const addToTab = async (req: Request, res: Response, next: NextFunction):
 
     // 3. Update tab total
     const { data: tab, error: tabError } = await supabase.rpc('update_tab_total', { p_tab_id: id });
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
-    // Note: I need to create this RPC or do it manually. Manual for now:
-
     if (tabError) {
+      console.error('Database error:', tabError);
       // Fallback manual update
-      const { data: currentTab , error } = await supabase.from('bar_tabs').select('total_amount').eq('id', id).single();
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
+      const { data: currentTab, error: currentTabError } = await supabase.from('bar_tabs').select('total_amount').eq('id', id).single();
+      if (currentTabError) {
+        console.error('Database error:', currentTabError);
+        throw currentTabError;
       }
       const newTotal = (currentTab?.total_amount || 0) + additionalTotal;
 

@@ -26,8 +26,8 @@ export const globalSearch = async (req: Request, res: Response) => {
     }
 
     // Parse modules filter if provided
-    const modulesList = modules 
-      ? (typeof modules === 'string' ? modules.split(',') : modules)
+    const modulesList: string[] = modules 
+      ? (typeof modules === 'string' ? modules.split(',') : Array.isArray(modules) ? modules.map(m => String(m)) : [String(modules)])
       : ['staff', 'guest', 'order', 'booking', 'bill', 'transaction', 'receipt', 'payment'];
 
     const results: any[] = [];

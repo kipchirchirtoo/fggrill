@@ -24,11 +24,7 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                     // Optimization: In a real app, you'd sync this carefully. 
                     // Here we'll just Insert a new record if it looks new.
 
-                    const { error } = await supabase.from('staff_credit_bills').insert({
-                    if (error) {
-                      console.error('Database error:', error);
-                      throw error;
-                    }
+                    const { error: billError } = await supabase.from('staff_credit_bills').insert({
                         staff_id: bill.staff_id,
                         amount: bill.amount,
                         description: `Cashier Logbook Credit: ${bill.reference || 'No Ref'}`,
@@ -36,7 +32,7 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                         status: 'pending'
                     });
 
-                    if (error) console.error('Failed to create credit bill record', error);
+                    if (billError) console.error('Failed to create credit bill record', billError);
                 }
             }
         }

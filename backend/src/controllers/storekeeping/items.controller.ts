@@ -523,7 +523,7 @@ export const addStock = async (
     const newQuantity = (currentItem.quantity || 0) + parseInt(quantity);
 
     // Update item quantity
-    const { data, error } = await supabase
+    const { data, error: updateError } = await supabase
       .from('simple_items')
       .update({
         quantity: newQuantity,
@@ -533,13 +533,13 @@ export const addStock = async (
       .select()
       .single();
 
-    if (error) throw error;
+    if (updateError) throw updateError;
 
     // Generate order number for this stock-in
     const orderNum = await generateOrderNumber('STKIN');
 
     // Log stock history with order number
-    const { error } = await supabase.from('stock_history').insert({
+    const { error: historyError } = await supabase.from('stock_history').insert({
       item_sku: currentItem.sku,
       change_type: 'IN',
       quantity_change: parseInt(quantity),
@@ -551,11 +551,11 @@ export const addStock = async (
       user_id: req.user?.id || null
     });
 
-    if (error) {
+    if (historyError) {
 
-      console.error('Database error:', error);
+      console.error('Database error:', historyError);
 
-      throw error;
+      throw historyError;
 
     }
 
