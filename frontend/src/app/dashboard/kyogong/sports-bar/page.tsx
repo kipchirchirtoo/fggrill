@@ -1,3 +1,5 @@
+'use client';
+
 import { KyogongPOSLayout } from '@/components/kyogong/KyogongPOSLayout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/user-roles';
