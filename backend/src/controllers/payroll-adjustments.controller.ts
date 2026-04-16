@@ -14,14 +14,7 @@ export const getAdjustments = async (req: Request, res: Response, next: NextFunc
 
         let query = supabase
             .from('staff_payroll_adjustments')
-            .select(`
-                *,
-                staff:staff_profiles!inner(
-                    id, first_name, last_name, role, department, 
-                    user:users!user_id(first_name, last_name)
-                ),
-                created_by_user:users!created_by(first_name, last_name)
-            `)
+            .select('*')
             .order('created_at', { ascending: false });
 
         if (staff_id) query = query.eq('staff_id', staff_id);
@@ -33,15 +26,7 @@ export const getAdjustments = async (req: Request, res: Response, next: NextFunc
         const { data, error } = await query;
         if (error) throw error;
 
-        // Flatten staff names
-        const transformed = data.map(item => ({
-            ...item,
-            staff_name: item.staff?.user
-                ? `${item.staff.user.first_name || ''} ${item.staff.user.last_name || ''}`.trim()
-                : `${item.staff?.first_name || ''} ${item.staff?.last_name || ''}`.trim()
-        }));
-
-        res.status(200).json({ success: true, count: transformed.length, data: transformed });
+        res.status(200).json({ success: true, count: data.length, data });
     } catch (error) {
         next(error);
     }
@@ -91,9 +76,8 @@ export const createAdjustment = async (req: Request, res: Response, next: NextFu
 
         if (error) throw error;
 
-        if (normalizedStatus === 'approved') {
-            await syncAdjustmentToPayroll(data.id, created_by, req);
-        }
+        // Always sync so payroll draft picks it up immediately
+        try { await syncAdjustmentToPayroll(data.id, created_by, req); } catch (_) {}
 
         res.status(201).json({ success: true, data });
     } catch (error) {

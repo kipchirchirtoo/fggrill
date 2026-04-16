@@ -42,7 +42,37 @@ export default function HRLeaveRequestsPage() {
             const response = await staffAPI.getLeaveRequests({
                 status: statusFilter !== 'all' ? statusFilter : undefined
             });
-            if (response.success) setRequests(response.data || []);
+            if (response.success) {
+                // Transform the API response to match the frontend interface
+                const transformedData = (response.data || []).map((item: any) => {
+                    const staff = item.staff || {};
+                    const firstName = staff.first_name || '';
+                    const lastName = staff.last_name || '';
+                    const employeeName = `${firstName} ${lastName}`.trim() || 'Unknown Employee';
+                    
+                    // Calculate days between start_date and end_date
+                    let days = 0;
+                    if (item.start_date && item.end_date) {
+                        const start = new Date(item.start_date);
+                        const end = new Date(item.end_date);
+                        days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    }
+                    
+                    return {
+                        id: item.id,
+                        employee_name: employeeName,
+                        employee_id: item.staff_id,
+                        branch_name: staff.branch_name || undefined,
+                        leave_type: item.leave_type,
+                        start_date: item.start_date,
+                        end_date: item.end_date,
+                        days: days,
+                        reason: item.reason,
+                        status: item.status
+                    };
+                });
+                setRequests(transformedData);
+            }
         } catch (error) {
             console.error('Error fetching leave requests:', error);
             toast.error('Failed to load leave requests');

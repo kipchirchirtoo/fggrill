@@ -156,6 +156,10 @@ router.post('/verify/bar-stock/:id/verify', authorize([UserRole.AUDITOR, UserRol
 router.get('/verify/details', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getAnomalyDetail);
 router.post('/verify/clear', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyAnomaly);
 
+// Anomaly Detail Routes
+router.get('/anomalies/:id', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getAnomalyDetail);
+router.post('/anomalies/:id/clear', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyAnomaly);
+
 // Daily Log Verification
 router.get('/daily-logs', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT]), getDailyLogsStatus);
 router.post('/daily-logs/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyDailyLog);

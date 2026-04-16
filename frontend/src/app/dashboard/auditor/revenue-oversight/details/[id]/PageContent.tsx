@@ -40,18 +40,31 @@ export default function AnomalyDetailPage() {
     const [isSubmittingVerify, setIsSubmittingVerify] = useState(false);
 
     const fetchData = useCallback(async () => {
-        if (!id || !type) return;
+        // Validate ID format (should be a UUID)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        
+        // Don't fetch if no ID, no type, or invalid UUID format
+        if (!id || !type || !uuidRegex.test(id)) {
+            console.warn('Invalid anomaly ID or missing type parameter');
+            setIsLoading(false);
+            setData(null);
+            return;
+        }
+        
         setIsLoading(true);
         try {
-            const res = await auditAPI.getAnomalyDetail(id);
+            const res = await auditAPI.getAnomalyDetail(id, type);
             if (res.success) {
                 setData(res.data);
             } else {
-                toast.error(res.message || 'Failed to fetch details');
+                // Just log the error, don't show toast
+                console.error('Failed to fetch anomaly:', res.message);
+                setData(null);
             }
-        } catch (e) {
-            console.error(e);
-            toast.error('An error occurred while fetching details');
+        } catch (e: any) {
+            // Silently handle errors - just show "not found" UI
+            console.error('Error fetching anomaly:', e);
+            setData(null);
         } finally {
             setIsLoading(false);
         }
@@ -103,7 +116,7 @@ export default function AnomalyDetailPage() {
     const handleVerifySubmit = async () => {
         setIsSubmittingVerify(true);
         try {
-            const res = await auditAPI.clearAnomaly(id, verifyNotes);
+            const res = await auditAPI.clearAnomaly(id, verifyNotes, type || undefined);
 
             if (res.success) {
                 toast.success('Transaction verified and cleared');
@@ -352,7 +365,7 @@ export default function AnomalyDetailPage() {
                                                         {exc.severity} PRIORITY
                                                     </span>
                                                     <span className="text-[10px] text-stone-400 font-medium">
-                                                        Created {format(new Date(exc.detected_at || exc.created_at), 'MMM d, HH:mm')}
+                                                        {(exc.detected_at || exc.created_at) && `Created ${format(new Date(exc.detected_at || exc.created_at), 'MMM d, HH:mm')}`}
                                                     </span>
                                                 </div>
                                                 <p className="text-sm font-bold text-stone-800 mb-1">{exc.description}</p>
@@ -450,9 +463,11 @@ export default function AnomalyDetailPage() {
                                         <p className="text-[11px] text-stone-600 italic">
                                             "{data.audit_notes || data.resolution_notes || 'Confirmed and cleared by auditor.'}"
                                         </p>
-                                        <p className="text-[10px] text-stone-400 mt-1 font-medium">
-                                            {format(new Date(data.audited_at || data.resolved_at), 'PPp')}
-                                        </p>
+                                        {(data.audited_at || data.resolved_at) && (
+                                            <p className="text-[10px] text-stone-400 mt-1 font-medium">
+                                                {format(new Date(data.audited_at || data.resolved_at), 'PPp')}
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>

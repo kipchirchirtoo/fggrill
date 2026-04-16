@@ -103,13 +103,13 @@ export class PayrollService {
         .gte('attendance_date', startDate)
         .lte('attendance_date', endDate),
 
-      // 8. HR manual adjustments
+      // 8. HR manual adjustments — include pending + approved + applied
       supabase.from('staff_payroll_adjustments')
         .select('id, staff_id, type, category, amount, description, created_by')
         .in('staff_id', staffIds)
         .eq('month', String(month))
         .eq('year', year)
-        .in('status', ['approved', 'applied', 'Approved', 'Applied', 'APPROVED', 'APPLIED']),
+        .in('status', ['pending', 'approved', 'applied']),
     ]);
 
     // Group everything by staff_id
@@ -254,16 +254,17 @@ export class PayrollService {
 
     // 7. HR manual adjustments
     for (const adj of batchData.hrAdjustments.get(staff.id) || []) {
+      const adjType = (adj.type || 'deduction').toLowerCase();
       const item = {
         category: (adj.category || 'other').toLowerCase(),
         source: 'manual',
         source_table: 'staff_payroll_adjustments', source_id: adj.id,
         amount: parseFloat(adj.amount || '0'),
-        reference: adj.description || `HR ${adj.type}`,
+        reference: adj.description || `HR ${adjType}`,
         audit_ref: `Created by ${adj.created_by}`,
         timestamp: ts,
       };
-      if (adj.type === 'addition') dynamicAdditions.push(item);
+      if (adjType === 'addition') dynamicAdditions.push(item);
       else dynamicDeductions.push(item);
     }
 

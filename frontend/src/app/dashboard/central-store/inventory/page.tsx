@@ -36,14 +36,25 @@ export default function InventoryPage() {
         limit: 50,
         search: searchQuery 
       });
+      
       if (response.success) {
         setItems(response.data || []);
         setTotalPages(response.pages || 1);
+        
+        // Update stats from response
         if (response.stats) {
-          setGlobalStats(response.stats);
+          setGlobalStats({
+            total: response.stats.total || 0,
+            inStock: response.stats.inStock || 0,
+            lowStock: response.stats.lowStock || 0,
+            outOfStock: response.stats.outOfStock || 0
+          });
         }
       }
-    } catch (error) { console.error('Error:', error); }
+    } catch (error: any) { 
+      console.error('Error fetching items:', error);
+      toast.error(error.message || 'Failed to fetch inventory items');
+    }
     finally { setIsLoading(false); }
   }, [currentPage, searchQuery]);
 
@@ -147,19 +158,35 @@ export default function InventoryPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Total SKU</p>
-              <p className="text-2xl font-semibold text-stone-900 mt-1">{globalStats.total}</p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-semibold text-stone-900 mt-1">{globalStats.total}</p>
+              )}
             </div>
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">In Stock</p>
-              <p className="text-2xl font-semibold text-stone-900 mt-1">{globalStats.inStock}</p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-semibold text-stone-900 mt-1">{globalStats.inStock}</p>
+              )}
             </div>
-            <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-stone-400">
+            <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-amber-400">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Low Stock</p>
-              <p className="text-2xl font-semibold text-amber-600 mt-1">{globalStats.lowStock}</p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-semibold text-amber-600 mt-1">{globalStats.lowStock}</p>
+              )}
             </div>
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Out of Stock</p>
-              <p className="text-2xl font-semibold text-stone-300 mt-1">{globalStats.outOfStock}</p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-semibold text-stone-300 mt-1">{globalStats.outOfStock}</p>
+              )}
             </div>
           </div>
 

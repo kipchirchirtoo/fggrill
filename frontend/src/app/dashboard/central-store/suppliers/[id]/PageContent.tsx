@@ -618,7 +618,7 @@ export default function SupplierDetailPage() {
                                             ) : grns.map((grn) => (
                                                 <tr key={grn.id} className="border-b border-stone-50 hover:bg-stone-50/50 transition-colors">
                                                     <td className="py-3 px-4 font-mono font-medium text-[#007AFF]">{grn.grn_number}</td>
-                                                    <td className="py-3 px-4">{new Date(grn.grn_date).toLocaleDateString()}</td>
+                                                    <td className="py-3 px-4">{grn.grn_date ? new Date(grn.grn_date).toLocaleDateString() : 'Invalid Date'}</td>
                                                     <td className="py-3 px-4 text-stone-500">{grn.purchase_order?.po_number || 'Direct'}</td>
                                                     <td className="py-3 px-4 text-center">{grn.total_items}</td>
                                                     <td className="py-3 px-4 text-right font-medium">{grn.total_value.toLocaleString()}</td>

@@ -1,20 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from "@/components/ui/minimal/card";
 import { Button } from "@/components/ui/minimal/button";
 import { User, Mail, Phone, Building2, Briefcase, Save, Camera, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { staffAPI } from '@/lib/api';
+import { staffAPI, systemAPI } from '@/lib/api';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import Image from 'next/image';
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, checkAuth } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -32,13 +36,72 @@ export default function ProfilePage() {
         phone: (user as any).phone_number || '',
         department: (user as any).department || '',
       });
+      
+      // Set photo preview from user data
+      const photoUrl = (user as any).photo_url || (user as any).profile_photo;
+      if (photoUrl) {
+        setPhotoPreview(photoUrl);
+      }
     }
   }, [user]);
+
+  const handlePhotoClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+
+      // Upload photo
+      const formData = new FormData();
+      formData.append('photo', file);
+
+      const response = await systemAPI.uploadProfilePhoto(formData);
+      
+      if (response.success) {
+        toast.success('Profile photo updated successfully');
+        // Refresh user data to get updated photo URL
+        await checkAuth();
+      } else {
+        throw new Error(response.message || 'Failed to upload photo');
+      }
+    } catch (error: any) {
+      console.error('Error uploading photo:', error);
+      toast.error(error.message || 'Failed to upload photo');
+      // Reset preview on error
+      const photoUrl = (user as any).photo_url || (user as any).profile_photo;
+      setPhotoPreview(photoUrl || null);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      await staffAPI.updateProfile({
+      await systemAPI.updateProfile({
         first_name: formData.firstName,
         last_name: formData.lastName,
         phone_number: formData.phone,
@@ -46,9 +109,11 @@ export default function ProfilePage() {
       });
       toast.success('Profile updated successfully');
       setIsEditing(false);
-    } catch (error) {
+      // Refresh user data
+      await checkAuth();
+    } catch (error: any) {
       console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
+      toast.error(error.message || 'Failed to update profile');
     } finally {
       setIsLoading(false);
     }
@@ -66,16 +131,42 @@ export default function ProfilePage() {
           {/* Profile Photo */}
           <div className="flex items-center gap-6 mb-6 pb-6 border-b">
             <div className="relative">
-              <div className="w-24 h-24 bg-[#F2F2F7] rounded-full flex items-center justify-center">
-                <User className="h-12 w-12 text-[#3C3C43]" />
+              <div className="w-24 h-24 bg-[#F2F2F7] rounded-full flex items-center justify-center overflow-hidden">
+                {photoPreview ? (
+                  <Image
+                    src={photoPreview}
+                    alt="Profile"
+                    width={96}
+                    height={96}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="h-12 w-12 text-[#3C3C43]" />
+                )}
               </div>
-              <button className="absolute bottom-0 right-0 p-2 bg-[#FFFFFF] rounded-full shadow-none 0_2px_14px_rgba(0,0,0,0.06)] border">
-                <Camera className="h-4 w-4 text-gray-600" />
+              <button
+                onClick={handlePhotoClick}
+                disabled={isUploadingPhoto}
+                className="absolute bottom-0 right-0 p-2 bg-[#FFFFFF] rounded-full shadow-[0_2px_14px_rgba(0,0,0,0.06)] border hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {isUploadingPhoto ? (
+                  <RefreshCw className="h-4 w-4 text-gray-600 animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4 text-gray-600" />
+                )}
               </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
             </div>
             <div>
               <h2 className="text-xl font-semibold font-sf-pro-display">{user?.firstName} {user?.lastName}</h2>
               <p className="text-gray-500 capitalize">{user?.role?.replace('_', ' ')}</p>
+              <p className="text-xs text-gray-400 mt-1">Click camera icon to upload photo</p>
             </div>
           </div>
 

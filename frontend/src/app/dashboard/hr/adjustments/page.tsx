@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSearchParams } from 'next/navigation';
 
 const CATEGORIES_DEDUCTION = [
     { id: 'credit_bills', label: 'Credit Bills' },
@@ -39,6 +40,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function PayrollAdjustmentsPage() {
     const { user } = useAuth();
+    const searchParams = useSearchParams();
     const canManage = [UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR].includes(user?.role as UserRole);
 
     const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth() + 1));
@@ -67,6 +69,38 @@ export default function PayrollAdjustmentsPage() {
             if (res.success) setStaffList(res.data || []);
         }).finally(() => setLoadingStaff(false));
     }, []);
+
+    // Handle URL parameters for pre-filling from performance page
+    useEffect(() => {
+        const staffId = searchParams.get('staff_id');
+        const staffName = searchParams.get('staff_name');
+        const tab = searchParams.get('tab');
+        const type = searchParams.get('type');
+        const category = searchParams.get('category');
+        const reason = searchParams.get('reason');
+
+        if (staffId && staffList.length > 0) {
+            // Find and select the staff member
+            const staff = staffList.find(s => s.id === staffId);
+            if (staff) {
+                setSelectedStaff(staff);
+                
+                // Pre-fill the form if parameters are provided
+                if (type && category) {
+                    setForm({
+                        type: type as 'deduction' | 'addition',
+                        category: category,
+                        amount: '',
+                        description: reason || ''
+                    });
+                    setShowForm(true);
+                    
+                    // Show success toast
+                    toast.success(`Ready to add ${category} for ${staffName || staff.first_name}`);
+                }
+            }
+        }
+    }, [searchParams, staffList]);
 
     // Load folio when staff or period changes
     const loadFolio = useCallback(async (staffId: string) => {

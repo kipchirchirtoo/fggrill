@@ -313,9 +313,19 @@ export default function AuditorDashboard() {
                             </div>
                             <div className="space-y-4">
                                 {watchList.length > 0 ? (
-                                    watchList.map((item: any, i: number) => (
+                                    watchList
+                                        .filter((item: any) => item?.id && item?.entity_type) // Filter out invalid items
+                                        .map((item: any, i: number) => (
                                         <div key={i} className="flex gap-4 items-start group pb-4 border-b border-stone-50 last:border-0 last:pb-0 cursor-pointer"
-                                            onClick={() => router.push(`/dashboard/auditor/revenue-oversight/details/${item.id}?type=${item.entity_type}`)}>
+                                            onClick={() => {
+                                                // Validate UUID format before navigating
+                                                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                                                if (item.id && uuidRegex.test(item.id)) {
+                                                    router.push(`/dashboard/auditor/revenue-oversight/details/${item.id}?type=${item.entity_type}`);
+                                                } else {
+                                                    console.warn('Invalid anomaly ID:', item.id);
+                                                }
+                                            }}>
                                             <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0 transition-transform group-hover:scale-125"
                                                 style={{ backgroundColor: item.severity === 'HIGH' ? '#ef4444' : item.severity === 'MEDIUM' ? '#f59e0b' : '#d6d3d1' }} />
                                             <div className="flex-1">

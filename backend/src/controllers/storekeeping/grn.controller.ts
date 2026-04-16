@@ -55,10 +55,18 @@ export const getGRNs = async (
 
         if (error) throw error;
 
+        // Transform data to flatten supplier and PO info for consistency
+        const transformedGrns = (grns || []).map(grn => ({
+            ...grn,
+            supplier_name: grn.supplier?.name || 'N/A',
+            po_number: grn.purchase_order?.po_number || null,
+            delivery_date: grn.grn_date
+        }));
+
         res.status(200).json({
             success: true,
-            count: grns?.length || 0,
-            data: grns || []
+            count: transformedGrns.length,
+            data: transformedGrns
         });
     } catch (error) {
         logger.error('Error fetching GRNs:', error);
@@ -141,6 +149,9 @@ export const getGRN = async (
             success: true,
             data: {
                 ...grn,
+                supplier_name: grn.supplier?.name || 'N/A',
+                po_number: grn.purchase_order?.po_number || null,
+                delivery_date: grn.grn_date,
                 items: enrichedItems
             }
         });

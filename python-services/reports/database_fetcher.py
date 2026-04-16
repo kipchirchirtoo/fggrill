@@ -5,6 +5,7 @@ Direct database connection for accurate report data
 
 import os
 import logging
+import calendar
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
@@ -95,6 +96,7 @@ class DatabaseFetcher:
                 'supplier_statement': self._fetch_supplier_statement,
                 'revenue_reconciliation': self._fetch_revenue_reconciliation,
                 'sales_performance': self._fetch_sales_performance,
+                'staff_performance': self._fetch_staff_performance,
             }
             
             fetcher = fetchers.get(report_type)
@@ -202,6 +204,18 @@ class DatabaseFetcher:
                     'total_items_sold': 0,
                     'total_quantity_sold': 0,
                     'total_revenue': 0
+                }
+            },
+            'staff_performance': {
+                **base,
+                'period': {},
+                'branch': 'All Branches',
+                'staff_performance': [],
+                'summary': {
+                    'total_staff': 0,
+                    'total_sales': 0,
+                    'total_tips': 0,
+                    'avg_attendance': 0
                 }
             }
         }
@@ -2192,6 +2206,176 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         except Exception as e:
             logger.error(f"Error fetching sales performance: {e}")
             
+        return data
+
+    def _fetch_staff_performance(self, filters: Dict) -> Dict[str, Any]:
+        """Fetch Staff Performance Report data — attendance + sales + tips + ratings"""
+        month = filters.get('month')
+        year = filters.get('year')
+        branch_id = filters.get('branch_id')
+
+        now = datetime.now()
+        if month and year:
+            try:
+                start_date = datetime(int(year), int(month), 1).strftime('%Y-%m-%d')
+                # Last day of month
+                last_day = calendar.monthrange(int(year), int(month))[1]
+                end_date = datetime(int(year), int(month), last_day).strftime('%Y-%m-%d')
+                period_month = datetime(int(year), int(month), 1).strftime('%B')
+                period_year = int(year)
+            except Exception:
+                start_date = now.replace(day=1).strftime('%Y-%m-%d')
+                end_date = now.strftime('%Y-%m-%d')
+                period_month = now.strftime('%B')
+                period_year = now.year
+        else:
+            start_date, end_date = self._parse_dates(filters)
+            period_month = now.strftime('%B')
+            period_year = now.year
+
+        data = {
+            'period': {'month': period_month, 'year': period_year},
+            'branch': 'All Branches',
+            'staff_performance': [],
+            'summary': {
+                'total_staff': 0,
+                'total_sales': 0,
+                'total_tips': 0,
+                'avg_attendance': 0
+            }
+        }
+
+        if not self.client:
+            return data
+
+        try:
+            # 1. Fetch all staff profiles
+            profiles_query = self.client.table('staff_profiles').select('id, first_name, last_name, role, department, branch_id, user_id')
+            if branch_id:
+                profiles_query = profiles_query.eq('branch_id', int(branch_id))
+                # Resolve branch name
+                try:
+                    br = self.client.table('branches').select('name').eq('id', int(branch_id)).single().execute()
+                    data['branch'] = (br.data or {}).get('name', 'Unknown Branch')
+                except Exception:
+                    data['branch'] = f'Branch {branch_id}'
+
+            profiles_res = profiles_query.execute()
+            profiles = profiles_res.data or []
+
+            if not profiles:
+                return data
+
+            # Build lookup maps
+            staff_map = {}  # id -> profile
+            for p in profiles:
+                staff_map[p['id']] = p
+
+            staff_ids = list(staff_map.keys())
+
+            # 2. Fetch attendance for the period
+            attendance_map = {}  # staff_id -> present_days count
+            try:
+                att_res = self.client.table('staff_attendance')\
+                    .select('staff_id, status')\
+                    .in_('staff_id', staff_ids)\
+                    .gte('attendance_date', start_date)\
+                    .lte('attendance_date', end_date)\
+                    .execute()
+                for rec in (att_res.data or []):
+                    sid = rec.get('staff_id')
+                    if rec.get('status') in ('present', 'late'):
+                        attendance_map[sid] = attendance_map.get(sid, 0) + 1
+            except Exception as e:
+                logger.warning(f"Could not fetch attendance for staff performance: {e}")
+
+            # 3. Fetch sales attributed to staff (restaurant orders)
+            sales_map = {}   # staff_id -> total_sales
+            tips_map = {}    # staff_id -> total_tips
+            try:
+                orders_query = self.client.table('restaurant_orders')\
+                    .select('staff_id, total_amount, tip_amount')\
+                    .in_('staff_id', staff_ids)\
+                    .gte('created_at', f'{start_date}T00:00:00')\
+                    .lte('created_at', f'{end_date}T23:59:59')\
+                    .eq('status', 'completed')
+                if branch_id:
+                    orders_query = orders_query.eq('branch_id', int(branch_id))
+                orders_res = orders_query.execute()
+                for order in (orders_res.data or []):
+                    sid = order.get('staff_id')
+                    if sid:
+                        sales_map[sid] = sales_map.get(sid, 0) + float(order.get('total_amount', 0) or 0)
+                        tips_map[sid] = tips_map.get(sid, 0) + float(order.get('tip_amount', 0) or 0)
+            except Exception as e:
+                logger.warning(f"Could not fetch sales for staff performance: {e}")
+
+            # 4. Fetch ratings (staff_ratings table if it exists)
+            ratings_map = {}  # staff_id -> avg_rating
+            try:
+                ratings_res = self.client.table('staff_ratings')\
+                    .select('staff_id, rating')\
+                    .in_('staff_id', staff_ids)\
+                    .gte('created_at', f'{start_date}T00:00:00')\
+                    .lte('created_at', f'{end_date}T23:59:59')\
+                    .execute()
+                ratings_by_staff = {}
+                for r in (ratings_res.data or []):
+                    sid = r.get('staff_id')
+                    if sid:
+                        if sid not in ratings_by_staff:
+                            ratings_by_staff[sid] = []
+                        ratings_by_staff[sid].append(float(r.get('rating', 0) or 0))
+                for sid, rlist in ratings_by_staff.items():
+                    ratings_map[sid] = sum(rlist) / len(rlist) if rlist else 0
+            except Exception as e:
+                logger.warning(f"Could not fetch ratings for staff performance: {e}")
+
+            # 5. Assemble performance list
+            perf_list = []
+            total_sales = 0
+            total_tips = 0
+            total_present = 0
+
+            for staff in profiles:
+                sid = staff['id']
+                present_days = attendance_map.get(sid, 0)
+                s_sales = sales_map.get(sid, 0)
+                s_tips = tips_map.get(sid, 0)
+                avg_rating = ratings_map.get(sid, 0)
+
+                total_sales += s_sales
+                total_tips += s_tips
+                total_present += present_days
+
+                full_name = f"{staff.get('first_name', '')} {staff.get('last_name', '')}".strip().upper() or 'UNKNOWN'
+                role = (staff.get('role') or 'UNSPECIFIED').upper()
+                dept = (staff.get('department') or 'general').lower()
+
+                perf_list.append({
+                    'name': full_name,
+                    'role': role,
+                    'department': dept,
+                    'total_sales': round(s_sales, 2),
+                    'total_tips': round(s_tips, 2),
+                    'present_days': present_days,
+                    'avg_rating': round(avg_rating, 2)
+                })
+
+            # Sort by sales desc, then attendance desc
+            perf_list.sort(key=lambda x: (-x['total_sales'], -x['present_days'], -x['avg_rating']))
+            for i, item in enumerate(perf_list):
+                item['rank'] = i + 1
+
+            data['staff_performance'] = perf_list
+            data['summary']['total_staff'] = len(perf_list)
+            data['summary']['total_sales'] = round(total_sales, 2)
+            data['summary']['total_tips'] = round(total_tips, 2)
+            data['summary']['avg_attendance'] = round(total_present / len(perf_list), 2) if perf_list else 0
+
+        except Exception as e:
+            logger.error(f"Error fetching staff performance: {e}", exc_info=True)
+
         return data
 
     def _fetch_sold_items_agg(self, filters: Dict) -> Dict[str, Any]:

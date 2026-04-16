@@ -181,7 +181,9 @@ export async function fetchAPI<T>(
         success: result.success ?? true,
         data: result.data ?? result,
         message: result.message,
-        count: result.count
+        count: result.count,
+        pages: result.pages,
+        stats: result.stats
       } as ApiResponse<T>;
 
     } catch (error) {

@@ -175,6 +175,10 @@ def generate_branded_pdf_report():
         if passed_data and not use_real_data:
             report_data = passed_data
             logger.info("Using passed data from frontend")
+        elif passed_data and use_real_data:
+            # Frontend passed data takes priority — use it directly
+            report_data = passed_data
+            logger.info("Using passed data from frontend (useRealData=True but data provided)")
         elif use_real_data:
             logger.info("Fetching real data from database...")
             report_data = database_fetcher.fetch_report_data(report_type, filters)

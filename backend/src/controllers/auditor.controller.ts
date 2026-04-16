@@ -154,7 +154,10 @@ export const resolveException = async (req: Request, res: Response, next: NextFu
  */
 export const verifyAnomaly = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { id, type, notes } = req.body;
+    // Support both route params (/anomalies/:id/clear) and body params (/verify/clear with body)
+    const id = req.params.id || req.body.id;
+    const type = req.body.type || req.query.type;
+    const notes = req.body.notes;
     const auditorId = req.user?.id;
     const timestamp = new Date().toISOString();
 
@@ -2156,7 +2159,9 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
  */
 export const getAnomalyDetail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { id, type } = req.query;
+    // Support both route params (/anomalies/:id) and query params (/verify/details?id=...&type=...)
+    const id = req.params.id || req.query.id;
+    const type = req.query.type;
 
     if (!id || !type) {
       throw new Error('Missing id or type parameter');

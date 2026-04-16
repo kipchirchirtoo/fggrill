@@ -53,6 +53,10 @@ export const userAPI = {
   
   getProfile: () => fetchAPI<User>('/users/profile'),
   updateProfile: (data: any) => fetchAPI<User>('/users/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  updatePassword: (currentPassword: string, newPassword: string) => fetchAPI<void>('/users/password', { 
+    method: 'PUT', 
+    body: JSON.stringify({ currentPassword, newPassword }) 
+  }),
   uploadProfilePhoto: (formData: FormData) => fetchAPI<{ photo_url: string }>('/users/profile/photo', {
     method: 'POST',
     body: formData,

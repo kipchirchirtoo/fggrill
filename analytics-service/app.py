@@ -18,8 +18,10 @@ from services.demand_forecast import DemandForecast
 from services.menu_optimization import MenuOptimization
 from services.inventory_optimizer import InventoryOptimizer
 from services.customer_segmentation import CustomerSegmentation
+from services.branch_sales_analytics import BranchSalesAnalytics
 from reports.pdf_generator import PDFReportGenerator
 from reports.excel_exporter import ExcelExporter
+from reports.csv_exporter import CSVExporter
 
 app = FastAPI(
     title="Restaurant Analytics Service",
@@ -49,8 +51,10 @@ demand_forecast = DemandForecast()
 menu_optimization = MenuOptimization()
 inventory_optimizer = InventoryOptimizer()
 customer_segmentation = CustomerSegmentation()
+branch_sales_analytics = BranchSalesAnalytics()
 pdf_generator = PDFReportGenerator()
 excel_exporter = ExcelExporter()
+csv_exporter = CSVExporter()
 
 # ============ REQUEST MODELS ============
 
@@ -322,6 +326,118 @@ async def generate_security_report(request: SecurityReportRequest):
             file_path,
             media_type='application/pdf',
             filename=f"FG_Security_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============ BRANCH SALES ANALYTICS ============
+
+class BranchSalesAnalyticsRequest(BaseModel):
+    branch_id: int
+    start_date: date
+    end_date: date
+    filters: Optional[dict] = None
+
+@app.post("/api/analytics/branch-sales")
+async def get_branch_sales_analytics(request: BranchSalesAnalyticsRequest):
+    """Get comprehensive branch sales analytics"""
+    try:
+        # Aggregate sales data
+        sales_data = branch_sales_analytics.aggregate_sales_data(
+            branch_id=request.branch_id,
+            start_date=request.start_date.isoformat(),
+            end_date=request.end_date.isoformat(),
+            filters=request.filters
+        )
+
+        # Get branch name
+        branch_name = branch_sales_analytics.get_branch_name(request.branch_id)
+
+        # Build response
+        response = {
+            "data": sales_data,
+            "metadata": {
+                "branch_id": request.branch_id,
+                "branch_name": branch_name,
+                "date_range": {
+                    "start": request.start_date.isoformat(),
+                    "end": request.end_date.isoformat()
+                },
+                "generated_at": datetime.now().isoformat(),
+                "filters_applied": request.filters or {}
+            }
+        }
+
+        return JSONResponse(content=response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/reports/branch-sales-pdf")
+async def generate_branch_sales_pdf(request: BranchSalesAnalyticsRequest):
+    """Generate PDF report for branch sales"""
+    try:
+        # Aggregate sales data
+        sales_data = branch_sales_analytics.aggregate_sales_data(
+            branch_id=request.branch_id,
+            start_date=request.start_date.isoformat(),
+            end_date=request.end_date.isoformat(),
+            filters=request.filters
+        )
+
+        # Get branch name
+        branch_name = branch_sales_analytics.get_branch_name(request.branch_id)
+
+        # Generate PDF
+        file_path = await pdf_generator.generate_branch_sales_report(
+            sales_data=sales_data,
+            branch_name=branch_name,
+            date_range={
+                "start": request.start_date.isoformat(),
+                "end": request.end_date.isoformat()
+            }
+        )
+
+        filename = f"branch-sales-{request.branch_id}-{request.start_date}-{request.end_date}.pdf"
+
+        return FileResponse(
+            file_path,
+            media_type='application/pdf',
+            filename=filename
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/reports/branch-sales-csv")
+async def generate_branch_sales_csv(request: BranchSalesAnalyticsRequest):
+    """Generate CSV export for branch sales"""
+    try:
+        # Aggregate sales data
+        sales_data = branch_sales_analytics.aggregate_sales_data(
+            branch_id=request.branch_id,
+            start_date=request.start_date.isoformat(),
+            end_date=request.end_date.isoformat(),
+            filters=request.filters
+        )
+
+        # Get branch name
+        branch_name = branch_sales_analytics.get_branch_name(request.branch_id)
+
+        # Generate CSV
+        file_path = csv_exporter.export_branch_sales(
+            sales_data=sales_data,
+            branch_name=branch_name,
+            date_range={
+                "start": request.start_date.isoformat(),
+                "end": request.end_date.isoformat()
+            }
+        )
+
+        filename = f"branch-sales-{request.branch_id}-{request.start_date}-{request.end_date}.csv"
+
+        return FileResponse(
+            file_path,
+            media_type='text/csv',
+            filename=filename
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

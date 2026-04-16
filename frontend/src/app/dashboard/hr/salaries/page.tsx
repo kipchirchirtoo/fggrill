@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth, UserRole } from '@/lib/auth-context';
+import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { staffAPI, systemAPI, storeAPI } from '@/lib/api';
+import { staffAPI } from '@/lib/api';
 import {
     DollarSign,
     RefreshCw,
@@ -40,7 +40,6 @@ interface SalaryRecord {
 }
 
 export default function HRSalariesPage() {
-    const { user } = useAuth();
     const [staff, setStaff] = useState<SalaryRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -52,132 +51,37 @@ export default function HRSalariesPage() {
     const fetchStaffSalaries = useCallback(async () => {
         setIsLoading(true);
         try {
+            const staffRes = await staffAPI.getStaff({ limit: 1000 });
+            const rawStaff: any[] = staffRes.success ? (staffRes.data || []) : [];
 
-            // Role guard: only permitted roles may call getSystemUsers (backend requires SUPER_ADMIN, GM, HR_MANAGER, AUDITOR)
-            const canFetchUsers = user && [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR].includes(user.role as UserRole);
-
-            const [staffRes, driversRes, usersRes] = await Promise.all([
-                staffAPI.getStaff({ limit: 1000 }),
-                storeAPI.getDrivers(),
-                canFetchUsers ? systemAPI.getSystemUsers() : Promise.resolve({ success: true, data: [] }),
-            ]);
-
-            const isGuest = (u: any) => {
-                const role = (u.role || '').toLowerCase();
-                const firstName = (u.first_name || '').toLowerCase();
-                const lastName = (u.last_name || '').toLowerCase();
-                const fullName = (u.name || '').toLowerCase();
-                return role === 'guest' ||
-                    firstName.includes('guest') ||
-                    lastName.includes('guest') ||
-                    fullName.includes('guest');
+            const isGuest = (s: any) => {
+                const role = (s.role || '').toLowerCase();
+                const firstName = (s.first_name || '').toLowerCase();
+                const lastName = (s.last_name || '').toLowerCase();
+                return role === 'guest' || firstName.includes('guest') || lastName.includes('guest');
             };
 
-            const rawDrivers: any[] = (driversRes?.data || []).filter((d: any) => !isGuest(d));
-            const rawUsers: any[] = (usersRes?.data || []).filter((u: any) => !isGuest(u));
-            const rawRegular: any[] = (staffRes.success ? (staffRes.data || []) : []).filter((s: any) => !isGuest(s));
+            const records: SalaryRecord[] = rawStaff
+                .filter((s: any) => !isGuest(s))
+                .map((s: any) => ({
+                    id: s.id,
+                    first_name: s.first_name || '',
+                    last_name: s.last_name || '',
+                    role: s.role || 'Staff',
+                    department: s.department || 'general',
+                    basic_salary: s.basic_salary || 0,
+                    bank_name: s.bank_name || '',
+                    account_number: s.account_number || '',
+                }));
 
-
-            // Role-to-dept map (must match backend valid_department constraint)
-            const roleToDept: Record<string, string> = {
-                waiter: 'restaurant', waitress: 'restaurant', head_waiter: 'restaurant',
-                restaurant: 'restaurant', kitchen: 'restaurant', pos_kitchen: 'restaurant',
-                kitchen_operations: 'restaurant', kitchen_helper: 'restaurant',
-                head_chef: 'restaurant', sous_chef: 'restaurant', chef: 'restaurant',
-                cook: 'restaurant', line_cook: 'restaurant', prep_cook: 'restaurant',
-                food_runner: 'restaurant', busser: 'restaurant', host_hostess: 'restaurant', dishwasher: 'restaurant',
-                bartender: 'bar_lounge', barista: 'bar_lounge', barman: 'bar_lounge',
-                barmaid: 'bar_lounge', bar_manager: 'bar_lounge',
-                receptionist: 'reception', concierge: 'reception', bell_captain: 'reception', bellhop: 'reception',
-                housekeeping: 'housekeeping', room_attendant: 'housekeeping', laundry_attendant: 'housekeeping',
-                maintenance: 'maintenance', electrician: 'maintenance', plumber: 'maintenance',
-                hvac_technician: 'maintenance', groundskeeper: 'maintenance',
-                security: 'security', security_guard: 'security',
-                cashier: 'administration', kyogong_spa_cashier: 'administration',
-                kyogong_executive_bar_cashier: 'administration', kyogong_sports_bar_cashier: 'administration',
-                kyogong_reception_cashier: 'administration', procurement: 'administration',
-                central_storekeeper: 'administration', branch_storekeeper: 'administration',
-                storekeeper: 'administration', employee: 'administration',
-                accountant: 'finance', auditor: 'finance', branch_accountant: 'finance',
-                night_auditor: 'finance', payroll_clerk: 'finance', finance_manager: 'finance',
-                super_admin: 'management', admin: 'management', manager: 'management',
-                general_manager: 'management', branch_manager: 'management', hr_manager: 'management',
-                branch_operations_manager: 'management', central_operations_manager: 'management',
-                facilities_manager: 'management', restaurant_manager: 'management',
-                maintenance_supervisor: 'management', housekeeping_supervisor: 'management',
-                front_desk_supervisor: 'management', security_supervisor: 'management',
-            };
-
-            const mergedMap = new Map<string, SalaryRecord>();
-
-            // 1. Process Raw Users First
-            rawUsers.forEach((u: any) => {
-                if (u.role === 'guest') return;
-                mergedMap.set(u.id, {
-                    id: u.id,
-                    first_name: u.first_name || '',
-                    last_name: u.last_name || '',
-                    role: u.role || 'user',
-                    department: roleToDept[u.role] || 'general',
-                    basic_salary: u.basic_salary || 0,
-                    bank_name: u.bank_name || '',
-                    account_number: u.account_number || '',
-                });
-            });
-
-            // 2. Process Drivers
-            rawDrivers.forEach((d: any) => {
-                const nameParts = (d.name || '').trim().split(' ');
-                const fName = nameParts[0] || d.name || '';
-                const lName = nameParts.slice(1).join(' ') || '';
-
-                mergedMap.set(d.id, {
-                    id: d.id,
-                    first_name: fName,
-                    last_name: lName,
-                    role: 'driver',
-                    department: 'general',
-                    basic_salary: d.basic_salary || parseInt(d.salary) || parseInt(d.salary_amount) || 0,
-                    bank_name: d.bank_name || '',
-                    account_number: d.account_number || '',
-                });
-            });
-
-            // 3. Process Staff Profiles (Overlay actual salary data)
-            rawRegular.forEach((s: any) => {
-                const mapKey = s.user_id || s.id;
-
-                if (mergedMap.has(mapKey)) {
-                    // Update existing user/driver with actual staff_profile data
-                    const existing = mergedMap.get(mapKey)!;
-                    existing.basic_salary = s.basic_salary !== undefined ? s.basic_salary : existing.basic_salary;
-                    existing.bank_name = s.bank_name || existing.bank_name;
-                    existing.account_number = s.account_number || existing.account_number;
-                    // If the component needs the staff_profile ID for updates, use it, but keep the role
-                    existing.id = s.id;
-                } else {
-                    // Add if not present at all
-                    mergedMap.set(mapKey, {
-                        id: s.id,
-                        first_name: s.first_name || '',
-                        last_name: s.last_name || '',
-                        role: s.role || 'Staff',
-                        department: s.department || 'general',
-                        basic_salary: s.basic_salary || 0,
-                        bank_name: s.bank_name || '',
-                        account_number: s.account_number || '',
-                    });
-                }
-            });
-
-            setStaff(Array.from(mergedMap.values()));
+            setStaff(records);
         } catch (error) {
             console.error('Error fetching salaries:', error);
             toast.error('Failed to load salary data');
         } finally {
             setIsLoading(false);
         }
-    }, [user]);
+    }, []);
 
     useEffect(() => {
         fetchStaffSalaries();
@@ -205,12 +109,7 @@ export default function HRSalariesPage() {
         if (!selectedStaff || !newSalary) return;
         setIsSubmitting(true);
         try {
-            // Drivers don't have staff_profiles right now, we update them via storeAPI directly
-            if (selectedStaff.role === 'driver') {
-                await storeAPI.updateDriver(selectedStaff.id, { basic_salary: Number(newSalary) });
-            } else {
-                await staffAPI.updateStaffMember(selectedStaff.id, { basic_salary: Number(newSalary) });
-            }
+            await staffAPI.updateStaffMember(selectedStaff.id, { basic_salary: Number(newSalary) });
             toast.success(`Salary updated for ${selectedStaff.first_name}`);
             setEditModalOpen(false);
             fetchStaffSalaries();

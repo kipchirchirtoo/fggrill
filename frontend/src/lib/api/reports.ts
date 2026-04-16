@@ -40,12 +40,56 @@ const reportsBase = {
   },
   
   exportPdf: async (reportType: string, filters: any = {}) => {
+    // Extract useRealData and data from filters if provided
+    const { useRealData = true, data: passedData, ...otherFilters } = filters;
+    
+    const payload: any = { 
+      reportType, 
+      filters: otherFilters, 
+      useRealData 
+    };
+    
+    // Include passed data if useRealData is false
+    if (!useRealData && passedData) {
+      payload.data = passedData;
+    }
+    
     const result = await fetchAPI<Blob>('/reports/generate/branded-pdf', {
       method: 'POST',
-      body: JSON.stringify({ reportType, filters, useRealData: true }),
+      body: JSON.stringify(payload),
       responseType: 'blob'
     }, REPORTS_SERVICE_URL);
-    return result.data;
+    
+    if (result.success && result.data && typeof window !== 'undefined') {
+      const blob = result.data;
+      
+      // Check if blob has content
+      if (blob.size === 0) {
+        console.error('Received empty blob from server');
+        throw new Error('Received empty PDF file from server');
+      }
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Append to body, click, and cleanup
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      return true;
+    }
+    
+    throw new Error('Failed to generate PDF report');
   },
 };
 
@@ -103,8 +147,8 @@ export const auditAPI = {
   // Aliases and Extensions for Legacy Compliance
   getAuditTrail: (params?: any) => auditAPI.getAuditLogs(params),
   verifyFinances: (params?: any) => fetchAPI<any>(`/auditor/verify/finances${buildQuery(params)}`),
-  getAnomalyDetail: (id: string) => fetchAPI<any>(`/auditor/anomalies/${id}`),
-  clearAnomaly: (id: string, notes: string) => fetchAPI<void>(`/auditor/anomalies/${id}/clear`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  getAnomalyDetail: (id: string, type?: string) => fetchAPI<any>(`/auditor/anomalies/${id}${type ? `?type=${type}` : ''}`),
+  clearAnomaly: (id: string, notes: string, type?: string) => fetchAPI<void>(`/auditor/anomalies/${id}/clear${type ? `?type=${type}` : ''}`, { method: 'POST', body: JSON.stringify({ notes, type }) }),
   verifyRevenue: (params?: any) => fetchAPI<any>(`/auditor/verify/revenue${buildQuery(params)}`),
   verifyBranchOrders: (params?: any) => fetchAPI<any>(`/auditor/verify/branch-orders${buildQuery(params)}`),
   verifySoldItems: (params?: any) => fetchAPI<any>(`/auditor/verify/sold-items${buildQuery(params)}`),

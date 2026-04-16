@@ -283,6 +283,7 @@ class BrandedPDFGenerator:
             'branch_performance': self._generate_branch_performance_report,
             'sales_performance': self._generate_sales_performance_report,
             'staff_overview': self._generate_staff_overview_report,
+            'staff_performance': self._generate_staff_performance_report,
             'compliance': self._generate_compliance_report,
             'branch_comparison': self._generate_branch_comparison_report,
             'kpi_dashboard': self._generate_kpi_dashboard_report,
@@ -1560,6 +1561,77 @@ class BrandedPDFGenerator:
             ('FONTSIZE', (0, 0), (-1, -1), 8),
         ]))
         elements.append(record_table)
+        
+        return self._create_pdf(elements)
+
+    def _generate_staff_performance_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Staff Performance Report"""
+        elements = []
+        
+        period = data.get('period', {})
+        period_str = f"{period.get('month', 'N/A')} {period.get('year', '')}"
+        branch = data.get('branch', 'All Branches')
+        
+        elements.extend(self._create_header("STAFF PERFORMANCE REPORT", period_str, branch))
+        
+        # Summary Section
+        summary = data.get('summary', {})
+        summary_data = [
+            ['PERFORMANCE SUMMARY', '', '', ''],
+            ['Total Staff:', str(summary.get('total_staff', 0)),
+             'Total Sales:', f"KES {self._format_currency(summary.get('total_sales', 0))}"],
+            ['Total Tips:', f"KES {self._format_currency(summary.get('total_tips', 0))}",
+             'Avg Attendance:', f"{summary.get('avg_attendance', 0):.1f} days"],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+        summary_table.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Performance Rankings
+        elements.append(Paragraph("<b>STAFF PERFORMANCE RANKINGS</b>", self.styles['SectionHeader']))
+        
+        headers = ['Rank', 'Name', 'Role', 'Sales (KES)', 'Tips (KES)', 'Attendance', 'Rating']
+        perf_data = [headers]
+        
+        for staff in data.get('staff_performance', []):
+            perf_data.append([
+                str(staff.get('rank', '')),
+                staff.get('name', ''),
+                staff.get('role', ''),
+                self._format_currency(staff.get('total_sales', 0)),
+                self._format_currency(staff.get('total_tips', 0)),
+                f"{staff.get('present_days', 0)} days",
+                f"{staff.get('avg_rating', 0):.1f}/5.0"
+            ])
+            
+        if len(perf_data) == 1:
+            perf_data.append(['--', 'No performance data available', '--', '--', '--', '--', '--'])
+            
+        perf_table = Table(perf_data, colWidths=[0.6*inch, 1.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1*inch, 0.8*inch])
+        perf_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GREEN),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [FG_WHITE, ROW_ALT]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(perf_table)
         
         return self._create_pdf(elements)
 

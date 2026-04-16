@@ -1259,6 +1259,13 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
+      <NavItem
+        href="/dashboard/branch-manager/analytics"
+        icon={BarChart3}
+        label="Branch Sales"
+        active={pathname === '/dashboard/branch-manager/analytics'}
+      />
+
       {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
         <NavItem
           href="/dashboard/branch-manager/wastage"

@@ -24,7 +24,7 @@ const attendanceBase = {
   clockOut: () => fetchAPI<AttendanceRecord>('/staff/attendance/clock-out', { method: 'POST' }),
   getSummary: (staffId?: string | number) => fetchAPI<any>(`/staff/attendance/summary${buildQuery({ staff_id: staffId })}`),
   updateAttendance: (id: string | number, data: any) => fetchAPI<AttendanceRecord>(`/staff/attendance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  approveAttendance: (id: string | number) => fetchAPI<void>(`/staff/attendance/${id}/approve`, { method: 'PUT' }),
+  approveAttendance: (id: string | number, data?: { approved?: boolean; rejection_reason?: string }) => fetchAPI<void>(`/staff/attendance/${id}/approve`, { method: 'PUT', body: JSON.stringify(data ?? { approved: true }) }),
   confirmAttendance: () => fetchAPI<void>('/staff/attendance/confirm', { method: 'POST' }),
   getReports: (params?: any) => fetchAPI<any[]>(`/staff/attendance/reports${buildQuery(params)}`),
 };

@@ -14,7 +14,7 @@ interface SearchResult {
     id: string;
     title: string;
     subtitle: string;
-    metadata: Record<string, any>;
+    metadata?: Record<string, any>;
 }
 
 export default function UniversalSearchPage() {
@@ -321,7 +321,7 @@ export default function UniversalSearchPage() {
 
                                         {/* Metadata Grid */}
                                         <div className="grid grid-cols-2 gap-4">
-                                            {Object.entries(selectedResult.metadata).map(([key, value]) => (
+                                            {selectedResult.metadata && Object.entries(selectedResult.metadata).map(([key, value]) => (
                                                 <div key={key} className="p-4 bg-stone-50 rounded-2xl border border-stone-100/50 group hover:border-stone-900/10 transition-colors">
                                                     <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1.5 opacity-60">
                                                         {key.replace(/_/g, ' ')}
@@ -329,6 +329,11 @@ export default function UniversalSearchPage() {
                                                     <p className="text-[15px] font-bold text-stone-900">{String(value)}</p>
                                                 </div>
                                             ))}
+                                            {!selectedResult.metadata && (
+                                                <div className="col-span-2 p-6 text-center text-stone-400 text-sm">
+                                                    No metadata available for this result
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Audit Trail Section */}

@@ -115,6 +115,51 @@
     /* Shadows - warm tinted */
     --shadow-color: 30 20% 20%;
     .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #03bb91 #34383c; } .custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #34383c; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #03bb91; border-radius: 20px; border: 2px solid #34383c; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #02a17d; } }
+
+  /* Dark mode color scheme */
+  .dark {
+    /* Core palette - dark with warm undertones */
+    --background: 220 15% 10%;
+    --foreground: 40 20% 95%;
+    --card: 220 15% 12%;
+    --card-foreground: 40 20% 95%;
+    --popover: 220 15% 12%;
+    --popover-foreground: 40 20% 95%;
+
+    /* Primary - lighter for dark mode */
+    --primary: 40 20% 85%;
+    --primary-foreground: 220 15% 10%;
+
+    /* Secondary - dark warm gray */
+    --secondary: 220 12% 18%;
+    --secondary-foreground: 40 20% 90%;
+
+    /* Muted - dark muted gray */
+    --muted: 220 12% 20%;
+    --muted-foreground: 40 10% 60%;
+
+    /* Accent - warm amber gold (slightly adjusted for dark) */
+    --accent: 38 90% 55%;
+    --accent-foreground: 220 15% 10%;
+
+    /* Status colors - adjusted for dark mode */
+    --success: 152 55% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 88% 55%;
+    --warning-foreground: 220 15% 10%;
+    --destructive: 0 68% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --info: 210 75% 55%;
+    --info-foreground: 0 0% 100%;
+
+    /* UI elements */
+    --border: 220 12% 25%;
+    --input: 220 12% 18%;
+    --ring: 38 90% 55%;
+
+    /* Shadows - cooler for dark mode */
+    --shadow-color: 220 20% 5%;
+  }
   .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #03bb91 #34383c; } .custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #34383c; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #03bb91; border-radius: 20px; border: 2px solid #34383c; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #02a17d; } }
 
 @layer base {
@@ -134,6 +179,10 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     letter-spacing: -0.015em;
     .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #03bb91 #34383c; } .custom-scrollbar::-webkit-scrollbar { width: 6px; } .custom-scrollbar::-webkit-scrollbar-track { background: #34383c; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #03bb91; border-radius: 20px; border: 2px solid #34383c; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #02a17d; } }
+
+  .dark body {
+    @apply bg-gray-900 text-gray-100;
+  }
 
   /* Typography scale - intentional hierarchy with fluid scaling */
   h1,

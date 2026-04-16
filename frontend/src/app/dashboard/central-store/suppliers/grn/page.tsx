@@ -50,7 +50,16 @@ export default function GRNPage() {
         setIsLoading(true);
         try {
             const response = await procurementAPI.getGRNs();
-            if (response.success) setGrns(response.data || []);
+            if (response.success) {
+                // Transform the data to flatten supplier and PO info
+                const transformedData = (response.data || []).map((grn: any) => ({
+                    ...grn,
+                    supplier_name: grn.supplier?.name || 'N/A',
+                    po_number: grn.purchase_order?.po_number || grn.po_number || null,
+                    delivery_date: grn.grn_date || grn.delivery_date
+                }));
+                setGrns(transformedData);
+            }
         } catch (error) { console.error('Error fetching GRNs:', error); }
         finally { setIsLoading(false); }
     }, []);
@@ -144,7 +153,9 @@ export default function GRNPage() {
                                             <td className="px-4 py-3 font-mono text-xs font-bold text-stone-700">{grn.grn_number}</td>
                                             <td className="px-4 py-3 font-mono text-[10px] text-stone-400">{grn.po_number || 'Direct Receipt'}</td>
                                             <td className="px-4 py-3">{grn.supplier_name || 'N/A'}</td>
-                                            <td className="px-4 py-3 text-stone-500">{new Date(grn.delivery_date).toLocaleDateString()}</td>
+                                            <td className="px-4 py-3 text-stone-500">
+                                                {grn.delivery_date ? new Date(grn.delivery_date).toLocaleDateString() : 'Invalid Date'}
+                                            </td>
                                             <td className="px-4 py-3">
                                                 <IOSBadge variant="light" color={getStatusColor(grn.status)} className="capitalize text-[10px] py-0 px-2 min-w-[80px] text-center border-none">
                                                     {grn.status.replace('_', ' ')}
@@ -195,7 +206,12 @@ export default function GRNPage() {
                                 <div className="grid grid-cols-3 gap-4 text-xs bg-stone-50 p-3 rounded-ios-lg">
                                     <div>
                                         <p className="text-stone-400 pb-1">Delivery Logistics</p>
-                                        <div className="flex items-center gap-2"><Truck size={14} className="text-stone-500" /> <span className="font-medium">{new Date(viewGRN.delivery_date).toLocaleDateString()}</span></div>
+                                        <div className="flex items-center gap-2">
+                                            <Truck size={14} className="text-stone-500" /> 
+                                            <span className="font-medium">
+                                                {viewGRN.delivery_date ? new Date(viewGRN.delivery_date).toLocaleDateString() : 'Invalid Date'}
+                                            </span>
+                                        </div>
                                     </div>
                                     <div>
                                         <p className="text-stone-400 pb-1">PO Reference</p>

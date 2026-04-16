@@ -36,7 +36,7 @@ type SyncContext = {
   year: number;
 };
 
-const PAYROLL_ACTIVE_ADJUSTMENT_STATUSES = new Set(['approved', 'applied']);
+const PAYROLL_ACTIVE_ADJUSTMENT_STATUSES = new Set(['pending', 'approved', 'applied']);
 
 const normalizeStatus = (value?: string | null) => (value || '').toLowerCase();
 

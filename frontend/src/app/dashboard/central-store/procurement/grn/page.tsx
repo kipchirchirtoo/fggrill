@@ -153,7 +153,7 @@ export default function GRNPage() {
                                         </div>
                                         <div className="flex justify-between text-stone-500">
                                             <span className="flex items-center gap-1"><Calendar size={12} /> Date:</span>
-                                            <span>{new Date(grn.grn_date).toLocaleDateString()}</span>
+                                            <span>{grn.grn_date ? new Date(grn.grn_date).toLocaleDateString() : 'Invalid Date'}</span>
                                         </div>
                                         <div className="flex justify-between font-bold text-stone-900 border-t border-stone-50 pt-2">
                                             <span>Total Value:</span>
@@ -187,7 +187,12 @@ export default function GRNPage() {
                                 <div className="grid grid-cols-3 gap-4 text-[10px] bg-[#F2F2F7] p-4 rounded-ios-xl">
                                     <div className="space-y-1">
                                         <p className="text-stone-400 font-bold uppercase tracking-widest">Delivery Details</p>
-                                        <div className="flex items-center gap-2"><Truck size={14} className="text-amber-500" /> <span className="font-bold text-stone-800">{new Date(viewGRN.grn_date).toLocaleDateString()}</span></div>
+                                        <div className="flex items-center gap-2">
+                                            <Truck size={14} className="text-amber-500" /> 
+                                            <span className="font-bold text-stone-800">
+                                                {viewGRN.grn_date ? new Date(viewGRN.grn_date).toLocaleDateString() : 'Invalid Date'}
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="space-y-1 border-l border-stone-200 pl-4">
                                         <p className="text-stone-400 font-bold uppercase tracking-widest">PO Reference</p>

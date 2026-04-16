@@ -15,6 +15,7 @@ import { Trophy, TrendingUp, Users, Calendar, Award, Plus, Filter, Search, Dolla
 import { reportsAPI } from '@/lib/api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { useRouter } from 'next/navigation';
 
 interface StaffPerformance {
     staff_id: string;
@@ -32,6 +33,7 @@ interface StaffPerformance {
 
 export default function PerformanceReviewPage() {
     const { user } = useAuth();
+    const router = useRouter();
     const [performance, setPerformance] = useState<StaffPerformance[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -40,31 +42,71 @@ export default function PerformanceReviewPage() {
     const [selectedBranch, setSelectedBranch] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Increase/Allowance Modal
-    const [showAdjModal, setShowAdjModal] = useState(false);
-    const [selectedStaff, setSelectedStaff] = useState<StaffPerformance | null>(null);
-    const [adjData, setAdjData] = useState({
-        type: 'addition',
-        category: 'allowance',
-        amount: '',
-        description: ''
-    });
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
     const handleExportPDF = async () => {
         try {
-            await reportsAPI.exportReport({
-                reportType: 'hr_performance',
-                format: 'pdf',
-                filters: {
-                    month,
-                    year,
-                    branch_id: selectedBranch === 'all' ? undefined : Number(selectedBranch)
+            if (filteredPerformance.length === 0) {
+                toast.error('No data to export');
+                return;
+            }
+
+            // Prepare the data to send directly to PDF generator
+            const reportData = {
+                period: {
+                    month: new Date(year, month - 1).toLocaleString('default', { month: 'long' }),
+                    year: year
+                },
+                branch: selectedBranch === 'all' ? 'All Branches' : branches.find(b => b.id === Number(selectedBranch))?.name || 'Unknown',
+                staff_performance: filteredPerformance.map((staff, index) => ({
+                    rank: index + 1,
+                    name: staff.name,
+                    role: staff.role,
+                    department: staff.department,
+                    total_sales: staff.metrics.totalSales,
+                    total_tips: staff.metrics.totalTips,
+                    present_days: staff.metrics.presentDays,
+                    avg_rating: staff.metrics.avgRating
+                })),
+                summary: {
+                    total_staff: filteredPerformance.length,
+                    total_sales: filteredPerformance.reduce((sum, s) => sum + s.metrics.totalSales, 0),
+                    total_tips: filteredPerformance.reduce((sum, s) => sum + s.metrics.totalTips, 0),
+                    avg_attendance: filteredPerformance.reduce((sum, s) => sum + s.metrics.presentDays, 0) / filteredPerformance.length
                 }
+            };
+            
+            // Send with data at the top level and useRealData: false
+            const blob = await reportsAPI.exportPdf('staff_performance', {
+                month,
+                year,
+                branch_id: selectedBranch === 'all' ? undefined : Number(selectedBranch),
+                useRealData: false,
+                data: reportData
             });
-            toast.success('PDF downloaded');
+            
+            if (blob && blob instanceof Blob && blob.size > 0) {
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `staff_performance_${year}_${String(month).padStart(2, '0')}.pdf`;
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+                
+                toast.success('PDF downloaded successfully');
+            } else {
+                throw new Error('Received empty or invalid PDF file');
+            }
         } catch (error: any) {
-            toast.error('Failed to export PDF');
+            console.error('PDF export error:', error);
+            toast.error(error.message || 'Failed to export PDF');
         }
     };
 
@@ -104,43 +146,16 @@ export default function PerformanceReviewPage() {
     };
 
     const handleOpenAdj = (staff: StaffPerformance) => {
-        setSelectedStaff(staff);
-        setAdjData({
+        // Redirect to adjustments page with pre-filled data
+        const params = new URLSearchParams({
+            staff_id: staff.staff_id,
+            staff_name: staff.name,
+            tab: 'increase',
             type: 'addition',
             category: 'allowance',
-            amount: '',
-            description: `Performance bonus for ${new Date(year, month - 1).toLocaleString('default', { month: 'long' })}`
+            reason: 'Good performance'
         });
-        setShowAdjModal(true);
-    };
-
-    const handleSaveAdj = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedStaff || !adjData.amount) return;
-
-        setIsSubmitting(true);
-        try {
-            const response = await branchOperationsAPI.createPayrollAdjustment({
-                staff_id: selectedStaff.staff_id,
-                type: adjData.type,
-                category: adjData.category,
-                amount: Number(adjData.amount),
-                description: adjData.description,
-                month: String(month),
-                year: Number(year)
-            });
-
-            if (response.success) {
-                toast.success(`${adjData.category === 'allowance' ? 'Allowance' : 'Increase'} granted successfully!`);
-                setShowAdjModal(false);
-            } else {
-                throw new Error(response.message || 'Failed to apply adjustment');
-            }
-        } catch (error: any) {
-            toast.error(error.message);
-        } finally {
-            setIsSubmitting(false);
-        }
+        router.push(`/dashboard/hr/adjustments?${params.toString()}`);
     };
 
     const filteredPerformance = performance.filter(p =>
@@ -365,100 +380,6 @@ export default function PerformanceReviewPage() {
                     </IOSCard>
                 </div>
             </DashboardLayout>
-
-            {/* Increase/Allowance Modal */}
-            <Dialog open={showAdjModal} onOpenChange={setShowAdjModal}>
-                <DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-xl border-white/20 shadow-2xl rounded-3xl p-0 overflow-hidden">
-                    <div className="px-6 pt-6 pb-4 bg-gradient-to-b from-stone-50 to-white border-b border-stone-100">
-                        <DialogHeader>
-                            <DialogTitle className="text-xl font-bold tracking-tight text-stone-800">Reward Performer</DialogTitle>
-                            <DialogDescription className="text-stone-500 mt-1">
-                                Grant an allowance or salary increase for <strong className="text-stone-800">{selectedStaff?.name}</strong>.
-                            </DialogDescription>
-                        </DialogHeader>
-                    </div>
-
-                    <form onSubmit={handleSaveAdj} className="px-6 py-5 space-y-5">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Reward Type</Label>
-                                <div className="relative">
-                                    <select
-                                        className="w-full h-11 pl-4 pr-8 rounded-xl border-0 ring-1 ring-inset ring-stone-200 bg-stone-50 focus:ring-2 focus:ring-inset focus:ring-blue-500 text-sm font-medium text-stone-700 transition-shadow appearance-none cursor-pointer"
-                                        value={adjData.category}
-                                        onChange={(e) => setAdjData({ ...adjData, category: e.target.value })}
-                                    >
-                                        <option value="allowance">Allowance</option>
-                                        <option value="increase">Salary Increase</option>
-                                    </select>
-                                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-stone-400">
-                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Amount</Label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <span className="text-stone-400 sm:text-xs font-bold">KES</span>
-                                    </div>
-                                    <input
-                                        type="number"
-                                        placeholder="0.00"
-                                        step="any"
-                                        className="w-full h-11 pl-12 pr-4 rounded-xl border-0 ring-1 ring-inset ring-stone-200 bg-stone-50 focus:ring-2 focus:ring-inset focus:ring-blue-500 text-sm font-bold text-stone-800 transition-shadow"
-                                        value={adjData.amount}
-                                        onChange={(e) => setAdjData({ ...adjData, amount: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold text-stone-500 uppercase tracking-wider">Description</Label>
-                            <textarea
-                                className="w-full p-4 rounded-xl border-0 ring-1 ring-inset ring-stone-200 bg-stone-50 focus:ring-2 focus:ring-inset focus:ring-blue-500 text-sm min-h-[90px] transition-shadow resize-none text-stone-700"
-                                placeholder="Why is this staff being rewarded?"
-                                value={adjData.description}
-                                onChange={(e) => setAdjData({ ...adjData, description: e.target.value })}
-                            />
-                        </div>
-
-                        <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-100 flex items-start shadow-sm mt-2">
-                            <div className="bg-emerald-100 p-1.5 rounded-lg mr-3 mt-0.5">
-                                <DollarSign className="h-4 w-4 text-emerald-600" />
-                            </div>
-                            <div>
-                                <h4 className="text-xs font-bold text-emerald-800 mb-0.5">Payroll Integration</h4>
-                                <p className="text-[11px] text-emerald-600/90 leading-relaxed font-medium">
-                                    This {adjData.category} will be automatically added to the next payroll generated for this staff member.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3 pt-4 border-t border-stone-100 mt-2">
-                            <IOSButton
-                                variant="outline"
-                                className="flex-1 bg-white hover:bg-stone-50 border-stone-200 text-stone-600 font-bold"
-                                onClick={() => setShowAdjModal(false)}
-                                disabled={isSubmitting}
-                                type="button"
-                            >
-                                Cancel
-                            </IOSButton>
-                            <IOSButton
-                                type="submit"
-                                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-bold shadow-md shadow-blue-500/20"
-                                disabled={isSubmitting || !adjData.amount}
-                            >
-                                {isSubmitting ? 'Processing...' : `Grant ${adjData.category === 'increase' ? 'Increase' : 'Allowance'}`}
-                            </IOSButton>
-                        </div>
-                    </form>
-                </DialogContent>
-            </Dialog>
         </ProtectedRoute>
     );
 }

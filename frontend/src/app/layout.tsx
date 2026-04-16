@@ -2,6 +2,7 @@ import "./globals.css"
 import "./ios-theme.css"
 import { Providers } from "@/components/providers"
 import { AuthProvider } from '@/lib/auth-context'
+import { ThemeProvider } from '@/lib/theme-context'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -27,11 +28,13 @@ export default function RootLayout({
       <head>
       </head>
       <body className="light" suppressHydrationWarning>
-        <AuthProvider>
-          <Providers>
-            {children}
-          </Providers>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <Providers>
+              {children}
+            </Providers>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

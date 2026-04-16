@@ -458,7 +458,7 @@ export const updateUserProfile = async (
 };
 
 // @desc    Update user password
-// @route   PUT /api/users/password/:id
+// @route   PUT /api/users/password
 // @access  Private
 export const updateUserPassword = async (
   req: Request,
@@ -466,17 +466,93 @@ export const updateUserPassword = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { error } = await supabase.auth.admin.updateUserById(
-      req.params.id,
-      { password: req.body.password }
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide current and new password'
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters'
+      });
+      return;
+    }
+
+    // Verify current password
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('password_hash')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError || !user) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+      return;
+    }
+
+    // Check if current password matches
+    if (user.password_hash) {
+      const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!isMatch) {
+        res.status(401).json({
+          success: false,
+          message: 'Current password is incorrect'
+        });
+        return;
+      }
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    // Update password in database
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ 
+        password_hash: passwordHash,
+        password_changed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+
+    if (updateError) throw updateError;
+
+    // Update in Supabase Auth
+    const { error: authError } = await supabase.auth.admin.updateUserById(
+      userId,
+      { password: newPassword }
     );
 
-    if (error) throw error;
+    if (authError) {
+      logger.error('Supabase Auth password update error:', authError);
+      // Don't fail the request if auth update fails
+    }
 
     res.status(200).json({
       success: true,
       message: 'Password updated successfully'
     });
+
+    logger.info(`Password updated for user ${userId}`);
   } catch (error) {
     next(error);
   }

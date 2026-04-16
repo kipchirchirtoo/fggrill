@@ -1,234 +1,239 @@
-# ⚙️ BUGFIX_RULES.md — FamousGates AI Assistant Rules
-# Load this as a Cursor Project Rule / Windsurf Rule / Copilot Instruction file
-# These rules are NON-NEGOTIABLE and override all default AI behavior
-
+---
+inclusion: always
 ---
 
-## 🔴 RULE 0 — THE PRIME DIRECTIVE
+# FamousGates Development Rules
 
-**"Fix the root cause. Never the symptom. Never break what is already working."**
+**Stack:** Next.js 14 · Supabase · Node.js · Flask · Tauri v2 · React Native
 
-If fixing a bug in File A would break File B, you must fix both in the same operation,
-or you must explicitly state: *"I cannot fix this safely without also changing [File B]."*
+## Core Principles
 
----
+**Prime Directive:** Fix root causes, not symptoms. Never break working functionality.
 
-## 🔴 RULE 1 — READ BEFORE YOU WRITE
+**Read Before Write:** Before editing any file, read:
+1. The target file (complete content)
+2. All files that import from it
+3. Supabase table definitions for affected tables
+4. Corresponding TypeScript types/interfaces
 
-Before editing any file, you MUST read:
-1. The file you are about to change (full content)
-2. Every file that imports from that file
-3. The Supabase table definition for any table touched by that file
-4. The corresponding TypeScript type/interface for that table
+**One Bug Per Edit:** Fix exactly one bug or tightly-coupled cluster. No unrelated refactoring, renaming, or cleanup in the same edit.
 
-**You are forbidden from editing a file you have not fully read in this session.**
+**Ripple Effect Check:** Before committing changes, verify:
+- All import sites updated if function signature changed
+- All consumers updated if TypeScript type changed
+- All references updated if DB column renamed
+- All frontend consumers updated if API response shape changed
+- All forms provide newly required Zod schema fields
 
----
+## Database & Schema
 
-## 🔴 RULE 2 — ONE BUG PER EDIT
-
-Each code edit must fix exactly one bug or one tightly-coupled cluster of bugs.
-Do not refactor, rename, or "clean up" unrelated code in the same edit.
-
-> ❌ WRONG: Fix the invoice lookup AND rename variables AND reorganize imports  
-> ✅ RIGHT: Fix the invoice lookup only
-
----
-
-## 🔴 RULE 3 — SCHEMA IS THE SOURCE OF TRUTH
-
-The Supabase database schema is the **single source of truth**.
-TypeScript types, Zod schemas, API payloads, and form fields must all conform to it.
-
-When there is a mismatch, the fix order is always:
+**Schema is Source of Truth:** Fix order is always:
 ```
 DB Schema → TypeScript Types → Zod Schemas → API Handlers → Frontend Forms
 ```
 
-Never change the DB schema to match broken frontend code.
-Always change the frontend/backend code to match the correct DB schema.
+Never change DB schema to match broken frontend code. Always change code to match correct schema.
 
----
+**TypeScript Types:**
+- Never use `any`, `// @ts-ignore`, or `as unknown as T` as fixes
+- Every Supabase table has exactly one canonical TypeScript type
+- Types live in single shared file (e.g., `types/database.ts`)
+- All modules import from that file—no duplicate definitions
 
-## 🔴 RULE 4 — TYPESCRIPT TYPES ARE CONTRACTS
+## Supabase Patterns
 
-- Never use `any` as a fix. Find or create the correct type.
-- Never use `// @ts-ignore` as a fix. Fix the underlying type error.
-- Never use `as unknown as SomeType` to cast around a type error. Fix the shape.
-- Every Supabase table must have exactly one canonical TypeScript type.
-- That type must live in a single shared file (e.g., `types/database.ts`).
-- All modules must import from that file — no duplicate/diverging type definitions.
-
----
-
-## 🔴 RULE 5 — SUPABASE RULES (MANDATORY)
-
-### Auth
+**Authentication:**
 ```typescript
-// ❌ NEVER — security vulnerability, can be spoofed
+// ❌ NEVER — security vulnerability
 const { data: { session } } = await supabase.auth.getSession()
 
 // ✅ ALWAYS — server-validated
 const { data: { user } } = await supabase.auth.getUser()
 ```
 
-### SSR Cookie Handling
+**SSR Cookie Handling:**
 ```typescript
-// ❌ NEVER — deprecated, breaks session state
+// ❌ NEVER — deprecated
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
-cookies: { get, set, remove }  // individual cookie methods
+cookies: { get, set, remove }
 
 // ✅ ALWAYS — correct SSR pattern
 import { createServerClient } from '@supabase/ssr'
-cookies: { getAll, setAll }  // bulk cookie methods only
+cookies: { getAll, setAll }
 ```
 
-### Client Types
-```typescript
-// ❌ NEVER use service_role key on the client/browser side
-// ✅ ALWAYS use anon key on the client
-// ✅ ALWAYS use service_role key ONLY in server-side API routes
-```
+**Client Keys:**
+- Client/browser: anon key only
+- Server-side API routes: service_role key only
 
-### RLS & Branch Scoping
+**RLS & Branch Scoping:**
 ```typescript
-// ❌ NEVER — fetches data from ALL branches (data leak)
+// ❌ NEVER — data leak across branches
 supabase.from('orders').select('*')
 
-// ✅ ALWAYS — scoped to the current branch
+// ✅ ALWAYS — scoped to current branch
 supabase.from('orders').select('*').eq('branch_id', currentBranchId)
 ```
 
-### Schema Cache
+**Schema Cache:** If PGRST error or 406 on existing table, reload Supabase schema cache via Dashboard → API → Reload.
+
+## API Patterns
+
+**Error Handling:**
 ```typescript
-// If you see PGRST error or 406 on a table that exists:
-// You must reload the Supabase schema cache via Dashboard → API → Reload
-// OR add the schema explicitly to the Supabase client config
-```
-
----
-
-## 🔴 RULE 6 — API CALL RULES
-
-Every API call (fetch, axios, supabase query) must:
-
-```typescript
-// ✅ Have error handling
 try {
   const result = await apiCall()
-  // handle success
 } catch (error) {
-  // NEVER: catch (error) {}  ← swallowed error
-  // NEVER: catch (error) { console.log(error) }  ← not surfaced to user
-  // ALWAYS:
   const message = error instanceof Error ? error.message : 'An unexpected error occurred'
   toast.error(message)
-  // log to error monitoring if available
 }
+```
 
-// ✅ Have loading state management
+Never swallow errors or only log to console. Always surface to user.
+
+**Loading State:**
+```typescript
 const [isLoading, setIsLoading] = useState(false)
 setIsLoading(true)
 try { ... } finally { setIsLoading(false) }
+```
 
-// ✅ Have the correct HTTP method
-// POST   → create new record
-// PUT    → replace entire record
-// PATCH  → update specific fields only
-// DELETE → remove record (send ID in URL, not body)
+**HTTP Methods:**
+- POST → create new record
+- PUT → replace entire record
+- PATCH → update specific fields
+- DELETE → remove record (ID in URL, not body)
 
-// ✅ Send Authorization header on protected routes
+**Protected Routes:**
+```typescript
 headers: {
   'Authorization': `Bearer ${session.access_token}`,
   'Content-Type': 'application/json'
 }
 ```
 
----
-
-## 🔴 RULE 7 — MODAL & FORM RULES
-
-Every modal must:
-
+**Response Shapes:**
 ```typescript
-// ✅ Reset form on open AND on close
+// Success
+{ data: T, message?: string }
+
+// Error
+{ error: string, code?: string, field?: string }
+```
+
+Never expose raw Supabase/PostgreSQL errors to client.
+
+## Forms & Validation
+
+**Modal Lifecycle:**
+```typescript
+// Reset on open
 useEffect(() => {
   if (isOpen) form.reset(defaultValues)
 }, [isOpen])
 
-// ✅ Disable submit button while loading
+// Disable during submission
 <Button disabled={isSubmitting || isLoading} type="submit">
 
-// ✅ Show field-level validation errors
+// Show field errors
 {errors.fieldName && <p className="text-red-500 text-sm">{errors.fieldName.message}</p>}
+```
 
-// ✅ Handle both create and edit modes explicitly
-// Don't merge them into one confusing conditional mess
+**Zod Schemas:**
+- Mirror DB column names exactly (snake_case, not camelCase)
+- Nullable DB columns → `.optional()` in Zod
+- Required DB columns → `.min(1)` or equivalent in Zod
+- Match DB types: `NUMERIC` → `z.number()`, `UUID` → `z.string().uuid()`, `INT` → `z.number().int()`
 
-// ✅ Send only the fields the API/DB expects
-// Strip UI-only fields before submitting
+**Payload Sanitization:**
+```typescript
 const { uiOnlyField, ...payload } = formValues
-await createRecord(payload)  // uiOnlyField never reaches the API
+await createRecord(payload)
 ```
 
-Every Zod schema must:
-```typescript
-// ✅ Mirror the DB column names exactly (not camelCase variations of snake_case)
-// DB column: branch_id  →  Zod field: branch_id  (not branchId)
+## Backend Patterns
 
-// ✅ Mark nullable DB columns as optional in Zod
-// DB: description TEXT NULL  →  Zod: description: z.string().optional()
+**Node.js API Routes:**
+- Validate request body before processing
+- Return consistent response shapes
+- Verify JWT in middleware
+- Never expose raw database errors
 
-// ✅ Mark required DB columns as required in Zod
-// DB: name VARCHAR NOT NULL  →  Zod: name: z.string().min(1)
-
-// ✅ Use correct types
-// DB: price NUMERIC  →  Zod: price: z.number().positive()
-// DB: id UUID        →  Zod: id: z.string().uuid()
-// DB: quantity INT   →  Zod: quantity: z.number().int().nonnegative()
-```
-
----
-
-## 🔴 RULE 8 — BACKEND RULES (Node.js & Flask)
-
-### Node.js API Routes
-```javascript
-// ✅ Always validate request body before processing
-// ✅ Always return consistent error shapes:
-{ error: string, code?: string, field?: string }
-
-// ✅ Always return consistent success shapes:
-{ data: T, message?: string }
-
-// ✅ Never expose raw Supabase/PostgreSQL errors to the client
-// Catch → log internally → return sanitized message
-
-// ✅ Always verify JWT in middleware before handler runs
-```
-
-### Flask Microservices
+**Flask Microservices:**
 ```python
-# ✅ Every route that accepts JSON must call request.get_json()
-# ✅ Every route must have CORS headers for Next.js origin
-# ✅ Never return Python exceptions directly — catch and format them
-# ✅ Return HTTP 400 for bad input, 401 for auth failures, 500 for server errors
+# Accept JSON
+data = request.get_json()
 
-# ✅ Standard response format:
+# CORS headers for Next.js origin
+# Return HTTP 400 (bad input), 401 (auth), 500 (server error)
+
+# Response format
 return jsonify({"data": result}), 200
-return jsonify({"error": "Description of what went wrong"}), 400
+return jsonify({"error": "Description"}), 400
 ```
 
----
+## React Query
 
-## 🔴 RULE 9 — ERROR MESSAGE RULES
+**Query Keys:**
+```typescript
+// ✅ Include all variables affecting query
+useQuery({ queryKey: ['orders', branchId, status], ... })
+```
+
+**Invalidation:**
+```typescript
+queryClient.invalidateQueries({ queryKey: ['orders'] })
+queryClient.invalidateQueries({ queryKey: ['invoices'] })
+```
+
+**UI States:**
+```typescript
+if (isLoading) return <Skeleton />
+if (isError) return <ErrorState message={error.message} />
+if (!data?.length) return <EmptyState />
+```
+
+**Data Transformation:**
+```typescript
+useQuery({ ..., select: (data) => data.filter(x => x.active) })
+```
+
+## Naming Conventions
+
+```
+DB columns:       snake_case    (branch_id, created_at)
+TypeScript types: snake_case    (match DB exactly)
+Zod fields:       snake_case    (match DB exactly)
+API payloads:     snake_case    (consistent with DB)
+React props:      camelCase     (tableId, branchId)
+React state:      camelCase     (isLoading, hasError)
+Constants:        SCREAMING_SNAKE_CASE
+```
+
+**Common Bug:** Using `branchId` (camelCase) in Supabase query where column is `branch_id` (snake_case). This silently fails.
+
+## Code Quality
+
+**Eliminate on touched lines:**
+- `console.log()` in production paths
+- Magic strings/numbers (use constants/enums)
+- Nested ternaries (use if/else or early returns)
+- Empty catch blocks (always handle or rethrow)
+- Unexplained `@ts-ignore` (fix issue or document why)
+
+## Definition of Done
+
+A fix is complete when:
+- Root cause fixed (not symptom)
+- No TypeScript errors in changed files
+- No console errors for affected flow
+- No related files broken
+- Loading, error, and empty states handled
+- Success feedback shown to user
+
+## Error Message Safety
 
 ```typescript
-// ❌ NEVER show raw error objects in toasts
-toast.error(error)              // shows "[object Object]"
-toast.error(error.message)      // crashes if error is not an Error instance
-
-// ✅ ALWAYS use safe extraction
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
@@ -240,131 +245,3 @@ const getErrorMessage = (error: unknown): string => {
 
 toast.error(getErrorMessage(error))
 ```
-
----
-
-## 🔴 RULE 10 — RIPPLE EFFECT RULE (The Most Important Rule)
-
-Before committing any fix, you MUST answer these questions:
-
-```
-1. What files import the file I just changed?
-2. Do any of those files depend on the specific shape I just modified?
-3. If I changed a function signature, did I update ALL call sites?
-4. If I changed a TypeScript type, did I update ALL files that use that type?
-5. If I changed a DB column name, did I search the ENTIRE codebase for the old name?
-6. If I changed an API response shape, did I update ALL frontend consumers?
-7. If I added a required field to a Zod schema, does every form that uses it provide that field?
-```
-
-**If you cannot answer YES to all applicable questions, do not save the fix yet.**
-
----
-
-## 🟡 RULE 11 — CODE QUALITY RULES (Enforce During Fixes)
-
-While fixing bugs, also correct these on any line you touch:
-
-```typescript
-// ❌ Eliminate all console.log() in production code paths
-// ✅ Replace with proper error logging or remove entirely
-
-// ❌ No magic strings/numbers
-const STATUS = 'pending'  // magic string
-// ✅ Use constants or enums
-const ORDER_STATUS = { PENDING: 'pending', CONFIRMED: 'confirmed' } as const
-
-// ❌ No nested ternaries
-const x = a ? b ? c : d : e
-// ✅ Use explicit if/else or early returns
-
-// ❌ No empty catch blocks
-try { ... } catch (e) {}
-// ✅ Always handle or rethrow
-
-// ❌ No disabled TypeScript rules without explanation
-// @ts-ignore
-// ✅ Fix the underlying issue OR add a comment explaining WHY it's disabled
-```
-
----
-
-## 🟡 RULE 12 — NAMING CONVENTIONS
-
-To prevent the type of bugs where frontend and backend disagree on field names:
-
-```
-DB columns:         snake_case    (branch_id, created_at, staff_name)
-TypeScript types:   snake_case    (match DB exactly for Supabase auto-types)
-Zod field names:    snake_case    (match DB exactly)
-API payloads:       snake_case    (consistent with DB)
-React props:        camelCase     (tableId, branchId — internal component use only)
-React state vars:   camelCase     (isLoading, hasError)
-Constants:          SCREAMING_SNAKE_CASE
-```
-
-**The most common bug in this system:** using `branchId` (camelCase) in a Supabase query
-where the column is `branch_id` (snake_case). This silently fails with no results.
-
----
-
-## 🟡 RULE 13 — REACT QUERY / DATA FETCHING
-
-```typescript
-// ✅ Query keys must be arrays and must include all variables that affect the query
-useQuery({ queryKey: ['orders', branchId, status], ... })  // NOT just ['orders']
-
-// ✅ After mutations, invalidate ALL related queries
-queryClient.invalidateQueries({ queryKey: ['orders'] })
-queryClient.invalidateQueries({ queryKey: ['invoices'] })  // if orders affect invoices
-
-// ✅ Always handle isLoading, isError, and empty states in the UI
-if (isLoading) return <Skeleton />
-if (isError) return <ErrorState message={error.message} />
-if (!data?.length) return <EmptyState />
-
-// ✅ Use select to transform data at the query level, not in render
-useQuery({ ..., select: (data) => data.filter(x => x.active) })
-```
-
----
-
-## 🟢 RULE 14 — WHAT "DONE" MEANS
-
-A fix is complete only when ALL of the following are true:
-
-```
-□ Root cause fixed (not symptom)
-□ No TypeScript errors in changed files
-□ No console errors in browser for the affected flow
-□ No related files broken by the change
-□ Loading state handled
-□ Error state handled  
-□ Empty/null state handled
-□ Success feedback shown to user
-□ Fix documented in bug report
-□ Regression note written
-```
-
----
-
-## 🟢 RULE 15 — SESSION START RITUAL
-
-At the beginning of every new AI session working on this codebase, say:
-
-> *"I am working on the FamousGates Hotel & Restaurant Management System.
-> Before I make any changes, I will read the relevant files,
-> check the Supabase schema, identify all dependents,
-> and follow BUGFIX_RULES.md throughout this session."*
-
-Then load:
-1. `BUGFIX_RULES.md` (this file)
-2. `SYSTEM_AUDIT_PROMPT.md`
-3. The specific module files you are working on
-4. The relevant Supabase schema/migration files
-
----
-
-*BUGFIX_RULES.md — FamousGates Hotels Management System*
-*Stack: Next.js 14 · Supabase · Node.js · Flask · Tauri v2 · React Native*
-*Enforce these rules in every AI IDE session. No exceptions.*
