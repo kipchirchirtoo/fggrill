@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
-const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://api.hirall.com' : 'http://localhost:5000')).replace(/\/$/, '')
+const rawApiBaseUrl = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://api.hirall.com' : 'http://localhost:5000')
+const apiBaseUrl = (
+    /^https?:\/\//i.test(rawApiBaseUrl)
+        ? rawApiBaseUrl
+        : `${/^(localhost|127(?:\.\d{1,3}){3})(:\d+)?$/i.test(rawApiBaseUrl) ? 'http' : 'https'}://${rawApiBaseUrl}`
+).replace(/\/$/, '')
 
 const nextConfig = {
     // Only use 'export' for Electron builds, not for Vercel
