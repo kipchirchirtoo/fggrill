@@ -155,6 +155,12 @@ export interface LeaveRequest {
   reason: string;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   approved_by?: string;
+  // Report to Duty fields
+  reported_to_duty?: boolean;
+  actual_return_date?: string;
+  reported_at?: string;
+  reported_by?: string;
+  report_notes?: string;
 }
 
 export interface PayrollRecord {
