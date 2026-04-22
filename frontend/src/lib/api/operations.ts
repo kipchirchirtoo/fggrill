@@ -82,8 +82,8 @@ export const housekeepingAPI = {
   createLostFoundItem: (data: any) => fetchAPI<any>('/housekeeping/lost-found', { method: 'POST', body: JSON.stringify(data) }),
   
   // Guest Requests
-  createGuestRequest: (data: any) => fetchAPI<any>('/housekeeping/requests', { method: 'POST', body: JSON.stringify(data) }),
-  getGuestRequests: (params?: any) => fetchAPI<any[]>(`/housekeeping/requests${buildQuery(params)}`),
+  createGuestRequest: (data: any) => fetchAPI<any>('/housekeeping/guest-requests', { method: 'POST', body: JSON.stringify(data) }),
+  getGuestRequests: (params?: any) => fetchAPI<any[]>(`/housekeeping/guest-requests${buildQuery(params)}`),
 
   // Additional Methods from Errors
   getInspections: (params?: any) => fetchAPI<any[]>(`/housekeeping/inspections${buildQuery(params)}`),

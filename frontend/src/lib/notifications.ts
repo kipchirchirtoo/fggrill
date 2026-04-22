@@ -1,6 +1,41 @@
 import { toast } from 'sonner';
 import { UserRole } from './auth-context';
 
+// Enhanced toast function that uses Tauri notifications when available
+export async function enhancedToast(
+  type: 'info' | 'success' | 'warning' | 'error',
+  title: string,
+  message?: string,
+  options?: any
+) {
+  // Show regular toast
+  const toastMessage = message || title;
+  switch (type) {
+    case 'success':
+      toast.success(toastMessage, options);
+      break;
+    case 'error':
+      toast.error(toastMessage, options);
+      break;
+    case 'warning':
+      toast.warning(toastMessage, options);
+      break;
+    default:
+      toast.info(toastMessage, options);
+  }
+
+  // Also show native notification if in Tauri
+  try {
+    const { showNotification, isTauri } = await import('./tauri-downloads');
+    if (isTauri()) {
+      await showNotification(title, message || title);
+    }
+  } catch (error) {
+    // Tauri not available, continue with regular toast
+    console.log('Tauri notifications not available');
+  }
+}
+
 // Role hierarchy - higher number = higher access level
 export const ROLE_HIERARCHY: Record<string, number> = {
   [UserRole.SUPER_ADMIN]: 100,
@@ -170,7 +205,7 @@ export const notifyLowStock = async (items: any[]) => {
   };
 
   await sendNotification(notification);
-  toast.warning(notification.message, {
+  await enhancedToast('warning', notification.title, notification.message, {
     action: {
       label: 'View Items',
       onClick: () => window.location.href = notification.actionUrl
@@ -189,7 +224,7 @@ export const notifyPurchaseOrderApproval = async (orderId: string, supplierName:
   };
 
   await sendNotification(notification);
-  toast.info(notification.message, {
+  await enhancedToast('info', notification.title, notification.message, {
     action: {
       label: 'Review Order',
       onClick: () => window.location.href = notification.actionUrl
@@ -208,7 +243,7 @@ export const notifyOrderReceived = async (orderId: string, supplierName: string)
   };
 
   await sendNotification(notification);
-  toast.success(notification.message, {
+  await enhancedToast('success', notification.title, notification.message, {
     action: {
       label: 'Verify Order',
       onClick: () => window.location.href = notification.actionUrl

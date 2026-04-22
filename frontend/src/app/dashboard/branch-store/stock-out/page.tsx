@@ -170,7 +170,10 @@ export default function BranchStockOutPage() {
         movement_type: 'STOCK_OUT',
         branch_id: branchId
       } as any);
-      toast.success('Stock out recorded');
+      
+      const deptName = formData.department.charAt(0).toUpperCase() + formData.department.slice(1);
+      toast.success(`Stock automatically approved and issued to ${deptName}`);
+      
       setAddModalOpen(false);
       setFormData({ item_sku: '', quantity: 1, department: 'kitchen', notes: '' });
       fetchRecords();
@@ -262,7 +265,7 @@ export default function BranchStockOutPage() {
                 {user?.role === UserRole.AUDITOR ? 'Stock Out Audit' : 'Stock Out'}
               </h1>
               <p className="text-gray-500">
-                {user?.role === UserRole.AUDITOR ? 'Review and verify issued stock records' : 'Issue items from stock'}
+                {user?.role === UserRole.AUDITOR ? 'Review and verify issued stock records' : 'Issue items to departments - automatically approved'}
               </p>
             </div>
             <div className="flex gap-2">
@@ -484,7 +487,10 @@ export default function BranchStockOutPage() {
 
         <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Issue Stock</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Issue Stock to Department</DialogTitle>
+              <p className="text-sm text-gray-500 mt-1">Items are automatically approved and synced to department operations</p>
+            </DialogHeader>
             <div className="space-y-4 mt-4">
               <div><label className="text-sm font-medium">Item *</label>
                 <select value={formData.item_sku} onChange={(e) => setFormData({ ...formData, item_sku: e.target.value, quantity: 1 })} className="w-full p-2 border rounded-ios-lg">
@@ -532,11 +538,12 @@ export default function BranchStockOutPage() {
                   return null;
                 })()}
               </div>
-              <div><label className="text-sm font-medium">Department</label>
+              <div><label className="text-sm font-medium">Department *</label>
                 <select value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full p-2 border rounded-ios-lg">
-                  <option value="kitchen">Kitchen</option>
-                  <option value="bar">Bar</option>
+                  <option value="kitchen">Kitchen (Auto-synced)</option>
+                  <option value="bar">Bar (Auto-synced)</option>
                   <option value="housekeeping">Housekeeping</option>
+                  <option value="reception">Reception</option>
                   <option value="maintenance">Maintenance</option>
                   <option value="other">Other</option>
                 </select>
@@ -552,7 +559,7 @@ export default function BranchStockOutPage() {
                     return !formData.item_sku || formData.quantity <= 0 || (sel ? sel.quantity <= 0 : false);
                   })()}
                 >
-                  Issue
+                  Issue & Approve
                 </IOSButton>
               </div>
             </div>

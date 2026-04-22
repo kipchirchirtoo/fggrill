@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditorReportsAPI, auditAPI } from '@/lib/api';
-import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock, FileDown, Activity, AlertTriangle, Check, Truck } from 'lucide-react';
+import { ClipboardList, RefreshCw, Plus, Package, Search, AlertCircle, Clock, FileDown, Activity, AlertTriangle, Check, Truck, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -29,6 +29,7 @@ export default function BranchRequestsPage() {
     const [requestReason, setRequestReason] = useState('');
     const [selectedRequest, setSelectedRequest] = useState<StockRequest | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
 
     const fetchRequests = useCallback(async () => {
         setIsLoading(true);
@@ -41,16 +42,18 @@ export default function BranchRequestsPage() {
 
     const handleExport = async () => {
         try {
-            toast.loading("Generating requisition ledger...");
-            await auditorReportsAPI.exportBrandedPdf('stock_requests', {
-                branch_id: user?.branch_id
+            const reportType = activeTab === 'history' ? 'stock_requests_history' : 'stock_requests';
+            toast.loading(`Generating ${activeTab === 'history' ? 'history' : 'current requests'} report...`);
+            await auditorReportsAPI.exportBrandedPdf(reportType, {
+                branch_id: user?.branch_id,
+                status: activeTab === 'history' ? 'DELIVERED,RECEIVED,CANCELLED' : 'PENDING,APPROVED,PARTIALLY_APPROVED,REJECTED,IN_TRANSIT'
             });
             toast.dismiss();
-            toast.success("Ledger generated successfully");
+            toast.success("Report generated successfully");
         } catch (error) {
             console.error(error);
             toast.dismiss();
-            toast.error("Failed to export ledger");
+            toast.error("Failed to export report");
         }
     };
 
@@ -60,6 +63,19 @@ export default function BranchRequestsPage() {
         const hasRejections = requests.filter(r => r.items?.some((i: any) => i.status === 'REJECTED')).length;
         return { pending, totalItems, hasRejections };
     }, [requests]);
+
+    // Filter requests based on active tab
+    const filteredRequests = useMemo(() => {
+        if (activeTab === 'current') {
+            return requests.filter(r => 
+                ['PENDING', 'APPROVED', 'PARTIALLY_APPROVED', 'REJECTED', 'IN_TRANSIT'].includes(r.status)
+            );
+        } else {
+            return requests.filter(r => 
+                ['DELIVERED', 'RECEIVED', 'CANCELLED', 'FULFILLED'].includes(r.status)
+            );
+        }
+    }, [requests, activeTab]);
 
     const fetchItems = useCallback(async () => {
         try {
@@ -211,8 +227,10 @@ export default function BranchRequestsPage() {
                         </div>
                         <div className="flex gap-2">
                             <IOSButton variant="secondary" onClick={fetchRequests} leftIcon={<RefreshCw className={isLoading ? 'animate-spin' : ''} />}>Refresh</IOSButton>
-                            {user?.role === UserRole.AUDITOR && (
-                                <IOSButton variant="secondary" onClick={handleExport} leftIcon={<FileDown />}>Export Ledger</IOSButton>
+                            {(user?.role === UserRole.AUDITOR || user?.role === UserRole.BRANCH_MANAGER || user?.role === UserRole.BRANCH_STOREKEEPER) && (
+                                <IOSButton variant="secondary" onClick={handleExport} leftIcon={<FileDown />}>
+                                    Export {activeTab === 'current' ? 'Current' : 'History'} PDF
+                                </IOSButton>
                             )}
                             {user?.role !== UserRole.AUDITOR && (
                                 <IOSButton onClick={() => setIsNewRequestModalOpen(true)} leftIcon={<Plus />}>New Request</IOSButton>
@@ -229,7 +247,7 @@ export default function BranchRequestsPage() {
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Total Requisitions</p>
-                                        <p className="text-xl font-black text-stone-900">{requests.length}</p>
+                                        <p className="text-xl font-black text-stone-900">{filteredRequests.length}</p>
                                     </div>
                                 </div>
                             </IOSCard>
@@ -239,8 +257,12 @@ export default function BranchRequestsPage() {
                                         <Clock className="h-5 w-5" />
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-amber-600">Pending Approval</p>
-                                        <p className="text-xl font-black text-amber-600">{stats.pending}</p>
+                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-amber-600">
+                                            {activeTab === 'current' ? 'Pending Approval' : 'Completed'}
+                                        </p>
+                                        <p className="text-xl font-black text-amber-600">
+                                            {activeTab === 'current' ? stats.pending : filteredRequests.filter(r => r.status === 'DELIVERED').length}
+                                        </p>
                                     </div>
                                 </div>
                             </IOSCard>
@@ -250,21 +272,56 @@ export default function BranchRequestsPage() {
                                         <AlertTriangle className="h-5 w-5" />
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-rose-600">With Rejections</p>
-                                        <p className="text-xl font-black text-rose-600">{stats.hasRejections}</p>
+                                        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest text-rose-600">
+                                            {activeTab === 'current' ? 'With Rejections' : 'Cancelled'}
+                                        </p>
+                                        <p className="text-xl font-black text-rose-600">
+                                            {activeTab === 'current' ? stats.hasRejections : filteredRequests.filter(r => r.status === 'CANCELLED').length}
+                                        </p>
                                     </div>
                                 </div>
                             </IOSCard>
                         </div>
                     )}
 
+                    {/* Tabs */}
+                    <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+                        <button
+                            onClick={() => setActiveTab('current')}
+                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                activeTab === 'current'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                        >
+                            <ClipboardList className="h-4 w-4" />
+                            Current Requests
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('history')}
+                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                activeTab === 'history'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                        >
+                            <History className="h-4 w-4" />
+                            History (Cleared & Dispatched)
+                        </button>
+                    </div>
+
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-gray-400" /></div>
-                    ) : requests.length === 0 ? (
-                        <IOSCard className="p-12 text-center"><ClipboardList className="h-12 w-12 mx-auto text-gray-300 mb-4" /><p className="text-gray-500">No requests yet</p></IOSCard>
+                    ) : filteredRequests.length === 0 ? (
+                        <IOSCard className="p-12 text-center">
+                            <ClipboardList className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                            <p className="text-gray-500">
+                                {activeTab === 'current' ? 'No current requests' : 'No completed requests yet'}
+                            </p>
+                        </IOSCard>
                     ) : (
                         <div className="grid gap-3">
-                            {requests.map((req) => (
+                            {filteredRequests.map((req) => (
                                 <IOSCard
                                     key={req.id}
                                     className="p-4 cursor-pointer hover:border-blue-400 transition-colors"
@@ -275,17 +332,34 @@ export default function BranchRequestsPage() {
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-ios-lg bg-amber-100 flex items-center justify-center"><ClipboardList className="h-6 w-6 text-amber-600" /></div>
+                                            <div className={`w-12 h-12 rounded-ios-lg flex items-center justify-center ${
+                                                activeTab === 'history' 
+                                                    ? req.status === 'DELIVERED' ? 'bg-green-100' : req.status === 'CANCELLED' ? 'bg-red-100' : 'bg-gray-100'
+                                                    : 'bg-amber-100'
+                                            }`}>
+                                                {activeTab === 'history' ? (
+                                                    req.status === 'DELIVERED' ? <Check className="h-6 w-6 text-green-600" /> :
+                                                    req.status === 'CANCELLED' ? <AlertCircle className="h-6 w-6 text-red-600" /> :
+                                                    <History className="h-6 w-6 text-gray-600" />
+                                                ) : (
+                                                    <ClipboardList className="h-6 w-6 text-amber-600" />
+                                                )}
+                                            </div>
                                             <div>
                                                 <p className="font-bold">{req.request_number}</p>
-                                                <p className="text-xs text-gray-400 flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(req.created_at).toLocaleDateString()}</p>
+                                                <p className="text-xs text-gray-400 flex items-center gap-1">
+                                                    <Clock className="h-3 w-3" /> 
+                                                    {new Date(req.created_at).toLocaleDateString()}
+                                                </p>
                                                 <p className="text-sm text-gray-500">{req.items?.length || 0} items</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <IOSBadge variant="light" color={getStatusColor(req.status) as any}>{req.status}</IOSBadge>
                                             <div className="hidden md:block">
-                                                {req.items?.some(i => i.status === 'REJECTED') && <span className="text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded">Has Rejections</span>}
+                                                {req.items?.some(i => i.status === 'REJECTED') && (
+                                                    <span className="text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded">Has Rejections</span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

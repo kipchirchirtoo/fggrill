@@ -18,7 +18,7 @@ export const storeAPI = {
   approveStockRequest: (id: string, data?: any) =>
     fetchAPI<void>(`/store/stock-requests/${id}/approve`, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
   bulkApproveStockRequests: (request_ids: string[], approved_quantity_notes?: string) =>
-    fetchAPI<any>('/store/stock-requests/bulk-approve', { 
+    fetchAPI<any>('/storekeeping/stock-requests/bulk-approve', { 
       method: 'POST', 
       body: JSON.stringify({ request_ids, approved_quantity_notes }) 
     }),

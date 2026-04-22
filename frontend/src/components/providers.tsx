@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useState } from "react"
 import { Toaster } from "sonner"
 import { BranchProvider } from "@/lib/branch-context"
+import { DownloadManager } from "@/components/ui/download-manager"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -31,6 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               }
             }}
           />
+          <DownloadManager />
         </BranchProvider>
       </QueryClientProvider>
     </>

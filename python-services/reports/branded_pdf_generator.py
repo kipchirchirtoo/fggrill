@@ -307,6 +307,8 @@ class BrandedPDFGenerator:
             'ai_analysis': self._generate_ai_report,
             'invoice': self._generate_invoice,
             'customer_credit_outstanding': self._generate_customer_credit_outstanding,
+            'stock_requests': self._generate_stock_requests_report,
+            'stock_requests_history': self._generate_stock_requests_history_report,
         }
         
         # Normalize report type - handle common variations and cases
@@ -4426,4 +4428,44 @@ class BrandedPDFGenerator:
         
         # Build PDF
         return self._create_pdf(elements)
+
+    def _generate_stock_requests_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Stock Requests Report using the payroll-style branding"""
+        from .stock_requests_pdf import generate_stock_requests_pdf
+        
+        # Transform data to match the PDF generator expectations
+        pdf_data = {
+            "requests": data.get("data", []),
+            "branch_name": filters.get("branch_name", "All Branches"),
+            "report_type": "Stock Requests Report"
+        }
+        
+        # Generate PDF bytes
+        pdf_bytes = generate_stock_requests_pdf(pdf_data)
+        
+        # Save to temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            tmp_file.write(pdf_bytes)
+            return tmp_file.name
+
+    def _generate_stock_requests_history_report(self, data: Dict, filters: Dict) -> str:
+        """Generate Stock Requests History Report using the payroll-style branding"""
+        from .stock_requests_pdf import generate_stock_requests_history_pdf
+        
+        # Transform data to match the PDF generator expectations
+        pdf_data = {
+            "requests": data.get("data", []),
+            "branch_name": filters.get("branch_name", "All Branches"),
+            "report_type": "Stock Requests History Report"
+        }
+        
+        # Generate PDF bytes
+        pdf_bytes = generate_stock_requests_history_pdf(pdf_data)
+        
+        # Save to temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            tmp_file.write(pdf_bytes)
+            return tmp_file.name
 

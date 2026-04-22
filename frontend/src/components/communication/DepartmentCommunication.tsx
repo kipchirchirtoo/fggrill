@@ -132,8 +132,9 @@ export function DepartmentCommunication({
     setIsLoading(true);
     try {
       // Fetch housekeeping tasks
-      const hkRes = await housekeepingAPI.getGuestRequests({ status: 'pending' }).catch(() => ({ data: [] }));
-      const hkRequests = (hkRes.data || hkRes || []).map((r: any) => ({
+      const hkRes = await housekeepingAPI.getGuestRequests({ status: 'pending' }).catch(() => ({ success: false, data: [] }));
+      const hkData = Array.isArray(hkRes.data) ? hkRes.data : (Array.isArray(hkRes) ? hkRes : []);
+      const hkRequests = hkData.map((r: any) => ({
         id: r.id,
         type: 'housekeeping' as const,
         room_number: r.room_number || r.room?.room_number || '-',
@@ -146,8 +147,9 @@ export function DepartmentCommunication({
       }));
 
       // Fetch maintenance requests
-      const maintRes = await maintenanceAPI.getRequests(branchId, 'pending').catch(() => ({ data: [] }));
-      const maintRequests = (maintRes.data || maintRes || []).map((r: any) => ({
+      const maintRes = await maintenanceAPI.getRequests(branchId, 'pending').catch(() => ({ success: false, data: [] }));
+      const maintData = Array.isArray(maintRes.data) ? maintRes.data : (Array.isArray(maintRes) ? maintRes : []);
+      const maintRequests = maintData.map((r: any) => ({
         id: r.id,
         type: 'maintenance' as const,
         room_number: r.room_number || r.location || '-',
