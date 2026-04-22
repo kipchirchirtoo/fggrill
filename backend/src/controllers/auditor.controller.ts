@@ -877,7 +877,7 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 
     console.log('ðŸ” [Financial Reconciliation] Fetching pool token sales...');
     const { data: poolSales, error: poolSalesError } = await supabase.from('restaurant_pool_token_sales')
-      .select('*, cashier:users(id, first_name, last_name)')
+      .select('*')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
@@ -886,6 +886,13 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       throw poolSalesError;
     }
     console.log(`âœ… [Financial Reconciliation] Found ${poolSales?.length || 0} pool token sales`);
+
+    // Fetch cashier details for pool sales separately
+    const poolCashierIds = [...new Set(poolSales?.map(s => s.cashier_id).filter(Boolean))];
+    const { data: poolCashiers } = poolCashierIds.length 
+      ? await supabase.from('users').select('id, first_name, last_name').in('id', poolCashierIds)
+      : { data: [] };
+    const poolCashierMap = Object.fromEntries(poolCashiers?.map(u => [u.id, u]) || []);
 
     // 2. Collect IDs for related entities to infer branch and cashier
     console.log('ðŸ” [Financial Reconciliation] Collecting related entity IDs...');
@@ -975,7 +982,7 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
         branch_id: s.branch_id,
         created_by: s.cashier_id,
         is_pool_token: true,
-        cashier: s.cashier
+        cashier: poolCashierMap[s.cashier_id]
       }));
 
     enrichedPayments = [...enrichedPayments, ...virtualPoolPayments];
