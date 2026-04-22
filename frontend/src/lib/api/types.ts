@@ -11,6 +11,7 @@ export interface ApiResponse<T> {
   count?: number; // For paginated results
   pages?: number;
   stats?: any;
+  summary?: any;
   // Legacy Aliases (Partial compatibility for existing consumers)
   staff?: any;
   branches?: any;

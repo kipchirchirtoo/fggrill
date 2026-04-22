@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, date, timedelta
+import os
 import uvicorn
 
 # Import analytics routers
@@ -446,10 +447,11 @@ async def generate_branch_sales_csv(request: BranchSalesAnalyticsRequest):
 app.include_router(maa_router, prefix="/api/analytics", tags=["MAA Analytics"])
 
 if __name__ == "__main__":
+    port = int(os.getenv("PORT", os.getenv("ANALYTICS_SERVICE_PORT", 8003)))
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
-        port=5001,
+        port=port,
         reload=True,
         log_level="info"
     )

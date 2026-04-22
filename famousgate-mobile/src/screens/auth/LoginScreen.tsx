@@ -32,22 +32,60 @@ const LoginScreen: React.FC = () => {
       return;
     }
 
+    if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await authApi.login(trimmedEmail, password);
+      console.log('🔑 [LOGIN] Attempting login for:', trimmedEmail);
+      const response = await authApi.login(trimmedEmail, password);
+      
+      console.log('🔑 [LOGIN] Raw response:', JSON.stringify(response, null, 2));
 
-      // Backend returns { token, user } — normalise to our AuthTokens shape
-      const accessToken = data.token || data.access_token;
-      const refreshToken = data.refresh_token || data.refreshToken || accessToken;
+      // Handle different response formats
+      // Format 1: { token, user }
+      // Format 2: { data: { user, session: { access_token } } }
+      // Format 3: { success: true, data: { user, session: { access_token } } }
+      
+      let data = response;
+      if (response.data) {
+        data = response.data;
+      }
+      
+      const accessToken = 
+        data.token || 
+        data.access_token || 
+        data.session?.access_token;
+        
+      const refreshToken = 
+        data.refresh_token || 
+        data.refreshToken || 
+        data.session?.refresh_token || 
+        accessToken;
+        
       const user = data.user;
 
+      console.log('🔑 [LOGIN] Extracted data:', {
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        hasUser: !!user,
+        userEmail: user?.email,
+        userRole: user?.role,
+      });
+
       if (!accessToken || !user) {
+        console.error('❌ [LOGIN] Invalid response:', response);
         throw new Error('Invalid response from server. Please try again.');
       }
 
+      console.log('🔑 [LOGIN] Calling auth store login...');
       await login({ access_token: accessToken, refresh_token: refreshToken, user });
+      console.log('✅ [LOGIN] Login successful, navigation should update');
       // RootNavigator will automatically redirect based on user.role
     } catch (err: any) {
+      console.error('❌ [LOGIN] Login error:', err);
       const msg =
         err.response?.data?.message ||
         err.response?.data?.error ||
@@ -87,6 +125,7 @@ const LoginScreen: React.FC = () => {
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
+            autoCorrect={false}
             returnKeyType="next"
             left={<TextInput.Icon icon="email-outline" />}
             style={styles.input}

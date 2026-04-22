@@ -6,6 +6,8 @@ import { colors, spacing, shadows } from '../../theme';
 import { useAuthStore } from '../../stores/auth.store';
 import { dispatchApi } from '../../api/dispatch.api';
 import { inventoryApi } from '../../api/inventory.api';
+import DashboardHeader from '../../components/common/DashboardHeader';
+import StatMetricCard from '../../components/common/StatMetricCard';
 
 const BSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { user } = useAuthStore();
@@ -16,17 +18,25 @@ const BSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     setLoading(true);
     try {
       const [dashboard, incoming, lowStock] = await Promise.all([
-        dispatchApi.branchDashboard().catch(() => ({})),
+        dispatchApi.branchDashboard().catch(() => null),
         dispatchApi.incoming().catch(() => []),
         inventoryApi.lowStock().catch(() => []),
       ]);
+      const dashboardData = dashboard || {
+        pending_deliveries: 0,
+        today_receipts: 0,
+        total_items: 0,
+        stock_items: 0,
+        low_stock: 0,
+        low_stock_count: 0,
+      };
       const pending = Array.isArray(incoming)
         ? incoming.filter((d: any) => !['delivered', 'confirmed'].includes(d.status)).length
-        : (dashboard.pending_deliveries ?? 0);
+        : (dashboardData.pending_deliveries ?? 0);
       setStats({
         pending_deliveries: pending,
-        today_receipts: dashboard.today_receipts ?? dashboard.todayReceipts ?? 0,
-        stock_items: dashboard.total_items ?? dashboard.totalItems ?? 0,
+        today_receipts: dashboardData.today_receipts ?? 0,
+        stock_items: dashboardData.stock_items ?? dashboardData.total_items ?? 0,
         low_stock: Array.isArray(lowStock) ? lowStock.length : 0,
       });
     } catch (e) { console.error(e); }
@@ -47,29 +57,56 @@ const BSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />} contentContainerStyle={styles.scroll}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Welcome back,</Text>
-            <Text style={styles.name}>{user?.first_name} {user?.last_name}</Text>
-            <Text style={styles.branch}>{user?.branch_name || 'Branch Store'}</Text>
-          </View>
-          <MaterialCommunityIcons name="store" size={44} color={colors.primary.DEFAULT} />
-        </View>
+        <DashboardHeader
+          navigation={navigation}
+          eyebrow="Branch store"
+          title={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Branch Store'}
+          subtitle={user?.branch_name || 'Receiving, stock, and requisitions'}
+          icon="store"
+          accentColor={colors.info.DEFAULT}
+          badgeLabel={stats.pending_deliveries > 0 ? `${stats.pending_deliveries} deliveries waiting` : 'Operations steady'}
+          badgeIcon={stats.pending_deliveries > 0 ? 'truck-alert-outline' : 'check-decagram-outline'}
+          badgeColor={stats.pending_deliveries > 0 ? colors.warning.DEFAULT : colors.success.DEFAULT}
+        />
 
-        <View style={styles.grid}>
+        <View style={styles.metricsList}>
           {[
-            { icon: 'truck-delivery', label: 'Pending Deliveries', value: stats.pending_deliveries, color: stats.pending_deliveries > 0 ? colors.warning.DEFAULT : colors.text.tertiary, alert: stats.pending_deliveries > 0 },
-            { icon: 'check-circle', label: "Today's Receipts", value: stats.today_receipts, color: colors.success.DEFAULT },
-            { icon: 'package-variant', label: 'Stock Items', value: stats.stock_items, color: colors.info.DEFAULT },
-            { icon: 'alert-circle', label: 'Low Stock', value: stats.low_stock, color: stats.low_stock > 0 ? colors.danger.DEFAULT : colors.text.tertiary },
+            {
+              icon: 'truck-delivery',
+              label: 'Pending Deliveries',
+              value: stats.pending_deliveries,
+              color: stats.pending_deliveries > 0 ? colors.warning.DEFAULT : colors.text.tertiary,
+              alert: stats.pending_deliveries > 0,
+              caption: 'Awaiting confirmation',
+              onPress: () => navigation.navigate('ReceiveDelivery'),
+            },
+            {
+              icon: 'check-circle',
+              label: "Today's Receipts",
+              value: stats.today_receipts,
+              color: colors.success.DEFAULT,
+              caption: 'Completed today',
+              onPress: () => navigation.navigate('ReceiptHistory'),
+            },
+            {
+              icon: 'package-variant',
+              label: 'Stock Items',
+              value: stats.stock_items,
+              color: colors.info.DEFAULT,
+              caption: 'Tracked at branch',
+              onPress: () => navigation.navigate('BranchStock'),
+            },
+            {
+              icon: 'alert-circle',
+              label: 'Low Stock',
+              value: stats.low_stock,
+              color: stats.low_stock > 0 ? colors.danger.DEFAULT : colors.text.tertiary,
+              alert: stats.low_stock > 0,
+              caption: 'Reorder soon',
+              onPress: () => navigation.navigate('BranchStock'),
+            },
           ].map((s, i) => (
-            <Card key={i} style={[styles.statCard, s.alert && styles.statAlert]}>
-              <Card.Content>
-                <MaterialCommunityIcons name={s.icon as any} size={28} color={s.color} />
-                <Text style={[styles.statVal, { color: s.color }]}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
-              </Card.Content>
-            </Card>
+            <StatMetricCard key={i} {...s} />
           ))}
         </View>
 
@@ -107,15 +144,7 @@ const BSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.lg, paddingBottom: 100 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xl },
-  greeting: { fontSize: 15, color: colors.text.tertiary },
-  name: { fontSize: 24, fontWeight: '700', color: colors.text.primary, marginTop: 2 },
-  branch: { fontSize: 13, color: colors.accent.DEFAULT, marginTop: 2, fontWeight: '500' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs, marginBottom: spacing.xl },
-  statCard: { width: '48%', margin: spacing.xs, backgroundColor: colors.card, ...shadows.sm },
-  statAlert: { borderColor: colors.warning.DEFAULT, borderWidth: 1 },
-  statVal: { fontSize: 30, fontWeight: '700', marginTop: spacing.sm },
-  statLabel: { fontSize: 12, color: colors.text.tertiary, marginTop: 2 },
+  metricsList: { marginBottom: spacing.lg },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: colors.text.primary, marginBottom: spacing.md },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs, marginBottom: spacing.xl },
   actionCard: { width: '31%', margin: spacing.xs, backgroundColor: colors.card, borderRadius: 12, padding: spacing.md, alignItems: 'center', ...shadows.sm },

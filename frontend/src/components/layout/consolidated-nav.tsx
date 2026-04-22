@@ -17,7 +17,7 @@ import {
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
   Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight, Calculator, Search,
-  SlidersHorizontal, LayoutDashboard, Plus, Brain
+  SlidersHorizontal, LayoutDashboard, Plus, Brain, Target
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -810,6 +810,49 @@ export function ConsolidatedNav() {
         label="Guest Invoices"
         active={pathname.includes('/dashboard/branch-accounting/invoices')}
       />
+
+      <NavGroup label="Financial Analytics" icon={BarChart3} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-accountant/analytics"
+          icon={TrendingUp}
+          label="Branch Sales"
+          active={pathname === '/dashboard/branch-accountant/analytics'}
+        />
+        <NavItem
+          href="/dashboard/branch-accountant/cashier-clearance"
+          icon={DollarSign}
+          label="Sales Clearance"
+          active={pathname === '/dashboard/branch-accountant/cashier-clearance'}
+        />
+        <NavItem
+          href="/dashboard/branch-accountant/sold-items"
+          icon={Package}
+          label="Sold Items Analytics"
+          active={pathname === '/dashboard/branch-accountant/sold-items'}
+        />
+        <NavItem
+          href="/dashboard/branch-accountant/revenue-oversight"
+          icon={Target}
+          label="Revenue Oversight"
+          active={pathname === '/dashboard/branch-accountant/revenue-oversight'}
+        />
+      </NavGroup>
+
+      <NavItem
+        href="/dashboard/branch-accountant/staff/audit"
+        icon={Shield}
+        label="Staff Audit Trail"
+        active={pathname === '/dashboard/branch-accountant/staff/audit'}
+      />
+
+      <NavGroup label="Reports" icon={FileText} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-accountant/reports/profit-loss"
+          icon={PieChart}
+          label="Profit & Loss"
+          active={pathname === '/dashboard/branch-accountant/reports/profit-loss'}
+        />
+      </NavGroup>
     </>
   );
 
@@ -1236,6 +1279,12 @@ export function ConsolidatedNav() {
           label="Restaurant"
           active={pathname === '/dashboard/branch-manager/restaurant'}
         />
+        <NavItem
+          href="/dashboard/branch-manager/restaurant/waiter-sales"
+          icon={TrendingUp}
+          label="Waiter Sales"
+          active={pathname === '/dashboard/branch-manager/restaurant/waiter-sales'}
+        />
       </NavGroup>
 
       <NavGroup label="Staff" icon={Users}>
@@ -1244,6 +1293,12 @@ export function ConsolidatedNav() {
           icon={Users}
           label="Staff"
           active={pathname === '/dashboard/branch-manager/staff'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/staff/performance"
+          icon={Award}
+          label="Performance"
+          active={pathname === '/dashboard/branch-manager/staff/performance'}
         />
         <NavItem
           href="/dashboard/branch-manager/attendance"
@@ -1259,21 +1314,47 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
-      <NavItem
-        href="/dashboard/branch-manager/analytics"
-        icon={BarChart3}
-        label="Branch Sales"
-        active={pathname === '/dashboard/branch-manager/analytics'}
-      />
+      <NavGroup label="Analytics & Reports" icon={BarChart3}>
+        <NavItem
+          href="/dashboard/branch-manager/analytics"
+          icon={TrendingUp}
+          label="Branch Sales"
+          active={pathname === '/dashboard/branch-manager/analytics'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/cashier-clearance"
+          icon={DollarSign}
+          label="Cashier Clearance"
+          active={pathname === '/dashboard/branch-manager/cashier-clearance'}
+        />
+      </NavGroup>
 
-      {(user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER) && (
+      <NavGroup label="Inventory" icon={Package}>
+        <NavItem
+          href="/dashboard/branch-manager/stock"
+          icon={Package}
+          label="Stock Levels"
+          active={pathname === '/dashboard/branch-manager/stock'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/stock/analytics"
+          icon={BarChart3}
+          label="Stock Analytics"
+          active={pathname === '/dashboard/branch-manager/stock/analytics'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/stock-out"
+          icon={TrendingDown}
+          label="Stock Out"
+          active={pathname === '/dashboard/branch-manager/stock-out'}
+        />
         <NavItem
           href="/dashboard/branch-manager/wastage"
           icon={Trash2}
           label="Wastage Reports"
           active={pathname === '/dashboard/branch-manager/wastage'}
         />
-      )}
+      </NavGroup>
     </>
   );
 

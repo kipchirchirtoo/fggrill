@@ -22,7 +22,7 @@ router.use(protect);
  */
 router.post(
   '/branch-sales',
-  authorize([UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
+  authorize([UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
   getBranchSales
 );
 
@@ -34,7 +34,7 @@ router.post(
  */
 router.get(
   '/branch-sales/summary',
-  authorize([UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
+  authorize([UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
   getBranchSalesSummary
 );
 
@@ -45,7 +45,7 @@ router.get(
  */
 router.post(
   '/branch-sales/export/pdf',
-  authorize([UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
+  authorize([UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
   exportBranchSalesPDF
 );
 
@@ -56,7 +56,7 @@ router.post(
  */
 router.post(
   '/branch-sales/export/csv',
-  authorize([UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
+  authorize([UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
   exportBranchSalesCSV
 );
 

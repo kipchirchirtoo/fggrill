@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
-    Search, Filter, Download, ArrowUpRight, ArrowDownRight,
-    BarChart3, PieChart, TrendingUp, Calendar, MapPin,
-    Package, RefreshCw, ChevronRight, Eye, MoreHorizontal
+    Search, Download, TrendingUp, Calendar,
+    Package, RefreshCw
 } from 'lucide-react';
 import { auditAPI } from '@/lib/api';
 import { toast } from 'sonner';
@@ -17,7 +18,8 @@ interface SoldItemsAnalyticsProps {
 
 export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnalyticsProps) {
     const [isLoading, setIsLoading] = useState(true);
-    const [data, setData] = useState<any>({ items: [], total_revenue: 0, total_quantity: 0 });
+    const [isExporting, setIsExporting] = useState(false);
+    const [data, setData] = useState<any>({ items: [], total_revenue: 0, total_quantity: 0, total_items: 0 });
     const [searchTerm, setSearchTerm] = useState('');
     const [dateRange, setDateRange] = useState({
         from: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
@@ -28,12 +30,30 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
         setIsLoading(true);
         try {
             const res = await auditAPI.getSoldItemsAnalytics({
-                from_date: dateRange.from,
-                to_date: dateRange.to,
+                start_date: dateRange.from,
+                end_date: dateRange.to,
                 branch_id: branchId
             });
             if (res.success) {
-                setData(res.data);
+                const payload = res.data || {};
+                const summary = payload.summary || {};
+                const analysis = payload.analysis || [];
+
+                setData({
+                    items: analysis.map((item: any) => ({
+                        ...item,
+                        item_id: item.item_id || null,
+                        branch_name: item.branch_name || (item.branch_id ? `Branch ${item.branch_id}` : 'N/A'),
+                        quantity: Number(item.quantity || 0),
+                        revenue: Number(item.revenue || 0),
+                        stock_requested: Number(item.stock_requested || 0),
+                        consumption_ratio: Number(item.consumption_ratio || 0),
+                        category: item.category || 'Uncategorized'
+                    })),
+                    total_revenue: Number(summary.total_revenue || 0),
+                    total_quantity: Number(summary.total_quantity_sold || 0),
+                    total_items: Number(summary.total_items_sold || analysis.length || 0)
+                });
             } else {
                 toast.error(res.message || 'Failed to fetch analytics data');
             }
@@ -49,16 +69,93 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
         fetchData();
     }, [dateRange, branchId]);
 
+    const exportSoldItemsPdf = async () => {
+        const doc = new jsPDF({ orientation: 'landscape' });
+        const generatedAt = new Date();
+
+        doc.setFillColor(26, 26, 26);
+        doc.rect(0, 0, 297, 24, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('FAMOUS GATES HOTELS', 14, 10);
+        doc.setFontSize(11);
+        doc.text('Sold Items Report', 14, 18);
+
+        doc.setTextColor(40, 40, 40);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Period: ${dateRange.from} to ${dateRange.to}`, 14, 34);
+        doc.text(`Generated: ${generatedAt.toLocaleString()}`, 14, 40);
+        doc.text(`Branch: ${branchId ? `Branch ${branchId}` : 'All Branches'}`, 14, 46);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(`Total Revenue: KES ${(data.total_revenue || 0).toLocaleString()}`, 210, 34);
+        doc.text(`Units Sold: ${(data.total_quantity || 0).toLocaleString()}`, 210, 40);
+        doc.text(`Unique Items: ${(data.total_items || 0).toLocaleString()}`, 210, 46);
+
+        autoTable(doc, {
+            startY: 54,
+            head: [[
+                'Product',
+                'Category',
+                'Branch',
+                'Qty Sold',
+                'Revenue (KES)',
+                'Stock Requested',
+                'Efficiency'
+            ]],
+            body: (filteredItems.length ? filteredItems : data.items || []).map((item: any) => [
+                item.name || 'Unknown',
+                item.category || 'Uncategorized',
+                item.branch_name || 'N/A',
+                Number(item.quantity || 0).toLocaleString(),
+                Number(item.revenue || 0).toLocaleString(),
+                item.stock_requested ? Number(item.stock_requested).toLocaleString() : '-',
+                item.stock_requested ? `${(Number(item.consumption_ratio || 0) * 100).toFixed(1)}%` : 'N/A'
+            ]),
+            headStyles: {
+                fillColor: [26, 26, 26],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold'
+            },
+            bodyStyles: {
+                textColor: [55, 55, 55],
+                fontSize: 9
+            },
+            alternateRowStyles: {
+                fillColor: [248, 248, 248]
+            },
+            margin: { left: 14, right: 14 }
+        });
+
+        doc.save(`FG_Sold_Items_${dateRange.from}_${dateRange.to}.pdf`);
+    };
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            await exportSoldItemsPdf();
+            toast.success('Sold items report downloaded');
+        } catch (error) {
+            console.error('Error exporting sold items analytics:', error);
+            toast.error('Failed to export report');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     const filteredItems = useMemo(() => {
         if (!data.items) return [];
         return data.items.filter((item: any) =>
             item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.sku.toLowerCase().includes(searchTerm.toLowerCase())
+            String(item.item_id || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [data.items, searchTerm]);
 
     const topPerformers = useMemo(() => {
-        return [...(data.items || [])].sort((a, b) => b.total_revenue - a.total_revenue).slice(0, 5);
+        return [...(data.items || [])].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
     }, [data.items]);
 
     return (
@@ -116,8 +213,12 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
                     >
                         <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-xl text-[13px] font-bold hover:bg-black transition-all shadow-sm">
-                        <Download className="h-4 w-4" /> Export Report
+                    <button
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-xl text-[13px] font-bold hover:bg-black transition-all shadow-sm disabled:opacity-50"
+                    >
+                        <Download className="h-4 w-4" /> {isExporting ? 'Exporting...' : 'Export Report'}
                     </button>
                 </div>
             </div>
@@ -129,7 +230,7 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
                         <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
                             <TrendingUp className="h-5 w-5 text-emerald-600" />
                         </div>
-                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-bold uppercase tracking-tight">Active Items</span>
+                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-bold uppercase tracking-tight">Revenue</span>
                     </div>
                     <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Total Revenue</p>
                     <p className="text-[24px] font-black text-stone-900">KES {(data.total_revenue || 0).toLocaleString()}</p>
@@ -159,10 +260,10 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
                                     <div className="w-24 h-1.5 bg-stone-50 rounded-full overflow-hidden">
                                         <div
                                             className="h-full bg-stone-900 rounded-full"
-                                            style={{ width: `${(item.total_revenue / topPerformers[0].total_revenue) * 100}%` }}
+                                            style={{ width: `${topPerformers[0]?.revenue ? (item.revenue / topPerformers[0].revenue) * 100 : 0}%` }}
                                         />
                                     </div>
-                                    <span className="text-[12px] font-bold text-stone-900">KES {item.total_revenue.toLocaleString()}</span>
+                                    <span className="text-[12px] font-bold text-stone-900">KES {item.revenue.toLocaleString()}</span>
                                 </div>
                             </div>
                         ))}
@@ -174,9 +275,9 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
             <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/30">
                     <h3 className="text-[15px] font-bold text-stone-900">Sold Items Inventory</h3>
-                    <button className="text-[11px] font-bold text-stone-400 hover:text-stone-900 transition-colors uppercase tracking-wider flex items-center gap-1">
-                        <Filter className="h-3.5 w-3.5" /> Advance Filters
-                    </button>
+                    <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        {data.total_items || 0} unique items tracked
+                    </span>
                 </div>
 
                 <div className="overflow-x-auto -mx-6 sm:mx-0">
@@ -186,22 +287,23 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
                                 <thead>
                                     <tr className="bg-stone-50/50 border-b border-stone-100">
                                         <th className="py-3 px-6 text-left text-[11px] font-bold text-stone-400 uppercase tracking-wider">Product Info</th>
+                                        <th className="py-3 px-6 text-left text-[11px] font-bold text-stone-400 uppercase tracking-wider">Branch</th>
                                         <th className="py-3 px-6 text-center text-[11px] font-bold text-stone-400 uppercase tracking-wider">Qty Sold</th>
                                         <th className="py-3 px-6 text-right text-[11px] font-bold text-stone-400 uppercase tracking-wider">Total Revenue</th>
-                                        <th className="py-3 px-6 text-left text-[11px] font-bold text-stone-400 uppercase tracking-wider">Branch Activity</th>
-                                        <th className="py-3 px-6 text-center text-[11px] font-bold text-stone-400 uppercase tracking-wider">Actions</th>
+                                        <th className="py-3 px-6 text-center text-[11px] font-bold text-stone-400 uppercase tracking-wider">Stock Requested</th>
+                                        <th className="py-3 px-6 text-center text-[11px] font-bold text-stone-400 uppercase tracking-wider">Efficiency</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-100">
                                     {isLoading ? (
                                         Array(5).fill(0).map((_, i) => (
                                             <tr key={i} className="animate-pulse">
-                                                <td colSpan={5} className="py-4 px-6"><div className="h-10 bg-stone-50 rounded-lg w-full" /></td>
+                                                <td colSpan={6} className="py-4 px-6"><div className="h-10 bg-stone-50 rounded-lg w-full" /></td>
                                             </tr>
                                         ))
                                     ) : filteredItems.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="py-12 text-center text-stone-400 text-[13px]">No sales data found for the selected criteria.</td>
+                                            <td colSpan={6} className="py-12 text-center text-stone-400 text-[13px]">No sales data found for the selected criteria.</td>
                                         </tr>
                                     ) : (
                                         filteredItems.map((item: any, i: number) => (
@@ -209,28 +311,23 @@ export function SoldItemsAnalytics({ branchId, title, subtitle }: SoldItemsAnaly
                                                 <td className="py-4 px-6">
                                                     <div className="flex flex-col">
                                                         <span className="text-[13px] font-bold text-stone-900">{item.name}</span>
-                                                        <span className="text-[11px] text-stone-400 font-mono italic">{item.sku}</span>
+                                                        <span className="text-[11px] text-stone-400 font-mono italic">{item.item_id || 'N/A'}</span>
                                                     </div>
                                                 </td>
+                                                <td className="py-4 px-6 text-[13px] text-stone-600 font-medium">{item.branch_name}</td>
                                                 <td className="py-4 px-6 text-center">
-                                                    <span className="text-[14px] font-bold text-stone-900">{item.total_quantity}</span>
+                                                    <span className="text-[14px] font-bold text-stone-900">{item.quantity.toLocaleString()}</span>
                                                 </td>
                                                 <td className="py-4 px-6 text-right">
-                                                    <span className="text-[14px] font-black text-stone-900">KES {item.total_revenue.toLocaleString()}</span>
+                                                    <span className="text-[14px] font-black text-stone-900">KES {item.revenue.toLocaleString()}</span>
                                                 </td>
-                                                <td className="py-4 px-6">
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {(item.branches || []).map((b: any, bi: number) => (
-                                                            <div key={bi} className="flex items-center gap-1 bg-stone-100 px-2 py-0.5 rounded-full text-[10px] font-medium text-stone-600 border border-stone-200">
-                                                                <MapPin className="h-2.5 w-2.5" /> {b.name}: {b.qty}
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                                <td className="py-4 px-6 text-center text-[13px] font-semibold text-stone-700">
+                                                    {item.stock_requested ? item.stock_requested.toLocaleString() : '-'}
                                                 </td>
                                                 <td className="py-4 px-6 text-center">
-                                                    <button className="p-2 hover:bg-stone-200 rounded-lg text-stone-400 hover:text-stone-900 transition-colors" title="View Trends">
-                                                        <Eye className="h-4 w-4" />
-                                                    </button>
+                                                    <span className={`text-[12px] font-bold ${item.stock_requested ? (item.consumption_ratio > 0.9 ? 'text-emerald-600' : item.consumption_ratio > 0.5 ? 'text-amber-600' : 'text-rose-600') : 'text-stone-300'}`}>
+                                                        {item.stock_requested ? `${(item.consumption_ratio * 100).toFixed(1)}%` : 'N/A'}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         ))

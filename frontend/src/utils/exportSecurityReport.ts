@@ -3,6 +3,8 @@
  * Generates comprehensive security reports in multiple formats
  */
 
+import { PYTHON_SERVICE_URL } from '@/lib/config';
+
 interface SecurityLog {
   id: string;
   created_at: string;
@@ -344,6 +346,8 @@ export const exportToPDF = async (logs: SecurityLog[], stats: SecurityStats | nu
   const filename = `FG_Security_Report_${timestamp}.pdf`;
 
   try {
+    console.log('Generating PDF report with Python service URL:', PYTHON_SERVICE_URL);
+    
     // Prepare data for Python service
     const reportData = {
       date_range: 'Last 24 Hours',
@@ -400,8 +404,11 @@ export const exportToPDF = async (logs: SecurityLog[], stats: SecurityStats | nu
       }))
     };
 
-    // Call Python service (port 5001)
-    const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'http://localhost:5001'}/api/reports/generate/security-report`, {
+    // Call Python service - URL is already normalized in config
+    const url = `${PYTHON_SERVICE_URL}/api/reports/generate/security-report`;
+    console.log('Calling PDF generation endpoint:', url);
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -410,19 +417,23 @@ export const exportToPDF = async (logs: SecurityLog[], stats: SecurityStats | nu
     });
 
     if (!response.ok) {
-      throw new Error('Failed to generate PDF report');
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('PDF generation failed:', response.status, errorText);
+      throw new Error(`Failed to generate PDF report: ${response.status} ${response.statusText}`);
     }
 
     // Download the PDF
     const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
+    link.href = downloadUrl;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(downloadUrl);
+    
+    console.log('PDF report generated successfully:', filename);
   } catch (error) {
     console.error('PDF generation error:', error);
     throw error;

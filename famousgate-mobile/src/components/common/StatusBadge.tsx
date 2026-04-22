@@ -1,68 +1,28 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { View, StyleSheet } from 'react-native';
+import { Text } from 'react-native-paper';
 import { colors, spacing } from '../../theme';
 
 interface StatusBadgeProps {
-  status: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
-  label: string;
-  icon?: string;
-  size?: 'small' | 'medium' | 'large';
+  status: string;
+  variant?: 'success' | 'warning' | 'danger' | 'info' | 'default';
 }
 
-const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label, icon, size = 'medium' }) => {
-  const getStatusColor = () => {
-    switch (status) {
-      case 'success':
-        return colors.success.DEFAULT;
-      case 'warning':
-        return colors.warning.DEFAULT;
-      case 'danger':
-        return colors.danger.DEFAULT;
-      case 'info':
-        return colors.info.DEFAULT;
-      case 'neutral':
-      default:
-        return colors.text.tertiary;
-    }
-  };
+const STATUS_COLORS = {
+  success: colors.success.DEFAULT,
+  warning: colors.warning.DEFAULT,
+  danger: colors.danger.DEFAULT,
+  info: colors.info.DEFAULT,
+  default: colors.text.tertiary,
+};
 
-  const getSizeStyles = () => {
-    switch (size) {
-      case 'small':
-        return { fontSize: 11, padding: 4, iconSize: 12 };
-      case 'large':
-        return { fontSize: 14, padding: 10, iconSize: 18 };
-      case 'medium':
-      default:
-        return { fontSize: 12, padding: 6, iconSize: 14 };
-    }
-  };
-
-  const statusColor = getStatusColor();
-  const sizeStyles = getSizeStyles();
-
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, variant = 'default' }) => {
+  const color = STATUS_COLORS[variant];
+  
   return (
-    <View
-      style={[
-        styles.badge,
-        {
-          backgroundColor: `${statusColor}15`,
-          paddingHorizontal: sizeStyles.padding,
-          paddingVertical: sizeStyles.padding / 2,
-        },
-      ]}
-    >
-      {icon && (
-        <MaterialCommunityIcons
-          name={icon as any}
-          size={sizeStyles.iconSize}
-          color={statusColor}
-          style={styles.icon}
-        />
-      )}
-      <Text style={[styles.label, { color: statusColor, fontSize: sizeStyles.fontSize }]}>
-        {label}
+    <View style={[styles.badge, { backgroundColor: `${color}18` }]}>
+      <Text style={[styles.text, { color }]}>
+        {status.toUpperCase().replace('_', ' ')}
       </Text>
     </View>
   );
@@ -70,19 +30,13 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label, icon, size = '
 
 const styles = StyleSheet.create({
   badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     borderRadius: 6,
     alignSelf: 'flex-start',
   },
-  icon: {
-    marginRight: spacing.xs / 2,
-  },
-  label: {
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  text: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
-
-export default StatusBadge;

@@ -71,6 +71,7 @@ export interface BranchSalesData {
   daily_breakdown: DailyBreakdown[];
   payment_method_breakdown: PaymentMethodBreakdown[];
   category_breakdown: CategoryBreakdown[];
+  transactions?: TransactionRecord[];
 }
 
 export interface BranchSalesResponse {

@@ -16,6 +16,9 @@ import { toast } from 'sonner';
 
 import { AddItemModal } from '@/components/storekeeping/AddItemModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertsWidget } from '@/components/branch-manager/AlertsWidget';
+import { QuickActionsWidget } from '@/components/branch-manager/QuickActionsWidget';
+import { PerformanceSummaryWidget } from '@/components/branch-manager/PerformanceSummaryWidget';
 
 export default function BranchManagerDashboard() {
   const { user } = useAuth();
@@ -146,6 +149,15 @@ export default function BranchManagerDashboard() {
               </div>
             ))}
           </div>
+
+          {/* Performance Summary Widget */}
+          {currentBranchId && <PerformanceSummaryWidget branchId={currentBranchId} />}
+
+          {/* Quick Actions Widget */}
+          <QuickActionsWidget />
+
+          {/* Alerts Widget */}
+          {currentBranchId && <AlertsWidget branchId={currentBranchId} />}
 
           {/* Quick Access */}
           <div className="card-elevated p-5">

@@ -73,14 +73,28 @@ export class Guest implements IGuest {
   // ===========================================================
 
   static async findById(id: string): Promise<Guest | null> {
-    const { data, error } = await supabase
-      .from('guests')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('guests')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-    if (error || !data) return null;
-    return Guest.fromDatabase(data);
+      if (error) {
+        console.error(`[Guest.findById] Database error for ID ${id}:`, error);
+        throw error;
+      }
+      
+      if (!data) {
+        console.log(`[Guest.findById] No guest found with ID: ${id}`);
+        return null;
+      }
+      
+      return Guest.fromDatabase(data);
+    } catch (error: any) {
+      console.error(`[Guest.findById] Error fetching guest ${id}:`, error);
+      throw new Error(`Failed to fetch guest: ${error.message}`);
+    }
   }
 
   static async findByEmail(email: string): Promise<Guest | null> {

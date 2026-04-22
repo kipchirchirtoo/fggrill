@@ -86,16 +86,24 @@ export default function GuestProfilePage() {
     setLoading(true);
     try {
       const [guestRes, loyaltyRes, historyRes] = await Promise.all([
-        guestAPI.getGuest(guestId),
-        guestLoyaltyAPI.getLoyalty(guestId),
-        guestLoyaltyAPI.getHistory(guestId),
+        guestAPI.getGuest(guestId).catch(err => ({ success: false, error: err.message, data: null })),
+        guestLoyaltyAPI.getLoyalty(guestId).catch(err => ({ success: false, error: err.message, data: null })),
+        guestLoyaltyAPI.getHistory(guestId).catch(err => ({ success: false, error: err.message, data: null })),
       ]);
 
-      if (guestRes.success) setGuest(guestRes.data);
+      if (!guestRes.success || !guestRes.data) {
+        toast.error('Guest not found or has been deleted');
+        router.push('/dashboard/reception/guests');
+        return;
+      }
+
+      setGuest(guestRes.data);
       if (loyaltyRes.success) setLoyalty(loyaltyRes.data);
       if (historyRes.success) setHistory(historyRes.data);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error loading guest data:', error);
       toast.error('Failed to load guest data');
+      router.push('/dashboard/reception/guests');
     } finally {
       setLoading(false);
     }

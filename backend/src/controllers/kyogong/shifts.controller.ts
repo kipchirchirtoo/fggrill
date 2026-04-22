@@ -5,7 +5,8 @@ import { FloatHistoryService } from '../../services/kyogong/float-history.servic
 // Helper to map shift object to what frontend expects
 const mapShiftResponse = (shift: any) => {
   if (!shift) return null;
-  return {
+  
+  const mapped = {
     ...shift,
     opening_cash_float: shift.opening_float,
     cash_sales: shift.total_cash_in,
@@ -14,6 +15,11 @@ const mapShiftResponse = (shift: any) => {
     total_sales: shift.total_revenue,
     opened_at: shift.start_time
   };
+  
+  console.log('🔧 [mapShiftResponse] Original shift:', { id: shift.id, shift_number: shift.shift_number });
+  console.log('🔧 [mapShiftResponse] Mapped shift:', { id: mapped.id, shift_number: mapped.shift_number });
+  
+  return mapped;
 };
 
 /**
@@ -172,6 +178,7 @@ export const getCurrentShift = async (req: Request, res: Response) => {
     if (error && error.code !== 'PGRST116') throw error;
 
     if (!shift) {
+      console.log('🔧 [getCurrentShift] No open shift found for cashier:', cashier_id);
       return res.json({
         success: true,
         data: null,
@@ -179,9 +186,13 @@ export const getCurrentShift = async (req: Request, res: Response) => {
       });
     }
 
+    console.log('🔧 [getCurrentShift] Found shift:', { id: shift.id, shift_number: shift.shift_number, cashier_id: shift.cashier_id });
+    const mappedShift = mapShiftResponse(shift);
+    console.log('🔧 [getCurrentShift] Returning mapped shift:', { id: mappedShift?.id, shift_number: mappedShift?.shift_number });
+
     res.json({
       success: true,
-      data: mapShiftResponse(shift)
+      data: mappedShift
     });
   } catch (error: any) {
     console.error('Get current shift error:', error);

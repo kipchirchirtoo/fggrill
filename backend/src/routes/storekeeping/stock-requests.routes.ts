@@ -7,6 +7,7 @@ import {
     createStockRequest,
     reviewStockRequest,
     approveStockRequest,
+    bulkApproveStockRequests,
     rejectStockRequest,
     cancelStockRequest
 } from '../../controllers/storekeeping/stock-requests.controller';
@@ -22,6 +23,9 @@ router.route('/')
     .post(createStockRequest);
 
 router.get('/branch-performance/:branchId', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchPerformance);
+
+// Bulk approve route (must come before /:id routes)
+router.post('/bulk-approve', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), bulkApproveStockRequests);
 
 router.route('/:id')
     .get(getStockRequest);

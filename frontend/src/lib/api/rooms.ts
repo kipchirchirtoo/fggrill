@@ -62,8 +62,8 @@ const bookingsBase = {
   checkOut: (id: string | number) => fetchAPI<void>(`/bookings/${id}/check-out`, { method: 'PUT' }),
   
   // Folio & Billing
-  getFolio: (id: string | number) => fetchAPI<any>(`/bookings/${id}/folio`),
-  addCharge: (id: string | number, data: any) => fetchAPI<void>(`/bookings/${id}/charges`, { method: 'POST', body: JSON.stringify(data) }),
+  getFolio: (id: string | number) => fetchAPI<any>(`/folios/reservation/${id}`),
+  addCharge: (id: string | number, data: any) => fetchAPI<void>(`/folios/reservation/${id}/transaction`, { method: 'POST', body: JSON.stringify(data) }),
   
   getAvailableRooms: (params: { start_date: string; end_date: string; room_type?: string; branch_id?: number }) =>
     fetchAPI<Room[]>(`/bookings/available${buildQuery(params)}`),

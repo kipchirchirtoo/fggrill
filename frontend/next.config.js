@@ -12,6 +12,15 @@ const nextConfig = {
     images: {
         unoptimized: true,
     },
+    // Proxy API requests to backend server
+    async rewrites() {
+        return [
+            {
+                source: '/api/:path*',
+                destination: 'http://localhost:5000/api/:path*',
+            },
+        ];
+    },
 }
 
 module.exports = nextConfig

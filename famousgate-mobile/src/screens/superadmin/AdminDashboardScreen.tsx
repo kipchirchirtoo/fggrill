@@ -7,6 +7,8 @@ import { useAuthStore } from '../../stores/auth.store';
 import { dispatchApi } from '../../api/dispatch.api';
 import { inventoryApi } from '../../api/inventory.api';
 import { systemApi } from '../../api/system.api';
+import DashboardHeader from '../../components/common/DashboardHeader';
+import StatMetricCard from '../../components/common/StatMetricCard';
 
 const AdminDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { user } = useAuthStore();
@@ -46,31 +48,57 @@ const AdminDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   return (
     <View style={styles.container}>
       <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />} contentContainerStyle={styles.scroll}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Superadmin</Text>
-            <Text style={styles.name}>{user?.first_name} {user?.last_name}</Text>
-          </View>
-          <View style={[styles.healthBadge, { backgroundColor: colors.success.DEFAULT + '20' }]}>
-            <MaterialCommunityIcons name="heart-pulse" size={20} color={colors.success.DEFAULT} />
-            <Text style={[styles.healthText, { color: colors.success.DEFAULT }]}>ONLINE</Text>
-          </View>
-        </View>
+        <DashboardHeader
+          navigation={navigation}
+          eyebrow="System command"
+          title={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Superadmin'}
+          subtitle="Cross-branch visibility, alerts, and operations control"
+          icon="shield-crown"
+          accentColor={colors.danger.DEFAULT}
+          badgeLabel="System online"
+          badgeIcon="heart-pulse"
+          badgeColor={colors.success.DEFAULT}
+        />
 
-        <View style={styles.grid}>
+        <View style={styles.metricsList}>
           {[
-            { icon: 'store', label: 'Branches', value: stats.branches, color: colors.primary.DEFAULT },
-            { icon: 'truck-delivery', label: 'Active Deliveries', value: stats.active_deliveries, color: colors.info.DEFAULT, alert: stats.active_deliveries > 0 },
-            { icon: 'alert-circle', label: 'Discrepancies', value: stats.discrepancies, color: stats.discrepancies > 0 ? colors.warning.DEFAULT : colors.text.tertiary, alert: stats.discrepancies > 0 },
-            { icon: 'package-variant-remove', label: 'Low Stock', value: stats.low_stock, color: stats.low_stock > 0 ? colors.danger.DEFAULT : colors.text.tertiary },
+            {
+              icon: 'store',
+              label: 'Branches',
+              value: stats.branches,
+              color: colors.primary.DEFAULT,
+              caption: 'Connected locations',
+              onPress: () => navigation.navigate('UserManagement'),
+            },
+            {
+              icon: 'truck-delivery',
+              label: 'Active Deliveries',
+              value: stats.active_deliveries,
+              color: colors.info.DEFAULT,
+              alert: stats.active_deliveries > 0,
+              caption: 'In motion right now',
+              onPress: () => navigation.navigate('LiveDelivery'),
+            },
+            {
+              icon: 'alert-circle',
+              label: 'Discrepancies',
+              value: stats.discrepancies,
+              color: stats.discrepancies > 0 ? colors.warning.DEFAULT : colors.text.tertiary,
+              alert: stats.discrepancies > 0,
+              caption: 'Require review',
+              onPress: () => navigation.navigate('DiscrepancyAlerts'),
+            },
+            {
+              icon: 'package-variant-remove',
+              label: 'Low Stock',
+              value: stats.low_stock,
+              color: stats.low_stock > 0 ? colors.danger.DEFAULT : colors.text.tertiary,
+              alert: stats.low_stock > 0,
+              caption: 'Monitor inventory risk',
+              onPress: () => navigation.navigate('LiveDelivery'),
+            },
           ].map((s, i) => (
-            <Card key={i} style={[styles.statCard, s.alert && styles.statAlert]}>
-              <Card.Content>
-                <MaterialCommunityIcons name={s.icon as any} size={28} color={s.color} />
-                <Text style={[styles.statVal, { color: s.color }]}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
-              </Card.Content>
-            </Card>
+            <StatMetricCard key={i} {...s} />
           ))}
         </View>
 
@@ -93,16 +121,7 @@ const AdminDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.lg, paddingBottom: 100 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xl },
-  greeting: { fontSize: 15, color: colors.text.tertiary },
-  name: { fontSize: 24, fontWeight: '700', color: colors.text.primary, marginTop: 2 },
-  healthBadge: { flexDirection: 'row', alignItems: 'center', padding: spacing.sm, borderRadius: 8 },
-  healthText: { fontSize: 12, fontWeight: '700', marginLeft: spacing.xs },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs, marginBottom: spacing.xl },
-  statCard: { width: '48%', margin: spacing.xs, backgroundColor: colors.card, ...shadows.sm },
-  statAlert: { borderColor: colors.warning.DEFAULT, borderWidth: 1 },
-  statVal: { fontSize: 30, fontWeight: '700', marginTop: spacing.sm },
-  statLabel: { fontSize: 12, color: colors.text.tertiary, marginTop: 2 },
+  metricsList: { marginBottom: spacing.lg },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: colors.text.primary, marginBottom: spacing.md },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs },
   actionCard: { width: '31%', margin: spacing.xs, backgroundColor: colors.card, borderRadius: 12, padding: spacing.md, alignItems: 'center', ...shadows.sm },

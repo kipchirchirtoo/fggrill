@@ -17,6 +17,39 @@ export function ShiftCloser({ shift, onShiftClosed }: ShiftCloserProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showVarianceField, setShowVarianceField] = useState(false);
 
+    console.log('🌐 [ShiftCloser] Received shift prop:', JSON.stringify(shift, null, 2));
+    console.log('🌐 [ShiftCloser] Shift ID:', shift?.id);
+    console.log('🌐 [ShiftCloser] Shift keys:', shift ? Object.keys(shift) : 'null');
+
+    // Early validation
+    if (!shift) {
+        return (
+            <div className="max-w-lg mx-auto bg-red-50 rounded-xl border border-red-200 p-8 text-center">
+                <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-red-900 mb-2">Invalid Shift Data</h3>
+                <p className="text-red-700 text-sm">No shift data available. Please refresh the page.</p>
+            </div>
+        );
+    }
+
+    if (!shift.id) {
+        return (
+            <div className="max-w-lg mx-auto bg-red-50 rounded-xl border border-red-200 p-8 text-center">
+                <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-red-900 mb-2">Missing Shift ID</h3>
+                <p className="text-red-700 text-sm mb-4">
+                    The shift data is missing a required ID field. This may be a data synchronization issue.
+                </p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="bg-red-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors"
+                >
+                    Refresh Page
+                </button>
+            </div>
+        );
+    }
+
     const cashExpected = (shift.opening_cash_float || 0) + (shift.cash_sales || 0);
     const cashVariance = closingCash ? parseFloat(closingCash) - cashExpected : null;
     const varianceThreshold = Math.max(cashExpected * 0.05, 1000);
@@ -24,6 +57,13 @@ export function ShiftCloser({ shift, onShiftClosed }: ShiftCloserProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (!shift?.id) {
+            console.error('🌐 [ShiftCloser] ERROR: Cannot close shift - ID is missing!', shift);
+            toast.error('Invalid shift data. Please refresh the page and try again.');
+            return;
+        }
+        
         if (!closingCash) {
             toast.error('Closing cash count is required');
             return;
@@ -36,6 +76,7 @@ export function ShiftCloser({ shift, onShiftClosed }: ShiftCloserProps) {
 
         setIsSubmitting(true);
         try {
+            console.log('🌐 [ShiftCloser] Closing shift with ID:', shift.id);
             const res = await kyogongAPI.closeShift(shift.id, {
                 closing_cash_counted: parseFloat(closingCash),
                 closing_petty_cash: closingPettyCash ? parseFloat(closingPettyCash) : undefined,
@@ -54,6 +95,7 @@ export function ShiftCloser({ shift, onShiftClosed }: ShiftCloserProps) {
                 }
             }
         } catch (error) {
+            console.error('🌐 [ShiftCloser] Error closing shift:', error);
             toast.error('Failed to close shift');
         } finally {
             setIsSubmitting(false);

@@ -3,6 +3,7 @@
  *
  * Shows full bill details after scanning a receipt barcode or tapping from UnpaidBills.
  * Handles the real API response shape from GET /api/cashier/bill/:bookingId
+ * Supports multiple bill types: restaurant, bar, hotel, conference, invoice, kyogong, unpaid_bill
  *
  * Receives: { booking: any } — raw API response
  * Navigates to: Payment with { booking }
@@ -10,7 +11,7 @@
 
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Card, Button, Divider } from 'react-native-paper';
+import { Text, Card, Button, Divider, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, shadows } from '../../theme';
 
@@ -22,19 +23,79 @@ interface Props {
 const BillDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const { booking } = route.params;
 
-  // Normalise field names — backend may return different shapes
-  const bookingNum = booking.booking_number || booking.confirmation_number || booking.reference || booking.id?.slice(0, 8);
-  const customerName = booking.customer_name || booking.guest_name || booking.name || 'Guest';
-  const roomNumber = booking.room_number || booking.room?.number;
-  const checkIn = booking.check_in || booking.check_in_date;
-  const checkOut = booking.check_out || booking.check_out_date;
-  const lineItems: any[] = booking.items || booking.line_items || booking.charges || [];
-  const subtotal = Number(booking.subtotal || booking.sub_total || 0);
-  const tax = Number(booking.tax || booking.tax_amount || booking.vat || 0);
-  const totalAmount = Number(booking.total_amount || booking.total || booking.amount || 0);
-  const amountPaid = Number(booking.amount_paid || booking.paid_amount || booking.paid || 0);
-  const balance = Number(booking.balance ?? booking.outstanding_amount ?? (totalAmount - amountPaid));
-  const isPaid = balance <= 0;
+  console.log('📱 [BillDetail] Full booking data:', JSON.stringify(booking, null, 2));
+
+  // Detect bill type from response structure
+  const billType = booking.type || 
+    (booking.order ? (booking.order.service_category ? 'kyogong' : 'restaurant') : 
+    (booking.booking ? 'hotel' : 
+    (booking.invoice ? 'invoice' : 
+    (booking.bill ? 'unpaid_bill' : 'unknown'))));
+
+  console.log('📱 [BillDetail] Detected bill type:', billType);
+
+  // Extract data based on bill type
+  let bookingNum, customerName, roomNumber, checkIn, checkOut, lineItems, billStatus;
+  
+  if (billType === 'restaurant' || billType === 'bar' || billType === 'kyogong') {
+    bookingNum = booking.order?.order_number || booking.bill_number || booking.id?.slice(0, 8);
+    customerName = booking.order?.guest_name || 'Walk-in';
+    roomNumber = booking.order?.room_number;
+    lineItems = booking.order?.items || [];
+    billStatus = booking.order?.status;
+  } else if (billType === 'hotel') {
+    bookingNum = booking.booking?.id?.slice(0, 8) || booking.bill_number;
+    customerName = booking.booking?.guest_name || 'Guest';
+    roomNumber = booking.booking?.room_number;
+    checkIn = booking.booking?.check_in;
+    checkOut = booking.booking?.check_out;
+    lineItems = [];
+    billStatus = booking.booking?.status;
+  } else if (billType === 'conference') {
+    bookingNum = booking.booking?.invoice_number || booking.bill_number;
+    customerName = booking.booking?.company_name || booking.booking?.customer_name || 'Guest';
+    checkIn = booking.booking?.start_date;
+    checkOut = booking.booking?.end_date;
+    lineItems = [];
+    billStatus = booking.booking?.payment_status;
+  } else if (billType === 'invoice') {
+    bookingNum = booking.invoice?.invoice_number || booking.bill_number;
+    customerName = booking.invoice?.customer_name || 'Customer';
+    lineItems = booking.invoice?.items || [];
+    billStatus = booking.invoice?.status;
+  } else if (billType === 'unpaid_bill') {
+    bookingNum = booking.bill?.bill_number || booking.bill_number;
+    customerName = booking.bill?.customer_name || 'Customer';
+    lineItems = booking.bill?.items || [];
+    billStatus = booking.bill?.status;
+  } else {
+    // Fallback for unknown structure
+    bookingNum = booking.booking_number || booking.bill_number || booking.reference || booking.id?.slice(0, 8);
+    customerName = booking.customer_name || booking.guest_name || booking.name || 'Guest';
+    roomNumber = booking.room_number || booking.room?.number;
+    checkIn = booking.check_in || booking.check_in_date;
+    checkOut = booking.check_out || booking.check_out_date;
+    lineItems = booking.items || booking.line_items || booking.charges || [];
+  }
+
+  // Financial data - always in booking.financials
+  const subtotal = Number(booking.financials?.subtotal || booking.financials?.sub_total || 0);
+  const tax = Number(booking.financials?.tax || booking.financials?.tax_amount || booking.financials?.vat || 0);
+  const totalAmount = Number(booking.financials?.total_amount || booking.financials?.total || booking.total_amount || 0);
+  const amountPaid = Number(booking.financials?.amount_paid || booking.financials?.paid || booking.amount_paid || 0);
+  const balance = Number(booking.financials?.balance ?? booking.balance ?? (totalAmount - amountPaid));
+  const isPaid = balance <= 0 || booking.payment_status === 'paid' || billStatus === 'paid';
+
+  console.log('📱 [BillDetail] Financial breakdown:', {
+    subtotal,
+    tax,
+    totalAmount,
+    amountPaid,
+    balance,
+    isPaid,
+    payment_status: booking.payment_status,
+    billStatus
+  });
 
   return (
     <View style={styles.container}>
@@ -46,6 +107,13 @@ const BillDetailScreen: React.FC<Props> = ({ route, navigation }) => {
               <View style={styles.flex}>
                 <Text style={styles.bookingNum}>{bookingNum}</Text>
                 <Text style={styles.customerName}>{customerName}</Text>
+                <Chip 
+                  mode="outlined" 
+                  style={styles.typeChip}
+                  textStyle={styles.typeChipText}
+                >
+                  {billType.toUpperCase()}
+                </Chip>
               </View>
               <View style={[styles.statusBadge, { backgroundColor: isPaid ? colors.success.DEFAULT + '20' : colors.warning.DEFAULT + '20' }]}>
                 <Text style={[styles.statusText, { color: isPaid ? colors.success.DEFAULT : colors.warning.DEFAULT }]}>
@@ -67,6 +135,12 @@ const BillDetailScreen: React.FC<Props> = ({ route, navigation }) => {
                   {new Date(checkIn).toLocaleDateString()}
                   {checkOut ? ` → ${new Date(checkOut).toLocaleDateString()}` : ' (ongoing)'}
                 </Text>
+              </View>
+            )}
+            {billStatus && (
+              <View style={styles.metaRow}>
+                <MaterialCommunityIcons name="information" size={15} color={colors.text.tertiary} />
+                <Text style={styles.metaText}>Status: {billStatus}</Text>
               </View>
             )}
           </Card.Content>
@@ -171,7 +245,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
   flex: { flex: 1 },
   bookingNum: { fontSize: 18, fontWeight: '700', color: colors.text.primary },
-  customerName: { fontSize: 14, color: colors.text.secondary, marginTop: 4 },
+  customerName: { fontSize: 14, color: colors.text.secondary, marginTop: 4, marginBottom: spacing.sm },
+  typeChip: { alignSelf: 'flex-start', height: 24, backgroundColor: colors.primary.DEFAULT + '10', borderColor: colors.primary.DEFAULT },
+  typeChipText: { fontSize: 10, fontWeight: '700', color: colors.primary.DEFAULT, marginVertical: 0 },
   statusBadge: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 8 },
   statusText: { fontSize: 12, fontWeight: '700' },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm },
@@ -180,9 +256,9 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: '600', color: colors.text.primary, marginBottom: spacing.md },
   noItems: { fontSize: 13, color: colors.text.tertiary, fontStyle: 'italic', marginBottom: spacing.md },
   lineItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: spacing.sm },
-  lineDesc: { fontSize: 14, color: colors.text.primary },
+  lineDesc: { fontSize: 14, color: colors.text.primary, flex: 1 },
   lineQty: { fontSize: 12, color: colors.text.tertiary, marginTop: 2 },
-  lineTotal: { fontSize: 14, fontWeight: '600', color: colors.text.primary },
+  lineTotal: { fontSize: 14, fontWeight: '600', color: colors.text.primary, marginLeft: spacing.md },
   divider: { marginVertical: spacing.md },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   totalLabel: { fontSize: 14, color: colors.text.tertiary },

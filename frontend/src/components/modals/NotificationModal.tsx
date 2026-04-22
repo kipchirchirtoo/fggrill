@@ -109,7 +109,7 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
 
   const clearAllNotifications = async () => {
     try {
-      const response = await notificationsAPI.clearMyNotifications();
+      const response = await notificationsAPI.clearNotifications();
       if (response.success) {
         // Remove all read notifications from the list immediately
         setNotifications(prev => prev.filter(n => !n.is_read));

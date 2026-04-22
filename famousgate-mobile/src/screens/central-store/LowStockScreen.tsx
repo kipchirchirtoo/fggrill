@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Text, Card, Searchbar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, shadows } from '../../theme';
-import apiClient from '../../api/client';
+import { inventoryApi } from '../../api/inventory.api';
 
 interface LowStockItem {
   id: string;
@@ -24,9 +24,10 @@ const LowStockScreen: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/mobile/low-stock');
-      setItems(res.data);
-      setFiltered(res.data);
+      const data = await inventoryApi.lowStock();
+      const list = Array.isArray(data) ? data : [];
+      setItems(list);
+      setFiltered(list);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };

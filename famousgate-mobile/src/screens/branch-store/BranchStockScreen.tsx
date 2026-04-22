@@ -4,7 +4,7 @@ import { Text, Card, Searchbar, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, shadows } from '../../theme';
 import { useAuthStore } from '../../stores/auth.store';
-import apiClient from '../../api/client';
+import { inventoryApi } from '../../api/inventory.api';
 
 interface StockItem {
   id: string;
@@ -28,9 +28,10 @@ const BranchStockScreen: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get(`/mobile/stock/branch/${user?.branch_id}`);
-      setItems(res.data);
-      setFiltered(res.data);
+      const data = await inventoryApi.branchStock(user?.branch_id ? String(user.branch_id) : undefined);
+      const list = Array.isArray(data) ? data : [];
+      setItems(list);
+      setFiltered(list);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };

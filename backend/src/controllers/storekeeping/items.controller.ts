@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
+import { randomBytes } from 'crypto';
 import {
   generateSKU,
   generateAutoSKU,
@@ -32,7 +33,8 @@ export const getItems = async (
     }
 
     if (search) {
-      query = query.or(`description.ilike.%${search}%,sku.ilike.%${search}%`);
+      const searchTerm = String(search).trim();
+      query = query.or(`description.ilike.%${searchTerm}%,item_name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`);
     }
 
     if (ordering) {
@@ -643,6 +645,43 @@ export const getCategoriesEndpoint = async (
     res.status(200).json({
       success: true,
       data: categories
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generateBarcodeEndpoint = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const barcode = `ITM-${randomBytes(4).toString('hex').toUpperCase()}`;
+
+      const { data: existing, error } = await supabase
+        .from('simple_items')
+        .select('sku')
+        .eq('barcode', barcode)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!existing) {
+        res.status(200).json({
+          success: true,
+          data: { barcode }
+        });
+        return;
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Unable to generate a unique barcode at this time'
     });
   } catch (error) {
     next(error);

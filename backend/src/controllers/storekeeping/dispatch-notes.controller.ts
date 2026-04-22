@@ -223,11 +223,20 @@ export const createDispatchNote = async (
         const userId = req.user?.id;
         const finalRequestId = stock_request_id || request_id;
 
+        logger.info('Creating dispatch note with data:', {
+            finalRequestId,
+            from_branch_id,
+            to_branch_id,
+            itemsCount: items?.length,
+            userId
+        });
+
         // Handle creation from request ID
         if (finalRequestId && (!items || items.length === 0)) {
             // 1. Get Central Warehouse
             const central = await BranchInventoryService.getCentralWarehouse();
             if (!central) {
+                logger.error('Central warehouse not configured');
                 throw new AppError('Central warehouse not configured', 500);
             }
 
@@ -238,15 +247,25 @@ export const createDispatchNote = async (
                 .eq('id', finalRequestId)
                 .single();
 
-            if (requestError || !request) {
+            if (requestError) {
+                logger.error('Error fetching stock request:', requestError);
+                throw new AppError(`Stock request not found: ${requestError.message}`, 404);
+            }
+
+            if (!request) {
                 throw new AppError('Stock request not found', 404);
             }
 
             // 3. Get Request Items
-            const { data: requestItems } = await supabase
+            const { data: requestItems, error: itemsError } = await supabase
                 .from('stock_request_items')
                 .select('*')
                 .eq('request_id', finalRequestId);
+
+            if (itemsError) {
+                logger.error('Error fetching request items:', itemsError);
+                throw new AppError(`Failed to fetch request items: ${itemsError.message}`, 500);
+            }
 
             if (!requestItems || requestItems.length === 0) {
                 throw new AppError('No items found in this request', 400);
@@ -286,11 +305,16 @@ export const createDispatchNote = async (
         }
 
         // Get destination branch code for dispatch number generation
-        const { data: branch } = await supabase
+        const { data: branch, error: branchError } = await supabase
             .from('branches')
             .select('code')
             .eq('id', to_branch_id)
             .single();
+
+        if (branchError) {
+            logger.error('Error fetching branch:', branchError);
+            throw new AppError(`Failed to fetch branch: ${branchError.message}`, 500);
+        }
 
         if (!branch) {
             throw new AppError('Destination branch not found', 404);
@@ -302,7 +326,75 @@ export const createDispatchNote = async (
 
         if (numberError) {
             logger.error('Error generating dispatch number:', numberError);
-            throw new AppError('Failed to generate dispatch number', 500);
+            // Fallback to manual generation if function doesn't exist
+            const timestamp = Date.now().toString().slice(-6);
+            const dispatch_number = `DN-${branch.code}-${timestamp}`;
+            logger.info('Using fallback dispatch number:', dispatch_number);
+            
+            // Continue with fallback number
+            const { data: newDispatch, error: dispatchError } = await supabase
+                .from('dispatch_notes')
+                .insert({
+                    dispatch_number,
+                    stock_request_id: stock_request_id || null,
+                    from_branch_id,
+                    to_branch_id,
+                    created_by: userId,
+                    vehicle_number: vehicle_number || null,
+                    driver_name: driver_name || null,
+                    driver_phone: driver_phone || null,
+                    estimated_delivery: estimated_delivery || null,
+                    dispatch_notes: dispatch_notes || null,
+                    status: 'DRAFT'
+                })
+                .select()
+                .single();
+
+            if (dispatchError) {
+                logger.error('Error creating dispatch note:', dispatchError);
+                throw new AppError(`Failed to create dispatch: ${dispatchError.message}`, 500);
+            }
+
+            // Insert dispatch items
+            const dispatchItems = items.map((item: any) => ({
+                dispatch_id: newDispatch.id,
+                item_sku: item.item_sku,
+                dispatched_quantity: item.dispatched_quantity || item.quantity,
+                batch_number: item.batch_number || null,
+                expiry_date: item.expiry_date || null,
+                bin_location: item.bin_location || null,
+                status: 'PENDING'
+            }));
+
+            const { error: itemsError } = await supabase
+                .from('dispatch_items')
+                .insert(dispatchItems);
+
+            if (itemsError) {
+                logger.error('Error inserting dispatch items:', itemsError);
+                throw new AppError(`Failed to add items: ${itemsError.message}`, 500);
+            }
+
+            // Fetch complete dispatch with items
+            const { data: completeDispatch } = await supabase
+                .from('dispatch_notes')
+                .select(`
+                    *,
+                    from_branch:branches!from_branch_id(id, name, code),
+                    to_branch:branches!to_branch_id(id, name, code),
+                    items:dispatch_items(
+                      *,
+                      item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
+                    )
+                `)
+                .eq('id', newDispatch.id)
+                .single();
+
+            res.status(201).json({
+                success: true,
+                data: completeDispatch
+            });
+            return;
         }
 
         const dispatch_number = dispatchNumberData;
@@ -316,26 +408,29 @@ export const createDispatchNote = async (
                 from_branch_id,
                 to_branch_id,
                 created_by: userId,
-                vehicle_number,
-                driver_name,
-                driver_phone,
-                estimated_delivery,
-                dispatch_notes,
+                vehicle_number: vehicle_number || null,
+                driver_name: driver_name || null,
+                driver_phone: driver_phone || null,
+                estimated_delivery: estimated_delivery || null,
+                dispatch_notes: dispatch_notes || null,
                 status: 'DRAFT'
             })
             .select()
             .single();
 
-        if (dispatchError) throw dispatchError;
+        if (dispatchError) {
+            logger.error('Error creating dispatch note:', dispatchError);
+            throw new AppError(`Failed to create dispatch: ${dispatchError.message}`, 500);
+        }
 
         // Insert dispatch items
         const dispatchItems = items.map((item: any) => ({
             dispatch_id: newDispatch.id,
             item_sku: item.item_sku,
-            dispatched_quantity: item.dispatched_quantity,
-            batch_number: item.batch_number,
-            expiry_date: item.expiry_date,
-            bin_location: item.bin_location,
+            dispatched_quantity: item.dispatched_quantity || item.quantity,
+            batch_number: item.batch_number || null,
+            expiry_date: item.expiry_date || null,
+            bin_location: item.bin_location || null,
             status: 'PENDING'
         }));
 
@@ -343,20 +438,23 @@ export const createDispatchNote = async (
             .from('dispatch_items')
             .insert(dispatchItems);
 
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+            logger.error('Error inserting dispatch items:', itemsError);
+            throw new AppError(`Failed to add items: ${itemsError.message}`, 500);
+        }
 
         // Fetch complete dispatch with items
         const { data: completeDispatch } = await supabase
             .from('dispatch_notes')
             .select(`
-        *,
-        from_branch:branches!from_branch_id(id, name, code),
-        to_branch:branches!to_branch_id(id, name, code),
-        items:dispatch_items(
-          *,
-          item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
-        )
-      `)
+                *,
+                from_branch:branches!from_branch_id(id, name, code),
+                to_branch:branches!to_branch_id(id, name, code),
+                items:dispatch_items(
+                  *,
+                  item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
+                )
+            `)
             .eq('id', newDispatch.id)
             .single();
 
@@ -364,8 +462,12 @@ export const createDispatchNote = async (
             success: true,
             data: completeDispatch
         });
-    } catch (error) {
-        logger.error('Error creating dispatch note:', error);
+    } catch (error: any) {
+        logger.error('Error creating dispatch note:', {
+            error: error.message,
+            stack: error.stack,
+            body: req.body
+        });
         next(error);
     }
 };

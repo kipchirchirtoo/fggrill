@@ -17,6 +17,11 @@ export const storeAPI = {
   // Stock Requests
   approveStockRequest: (id: string, data?: any) =>
     fetchAPI<void>(`/store/stock-requests/${id}/approve`, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
+  bulkApproveStockRequests: (request_ids: string[], approved_quantity_notes?: string) =>
+    fetchAPI<any>('/store/stock-requests/bulk-approve', { 
+      method: 'POST', 
+      body: JSON.stringify({ request_ids, approved_quantity_notes }) 
+    }),
   rejectStockRequest: (id: string, data?: any) =>
     fetchAPI<void>(`/store/stock-requests/${id}/reject`, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
   reviewStockRequest: (id: string, data: { action: 'APPROVE' | 'REJECT'; review_notes?: string; approved_items?: any[] }) =>
@@ -39,6 +44,7 @@ export const storeAPI = {
   getCategories:     () => fetchAPI<any[]>('/store/categories'),
   previewSKU:        (data: any) => fetchAPI<{ sku: string }>('/store/preview-sku',   { method: 'POST', body: JSON.stringify(data) }),
   generateSKU:       (data: any) => fetchAPI<{ sku: string }>('/store/generate-sku',  { method: 'POST', body: JSON.stringify(data) }),
+  generateBarcode:   (data: any) => fetchAPI<{ barcode: string }>('/store/generate-barcode',  { method: 'POST', body: JSON.stringify(data) }),
   suggestAttributes: (item_name: string) =>
     fetchAPI<any>('/storekeeping/items/suggest', { method: 'POST', body: JSON.stringify({ item_name }) }),
   getMasterCatalog: (params?: { category?: string; search?: string }) =>
@@ -203,6 +209,83 @@ export const storeAPI = {
       return { success: false, message: error instanceof Error ? error.message : 'Generation failed' };
     }
   },
+
+  // Barcode System & Dispatch Workflow
+  receiveItemWithBarcode: (data: {
+    item_id?: string;
+    item_name?: string;
+    category?: string;
+    unit: string;
+    quantity: number;
+    branch_id: string;
+    barcode?: string;
+    notes?: string;
+  }) => fetchAPI<any>('/dispatch/items/receive', { method: 'POST', body: JSON.stringify(data) }),
+
+  generateItemBarcode: (itemId: string) =>
+    fetchAPI<{ barcode: string }>('/dispatch/items/generate-barcode', { method: 'POST', body: JSON.stringify({ item_id: itemId }) }),
+
+  searchItemByBarcode: (barcode: string) =>
+    fetchAPI<any>(`/dispatch/items/search${buildQuery({ barcode })}`),
+
+  createDispatchWithOTP: (data: {
+    from_branch_id: string;
+    to_branch_id: string;
+    items: Array<{ item_id: string; quantity: number; unit: string }>;
+    notes?: string;
+  }) => fetchAPI<any>('/dispatch/dispatches', { method: 'POST', body: JSON.stringify(data) }),
+
+  getDispatchesWithOTP: (params?: {
+    status?: 'pending' | 'in_transit' | 'completed' | 'cancelled';
+    branch_id?: string;
+    from_branch_id?: string;
+    to_branch_id?: string;
+  }) => fetchAPI<any[]>(`/dispatch/dispatches${buildQuery(params)}`),
+
+  getDispatchByIdWithOTP: (dispatchId: string) =>
+    fetchAPI<any>(`/dispatch/dispatches/${dispatchId}`),
+
+  verifyDriverOTP: (dispatchId: string, otp: string) =>
+    fetchAPI<any>(`/dispatch/dispatches/${dispatchId}/verify-driver-otp`, { method: 'POST', body: JSON.stringify({ otp }) }),
+
+  verifyBranchOTP: (dispatchId: string, otp: string) =>
+    fetchAPI<any>(`/dispatch/dispatches/${dispatchId}/verify-branch-otp`, { method: 'POST', body: JSON.stringify({ otp }) }),
+
+  uploadDispatchDocument: async (dispatchId: string, file: File, documentType: 'stock_sheet' | 'delivery_note' | 'other' = 'stock_sheet') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('document_type', documentType);
+
+    return fetchAPI<any>(`/dispatch/dispatches/${dispatchId}/upload-document`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  getDispatchDocuments: (dispatchId: string) =>
+    fetchAPI<any[]>(`/dispatch/dispatches/${dispatchId}/documents`),
+
+  getAuditorDeliveries: (params?: {
+    status?: 'pending' | 'approved' | 'flagged';
+    branch_id?: string;
+  }) => fetchAPI<any[]>(`/dispatch/auditor/deliveries${buildQuery(params)}`),
+
+  getAuditorDeliveryDetail: (dispatchId: string) =>
+    fetchAPI<any>(`/dispatch/auditor/deliveries/${dispatchId}`),
+
+  reviewDelivery: (dispatchId: string, data: {
+    status: 'approved' | 'flagged';
+    notes?: string;
+  }) => fetchAPI<any>(`/dispatch/auditor/deliveries/${dispatchId}/review`, { method: 'POST', body: JSON.stringify(data) }),
+
+  generatePOSBarcode: (data: {
+    order_id?: string;
+    bill_id?: string;
+    branch_id: string;
+  }) => fetchAPI<{ barcode: string }>('/dispatch/pos/generate-barcode', { method: 'POST', body: JSON.stringify(data) }),
+
+  scanPOSBarcode: (barcode: string) =>
+    fetchAPI<any>(`/dispatch/pos/scan${buildQuery({ barcode })}`),
 
   // Aliases for legacy component satisfaction
   getInventory: (params?: any) => storeAPI.getItems(params),

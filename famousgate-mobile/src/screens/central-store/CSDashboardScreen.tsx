@@ -6,6 +6,8 @@ import { colors, spacing, shadows } from '../../theme';
 import { useAuthStore } from '../../stores/auth.store';
 import { dispatchApi } from '../../api/dispatch.api';
 import { inventoryApi } from '../../api/inventory.api';
+import DashboardHeader from '../../components/common/DashboardHeader';
+import StatMetricCard from '../../components/common/StatMetricCard';
 
 interface Stats {
   total_items: number;
@@ -23,14 +25,20 @@ const CSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     setLoading(true);
     try {
       const [dashboard, lowStock] = await Promise.all([
-        dispatchApi.centralDashboard().catch(() => ({})),
+        dispatchApi.centralDashboard().catch(() => null),
         inventoryApi.lowStock().catch(() => []),
       ]);
+      const dashboardData = dashboard || {
+        total_items: 0,
+        low_stock_count: 0,
+        pending_dispatches: 0,
+        today_dispatches: 0,
+      };
       setStats({
-        total_items: dashboard.total_items ?? dashboard.totalItems ?? 0,
-        low_stock_count: Array.isArray(lowStock) ? lowStock.length : (dashboard.low_stock_count ?? 0),
-        pending_dispatches: dashboard.pending_dispatches ?? dashboard.pendingDispatches ?? 0,
-        today_dispatches: dashboard.today_dispatches ?? dashboard.todayDispatches ?? 0,
+        total_items: dashboardData.total_items ?? 0,
+        low_stock_count: Array.isArray(lowStock) ? lowStock.length : (dashboardData.low_stock_count ?? 0),
+        pending_dispatches: dashboardData.pending_dispatches ?? 0,
+        today_dispatches: dashboardData.today_dispatches ?? 0,
       });
     } catch (e) {
       console.error('Dashboard load error:', e);
@@ -42,12 +50,12 @@ const CSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   useEffect(() => { load(); }, [load]);
 
   const actions = [
-    { icon: 'barcode-scan', label: 'Stock Intake', screen: 'StockIntake', color: colors.success.DEFAULT },
-    { icon: 'truck-delivery', label: 'Create Dispatch', screen: 'CreateDispatch', color: colors.accent.DEFAULT },
-    { icon: 'clipboard-list', label: 'Stock Take', screen: 'StockTake', color: colors.info.DEFAULT },
-    { icon: 'package-variant', label: 'GRN', screen: 'GRN', color: colors.primary.DEFAULT },
+    { icon: 'clipboard-list', label: 'Requisitions', screen: 'Requisitions', color: colors.warning.DEFAULT },
+    { icon: 'package-variant-closed', label: 'Packing Station', screen: 'PackingStation', color: colors.info.DEFAULT },
+    { icon: 'truck-fast', label: 'Dispatch', screen: 'DispatchManagement', color: colors.success.DEFAULT },
+    { icon: 'barcode-scan', label: 'Stock Intake', screen: 'StockIntake', color: colors.primary.DEFAULT },
+    { icon: 'clipboard-check', label: 'Stock Take', screen: 'StockTake', color: colors.accent.DEFAULT },
     { icon: 'delete-variant', label: 'Waste Log', screen: 'WasteLog', color: colors.danger.DEFAULT },
-    { icon: 'history', label: 'Dispatch History', screen: 'DispatchHistory', color: colors.warm[600] },
   ];
 
   return (
@@ -56,29 +64,55 @@ const CSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
         contentContainerStyle={styles.scroll}
       >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Welcome back,</Text>
-            <Text style={styles.name}>{user?.first_name} {user?.last_name}</Text>
-            <Text style={styles.role}>Central Storekeeper</Text>
-          </View>
-          <MaterialCommunityIcons name="warehouse" size={44} color={colors.primary.DEFAULT} />
-        </View>
+        <DashboardHeader
+          navigation={navigation}
+          eyebrow="Central store"
+          title={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Central Store'}
+          subtitle="Inventory overview, dispatches, and warehouse activity"
+          icon="warehouse"
+          accentColor={colors.primary.DEFAULT}
+          badgeLabel={stats.low_stock_count > 0 ? `${stats.low_stock_count} low stock alerts` : 'Inventory healthy'}
+          badgeIcon={stats.low_stock_count > 0 ? 'alert-outline' : 'shield-check-outline'}
+          badgeColor={stats.low_stock_count > 0 ? colors.danger.DEFAULT : colors.success.DEFAULT}
+        />
 
-        <View style={styles.grid}>
+        <View style={styles.metricsList}>
           {[
-            { icon: 'package-variant', label: 'Total Items', value: stats.total_items, color: colors.primary.DEFAULT },
-            { icon: 'alert-circle', label: 'Low Stock', value: stats.low_stock_count, color: stats.low_stock_count > 0 ? colors.danger.DEFAULT : colors.text.tertiary, alert: stats.low_stock_count > 0 },
-            { icon: 'clock-outline', label: 'Pending', value: stats.pending_dispatches, color: colors.warning.DEFAULT },
-            { icon: 'truck-check', label: 'Today', value: stats.today_dispatches, color: colors.success.DEFAULT },
+            {
+              icon: 'package-variant',
+              label: 'Total Items',
+              value: stats.total_items,
+              color: colors.primary.DEFAULT,
+              caption: 'Across central inventory',
+              onPress: () => navigation.navigate('StockTake'),
+            },
+            {
+              icon: 'alert-circle',
+              label: 'Low Stock',
+              value: stats.low_stock_count,
+              color: stats.low_stock_count > 0 ? colors.danger.DEFAULT : colors.text.tertiary,
+              alert: stats.low_stock_count > 0,
+              caption: 'Needs replenishment',
+              onPress: () => navigation.navigate('LowStock'),
+            },
+            {
+              icon: 'clock-outline',
+              label: 'Pending Dispatches',
+              value: stats.pending_dispatches,
+              color: colors.warning.DEFAULT,
+              caption: 'Awaiting action',
+              onPress: () => navigation.navigate('DispatchHistory'),
+            },
+            {
+              icon: 'truck-check',
+              label: 'Today Dispatches',
+              value: stats.today_dispatches,
+              color: colors.success.DEFAULT,
+              caption: 'Sent out today',
+              onPress: () => navigation.navigate('DispatchHistory'),
+            },
           ].map((s, i) => (
-            <Card key={i} style={[styles.statCard, s.alert && styles.statAlert]}>
-              <Card.Content>
-                <MaterialCommunityIcons name={s.icon as any} size={28} color={s.color} />
-                <Text style={[styles.statVal, { color: s.color }]}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
-              </Card.Content>
-            </Card>
+            <StatMetricCard key={i} {...s} />
           ))}
         </View>
 
@@ -117,15 +151,7 @@ const CSDashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.lg, paddingBottom: 100 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xl },
-  greeting: { fontSize: 15, color: colors.text.tertiary },
-  name: { fontSize: 24, fontWeight: '700', color: colors.text.primary, marginTop: 2 },
-  role: { fontSize: 13, color: colors.accent.DEFAULT, marginTop: 2, fontWeight: '500' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs, marginBottom: spacing.xl },
-  statCard: { width: '48%', margin: spacing.xs, backgroundColor: colors.card, ...shadows.sm },
-  statAlert: { borderColor: colors.danger.DEFAULT, borderWidth: 1 },
-  statVal: { fontSize: 30, fontWeight: '700', marginTop: spacing.sm },
-  statLabel: { fontSize: 12, color: colors.text.tertiary, marginTop: 2 },
+  metricsList: { marginBottom: spacing.lg },
   sectionTitle: { fontSize: 18, fontWeight: '600', color: colors.text.primary, marginBottom: spacing.md },
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -spacing.xs, marginBottom: spacing.xl },
   actionCard: { width: '31%', margin: spacing.xs, backgroundColor: colors.card, borderRadius: 12, padding: spacing.md, alignItems: 'center', ...shadows.sm },

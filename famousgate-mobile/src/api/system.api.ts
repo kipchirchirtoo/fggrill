@@ -13,7 +13,7 @@ export const systemApi = {
   updateUser: (id: string, data: object) =>
     apiClient.put(`/users/${id}`, data).then(r => r.data),
 
-  // GET /api/audit (audit logs)
+  // GET /api/audit/logs
   auditLogs: (params?: { page?: number; limit?: number }) =>
-    apiClient.get('/audit', { params }).then(r => r.data?.data || r.data),
+    apiClient.get('/audit/logs', { params }).then(r => r.data?.data || r.data),
 };

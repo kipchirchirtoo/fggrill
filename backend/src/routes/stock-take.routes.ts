@@ -21,6 +21,7 @@ const AUDIT_ROLES = [
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
     UserRole.AUDITOR,
+    UserRole.CENTRAL_STOREKEEPER,
     UserRole.BRANCH_MANAGER,
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.BRANCH_STOREKEEPER

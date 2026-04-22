@@ -5,21 +5,30 @@ import { format } from 'date-fns';
 interface StaffAuditRecord {
     id: string;
     date: string;
-    type: 'Credit Bill' | 'Advance' | 'Loan';
+    type: 'Credit Bill' | 'Advance' | 'Loan' | 'Unpaid Bill';
     amount: number;
     staff_name: string;
     staff_id: string;
+    staff_code?: string | null;
+    staff_department?: string | null;
+    staff_role?: string | null;
     description: string;
     status: string;
     reference: string;
+    outstanding_amount?: number;
 }
 
 interface StaffSummary {
     staff_id: string;
     staff_name: string;
+    employee_id?: string | null;
+    department?: string | null;
+    role?: string | null;
+    phone?: string | null;
     total_credit_bills: number;
     total_advances: number;
     total_loans: number;
+    total_unpaid_bills?: number;
     outstanding_balance: number;
 }
 
@@ -108,57 +117,69 @@ export const exportTransactionsPDF = async (
     const creditBills = records.filter(r => r.type === 'Credit Bill');
     const advances = records.filter(r => r.type === 'Advance');
     const loans = records.filter(r => r.type === 'Loan');
+    const unpaidBills = records.filter(r => r.type === 'Unpaid Bill');
+    const totalOutstanding = records.reduce((sum, r) => sum + (r.outstanding_amount || 0), 0);
 
     doc.setFillColor(245, 245, 247);
-    doc.rect(margin, cursorY, 170, 25, 'F');
+    doc.rect(margin, cursorY, 170, 32, 'F');
 
     doc.setFontSize(9);
     doc.setTextColor(100);
     doc.text('Total Transactions:', margin + 5, cursorY + 7);
     doc.text('Credit Bills:', margin + 5, cursorY + 14);
     doc.text('Advances:', margin + 5, cursorY + 21);
+    doc.text('Unpaid Bills:', margin + 5, cursorY + 28);
 
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
     doc.text(`${records.length}`, margin + 50, cursorY + 7);
     doc.text(`${creditBills.length} (${formatCurrency(creditBills.reduce((s, r) => s + r.amount, 0))})`, margin + 50, cursorY + 14);
     doc.text(`${advances.length} (${formatCurrency(advances.reduce((s, r) => s + r.amount, 0))})`, margin + 50, cursorY + 21);
+    doc.text(`${unpaidBills.length} (${formatCurrency(unpaidBills.reduce((s, r) => s + r.amount, 0))})`, margin + 50, cursorY + 28);
 
     doc.text('Loans:', margin + 105, cursorY + 7);
     doc.text('Total Amount:', margin + 105, cursorY + 14);
+    doc.text('Outstanding:', margin + 105, cursorY + 21);
 
     doc.text(`${loans.length} (${formatCurrency(loans.reduce((s, r) => s + r.amount, 0))})`, margin + 130, cursorY + 7);
     doc.text(formatCurrency(totalAmount), margin + 130, cursorY + 14);
+    doc.text(formatCurrency(totalOutstanding), margin + 130, cursorY + 21);
 
     doc.setFont('helvetica', 'normal');
-    cursorY += 35;
+    cursorY += 42;
 
     // 4. Transactions Table
     const tableData = records.map(record => [
         format(new Date(record.date), 'MMM d, yyyy'),
+        record.staff_code || '—',
+        record.staff_department || '—',
         record.reference,
         record.type,
         record.staff_name,
         record.description.length > 40 ? record.description.substring(0, 37) + '...' : record.description,
         formatCurrency(record.amount),
+        formatCurrency(record.outstanding_amount || 0),
         record.status
     ]);
 
     autoTable(doc, {
         startY: cursorY,
-        head: [['Date', 'Ref', 'Type', 'Staff', 'Description', 'Amount', 'Status']],
+        head: [['Date', 'Emp ID', 'Department', 'Ref', 'Type', 'Staff', 'Description', 'Amount', 'Outstanding', 'Status']],
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 8 },
         bodyStyles: { fontSize: 8 },
         columnStyles: {
-            0: { cellWidth: 22 },
+            0: { cellWidth: 18 },
             1: { cellWidth: 18 },
-            2: { cellWidth: 20 },
-            3: { cellWidth: 30 },
-            4: { cellWidth: 40 },
-            5: { cellWidth: 22, halign: 'right' },
-            6: { cellWidth: 18, halign: 'center' }
+            2: { cellWidth: 22 },
+            3: { cellWidth: 16 },
+            4: { cellWidth: 20 },
+            5: { cellWidth: 24 },
+            6: { cellWidth: 28 },
+            7: { cellWidth: 18, halign: 'right' },
+            8: { cellWidth: 20, halign: 'right' },
+            9: { cellWidth: 18, halign: 'center' }
         },
         margin: { left: margin, right: margin }
     });
@@ -233,11 +254,12 @@ export const exportSummaryPDF = async (
     const totalCreditBills = summary.reduce((sum, s) => sum + s.total_credit_bills, 0);
     const totalAdvances = summary.reduce((sum, s) => sum + s.total_advances, 0);
     const totalLoans = summary.reduce((sum, s) => sum + s.total_loans, 0);
+    const totalUnpaidBills = summary.reduce((sum, s) => sum + (s.total_unpaid_bills || 0), 0);
     const totalOutstanding = summary.reduce((sum, s) => sum + s.outstanding_balance, 0);
-    const totalExposure = totalCreditBills + totalAdvances + totalLoans;
+    const totalExposure = totalCreditBills + totalAdvances + totalLoans + totalUnpaidBills;
 
     doc.setFillColor(245, 245, 247);
-    doc.rect(margin, cursorY, 170, 30, 'F');
+    doc.rect(margin, cursorY, 170, 35, 'F');
 
     doc.setFontSize(9);
     doc.setTextColor(100);
@@ -245,6 +267,7 @@ export const exportSummaryPDF = async (
     doc.text('Total Credit Bills:', margin + 5, cursorY + 14);
     doc.text('Total Advances:', margin + 5, cursorY + 21);
     doc.text('Total Loans:', margin + 5, cursorY + 28);
+    doc.text('Total Unpaid Bills:', margin + 5, cursorY + 35);
 
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
@@ -252,6 +275,7 @@ export const exportSummaryPDF = async (
     doc.text(formatCurrency(totalCreditBills), margin + 50, cursorY + 14);
     doc.text(formatCurrency(totalAdvances), margin + 50, cursorY + 21);
     doc.text(formatCurrency(totalLoans), margin + 50, cursorY + 28);
+    doc.text(formatCurrency(totalUnpaidBills), margin + 50, cursorY + 35);
 
     doc.text('Total Outstanding:', margin + 105, cursorY + 7);
     doc.text('Total Exposure:', margin + 105, cursorY + 14);
@@ -260,32 +284,40 @@ export const exportSummaryPDF = async (
     doc.text(formatCurrency(totalExposure), margin + 145, cursorY + 14);
 
     doc.setFont('helvetica', 'normal');
-    cursorY += 40;
+    cursorY += 45;
 
     // 4. Summary Table
     const tableData = summary.map(item => [
         item.staff_name,
+        item.employee_id || '—',
+        item.department || '—',
+        item.role || '—',
         formatCurrency(item.total_credit_bills),
         formatCurrency(item.total_advances),
         formatCurrency(item.total_loans),
+        formatCurrency(item.total_unpaid_bills || 0),
         formatCurrency(item.outstanding_balance),
-        formatCurrency(item.total_credit_bills + item.total_advances + item.total_loans)
+        formatCurrency(item.total_credit_bills + item.total_advances + item.total_loans + (item.total_unpaid_bills || 0))
     ]);
 
     autoTable(doc, {
         startY: cursorY,
-        head: [['Staff Member', 'Credit Bills', 'Advances', 'Loans', 'Outstanding', 'Total Exposure']],
+        head: [['Staff Member', 'Emp ID', 'Department', 'Role', 'Credit Bills', 'Advances', 'Loans', 'Unpaid Bills', 'Outstanding', 'Total Exposure']],
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 8 },
         bodyStyles: { fontSize: 8 },
         columnStyles: {
-            0: { cellWidth: 40 },
-            1: { cellWidth: 25, halign: 'right' },
-            2: { cellWidth: 25, halign: 'right' },
-            3: { cellWidth: 25, halign: 'right' },
-            4: { cellWidth: 25, halign: 'right' },
-            5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+            0: { cellWidth: 28 },
+            1: { cellWidth: 18 },
+            2: { cellWidth: 22 },
+            3: { cellWidth: 18 },
+            4: { cellWidth: 20, halign: 'right' },
+            5: { cellWidth: 18, halign: 'right' },
+            6: { cellWidth: 18, halign: 'right' },
+            7: { cellWidth: 20, halign: 'right' },
+            8: { cellWidth: 20, halign: 'right' },
+            9: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
         },
         margin: { left: margin, right: margin }
     });

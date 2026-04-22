@@ -52,15 +52,30 @@ export function KyogongPOSLayout({
         setShiftLoading(true);
         try {
             const res = await kyogongAPI.getCurrentShift();
+            console.log('🌐 [Web] getCurrentShift RAW response:', JSON.stringify(res, null, 2));
+            
             if (res.success && res.data) {
-                setActiveShift(res.data);
-                if (res.data.id) {
-                    fetchTransactions(res.data.id);
+                console.log('🌐 [Web] Shift data:', JSON.stringify(res.data, null, 2));
+                console.log('🌐 [Web] Shift ID:', res.data.id);
+                console.log('🌐 [Web] Shift keys:', Object.keys(res.data));
+                
+                // Ensure the shift has an ID before setting it
+                if (!res.data.id) {
+                    console.error('🌐 [Web] CRITICAL ERROR: Shift data missing ID field!', res.data);
+                    toast.error('Invalid shift data received. Please refresh the page.');
+                    setActiveShift(null);
+                    return;
                 }
+                
+                setActiveShift(res.data);
+                fetchTransactions(res.data.id);
             } else {
+                console.log('🌐 [Web] No active shift found');
                 setActiveShift(null);
             }
-        } catch {
+        } catch (error) {
+            console.error('🌐 [Web] Error fetching current shift:', error);
+            toast.error('Failed to load shift data');
             setActiveShift(null);
         } finally {
             setShiftLoading(false);

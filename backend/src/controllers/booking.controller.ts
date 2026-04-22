@@ -227,6 +227,8 @@ export const updateBooking = async (
 
 // @desc    Check-in booking
 // @route   POST /api/bookings/:id/check-in
+// @desc    Check-in booking
+// @route   POST /api/bookings/:id/check-in
 // @access  Private
 export const checkInBooking = async (
   req: Request,
@@ -237,6 +239,8 @@ export const checkInBooking = async (
     const { id } = req.params;
     const userId = req.user?.id;
 
+    logger.info(`Check-in attempt for booking ${id} by user ${userId}`);
+
     // 1. Get the booking
     const { data: booking, error: fetchError } = await supabase
       .from('reservations')
@@ -244,12 +248,21 @@ export const checkInBooking = async (
       .eq('id', id)
       .single();
 
-    if (fetchError || !booking) {
+    if (fetchError) {
+      logger.error(`Error fetching booking ${id}:`, fetchError);
       throw new AppError('Booking not found', 404);
     }
 
+    if (!booking) {
+      logger.warn(`Booking ${id} not found`);
+      throw new AppError('Booking not found', 404);
+    }
+
+    logger.info(`Booking ${id} current status: ${booking.status}`);
+
     if (booking.status !== 'confirmed') {
-      throw new AppError(`Booking must be confirmed to check in. Current status: ${booking.status}`, 400);
+      logger.warn(`Cannot check in booking ${id} - status is ${booking.status}, must be confirmed`);
+      throw new AppError(`Cannot check in: Booking status is "${booking.status}". Only confirmed bookings can be checked in.`, 400);
     }
 
     // 2. Update booking status
@@ -265,7 +278,10 @@ export const checkInBooking = async (
       .select()
       .single();
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      logger.error(`Error updating booking ${id} to checked_in:`, updateError);
+      throw updateError;
+    }
 
     // 3. Update room status if room is assigned
     if (booking.room_id) {
@@ -276,13 +292,17 @@ export const checkInBooking = async (
           userId,
           `Room occupied via check-in for booking ${booking.confirmation_number}`
         );
+        logger.info(`Room ${booking.room_id} status updated to OCCUPIED`);
       } catch (roomError) {
         logger.error('Failed to update room status during check-in:', roomError);
+        // Don't fail the check-in if room status update fails
       }
     }
 
+    logger.info(`Successfully checked in booking ${id}`);
     res.status(200).json({ success: true, data: updatedBooking });
-  } catch (error) {
+  } catch (error: any) {
+    logger.error(`Check-in error for booking ${req.params.id}:`, error);
     next(error);
   }
 };

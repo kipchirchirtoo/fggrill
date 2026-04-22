@@ -111,7 +111,11 @@ export const auditAPI = {
   getRoleMigrations: (params?: any) => fetchAPI<any[]>('/system/roles/migration', { method: 'GET' }),
   executeRoleMigration: (data: any) => fetchAPI<any>('/system/roles/migration/execute', { method: 'POST', body: JSON.stringify(data) }),
   revertRoleMigration: (id: any) => fetchAPI<any>(`/system/roles/migration/${id}/revert`, { method: 'POST' }),
-  getSoldItemsAnalytics: (params?: any) => fetchAPI<any>('/analytics/sold-items', { method: 'GET' }),
+  getSoldItemsAnalytics: (params?: any) => fetchAPI<any>(`/auditor/verify/sold-items${buildQuery({
+    ...params,
+    start_date: params?.start_date ?? params?.from_date,
+    end_date: params?.end_date ?? params?.to_date
+  })}`, { method: 'GET' }),
   downloadBrandedPdf: (reportId: any, params?: any) => fetchAPI<Blob>(`/reports/${reportId}/pdf-branded`, { method: 'GET' }),
 
   getAuditLogs: (params?: any) => fetchAPI<AuditLog[]>(`/audit/logs${buildQuery(params)}`),
@@ -177,7 +181,7 @@ export const auditorReportsAPI = {
   exportBrandedPdf: async (reportType: string, params: any) => {
     const result = await fetchAPI<Blob>(`/reports/auditor/export/${reportType}${buildQuery(params)}`, {
       responseType: 'blob'
-    }, PYTHON_SERVICE_URL);
+    }, REPORTS_SERVICE_URL);
     
     if (result.success && result.data && typeof window !== 'undefined') {
       const blob = result.data;

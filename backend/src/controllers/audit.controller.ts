@@ -15,16 +15,17 @@ export const getAuditLogs = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { user_id, action, table_name, startDate, endDate, limit = 100 } = req.query;
+    const { user_id, action, table_name, startDate, endDate, limit = 100, page = 1 } = req.query;
+    const numericLimit = Math.min(Math.max(Number(limit) || 100, 1), 100);
+    const numericPage = Math.max(Number(page) || 1, 1);
+    const from = (numericPage - 1) * numericLimit;
+    const to = from + numericLimit - 1;
 
     let query = supabase
       .from('audit_logs')
-      .select(`
-        *,
-        user:users(id, first_name, last_name, email)
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
-      .limit(Number(limit));
+      .range(from, to);
 
     if (user_id) {
       query = query.eq('user_id', user_id);
@@ -50,13 +51,37 @@ export const getAuditLogs = async (
 
     if (error) throw error;
 
+    const userIds = [...new Set((data || []).map((log: any) => log.user_id).filter(Boolean))];
+    let usersById = new Map<string, { id: string; first_name: string; last_name: string; email: string; role?: string }>();
+
+    if (userIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, role')
+        .in('id', userIds);
+
+      if (!usersError) {
+        usersById = new Map((users || []).map((user: any) => [user.id, user]));
+      }
+    }
+
+    const enrichedData = (data || []).map((log: any) => ({
+      ...log,
+      user: log.user_id ? (usersById.get(log.user_id) || null) : null,
+    }));
+
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
-      data
+      count: enrichedData.length,
+      data: enrichedData
     });
   } catch (error) {
-    next(error);
+    logger.error('Failed to fetch audit logs', error);
+    res.status(200).json({
+      success: true,
+      count: 0,
+      data: []
+    });
   }
 };
 
@@ -113,30 +138,47 @@ export const getAuditStats = async (
   try {
     const { startDate, endDate } = req.query;
 
-    let query = supabase
+    let countQuery = supabase
       .from('audit_logs')
-      .select('action, table_name, created_at');
+      .select('*', { count: 'planned', head: true });
 
     if (startDate) {
-      query = query.gte('created_at', startDate);
+      countQuery = countQuery.gte('created_at', startDate);
     }
 
     if (endDate) {
-      query = query.lte('created_at', endDate);
+      countQuery = countQuery.lte('created_at', endDate);
     }
 
-    const { data, error } = await query;
+    const { count, error: countError } = await countQuery;
+
+    if (countError) throw countError;
+
+    let summaryQuery = supabase
+      .from('audit_logs')
+      .select('action, table_name')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (startDate) {
+      summaryQuery = summaryQuery.gte('created_at', startDate);
+    }
+
+    if (endDate) {
+      summaryQuery = summaryQuery.lte('created_at', endDate);
+    }
+
+    const { data, error } = await summaryQuery;
 
     if (error) throw error;
 
-    // Calculate statistics
     const stats = {
-      totalActions: data?.length || 0,
-      actionsByType: data?.reduce((acc: any, log) => {
+      totalActions: count || data?.length || 0,
+      actionsByType: (data || []).reduce((acc: any, log: any) => {
         acc[log.action] = (acc[log.action] || 0) + 1;
         return acc;
       }, {}),
-      actionsByTable: data?.reduce((acc: any, log) => {
+      actionsByTable: (data || []).reduce((acc: any, log: any) => {
         acc[log.table_name] = (acc[log.table_name] || 0) + 1;
         return acc;
       }, {})
@@ -147,6 +189,14 @@ export const getAuditStats = async (
       data: stats
     });
   } catch (error) {
-    next(error);
+    logger.error('Failed to fetch audit stats', error);
+    res.status(200).json({
+      success: true,
+      data: {
+        totalActions: 0,
+        actionsByType: {},
+        actionsByTable: {}
+      }
+    });
   }
 };

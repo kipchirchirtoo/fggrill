@@ -1438,7 +1438,6 @@ export const getFinancialKPIs = async (
     next(error);
   }
 };
-
 // @desc    Get detailed branch financial profile
 // @route   GET /api/finance/branch-financials/:branchId
 // @access  Private (Finance Staff, Branch Accountant)
@@ -1449,7 +1448,7 @@ export const getBranchFinancialProfile = async (
 ): Promise<void> => {
   try {
     const { branchId } = req.params;
-    const { days = 30 } = req.query;
+    const { days = 30, startDate: startDateParam, endDate: endDateParam } = req.query;
     const branch_id = parseInt(branchId);
 
     if (isNaN(branch_id)) {
@@ -1457,12 +1456,36 @@ export const getBranchFinancialProfile = async (
       return;
     }
 
-    const endDate = new Date().toISOString();
-    const startDate = new Date(Date.now() - (parseInt(days as string) * 24 * 60 * 60 * 1000)).toISOString();
+    const userBranchId = Number(req.user?.branch_id || 0);
+    const userRole = String(req.user?.role || '').toLowerCase();
+
+    if (['branch_manager', 'branch_accountant'].includes(userRole) && userBranchId !== branch_id) {
+      res.status(403).json({ success: false, message: 'Access denied for this branch' });
+      return;
+    }
+
+    const parsedStartDate = typeof startDateParam === 'string'
+      ? new Date(startDateParam.includes('T') ? startDateParam : `${startDateParam}T00:00:00.000Z`)
+      : new Date(Date.now() - (parseInt(days as string) * 24 * 60 * 60 * 1000));
+
+    const parsedEndDate = typeof endDateParam === 'string'
+      ? new Date(endDateParam.includes('T') ? endDateParam : `${endDateParam}T23:59:59.999Z`)
+      : new Date();
+
+    if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime()) || parsedEndDate < parsedStartDate) {
+      res.status(400).json({ success: false, message: 'Invalid date range' });
+      return;
+    }
+
+    const endDate = parsedEndDate.toISOString();
+    const startDate = parsedStartDate.toISOString();
     const dateRange = { startDate, endDate };
 
     // 1. Get Aggregated P&L Data
-    const aggregatedData = await aggregationService.getAggregatedData(dateRange, branch_id);
+    const aggregatedData = await aggregationService.getAggregatedData(
+      { startDate: startDate, endDate: endDate },
+      branch_id
+    );
 
     // 2. Get Recent Payments from central table
     // We fetch more to allow for filtering of branch_id from joined tables
@@ -1474,6 +1497,8 @@ export const getBranchFinancialProfile = async (
         bar_orders ( order_number, branch_id ),
         reservations ( room_id, rooms ( branch_id ) )
       `)
+      .gte('created_at', startDate)
+      .lte('created_at', endDate)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -1503,6 +1528,8 @@ export const getBranchFinancialProfile = async (
       .from('finance_transactions')
       .select('*')
       .eq('branch_id', branch_id)
+      .gte('created_at', startDate)
+      .lte('created_at', endDate)
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -1512,12 +1539,16 @@ export const getBranchFinancialProfile = async (
         .from('restaurant_orders')
         .select('id, order_number, status, total_amount, created_at')
         .eq('branch_id', branch_id)
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
         .order('created_at', { ascending: false })
         .limit(5),
       supabase
         .from('bar_orders')
         .select('id, order_number, status, total, created_at')
         .eq('branch_id', branch_id)
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
         .order('created_at', { ascending: false })
         .limit(5)
     ]);
@@ -1527,6 +1558,8 @@ export const getBranchFinancialProfile = async (
       .from('cashier_logbooks')
       .select('id, status, log_date, audit_notes, type')
       .eq('branch_id', branch_id)
+      .gte('log_date', startDate.slice(0, 10))
+      .lte('log_date', endDate.slice(0, 10))
       .order('log_date', { ascending: false })
       .limit(5);
 
@@ -1703,5 +1736,4 @@ export const updateDailyLogStatus = async (req: Request, res: Response, next: Ne
     next(error);
   }
 };
-
 

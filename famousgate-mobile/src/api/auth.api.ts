@@ -8,6 +8,20 @@ export const authApi = {
   // GET /api/auth/me
   me: () => apiClient.get('/auth/me').then(r => r.data),
 
+  // PUT /api/auth/updatedetails
+  updateDetails: (data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phoneNumber?: string;
+    address?: string;
+    profilePhoto?: string;
+  }) => apiClient.put('/auth/updatedetails', data).then(r => r.data),
+
+  // PUT /api/auth/updatepassword
+  updatePassword: (currentPassword: string, newPassword: string) =>
+    apiClient.put('/auth/updatepassword', { currentPassword, newPassword }).then(r => r.data),
+
   // POST /api/auth/logout
   logout: () => apiClient.post('/auth/logout').then(r => r.data),
 

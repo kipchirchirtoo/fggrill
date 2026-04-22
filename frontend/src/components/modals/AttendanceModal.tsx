@@ -41,7 +41,8 @@ export const AttendanceModal = ({ isOpen, onClose, onSuccess }: AttendanceModalP
 
     const fetchData = async () => {
         try {
-            const res = await attendanceAPI.getAttendance({ userId: user?.id });
+            // Use staff_id instead of userId - the backend expects staff_id parameter
+            const res = await attendanceAPI.getAttendance({ staff_id: user?.id });
             if (res.success) {
                 setHistory(res.data || []);
                 const active = res.data?.find((a: any) => !a.clock_out);
@@ -49,6 +50,7 @@ export const AttendanceModal = ({ isOpen, onClose, onSuccess }: AttendanceModalP
             }
         } catch (error) {
             console.error('Failed to fetch attendance:', error);
+            // Don't show error toast - just log it
         }
     };
 

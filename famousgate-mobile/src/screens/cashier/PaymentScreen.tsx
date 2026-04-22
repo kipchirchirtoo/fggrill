@@ -18,10 +18,36 @@ const METHODS = [
 
 const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
   const { booking } = route.params;
-  const balance = booking.balance ?? booking.outstanding_amount ?? booking.total_amount ?? 0;
+  
+  // Extract balance from financials object (matches backend response structure)
+  const balance = booking.financials?.balance ?? booking.balance ?? booking.outstanding_amount ?? booking.total_amount ?? 0;
+  const totalAmount = booking.financials?.total_amount ?? booking.total_amount ?? 0;
+  const amountPaid = booking.financials?.amount_paid ?? booking.amount_paid ?? 0;
+  
+  // Extract booking identifier based on bill type
+  const billType = booking.type || 'unknown';
+  let bookingId: string;
+  
+  if (billType === 'restaurant' || billType === 'bar' || billType === 'kyogong') {
+    bookingId = booking.order?.order_number || booking.bill_number || booking.id;
+  } else if (billType === 'hotel') {
+    bookingId = booking.booking?.id || booking.id;
+  } else if (billType === 'conference') {
+    bookingId = booking.booking?.invoice_number || booking.bill_number || booking.id;
+  } else if (billType === 'invoice') {
+    bookingId = booking.invoice?.invoice_number || booking.bill_number || booking.id;
+  } else if (billType === 'unpaid_bill') {
+    bookingId = booking.bill?.bill_number || booking.bill_number || booking.id;
+  } else {
+    bookingId = booking.booking_number || booking.bill_number || booking.id;
+  }
+  
+  console.log('📱 [Payment] Bill type:', billType, 'Booking ID:', bookingId, 'Balance:', balance);
+  
   const [method, setMethod] = useState<'cash' | 'mpesa' | 'card'>('cash');
   const [amount, setAmount] = useState(String(balance));
   const [mpesaPhone, setMpesaPhone] = useState('');
+  const [mpesaCode, setMpesaCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [mpesaStatus, setMpesaStatus] = useState<'idle' | 'waiting' | 'success' | 'failed'>('idle');
 
@@ -31,7 +57,33 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
     if (payAmt > balance) { Alert.alert('Error', 'Amount exceeds balance due'); return; }
 
     if (method === 'mpesa') {
-      if (!mpesaPhone || mpesaPhone.length < 10) { Alert.alert('Error', 'Enter a valid M-Pesa phone number'); return; }
+      // For M-Pesa, we need either phone for STK push OR manual code
+      if (!mpesaPhone && !mpesaCode) {
+        Alert.alert('Error', 'Enter M-Pesa phone number for STK push OR enter confirmation code manually');
+        return;
+      }
+      
+      // If manual code is provided, process payment directly
+      if (mpesaCode) {
+        setLoading(true);
+        try {
+          await cashierApi.processPayment({
+            bookingId: bookingId,
+            amount: payAmt,
+            method: 'mpesa_manual',
+            reference: mpesaCode,
+          });
+          Alert.alert('Payment Successful', `M-Pesa payment of KES ${payAmt.toLocaleString()} recorded with code ${mpesaCode}`, [
+            { text: 'OK', onPress: () => navigation.navigate('CashierTabs') },
+          ]);
+        } catch (e: any) {
+          Alert.alert('Error', e.response?.data?.message || 'Payment failed');
+        } finally { setLoading(false); }
+        return;
+      }
+      
+      // Otherwise, send STK push
+      if (mpesaPhone.length < 10) { Alert.alert('Error', 'Enter a valid M-Pesa phone number'); return; }
       setLoading(true);
       setMpesaStatus('waiting');
       try {
@@ -39,8 +91,8 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
         const res = await mpesaApi.initiate({
           phone: mpesaPhone,
           amount: payAmt,
-          booking_id: booking.id,
-          reference: booking.booking_number || booking.id,
+          booking_id: bookingId,
+          reference: bookingId,
         });
         const checkoutId = res.CheckoutRequestID || res.checkout_request_id;
         // Poll for status
@@ -64,7 +116,7 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
           if (attempts >= 12) { // 60 seconds
             clearInterval(poll);
             setMpesaStatus('failed');
-            Alert.alert('Timeout', 'M-Pesa payment timed out. Please check with the customer.');
+            Alert.alert('Timeout', 'M-Pesa payment timed out. Please check with the customer or enter code manually.');
           }
         }, 5000);
       } catch (e: any) {
@@ -78,9 +130,10 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
     try {
       // POST /api/cashier/pay
       await cashierApi.processPayment({
-        booking_id: booking.id,
+        bookingId: bookingId,
         amount: payAmt,
-        payment_method: method,
+        method: method === 'cash' ? 'cash' : (method === 'card' ? 'card_manual' : 'mpesa_manual'),
+        reference: `${method.toUpperCase()}-${Date.now()}`,
       });
       Alert.alert('Payment Successful', `KES ${payAmt.toLocaleString()} received via ${method.toUpperCase()}`, [
         { text: 'OK', onPress: () => navigation.navigate('CashierTabs') },
@@ -97,8 +150,10 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
           <Card.Content>
             <View style={styles.billRow}>
               <View>
-                <Text style={styles.bookingNum}>{booking.booking_number || booking.id?.slice(0, 8)}</Text>
-                <Text style={styles.customer}>{booking.customer_name || booking.guest_name || 'Guest'}</Text>
+                <Text style={styles.bookingNum}>{bookingId}</Text>
+                <Text style={styles.customer}>
+                  {booking.order?.guest_name || booking.booking?.guest_name || booking.invoice?.customer_name || booking.bill?.customer_name || booking.customer_name || 'Guest'}
+                </Text>
               </View>
               <View style={[styles.statusBadge, { backgroundColor: colors.warning.DEFAULT + '20' }]}>
                 <Text style={[styles.statusText, { color: colors.warning.DEFAULT }]}>UNPAID</Text>
@@ -107,12 +162,12 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
             <View style={styles.amountRows}>
               <View style={styles.amountRow}>
                 <Text style={styles.amountLabel}>Total Amount</Text>
-                <Text style={styles.amountValue}>KES {Number(booking.total_amount ?? 0).toLocaleString()}</Text>
+                <Text style={styles.amountValue}>KES {Number(totalAmount).toLocaleString()}</Text>
               </View>
               <View style={styles.amountRow}>
                 <Text style={styles.amountLabel}>Amount Paid</Text>
                 <Text style={[styles.amountValue, { color: colors.success.DEFAULT }]}>
-                  KES {Number(booking.amount_paid ?? 0).toLocaleString()}
+                  KES {Number(amountPaid).toLocaleString()}
                 </Text>
               </View>
               <View style={[styles.amountRow, styles.balanceRow]}>
@@ -139,16 +194,28 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
         </Card>
 
         {method === 'mpesa' && (
-          <TextInput
-            label="M-Pesa Phone Number"
-            value={mpesaPhone}
-            onChangeText={setMpesaPhone}
-            keyboardType="phone-pad"
-            mode="outlined"
-            placeholder="e.g. 0712345678"
-            style={styles.input}
-            left={<TextInput.Icon icon="cellphone" />}
-          />
+          <>
+            <TextInput
+              label="M-Pesa Phone Number (for STK Push)"
+              value={mpesaPhone}
+              onChangeText={setMpesaPhone}
+              keyboardType="phone-pad"
+              mode="outlined"
+              placeholder="e.g. 0712345678"
+              style={styles.input}
+              left={<TextInput.Icon icon="cellphone" />}
+            />
+            <Text style={styles.orText}>OR</Text>
+            <TextInput
+              label="M-Pesa Confirmation Code (Manual)"
+              value={mpesaCode}
+              onChangeText={setMpesaCode}
+              mode="outlined"
+              placeholder="e.g. QGH7XYZ123"
+              style={styles.input}
+              left={<TextInput.Icon icon="check-circle" />}
+            />
+          </>
         )}
 
         <Text style={styles.sectionTitle}>Amount</Text>
@@ -190,7 +257,9 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation }) => {
           style={styles.payBtn}
           icon="check-circle"
         >
-          {method === 'mpesa' ? 'Send M-Pesa Request' : `Confirm Payment — KES ${Number(amount || 0).toLocaleString()}`}
+          {method === 'mpesa' && mpesaCode ? `Confirm M-Pesa Code — KES ${Number(amount || 0).toLocaleString()}` :
+           method === 'mpesa' ? 'Send M-Pesa Request' : 
+           `Confirm Payment — KES ${Number(amount || 0).toLocaleString()}`}
         </Button>
       </ScrollView>
     </View>
@@ -219,6 +288,7 @@ const styles = StyleSheet.create({
   methodLabel: { flex: 1, fontSize: 15, color: colors.text.secondary, marginLeft: spacing.md },
   methodActive: { color: colors.primary.DEFAULT, fontWeight: '600' },
   input: { marginBottom: spacing.md, backgroundColor: colors.card },
+  orText: { fontSize: 12, color: colors.text.tertiary, textAlign: 'center', marginVertical: spacing.sm, fontWeight: '600' },
   quickAmounts: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xl },
   quickBtn: { flex: 1, padding: spacing.md, backgroundColor: colors.input, borderRadius: 8, alignItems: 'center' },
   quickBtnText: { fontSize: 14, fontWeight: '600', color: colors.text.primary },

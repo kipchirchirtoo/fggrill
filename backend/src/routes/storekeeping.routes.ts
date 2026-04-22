@@ -17,7 +17,8 @@ import {
   previewSKUEndpoint,
   getCategoriesEndpoint,
   generateSKUEndpoint,
-  getStockHistory
+  getStockHistory,
+  generateBarcodeEndpoint
 } from '../controllers/storekeeping/items.controller';
 
 import {
@@ -69,7 +70,8 @@ import {
   reviewStockRequest,
   approveStockRequest,
   rejectStockRequest,
-  getBranchPerformance
+  getBranchPerformance,
+  getApprovedRequests
 } from '../controllers/storekeeping/stock-requests.controller';
 
 import {
@@ -118,7 +120,7 @@ router.use(protect);
 
 // Define authorized roles
 const centralRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR]; // Central warehouse management
-const branchRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT]; // Branch stock viewing
+const branchRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT]; // Branch stock viewing
 const allStoreRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]; // All storekeeping roles
 const staffRoles = [
   UserRole.SUPER_ADMIN,
@@ -174,6 +176,9 @@ router.post('/preview-sku', authorize(staffRoles), previewSKUEndpoint);
 // Generate actual SKU
 router.post('/generate-sku', authorize(staffRoles), generateSKUEndpoint);
 
+// Generate barcode
+router.post('/generate-barcode', authorize(managerRoles), generateBarcodeEndpoint);
+
 // =====================================================
 // SHOP ITEMS ROUTES
 // =====================================================
@@ -226,10 +231,12 @@ router.get('/stock-movements', authorize(branchRoles), getStockMovements);
 const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR];
 
 // Stock requests (Branch → Central)
+// IMPORTANT: Specific routes MUST come before parameterized routes
+router.get('/stock-requests/approved', authorize(centralRoles), getApprovedRequests);
+router.get('/stock-requests/pending', authorize(managerRoles), getPendingRequests); // Allow branch managers to see pending requests
+router.get('/stock-requests/branch-performance/:branchId', authorize(auditorRoles), getBranchPerformance);
 router.post('/stock-requests', authorize(branchRoles), createStockRequest);
 router.get('/stock-requests', authorize(branchRoles), getStockRequests);
-router.get('/stock-requests/pending', authorize(centralRoles), getPendingRequests);
-router.get('/stock-requests/branch-performance/:branchId', authorize(auditorRoles), getBranchPerformance);
 router.get('/stock-requests/:id', authorize(branchRoles), getStockRequest);
 router.put('/stock-requests/:id/review', authorize(auditorRoles), reviewStockRequest);
 router.put('/stock-requests/:id/approve', authorize(auditorRoles), approveStockRequest);

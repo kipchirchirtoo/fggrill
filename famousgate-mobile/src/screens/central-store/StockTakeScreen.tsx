@@ -4,6 +4,8 @@ import { Text, Card, Button, TextInput, FAB } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, shadows } from '../../theme';
 import apiClient from '../../api/client';
+import { useAuthStore } from '../../stores/auth.store';
+import { inventoryApi } from '../../api/inventory.api';
 
 interface StockItem {
   id: string;
@@ -14,6 +16,7 @@ interface StockItem {
 }
 
 const StockTakeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { user } = useAuthStore();
   const [items, setItems] = useState<StockItem[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,10 +25,32 @@ const StockTakeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const startSession = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.post('/stock-take/sessions');
-      setSessionId(res.data.id);
-      const itemsRes = await apiClient.get('/mobile/inventory?limit=200');
-      setItems(itemsRes.data.map((i: any) => ({ ...i, counted_qty: null })));
+      const res = await apiClient.post('/stock-takes', {
+        branch_id: user?.branch_id,
+        count_type: 'daily',
+      });
+      const stockTake = res.data?.data || res.data;
+      const stockTakeId = stockTake?.id;
+      setSessionId(stockTakeId || null);
+
+      let hydratedItems: any[] = [];
+      if (stockTakeId) {
+        const itemsRes = await apiClient.get(`/stock-takes/${stockTakeId}/items`);
+        hydratedItems = itemsRes.data?.data || [];
+      }
+
+      if (!Array.isArray(hydratedItems) || hydratedItems.length === 0) {
+        const inventoryItems = await inventoryApi.list({ limit: 200 });
+        hydratedItems = Array.isArray(inventoryItems) ? inventoryItems : [];
+      }
+
+      setItems(hydratedItems.map((i: any) => ({
+        id: i.id,
+        name: i.item_name || i.name,
+        unit: i.unit || 'pcs',
+        current_stock: i.system_quantity ?? i.current_stock ?? 0,
+        counted_qty: i.actual_quantity ?? i.physical_quantity ?? null,
+      })));
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.message || 'Failed to start session');
     } finally {
@@ -42,13 +67,15 @@ const StockTakeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     if (counted.length === 0) { Alert.alert('Error', 'Count at least one item'); return; }
     setSubmitting(true);
     try {
-      await apiClient.post(`/stock-take/sessions/${sessionId}/submit`, {
-        entries: counted.map(i => ({
-          inventory_item_id: i.id,
-          system_qty: i.current_stock,
-          counted_qty: i.counted_qty,
-          variance: (i.counted_qty ?? 0) - i.current_stock,
+      await apiClient.put(`/stock-takes/${sessionId}`, {
+        items: counted.map(i => ({
+          id: i.id,
+          counted_quantity: i.counted_qty,
+          variance_reason: (i.counted_qty ?? 0) !== i.current_stock ? 'Count adjusted from mobile stock take' : undefined,
         })),
+      });
+      await apiClient.post(`/stock-takes/${sessionId}/submit`, {
+        status: 'submitted',
       });
       Alert.alert('Success', `Stock take submitted. ${counted.length} items counted.`, [
         { text: 'OK', onPress: () => navigation.goBack() },

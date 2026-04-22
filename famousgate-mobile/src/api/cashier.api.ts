@@ -3,7 +3,7 @@ import apiClient from './client';
 export const cashierApi = {
   // GET /api/cashier/bill/:bookingId
   getBill: (bookingId: string) =>
-    apiClient.get(`/cashier/bill/${bookingId}`).then(r => r.data),
+    apiClient.get(`/cashier/bill/${bookingId}`).then(r => r.data?.data || r.data),
 
   // GET /api/cashier/unpaid-bills
   unpaidBills: (params?: { branch_id?: string; search?: string }) =>
@@ -11,9 +11,10 @@ export const cashierApi = {
 
   // POST /api/cashier/pay
   processPayment: (data: {
-    booking_id: string;
+    bookingId: string;
     amount: number;
-    payment_method: 'cash' | 'mpesa' | 'card' | 'split';
+    method: string;
+    reference?: string;
     mpesa_phone?: string;
   }) => apiClient.post('/cashier/pay', data).then(r => r.data),
 

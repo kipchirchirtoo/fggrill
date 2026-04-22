@@ -2,15 +2,18 @@ from flask import Blueprint, request, jsonify, send_file
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import asyncio
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from analytics.services.sales_analytics import SalesAnalytics
+from analytics.services.branch_sales_analytics import BranchSalesAnalytics
 from analytics.services.demand_forecast import DemandForecast
 from analytics.services.menu_optimization import MenuOptimization
 from analytics.services.inventory_optimizer import InventoryOptimizer
 from analytics.services.customer_segmentation import CustomerSegmentation
 from analytics.reports.pdf_generator import PDFReportGenerator
+from analytics.reports.csv_exporter import CSVExporter
 from analytics.reports.excel_exporter import ExcelExporter
 
 analytics_bp = Blueprint('analytics', __name__)
@@ -25,11 +28,13 @@ supabase = create_client(supabase_url, supabase_key)
 # Initialize services (assuming they are moved or accessible)
 # For now, we'll assume they are in the same directory structure or updated
 sales_analytics = SalesAnalytics(supabase_client=supabase)
+branch_sales_analytics = BranchSalesAnalytics()
 demand_forecast = DemandForecast(supabase_client=supabase)
 menu_optimization = MenuOptimization()
 inventory_optimizer = InventoryOptimizer()
 customer_segmentation = CustomerSegmentation()
 pdf_generator = PDFReportGenerator()
+csv_exporter = CSVExporter()
 excel_exporter = ExcelExporter()
 
 def get_db_connection():
@@ -60,8 +65,124 @@ def analyze_daily_sales():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ... Port other routes from analytics-service/app.py and maa_analytics.py ...
-# (I will implement a subset first and then expand if needed, or port all)
+@analytics_bp.route('/branch-sales', methods=['POST'])
+def get_branch_sales_analytics():
+    try:
+        data = request.get_json() or {}
+        branch_id = data.get('branch_id')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        filters = data.get('filters')
+
+        if not branch_id or not start_date or not end_date:
+            return jsonify({"error": "branch_id, start_date, and end_date are required"}), 400
+
+        branch_id = int(branch_id)
+        sales_data = branch_sales_analytics.aggregate_sales_data(
+            branch_id=branch_id,
+            start_date=start_date,
+            end_date=end_date,
+            filters=filters
+        )
+        branch_name = branch_sales_analytics.get_branch_name(branch_id)
+
+        return jsonify({
+            "data": sales_data,
+            "metadata": {
+                "branch_id": branch_id,
+                "branch_name": branch_name,
+                "date_range": {
+                    "start": start_date,
+                    "end": end_date
+                },
+                "generated_at": datetime.now().isoformat(),
+                "filters_applied": filters or {}
+            }
+        }), 200
+    except ValueError:
+        return jsonify({"error": "branch_id must be a valid number"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@analytics_bp.route('/branch-sales/export/pdf', methods=['POST'])
+def export_branch_sales_pdf():
+    try:
+        data = request.get_json() or {}
+        branch_id = data.get('branch_id')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        filters = data.get('filters')
+
+        if not branch_id or not start_date or not end_date:
+            return jsonify({"error": "branch_id, start_date, and end_date are required"}), 400
+
+        branch_id = int(branch_id)
+        sales_data = branch_sales_analytics.aggregate_sales_data(
+            branch_id=branch_id,
+            start_date=start_date,
+            end_date=end_date,
+            filters=filters
+        )
+        branch_name = branch_sales_analytics.get_branch_name(branch_id)
+        file_path = asyncio.run(pdf_generator.generate_branch_sales_report(
+            sales_data=sales_data,
+            branch_name=branch_name,
+            date_range={
+                "start": start_date,
+                "end": end_date
+            }
+        ))
+
+        return send_file(
+            file_path,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'branch-sales-{branch_id}-{start_date}-{end_date}.pdf'
+        )
+    except ValueError:
+        return jsonify({"error": "branch_id must be a valid number"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@analytics_bp.route('/branch-sales/export/csv', methods=['POST'])
+def export_branch_sales_csv():
+    try:
+        data = request.get_json() or {}
+        branch_id = data.get('branch_id')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        filters = data.get('filters')
+
+        if not branch_id or not start_date or not end_date:
+            return jsonify({"error": "branch_id, start_date, and end_date are required"}), 400
+
+        branch_id = int(branch_id)
+        sales_data = branch_sales_analytics.aggregate_sales_data(
+            branch_id=branch_id,
+            start_date=start_date,
+            end_date=end_date,
+            filters=filters
+        )
+        branch_name = branch_sales_analytics.get_branch_name(branch_id)
+        file_path = csv_exporter.export_branch_sales(
+            sales_data=sales_data,
+            branch_name=branch_name,
+            date_range={
+                "start": start_date,
+                "end": end_date
+            }
+        )
+
+        return send_file(
+            file_path,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'branch-sales-{branch_id}-{start_date}-{end_date}.csv'
+        )
+    except ValueError:
+        return jsonify({"error": "branch_id must be a valid number"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @analytics_bp.route('/maintenance/predictive-analysis', methods=['GET'])
 def predictive_maintenance_analysis():

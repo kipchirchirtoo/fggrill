@@ -48,6 +48,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
+    return;
+  }
+
   // BYPASS CACHE for navigation requests to ensure latest code in development
   if (request.mode === 'navigate') {
     event.respondWith(

@@ -585,10 +585,7 @@ export const getWatchlist = async (req: Request, res: Response, next: NextFuncti
 
     let query = supabase
       .from('auditor_watchlist')
-      .select(`
-        *,
-        flagged_by_user:users!flagged_by(id, first_name, last_name)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (status) query = query.eq('status', status);
@@ -597,7 +594,26 @@ export const getWatchlist = async (req: Request, res: Response, next: NextFuncti
     const { data, error } = await query;
     if (error) throw error;
 
-    res.status(200).json({ success: true, count: data?.length || 0, data });
+    const flaggedByIds = [...new Set((data || []).map((item: any) => item.flagged_by).filter(Boolean))];
+    let usersById = new Map<string, { id: string; first_name: string; last_name: string }>();
+
+    if (flaggedByIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', flaggedByIds);
+
+      if (!usersError) {
+        usersById = new Map((users || []).map((user: any) => [user.id, user]));
+      }
+    }
+
+    const enrichedData = (data || []).map((item: any) => ({
+      ...item,
+      flagged_by_user: item.flagged_by ? (usersById.get(item.flagged_by) || null) : null,
+    }));
+
+    res.status(200).json({ success: true, count: enrichedData.length, data: enrichedData });
   } catch (error) {
     next(error);
   }
@@ -842,30 +858,46 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
  */
 export const getFinancialReconciliation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    console.log('ðŸ” [Financial Reconciliation] Starting with params:', req.query);
     const { branch_id, date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
+    console.log('ðŸ” [Financial Reconciliation] Target date:', targetDate);
 
     // 1. Get all payments for the date (remove branch_id filter as it doesn't exist on payments)
+    console.log('ðŸ” [Financial Reconciliation] Fetching payments...');
     const { data: rawPayments, error: payError } = await supabase.from('payments').select('*')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
+    if (payError) {
+      console.error('âŒ [Financial Reconciliation] Payments query error:', payError);
+      throw payError;
+    }
+    console.log(`âœ… [Financial Reconciliation] Found ${rawPayments?.length || 0} payments`);
+
+    console.log('ðŸ” [Financial Reconciliation] Fetching pool token sales...');
     const { data: poolSales, error: poolSalesError } = await supabase.from('restaurant_pool_token_sales')
       .select('*, cashier:users(id, first_name, last_name)')
       .gte('created_at', `${targetDate}T00:00:00`)
       .lte('created_at', `${targetDate}T23:59:59`);
 
-    if (payError) throw payError;
-    if (poolSalesError) throw poolSalesError;
+    if (poolSalesError) {
+      console.error('âŒ [Financial Reconciliation] Pool sales query error:', poolSalesError);
+      throw poolSalesError;
+    }
+    console.log(`âœ… [Financial Reconciliation] Found ${poolSales?.length || 0} pool token sales`);
 
     // 2. Collect IDs for related entities to infer branch and cashier
+    console.log('ðŸ” [Financial Reconciliation] Collecting related entity IDs...');
     const bookingIds = [...new Set(rawPayments?.map(p => p.booking_id).filter(Boolean))];
     const invoiceIds = [...new Set(rawPayments?.map(p => p.invoice_id).filter(Boolean))];
     const restOrderIds = [...new Set(rawPayments?.map(p => p.restaurant_order_id).filter(Boolean))];
     const barOrderIds = [...new Set(rawPayments?.map(p => p.bar_order_id).filter(Boolean))];
     const posIds = [...new Set(rawPayments?.map(p => p.pos_transaction_id).filter(Boolean))];
+    console.log('ðŸ” [Financial Reconciliation] IDs collected:', { bookingIds: bookingIds.length, invoiceIds: invoiceIds.length, restOrderIds: restOrderIds.length, barOrderIds: barOrderIds.length, posIds: posIds.length });
 
     // 3. Parallel fetch of related entities
+    console.log('ðŸ” [Financial Reconciliation] Fetching related entities...');
     const [
       { data: bookings },
       { data: invoices },
@@ -879,6 +911,7 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
       barOrderIds.length ? supabase.from('bar_orders').select('id, branch_id, staff_id, auditor_id, audited_at, audit_notes').in('id', barOrderIds) : { data: [] },
       posIds.length ? supabase.from('pos_transactions').select('id, branch_id, cashier_id, auditor_id, audited_at, audit_notes').in('id', posIds) : { data: [] }
     ]);
+    console.log('âœ… [Financial Reconciliation] Related entities fetched:', { bookings: bookings?.length || 0, invoices: invoices?.length || 0, restOrders: restOrders?.length || 0, barOrders: barOrders?.length || 0, posTxns: posTxns?.length || 0 });
 
     // 4. Create lookup maps
     const bookingMap = Object.fromEntries(bookings?.map(b => [b.id, b]) || []);
@@ -948,8 +981,9 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
     enrichedPayments = [...enrichedPayments, ...virtualPoolPayments];
 
     // 7. Fetch user and branch details for display
-    const userIds = [...new Set(enrichedPayments.map(p => p.created_by).filter(Boolean))];
+    const userIds = [...new Set(enrichedPayments.map(p => p.user_id || p.created_by).filter(Boolean))];
     const branchIds = [...new Set(enrichedPayments.map(p => p.branch_id).filter(Boolean))];
+    console.log('ðŸ” [Financial Reconciliation] Fetching user and branch details...', { userIds: userIds.length, branchIds: branchIds.length });
 
     const [{ data: users }, { data: branches }] = await Promise.all([
       userIds.length ? supabase.from('users').select('id, first_name, last_name, role').in('id', userIds) : { data: [] },
@@ -961,7 +995,7 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
 
     const payments = enrichedPayments.map(p => ({
       ...p,
-      cashier: userMap[p.created_by],
+      cashier: userMap[p.user_id || p.created_by],
       branch: branchMap[p.branch_id]
     }));
 
@@ -977,8 +1011,8 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
     // 9. Group by Cashier
     const cashierGroups: Record<string, any> = {};
     payments.forEach(p => {
-      const cashierId = p.created_by || 'system';
-      const cashierName = p.cashier ? `${p.cashier.first_name} ${p.cashier.last_name}` : (p.created_by ? 'Unknown User' : 'System');
+      const cashierId = p.user_id || p.created_by || 'system';
+      const cashierName = p.cashier ? `${p.cashier.first_name} ${p.cashier.last_name}` : ((p.user_id || p.created_by) ? 'Unknown User' : 'System');
       const branchName = p.branch?.name || (p.branch_id ? 'Unknown Branch' : 'Main / Global');
 
       if (!cashierGroups[cashierId]) {
@@ -1111,7 +1145,10 @@ export const getFinancialReconciliation = async (req: Request, res: Response, ne
         branch_summaries: branchSummaries
       }
     });
+    console.log('âœ… [Financial Reconciliation] Response sent successfully');
   } catch (error) {
+    console.error('âŒ [Financial Reconciliation] Error occurred:', error);
+    console.error('âŒ [Financial Reconciliation] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     next(error);
   }
 };
@@ -1538,10 +1575,10 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
     });
 
-    // ── Title block ──────────────────────────────────────────────────────────
+    // â”€â”€ Title block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws.mergeCells('A1:L1');
     const titleCell = ws.getCell('A1');
-    titleCell.value = 'FAMOUSGATE HOTELS — STOCK LEDGER REPORT';
+    titleCell.value = 'FAMOUSGATE HOTELS â€” STOCK LEDGER REPORT';
     titleCell.font = { name: 'Calibri', bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
     titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3C5E' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -1557,7 +1594,7 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
 
     ws.addRow([]); // spacer row 3
 
-    // ── Column definitions ───────────────────────────────────────────────────
+    // â”€â”€ Column definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws.columns = [
       { key: 'name',          width: 32 },
       { key: 'sku',           width: 18 },
@@ -1573,7 +1610,7 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
       { key: 'lastMovement',  width: 18 },
     ];
 
-    // ── Header row (row 4) ───────────────────────────────────────────────────
+    // â”€â”€ Header row (row 4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const headers = ['Item Name', 'SKU', 'Category', 'Unit', 'System Stock', 'Theoretical Stock',
       'Variance', 'Variance %', 'Cost Price (KES)', 'Variance Value (KES)', 'Status', 'Last Movement'];
 
@@ -1593,7 +1630,7 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
     });
     headerRow.height = 30;
 
-    // ── Data rows ────────────────────────────────────────────────────────────
+    // â”€â”€ Data rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let rowIndex = 5;
     let flaggedCount = 0;
     let totalVarianceValue = 0;
@@ -1668,7 +1705,7 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
       rowIndex++;
     });
 
-    // ── Summary row ──────────────────────────────────────────────────────────
+    // â”€â”€ Summary row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws.addRow([]);
     rowIndex++;
     const summaryRow = ws.getRow(rowIndex);
@@ -1687,10 +1724,10 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
     sumValCell.alignment = { horizontal: 'right', vertical: 'middle' };
     summaryRow.height = 26;
 
-    // ── Freeze header ────────────────────────────────────────────────────────
+    // â”€â”€ Freeze header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 4, activeCell: 'A5' }];
 
-    // ── Stream response ──────────────────────────────────────────────────────
+    // â”€â”€ Stream response â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const filename = `stock_ledger_${branchName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -1860,68 +1897,262 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
 export const getSoldItemsAnalysis = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { branch_id, start_date, end_date } = req.query;
+    const requestedBranchId = branch_id ? String(branch_id) : '';
+    const userBranchId = req.user?.branch_id ? String(req.user.branch_id) : '';
+    const userRole = String(req.user?.role || '');
+    const isBranchScopedUser = ['branch_manager', 'branch_accountant'].includes(userRole);
 
-    // 1. Fetch branches for names
-    const { data: branches , error } = await supabase.from('branches').select('id, name');
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    if (isBranchScopedUser && requestedBranchId && requestedBranchId !== '0' && userBranchId && requestedBranchId !== userBranchId) {
+      res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view sold items analytics for your assigned branch.'
+      });
+      return;
     }
+
+    const effectiveBranchId = isBranchScopedUser
+      ? (userBranchId || (requestedBranchId && requestedBranchId !== '0' ? requestedBranchId : ''))
+      : (requestedBranchId && requestedBranchId !== '0' ? requestedBranchId : '');
+
+    const { data: branches, error: branchesError } = await supabase.from('branches').select('id, name');
+    if (branchesError) throw branchesError;
+
+    const branchNameMap = (branches || []).reduce((acc: Record<string, string>, branch: any) => {
+      acc[String(branch.id)] = branch.name;
+      return acc;
+    }, {});
 
     const startDateStr = start_date as string || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const endDateStr = end_date as string || new Date().toISOString();
 
-    // 2. Fetch orders and stock requests
-    let restQuery = supabase.from('restaurant_orders').select('*').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
-    let barQuery = supabase.from('bar_orders').select('*').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
-    let stockReqQuery = supabase.from('stock_requests').select('*').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let restQuery = supabase.from('restaurant_orders').select('id, branch_id').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let barQuery = supabase.from('bar_orders').select('id, branch_id').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let stockReqQuery = supabase.from('stock_requests').select('id, requesting_branch_id').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let barStockReqQuery = supabase.from('bar_stock_requests').select('id, bar_branch_id').gte('created_at', startDateStr).lte('created_at', endDateStr);
 
-    if (branch_id && branch_id !== '0') {
-      restQuery = restQuery.eq('branch_id', branch_id);
-      barQuery = barQuery.eq('branch_id', branch_id);
-      stockReqQuery = stockReqQuery.eq('requesting_branch_id', branch_id);
+    if (effectiveBranchId) {
+      restQuery = restQuery.eq('branch_id', effectiveBranchId);
+      barQuery = barQuery.eq('branch_id', effectiveBranchId);
+      stockReqQuery = stockReqQuery.eq('requesting_branch_id', effectiveBranchId);
+      barStockReqQuery = barStockReqQuery.eq('bar_branch_id', effectiveBranchId);
     }
 
-    const [rawRest, rawBar, rawStock] = await Promise.all([restQuery, barQuery, stockReqQuery]);
+    const [rawRest, rawBar, rawStock, rawBarStock] = await Promise.all([restQuery, barQuery, stockReqQuery, barStockReqQuery]);
 
-    // Fetch items separately for manual joining
-    const restIds = rawRest.data?.map(o => o.id) || [];
-    const barIds = rawBar.data?.map(o => o.id) || [];
-    const stockIds = rawStock.data?.map(o => o.id) || [];
+    if (rawRest.error) throw rawRest.error;
+    if (rawBar.error) throw rawBar.error;
+    if (rawStock.error) throw rawStock.error;
+    if (rawBarStock.error) throw rawBarStock.error;
 
-    const [restItemsRes, barItemsRes, stockItemsRes] = await Promise.all([
-      supabase.from('restaurant_order_items').select('*').in('order_id', restIds),
-      supabase.from('bar_order_items').select('*').in('order_id', barIds), // No inventory join - bar_order_items only has drink_id and drink_name
-      supabase.from('stock_request_items').select('*').in('request_id', stockIds)
+    const restOrders = rawRest.data || [];
+    const barOrders = rawBar.data || [];
+    const stockRequests = rawStock.data || [];
+    const barStockRequests = rawBarStock.data || [];
+
+    const restIds = restOrders.map((order: any) => order.id).filter(Boolean);
+    const barIds = barOrders.map((order: any) => order.id).filter(Boolean);
+    const stockIds = stockRequests.map((request: any) => request.id).filter(Boolean);
+    const barStockIds = barStockRequests.map((request: any) => request.id).filter(Boolean);
+
+    const [restItemsRes, barItemsRes, stockItemsRes, barStockItemsRes] = await Promise.all([
+      restIds.length
+        ? supabase.from('restaurant_order_items').select('order_id, menu_item_id, item_name, quantity, unit_price, total_price').in('order_id', restIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      barIds.length
+        ? supabase.from('bar_order_items').select('order_id, drink_id, drink_name, item_name, quantity, unit_price, total_price').in('order_id', barIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      stockIds.length
+        ? supabase.from('stock_request_items').select('request_id, item_sku, requested_quantity').in('request_id', stockIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      barStockIds.length
+        ? supabase.from('bar_stock_request_items').select('request_id, inventory_item_id, requested_quantity').in('request_id', barStockIds)
+        : Promise.resolve({ data: [], error: null } as any)
     ]);
 
-    const itemsByRestId = (restItemsRes.data || []).reduce((acc: any, i) => {
-      if (!acc[i.order_id]) acc[i.order_id] = [];
-      acc[i.order_id].push(i);
-      return acc;
-    }, {});
-    const itemsByBarId = (barItemsRes.data || []).reduce((acc: any, i) => {
-      if (!acc[i.order_id]) acc[i.order_id] = [];
-      acc[i.order_id].push(i);
-      return acc;
-    }, {});
-    const itemsByStockId = (stockItemsRes.data || []).reduce((acc: any, i) => {
-      if (!acc[i.request_id]) acc[i.request_id] = [];
-      acc[i.request_id].push(i);
+    if (restItemsRes.error) throw restItemsRes.error;
+    if (barItemsRes.error) throw barItemsRes.error;
+    if (stockItemsRes.error) throw stockItemsRes.error;
+    if (barStockItemsRes.error) throw barStockItemsRes.error;
+
+    const restaurantItems = restItemsRes.data || [];
+    const barItems = barItemsRes.data || [];
+    const stockItems = stockItemsRes.data || [];
+    const barStockItems = barStockItemsRes.data || [];
+
+    const menuItemIds = [...new Set(restaurantItems.map((item: any) => item.menu_item_id).filter(Boolean))];
+    const drinkIds = [...new Set(barItems.map((item: any) => item.drink_id).filter(Boolean))];
+
+    const [menuItemsRes, barInventoryRes] = await Promise.all([
+      menuItemIds.length
+        ? supabase.from('restaurant_menu_items').select('id, name').in('id', menuItemIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      drinkIds.length
+        ? supabase.from('restaurant_bar_inventory').select('id, name, category').in('id', drinkIds)
+        : Promise.resolve({ data: [], error: null } as any)
+    ]);
+
+    if (menuItemsRes.error) throw menuItemsRes.error;
+    if (barInventoryRes.error) throw barInventoryRes.error;
+
+    const menuItemNameMap = (menuItemsRes.data || []).reduce((acc: Record<string, string>, item: any) => {
+      acc[String(item.id)] = item.name;
       return acc;
     }, {});
 
-    const restRes = { ...rawRest, data: rawRest.data?.map(o => ({ ...o, items: itemsByRestId[o.id] || [] })) };
-    const barRes = { ...rawBar, data: rawBar.data?.map(o => ({ ...o, items: itemsByBarId[o.id] || [] })) };
-    const stockRes = { ...rawStock, data: rawStock.data?.map(o => ({ ...o, items: itemsByStockId[o.id] || [] })) };
+    const barItemMap = (barInventoryRes.data || []).reduce((acc: Record<string, any>, item: any) => {
+      acc[String(item.id)] = item;
+      return acc;
+    }, {});
 
-    // 3. Process data by branch
+    let consumptionMappings: any[] = [];
+    try {
+      const { data: mappingData, error: mappingError } = await supabase
+        .from('audit_config_consumption')
+        .select('menu_item_id, inventory_item_sku, branch_id');
+
+      if (!mappingError) {
+        consumptionMappings = mappingData || [];
+      }
+    } catch (_error) {}
+
+    const restItemsByOrderId = restaurantItems.reduce((acc: Record<string, any[]>, item: any) => {
+      const key = String(item.order_id);
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    }, {});
+
+    const barItemsByOrderId = barItems.reduce((acc: Record<string, any[]>, item: any) => {
+      const key = String(item.order_id);
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    }, {});
+
+    const stockItemsByRequestId = stockItems.reduce((acc: Record<string, any[]>, item: any) => {
+      const key = String(item.request_id);
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    }, {});
+
+    const barStockItemsByRequestId = barStockItems.reduce((acc: Record<string, any[]>, item: any) => {
+      const key = String(item.request_id);
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    }, {});
+
+    const soldItemsMap: Record<string, any> = {};
+
+    const addSoldItem = (payload: {
+      branchId: string;
+      itemId?: string;
+      name: string;
+      quantity: number;
+      revenue: number;
+      category: string;
+      source: 'restaurant' | 'bar';
+    }) => {
+      const key = `${payload.branchId}_${payload.source}_${payload.itemId || payload.name}`;
+      if (!soldItemsMap[key]) {
+        soldItemsMap[key] = {
+          branch_id: payload.branchId,
+          branch_name: branchNameMap[payload.branchId] || `Branch ${payload.branchId}`,
+          item_id: payload.itemId || null,
+          name: payload.name,
+          quantity: 0,
+          revenue: 0,
+          category: payload.category,
+          source: payload.source
+        };
+      }
+
+      soldItemsMap[key].quantity += payload.quantity;
+      soldItemsMap[key].revenue += payload.revenue;
+    };
+
+    restOrders.forEach((order: any) => {
+      const branchKey = String(order.branch_id);
+      (restItemsByOrderId[String(order.id)] || []).forEach((item: any) => {
+        const quantity = Number(item.quantity || 0);
+        const unitPrice = Number(item.unit_price || 0);
+        const revenue = Number(item.total_price ?? quantity * unitPrice) || 0;
+        const itemId = item.menu_item_id ? String(item.menu_item_id) : '';
+        const name = menuItemNameMap[itemId] || item.item_name || 'Unknown Item';
+
+        addSoldItem({
+          branchId: branchKey,
+          itemId,
+          name,
+          quantity,
+          revenue,
+          category: 'Restaurant',
+          source: 'restaurant'
+        });
+      });
+    });
+
+    barOrders.forEach((order: any) => {
+      const branchKey = String(order.branch_id);
+      (barItemsByOrderId[String(order.id)] || []).forEach((item: any) => {
+        const quantity = Number(item.quantity || 0);
+        const unitPrice = Number(item.unit_price || 0);
+        const revenue = Number(item.total_price ?? quantity * unitPrice) || 0;
+        const itemId = item.drink_id ? String(item.drink_id) : '';
+        const barItem = itemId ? barItemMap[itemId] : null;
+        const name = barItem?.name || item.drink_name || item.item_name || 'Unknown Item';
+
+        addSoldItem({
+          branchId: branchKey,
+          itemId,
+          name,
+          quantity,
+          revenue,
+          category: barItem?.category || 'Bar',
+          source: 'bar'
+        });
+      });
+    });
+
+    const requestedInventoryByBranchSku: Record<string, number> = {};
+    stockRequests.forEach((request: any) => {
+      const branchKey = String(request.requesting_branch_id);
+      (stockItemsByRequestId[String(request.id)] || []).forEach((item: any) => {
+        const sku = String(item.item_sku || '');
+        if (!sku) return;
+        const key = `${branchKey}_${sku}`;
+        requestedInventoryByBranchSku[key] = (requestedInventoryByBranchSku[key] || 0) + Number(item.requested_quantity || 0);
+      });
+    });
+
+    const requestedBarByBranchItem: Record<string, number> = {};
+    barStockRequests.forEach((request: any) => {
+      const branchKey = String(request.bar_branch_id);
+      (barStockItemsByRequestId[String(request.id)] || []).forEach((item: any) => {
+        const inventoryItemId = item.inventory_item_id ? String(item.inventory_item_id) : '';
+        if (!inventoryItemId) return;
+        const key = `${branchKey}_${inventoryItemId}`;
+        requestedBarByBranchItem[key] = (requestedBarByBranchItem[key] || 0) + Number(item.requested_quantity || 0);
+      });
+    });
+
     const branchSummaries: Record<string, any> = {};
-    if (!branch_id || branch_id === '0') {
-      branches?.forEach(b => {
-        branchSummaries[b.id] = {
-          branch_id: b.id,
-          branch_name: b.name,
+
+    if (effectiveBranchId) {
+      branchSummaries[effectiveBranchId] = {
+        branch_id: effectiveBranchId,
+        branch_name: branchNameMap[effectiveBranchId] || `Branch ${effectiveBranchId}`,
+        total_items_sold: 0,
+        total_revenue: 0,
+        total_quantity: 0
+      };
+    } else {
+      (branches || []).forEach((branch: any) => {
+        const branchKey = String(branch.id);
+        branchSummaries[branchKey] = {
+          branch_id: branch.id,
+          branch_name: branch.name,
           total_items_sold: 0,
           total_revenue: 0,
           total_quantity: 0
@@ -1929,67 +2160,59 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
       });
     }
 
-    const soldItemsMap: Record<string, { name: string; quantity: number; revenue: number; branch_id: string; category: string; item_id?: string }> = {};
-    const processOrders = (orders: any[] | null, type: 'restaurant' | 'bar') => {
-      orders?.forEach(order => {
-        order.items?.forEach((item: any) => {
-          // Determine name and ID
-          let name = 'Unknown Item';
-          let item_id = '';
+    const analysis = Object.values(soldItemsMap).map((sold: any) => {
+      let stockRequested = 0;
 
-          if (type === 'restaurant') {
-            name = item.menu_item?.name || item.item_name || 'Unknown Item';
-            item_id = item.menu_item_id;
-          } else {
-            // For bar, use drink_name directly from bar_order_items
-            name = item.drink_name || item.item_name || 'Unknown Item';
-            item_id = item.drink_id;
-          }
+      if (sold.source === 'restaurant' && sold.item_id) {
+        const branchSpecificMappings = consumptionMappings.filter((mapping: any) => (
+          String(mapping.menu_item_id) === String(sold.item_id) && String(mapping.branch_id || '') === String(sold.branch_id)
+        ));
+        const globalMappings = consumptionMappings.filter((mapping: any) => (
+          String(mapping.menu_item_id) === String(sold.item_id) && !mapping.branch_id
+        ));
+        const applicableMappings = branchSpecificMappings.length > 0 ? branchSpecificMappings : globalMappings;
+        const relevantSkus = [...new Set(applicableMappings.map((mapping: any) => String(mapping.inventory_item_sku || '')).filter(Boolean))];
 
-          const key = `${order.branch_id}_${name}`; // Aggregate by name + branch
-          if (!soldItemsMap[key]) {
-            soldItemsMap[key] = { name: name, quantity: 0, revenue: 0, branch_id: order.branch_id, category: type, item_id: item_id };
-          }
-          const qty = item.quantity || 0;
-          const rev = Number(item.price || item.unit_price || 0) * qty; // Handle price differences
-
-          // Fix: Ensure we don't add NaN
-          if (!isNaN(rev)) {
-            soldItemsMap[key].revenue += rev;
-          }
-          soldItemsMap[key].quantity += qty;
-
-          if (branchSummaries[order.branch_id]) {
-            if (!isNaN(rev)) branchSummaries[order.branch_id].total_revenue += rev;
-            branchSummaries[order.branch_id].total_quantity += qty;
-            branchSummaries[order.branch_id].total_items_sold += 1;
-          }
+        relevantSkus.forEach((sku) => {
+          stockRequested += requestedInventoryByBranchSku[`${sold.branch_id}_${sku}`] || 0;
         });
-      });
-    };
+      }
 
-    processOrders(restRes.data || null, 'restaurant');
-    processOrders(barRes.data || null, 'bar');
+      if (sold.source === 'bar' && sold.item_id) {
+        stockRequested = requestedBarByBranchItem[`${sold.branch_id}_${sold.item_id}`] || 0;
+      }
 
-    // 4. Create comparison analysis
-    const requestedItemsMap: Record<string, number> = {};
-    stockRes.data?.forEach(request => {
-      request.items?.forEach((item: any) => {
-        const key = `${request.requesting_branch_id}_${item.item_sku}`;
-        requestedItemsMap[key] = (requestedItemsMap[key] || 0) + (item.requested_quantity || 0);
-      });
+      if (!branchSummaries[sold.branch_id]) {
+        branchSummaries[sold.branch_id] = {
+          branch_id: sold.branch_id,
+          branch_name: sold.branch_name,
+          total_items_sold: 0,
+          total_revenue: 0,
+          total_quantity: 0
+        };
+      }
+
+      branchSummaries[sold.branch_id].total_items_sold += 1;
+      branchSummaries[sold.branch_id].total_revenue += sold.revenue;
+      branchSummaries[sold.branch_id].total_quantity += sold.quantity;
+
+      return {
+        branch_id: sold.branch_id,
+        branch_name: sold.branch_name,
+        item_id: sold.item_id,
+        name: sold.name,
+        category: sold.category,
+        quantity: sold.quantity,
+        revenue: sold.revenue,
+        stock_requested: stockRequested,
+        consumption_ratio: stockRequested > 0 ? sold.quantity / stockRequested : 0
+      };
     });
 
-    const analysis = Object.entries(soldItemsMap).map(([key, sold]) => ({
-      ...sold,
-      stock_requested: requestedItemsMap[key] || 0,
-      consumption_ratio: requestedItemsMap[key] ? (sold.quantity / requestedItemsMap[key]) : 0
-    }));
-
     const summary = {
-      total_items_sold: Object.keys(soldItemsMap).length,
-      total_quantity_sold: Object.values(soldItemsMap).reduce((sum, item) => sum + item.quantity, 0),
-      total_revenue: Object.values(soldItemsMap).reduce((sum, item) => sum + item.revenue, 0),
+      total_items_sold: analysis.length,
+      total_quantity_sold: analysis.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0),
+      total_revenue: analysis.reduce((sum: number, item: any) => sum + Number(item.revenue || 0), 0),
       branch_summaries: Object.values(branchSummaries)
     };
 
@@ -2048,7 +2271,7 @@ export const getBarStockAudits = async (req: Request, res: Response, next: NextF
       });
     }
 
-    // Fetch item names — item_id can reference either restaurant_bar_inventory or store_items
+    // Fetch item names â€” item_id can reference either restaurant_bar_inventory or store_items
     const itemIds = new Set<string>();
     audits?.forEach((audit: any) => {
       audit.items?.forEach((item: any) => {
@@ -2438,229 +2661,364 @@ export const verifyDailyLog = async (req: Request, res: Response, next: NextFunc
 export const getStaffAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { branch_id, start_date, end_date, staff_id } = req.query;
+    const effectiveBranchId = (req as any).user?.branch_id || branch_id;
 
-    logger.info('Fetching staff audit with filters:', { branch_id, start_date, end_date, staff_id });
+    logger.info('Fetching staff audit with filters:', { branch_id: effectiveBranchId, start_date, end_date, staff_id });
 
-    // Build queries with proper joins to get staff names directly
-    // Join: staff_credit_bills -> staff_profiles -> users
+    let staffProfilesQuery = supabase
+      .from('staff_profiles')
+      .select('*');
+
+    if (effectiveBranchId && effectiveBranchId !== 'all') {
+      staffProfilesQuery = staffProfilesQuery.eq('branch_id', effectiveBranchId);
+    }
+
+    if (staff_id && staff_id !== 'all') {
+      staffProfilesQuery = staffProfilesQuery.eq('id', staff_id);
+    }
+
+    const { data: staffProfiles, error: staffProfilesError } = await staffProfilesQuery;
+
+    if (staffProfilesError) {
+      logger.error('Error fetching staff profiles for staff audit:', staffProfilesError);
+      throw staffProfilesError;
+    }
+
+    const profileMap = new Map((staffProfiles || []).map((staff: any) => [staff.id, staff]));
+    const profileByUserId = new Map(
+      (staffProfiles || [])
+        .filter((staff: any) => Boolean(staff.user_id))
+        .map((staff: any) => [staff.user_id, staff])
+    );
+    const staffIds = (staffProfiles || []).map((staff: any) => staff.id).filter(Boolean);
+    const staffUserIds = Array.from(profileByUserId.keys()).filter(Boolean);
+
+    if (staffIds.length === 0) {
+      res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        summary: []
+      });
+      return;
+    }
+
     let creditQuery = supabase
       .from('staff_credit_bills')
-      .select(`
-        id,
-        staff_id,
-        bill_date,
-        amount,
-        description,
-        status,
-        is_paid
-      `)
-      .order('bill_date', { ascending: false });
+      .select('*')
+      .in('staff_id', staffIds);
 
-    // Join: staff_advances -> staff_profiles -> users
     let advancesQuery = supabase
       .from('staff_advances')
-      .select(`
-        id,
-        staff_id,
-        request_date,
-        advance_date,
-        amount,
-        reason,
-        status,
-        auditor_id,
-        auditor_confirmed_at
-      `)
-      .order('advance_date', { ascending: false });
+      .select('*')
+      .in('staff_id', staffIds);
 
-    // Join: staff_loans -> staff_profiles -> users
     let loansQuery = supabase
       .from('staff_loans')
-      .select(`
-        id,
-        staff_id,
-        start_date,
-        loan_date,
-        total_amount,
-        remaining_balance,
-        reason,
-        status,
-        auditor_id,
-        auditor_confirmed_at
-      `)
-      .order('loan_date', { ascending: false });
+      .select('*')
+      .in('staff_id', staffIds);
 
-    // Apply filters
-    if (staff_id && staff_id !== 'all') {
-      creditQuery = creditQuery.eq('staff_id', staff_id);
-      advancesQuery = advancesQuery.eq('staff_id', staff_id);
-      loansQuery = loansQuery.eq('staff_id', staff_id);
-    }
-
-    if (start_date) {
-      creditQuery = creditQuery.gte('bill_date', start_date);
-      advancesQuery = advancesQuery.gte('advance_date', start_date);
-      loansQuery = loansQuery.gte('loan_date', start_date);
-    }
-    if (end_date) {
-      creditQuery = creditQuery.lte('bill_date', end_date);
-      advancesQuery = advancesQuery.lte('advance_date', end_date);
-      loansQuery = loansQuery.lte('loan_date', end_date);
-    }
-
-    // Await all
     const [
       { data: creditBills, error: creditError },
       { data: advances, error: advancesError },
       { data: loans, error: loansError }
-    ] = await Promise.all([creditQuery, advancesQuery, loansQuery]);
+    ] = await Promise.all([
+      creditQuery,
+      advancesQuery,
+      loansQuery
+    ]);
 
     if (creditError) {
       logger.error('Error fetching credit bills:', creditError);
       throw creditError;
     }
+
     if (advancesError) {
       logger.error('Error fetching advances:', advancesError);
       throw advancesError;
     }
+
     if (loansError) {
       logger.error('Error fetching loans:', loansError);
       throw loansError;
     }
 
-    // Collect all unique staff_ids to fetch names as fallback
-    const allStaffIds = new Set<string>();
-    creditBills?.forEach(b => b.staff_id && allStaffIds.add(b.staff_id));
-    advances?.forEach(a => a.staff_id && allStaffIds.add(a.staff_id));
-    loans?.forEach(l => l.staff_id && allStaffIds.add(l.staff_id));
+    let unpaidBillsByWaiter: any[] = [];
+    let unpaidBillsByCustomer: any[] = [];
+    const unpaidBillLookupStrategies = [
+      { label: 'user_id', ids: staffUserIds },
+      { label: 'staff_profile_id', ids: staffIds }
+    ].filter((strategy, index, strategies) => {
+      if (strategy.ids.length === 0) {
+        return false;
+      }
 
-    logger.info(`Found ${allStaffIds.size} unique staff_ids to resolve`);
+      return strategies.findIndex(other => JSON.stringify(other.ids) === JSON.stringify(strategy.ids)) === index;
+    });
 
-    // Fetch staff names directly from staff_profiles (first_name, last_name are on the table)
-    const { data: staffData, error: staffError } = await supabase
-      .from('staff_profiles')
-      .select('id, first_name, last_name')
-      .in('id', Array.from(allStaffIds));
+    for (const strategy of unpaidBillLookupStrategies) {
+      const queryVariants = [
+        {
+          label: 'status-filtered',
+          build: (column: 'waiter_id' | 'customer_id') => supabase
+            .from('unpaid_bills')
+            .select('*')
+            .in(column, strategy.ids)
+            .eq('status', 'unpaid')
+        },
+        {
+          label: 'without-status',
+          build: (column: 'waiter_id' | 'customer_id') => supabase
+            .from('unpaid_bills')
+            .select('*')
+            .in(column, strategy.ids)
+        }
+      ];
 
-    if (staffError) {
-      logger.error('Error fetching staff_profiles:', staffError);
+      let resolved = false;
+
+      for (const variant of queryVariants) {
+        const [waiterResult, customerResult] = await Promise.all([
+          variant.build('waiter_id'),
+          variant.build('customer_id')
+        ]);
+
+        if (!waiterResult.error && !customerResult.error) {
+          unpaidBillsByWaiter = waiterResult.data || [];
+          unpaidBillsByCustomer = customerResult.data || [];
+          resolved = true;
+          break;
+        }
+
+        logger.warn('Staff audit unpaid bills lookup failed, trying fallback strategy', {
+          lookup: strategy.label,
+          variant: variant.label,
+          waiterError: waiterResult.error?.message || waiterResult.error,
+          customerError: customerResult.error?.message || customerResult.error
+        });
+      }
+
+      if (resolved) {
+        break;
+      }
     }
 
-    logger.info(`Staff profiles query returned ${staffData?.length || 0} results`);
+    const unpaidBillMap = new Map<string, any>();
 
-    // Build name map from staff_profiles directly
-    const staffNameMap = new Map<string, string>();
-    staffData?.forEach(staff => {
-      const firstName = staff.first_name || '';
-      const lastName = staff.last_name || '';
-      if (firstName || lastName) {
-        staffNameMap.set(staff.id, `${firstName} ${lastName}`.trim());
+    [...(unpaidBillsByWaiter || []), ...(unpaidBillsByCustomer || [])].forEach((bill: any) => {
+      if (!unpaidBillMap.has(bill.id)) {
+        unpaidBillMap.set(bill.id, bill);
       }
     });
 
-    logger.info(`Resolved names for ${staffNameMap.size} staff members from staff_profiles`);
-
     const unifiedRecords: any[] = [];
 
-    // Helper function to extract staff name - use staffNameMap
-    const getStaffName = (record: any): string => {
-      try {
-        const staffId = record.staff_id;
-        if (!staffId) return '—';
-
-        // Lookup from our staff name map
-        const name = staffNameMap.get(staffId);
-        if (name) {
-          return name;
-        }
-
-        return '—';
-      } catch (error) {
-        logger.error('Error extracting staff name:', error);
-        return '—';
+    const getStaffProfile = (recordStaffId?: string | null) => {
+      if (!recordStaffId) {
+        return null;
       }
+
+      return profileMap.get(recordStaffId) || null;
     };
 
-    // Process Credit Bills
+    const buildStaffDetails = (staffProfile: any) => {
+      const staffName = staffProfile
+        ? `${staffProfile.first_name || staffProfile.firstName || ''} ${staffProfile.last_name || staffProfile.lastName || ''}`.trim()
+          || staffProfile.full_name
+          || staffProfile.name
+          || staffProfile.email
+          || 'â€”'
+        : 'â€”';
+
+      return {
+        staff_name: staffName,
+        staff_role: staffProfile?.role || staffProfile?.position || null,
+        staff_department: staffProfile?.department || null,
+        staff_code: staffProfile?.employee_id || staffProfile?.staff_code || staffProfile?.id_number || staffProfile?.national_id || null,
+        staff_phone: staffProfile?.phone || staffProfile?.phone_number || null,
+        branch_id: staffProfile?.branch_id || null
+      };
+    };
+
+    const isWithinDateRange = (value?: string | null) => {
+      if (!value) {
+        return !start_date && !end_date;
+      }
+
+      const recordDate = new Date(value);
+      if (Number.isNaN(recordDate.getTime())) {
+        return !start_date && !end_date;
+      }
+
+      if (start_date) {
+        const from = new Date(`${start_date}T00:00:00`);
+        if (recordDate < from) {
+          return false;
+        }
+      }
+
+      if (end_date) {
+        const to = new Date(`${end_date}T23:59:59`);
+        if (recordDate > to) {
+          return false;
+        }
+      }
+
+      return true;
+    };
+
     creditBills?.forEach((bill: any) => {
+      if (!isWithinDateRange(bill.bill_date || bill.created_at)) {
+        return;
+      }
+
+      const staffProfile = getStaffProfile(bill.staff_id);
       unifiedRecords.push({
         id: bill.id,
         date: bill.bill_date,
         type: 'Credit Bill',
-        amount: bill.amount,
-        staff_name: getStaffName(bill),
+        amount: Number(bill.amount || 0),
         staff_id: bill.staff_id,
         description: bill.description || 'Staff credit bill',
         status: bill.status === 'pending' ? 'Unpaid' : bill.status === 'deducted' ? 'Deducted' : bill.status === 'paid_cash' ? 'Paid' : (bill.is_paid ? 'Paid' : 'Unpaid'),
-        reference: bill.id.substring(0, 8).toUpperCase(),
-        original_record: bill
+        reference: (bill.id || '').substring(0, 8).toUpperCase(),
+        outstanding_amount: bill.is_paid ? 0 : Number(bill.amount || 0),
+        original_record: bill,
+        ...buildStaffDetails(staffProfile)
       });
     });
 
-    // Process Advances
     advances?.forEach((adv: any) => {
+      if (!isWithinDateRange(adv.advance_date || adv.created_at)) {
+        return;
+      }
+
+      const staffProfile = getStaffProfile(adv.staff_id);
       unifiedRecords.push({
         id: adv.id,
-        date: adv.advance_date || adv.request_date,
+        date: adv.advance_date || adv.created_at,
         type: 'Advance',
-        amount: adv.amount,
-        staff_name: getStaffName(adv),
+        amount: Number(adv.amount || 0),
         staff_id: adv.staff_id,
         description: adv.reason || 'Salary advance',
-        status: adv.status, // approved, pending, rejected, paid
-        reference: adv.id.substring(0, 8).toUpperCase(),
+        status: adv.status,
+        reference: (adv.id || '').substring(0, 8).toUpperCase(),
         auditor_id: adv.auditor_id,
         auditor_confirmed_at: adv.auditor_confirmed_at,
-        original_record: adv
+        outstanding_amount: 0,
+        original_record: adv,
+        ...buildStaffDetails(staffProfile)
       });
     });
 
-    // Process Loans
     loans?.forEach((loan: any) => {
+      if (!isWithinDateRange(loan.loan_date || loan.created_at)) {
+        return;
+      }
+
+      const staffProfile = getStaffProfile(loan.staff_id);
       unifiedRecords.push({
         id: loan.id,
-        date: loan.loan_date || loan.start_date,
+        date: loan.loan_date || loan.created_at,
         type: 'Loan',
-        amount: loan.total_amount,
-        staff_name: getStaffName(loan),
+        amount: Number(loan.total_amount || 0),
         staff_id: loan.staff_id,
         description: loan.reason || 'Staff loan',
-        status: loan.status, // active, paid, defaulted
-        reference: loan.id.substring(0, 8).toUpperCase(),
+        status: loan.status,
+        reference: (loan.id || '').substring(0, 8).toUpperCase(),
         auditor_id: loan.auditor_id,
         auditor_confirmed_at: loan.auditor_confirmed_at,
-        original_record: loan
+        outstanding_amount: Number(loan.remaining_balance || 0),
+        original_record: loan,
+        ...buildStaffDetails(staffProfile)
       });
     });
 
-    // Sort by Date Descending
+    Array.from(unpaidBillMap.values()).forEach((bill: any) => {
+      if (!isWithinDateRange(bill.bill_date || bill.created_at)) {
+        return;
+      }
+
+      const associatedStaffProfile = profileMap.get(bill.staff_id)
+        || profileMap.get(bill.customer_id)
+        || profileMap.get(bill.waiter_id)
+        || profileByUserId.get(bill.customer_id)
+        || profileByUserId.get(bill.waiter_id)
+        || null;
+      const associatedStaffId = associatedStaffProfile?.id || bill.staff_id || null;
+      const staffProfile = associatedStaffProfile || getStaffProfile(associatedStaffId);
+
+      if (!staffProfile) {
+        return;
+      }
+
+      const normalizedStatus = String(bill.status || '').toLowerCase();
+      const outstandingAmount = Number(bill.balance_amount ?? bill.amount ?? bill.total_amount ?? 0);
+
+      if (normalizedStatus && !['unpaid', 'partial', 'overdue'].includes(normalizedStatus) && outstandingAmount <= 0) {
+        return;
+      }
+
+      unifiedRecords.push({
+        id: bill.id,
+        date: bill.bill_date || bill.created_at,
+        type: 'Unpaid Bill',
+        amount: outstandingAmount,
+        staff_id: associatedStaffId,
+        description: `POS unpaid bill${bill.customer_name ? ` - ${bill.customer_name}` : ''}`,
+        status: bill.status || 'unpaid',
+        reference: bill.bill_number || (bill.id || '').substring(0, 8).toUpperCase(),
+        auditor_id: bill.auditor_id,
+        outstanding_amount: outstandingAmount,
+        linked_party_name: bill.customer_name || null,
+        original_record: bill,
+        ...buildStaffDetails(staffProfile)
+      });
+    });
+
     unifiedRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    // Summarize by Staff
     const staffSummary: Record<string, any> = {};
 
+    (staffProfiles || []).forEach((staff: any) => {
+      const staffName = `${staff.first_name || staff.firstName || ''} ${staff.last_name || staff.lastName || ''}`.trim()
+        || staff.full_name
+        || staff.name
+        || staff.email
+        || 'â€”';
+      staffSummary[staff.id] = {
+        staff_id: staff.id,
+        staff_name: staffName,
+        employee_id: staff.employee_id || staff.staff_code || staff.id_number || staff.national_id || null,
+        department: staff.department || null,
+        role: staff.role || staff.position || null,
+        phone: staff.phone || staff.phone_number || null,
+        branch_id: staff.branch_id || null,
+        total_credit_bills: 0,
+        total_advances: 0,
+        total_loans: 0,
+        total_unpaid_bills: 0,
+        outstanding_balance: 0
+      };
+    });
+
     unifiedRecords.forEach(record => {
-      if (!staffSummary[record.staff_id]) {
-        staffSummary[record.staff_id] = {
-          staff_id: record.staff_id,
-          staff_name: record.staff_name,
-          total_credit_bills: 0,
-          total_advances: 0,
-          total_loans: 0,
-          outstanding_balance: 0 // Rough estimate
-        };
+      if (!record.staff_id || !staffSummary[record.staff_id]) {
+        return;
       }
 
       const summary = staffSummary[record.staff_id];
       if (record.type === 'Credit Bill') {
         summary.total_credit_bills += Number(record.amount || 0);
-        if (record.status === 'Unpaid') summary.outstanding_balance += Number(record.amount || 0);
+        summary.outstanding_balance += Number(record.outstanding_amount || 0);
       } else if (record.type === 'Advance') {
         summary.total_advances += Number(record.amount || 0);
       } else if (record.type === 'Loan') {
         summary.total_loans += Number(record.amount || 0);
-        if (record.status === 'active') {
-          summary.outstanding_balance += Number(record.original_record.remaining_balance || 0);
-        }
+        summary.outstanding_balance += Number(record.outstanding_amount || 0);
+      } else if (record.type === 'Unpaid Bill') {
+        summary.total_unpaid_bills += Number(record.amount || 0);
+        summary.outstanding_balance += Number(record.outstanding_amount || 0);
       }
     });
 
@@ -2668,9 +3026,8 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       success: true,
       count: unifiedRecords.length,
       data: unifiedRecords,
-      summary: Object.values(staffSummary)
+      summary: Object.values(staffSummary).sort((a: any, b: any) => a.staff_name.localeCompare(b.staff_name))
     });
-
   } catch (error) {
     logger.error('Error fetching staff audit:', error);
     next(error);

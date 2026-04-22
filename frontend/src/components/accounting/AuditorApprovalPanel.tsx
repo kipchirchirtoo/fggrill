@@ -114,6 +114,45 @@ export default function AuditorApprovalPanel() {
         }
     };
 
+    const handleApproveAll = async () => {
+        if (requests.length === 0) {
+            toast.error('No requests to approve');
+            return;
+        }
+
+        const confirmed = window.confirm(
+            `Are you sure you want to approve ALL ${requests.length} pending stock requests?\n\nThis will approve all items at their full requested quantities.`
+        );
+
+        if (!confirmed) return;
+
+        setIsLoading(true);
+        try {
+            const requestIds = requests.map(r => r.id);
+            const response = await storeAPI.bulkApproveStockRequests(
+                requestIds,
+                'Bulk approved by auditor - all requests approved at full requested quantities'
+            );
+
+            if (response.success) {
+                const { successful, failed, total } = response.data;
+                if (failed > 0) {
+                    toast.warning(`Approved ${successful}/${total} requests. ${failed} failed.`);
+                } else {
+                    toast.success(`Successfully approved all ${successful} requests!`);
+                }
+                fetchRequests();
+            } else {
+                toast.error(response.message || 'Bulk approval failed');
+            }
+        } catch (error: any) {
+            console.error('Error in bulk approval:', error);
+            toast.error(error.message || 'Error occurred during bulk approval');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -126,10 +165,22 @@ export default function AuditorApprovalPanel() {
                         <p className="page-subtitle">Auditor review based on branch sales performance</p>
                     </div>
                 </div>
-                <button onClick={fetchRequests} className="btn-secondary">
-                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    <span className="ml-2">Sync Requests</span>
-                </button>
+                <div className="flex gap-3">
+                    {requests.length > 0 && (
+                        <button 
+                            onClick={handleApproveAll} 
+                            disabled={isLoading}
+                            className="btn-primary shadow-lg"
+                        >
+                            <ShieldCheck className={`h-4 w-4 ${isLoading ? 'animate-pulse' : ''}`} />
+                            <span className="ml-2">Approve All ({requests.length})</span>
+                        </button>
+                    )}
+                    <button onClick={fetchRequests} className="btn-secondary">
+                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        <span className="ml-2">Sync Requests</span>
+                    </button>
+                </div>
             </div>
 
             {isLoading ? (

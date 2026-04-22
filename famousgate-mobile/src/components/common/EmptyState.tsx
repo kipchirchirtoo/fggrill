@@ -1,23 +1,29 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Button } from 'react-native-paper';
+import { View, StyleSheet } from 'react-native';
+import { Text, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing } from '../../theme';
 
 interface EmptyStateProps {
-  icon: string;
+  icon?: string;
   title: string;
-  message: string;
+  message?: string;
   actionLabel?: string;
   onAction?: () => void;
 }
 
-const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, message, actionLabel, onAction }) => {
+export const EmptyState: React.FC<EmptyStateProps> = ({
+  icon = 'inbox',
+  title,
+  message,
+  actionLabel,
+  onAction,
+}) => {
   return (
     <View style={styles.container}>
-      <MaterialCommunityIcons name={icon as any} size={80} color={colors.text.tertiary} />
+      <MaterialCommunityIcons name={icon as any} size={70} color={colors.text.tertiary} />
       <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
+      {message && <Text style={styles.message}>{message}</Text>}
       {actionLabel && onAction && (
         <Button mode="contained" onPress={onAction} style={styles.button}>
           {actionLabel}
@@ -32,7 +38,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.xl,
+    padding: spacing.xxl,
   },
   title: {
     fontSize: 20,
@@ -42,16 +48,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   message: {
-    fontSize: 15,
+    fontSize: 14,
     color: colors.text.tertiary,
     marginTop: spacing.sm,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   button: {
     marginTop: spacing.xl,
-    backgroundColor: colors.primary.DEFAULT,
   },
 });
-
-export default EmptyState;

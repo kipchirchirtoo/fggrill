@@ -183,7 +183,8 @@ export async function fetchAPI<T>(
         message: result.message,
         count: result.count,
         pages: result.pages,
-        stats: result.stats
+        stats: result.stats,
+        summary: result.summary
       } as ApiResponse<T>;
 
     } catch (error) {

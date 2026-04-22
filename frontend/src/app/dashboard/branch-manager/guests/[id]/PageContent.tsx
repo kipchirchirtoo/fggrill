@@ -38,20 +38,31 @@ export default function GuestDetailPage({ params }: GuestDetailPageProps) {
       setIsLoading(true);
       try {
         // Fetch guest details
-        const guestResponse = await guestAPI.getGuest(id);
-        if (guestResponse.success) {
-          setGuest(guestResponse.data);
-        } else {
-          toast.error('Failed to load guest details');
+        const guestResponse = await guestAPI.getGuest(id).catch(err => ({ 
+          success: false, 
+          error: err.message || 'Guest not found', 
+          data: null 
+        }));
+        
+        if (!guestResponse.success || !guestResponse.data) {
+          toast.error('Guest not found or has been deleted');
           router.push('/dashboard/branch-manager/guests');
+          return;
         }
+        
+        setGuest(guestResponse.data);
 
         // Fetch guest stay history
-        const historyResponse = await fetchAPI(`/guests/${id}/history`);
+        const historyResponse = await fetchAPI(`/guests/${id}/history`).catch(err => ({
+          success: false,
+          error: err.message,
+          data: null
+        }));
+        
         if (historyResponse.success) {
           setGuestHistory(historyResponse.data);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching guest details:', error);
         toast.error('Failed to load guest details');
         router.push('/dashboard/branch-manager/guests');

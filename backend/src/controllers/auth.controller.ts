@@ -1,12 +1,56 @@
 import { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 dotenv.config();
-import { supabase, supabaseAuth } from '../config/supabase';
+import { supabase } from '../config/supabase';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 import db from '../db';
 import { logAuthAttempt, logSecurityEvent } from '../utils/audit';
+
+const getJwtSecrets = (): string[] => {
+  const candidateSecrets = [
+    process.env.JWT_SECRET,
+    process.env.SUPABASE_JWT_SECRET
+  ].filter((secret, index, arr) => secret && arr.indexOf(secret) === index) as string[];
+
+  if (!candidateSecrets.length) {
+    candidateSecrets.push('fallback-secret-key');
+  }
+
+  return candidateSecrets;
+};
+
+const issueLocalSession = (userId: string, email: string, role: string) => {
+  const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+
+  const accessToken = jwt.sign(
+    {
+      sub: userId,
+      email,
+      role,
+      aud: 'authenticated'
+    },
+    jwtSecret,
+    { expiresIn: '24h' }
+  );
+
+  const refreshToken = jwt.sign(
+    { sub: userId, type: 'refresh' },
+    jwtSecret,
+    { expiresIn: '7d' }
+  );
+
+  return {
+    secretSource: process.env.JWT_SECRET ? 'JWT_SECRET' : (process.env.SUPABASE_JWT_SECRET ? 'SUPABASE_JWT_SECRET' : 'fallback'),
+    session: {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      user: { id: userId, email }
+    }
+  };
+};
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -118,100 +162,11 @@ export const login = async (
       return;
     }
 
-    // No demo accounts - use real authentication only
-
-    // Try Supabase Auth first (uses anon key — required for signInWithPassword)
-    const { data: authData, error: authError } = await supabaseAuth.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    logger.info(`[AUTH-DEBUG] Supabase Auth attempt for ${email}: ${authError ? `FAILED - ${authError.message}` : 'SUCCESS'}`);
-
-    if (!authError && authData?.user) {
-      // Supabase Auth succeeded
-      let { data: profile, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
-
-      // Auto-heal: if public.users row is missing, create it now
-      if (profileError?.code === 'PGRST116' || !profile) {
-        logger.warn(`Auto-healing missing public.users row for ${email}`);
-        const meta = authData.user.user_metadata || {};
-        const emailPrefix = email.split('@')[0];
-        const { error } = await supabase.from('users').insert({
-          id:         authData.user.id,
-          email,
-          first_name: meta.first_name || emailPrefix || 'User',
-          last_name:  meta.last_name  || 'Account',
-          role:       meta.role       || 'guest',
-          status:     'active',
-          created_at: new Date().toISOString(),
-        });
-
-        if (error) {
-
-          console.error('Database error:', error);
-
-          throw error;
-
-        }
-        const refetch = await supabase.from('users').select('*').eq('id', authData.user.id).single();
-        if (refetch.error) {
-          console.error('Database error:', refetch.error);
-          throw refetch.error;
-        }
-        profile = refetch.data;
-        profileError = refetch.error;
-      }
-
-      if (profileError || !profile) {
-        throw profileError || new Error('Failed to create user profile');
-      }
-
-      // Update last login
-      await supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', authData.user.id);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          user: profile,
-          session: authData.session
-        }
-      });
-
-      logger.info(`User logged in via Supabase Auth: ${email}`);
-      
-      await logAuthAttempt({
-        email,
-        status: 'success',
-        userId: authData.user.id,
-        req,
-        authMethod: 'password'
-      });
-      return;
-    }
-
-    // If we reach here, Supabase Auth failed (AuthError)
-    await logAuthAttempt({
-      email,
-      status: 'failed',
-      req,
-      message: authError?.message || 'Supabase Auth Failed',
-      authMethod: 'password'
-    });
-
-    // Fallback: Direct database authentication using Supabase client
-    logger.info(`Supabase Auth failed for ${email}, trying direct DB auth via Supabase client`);
-
     let storedHash: string | null = null;
     let userId: string | null = null;
     let userProfile: any = null;
+
+    logger.info(`[AUTH-DEBUG] Attempting direct DB auth for ${email}`);
 
     try {
       // Get user profile with password_hash from users table using Supabase client
@@ -339,42 +294,19 @@ export const login = async (
       logger.warn('Failed to update last login:', updateError);
     }
 
-    // Generate JWT token
-    const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+    const { secretSource, session } = issueLocalSession(userId, userProfile.email, userProfile.role);
 
-    logger.info('Generating local JWT token for user login fallback', {
+    logger.info('Generating local JWT token for user login', {
       userId,
       email: userProfile.email,
-      secretSource: process.env.JWT_SECRET ? 'JWT_SECRET' : (process.env.SUPABASE_JWT_SECRET ? 'SUPABASE_JWT_SECRET' : 'fallback')
+      secretSource
     });
-
-    const accessToken = jwt.sign(
-      {
-        sub: userId,
-        email: userProfile.email,
-        role: userProfile.role,
-        aud: 'authenticated'
-      },
-      jwtSecret,
-      { expiresIn: '24h' }
-    );
-
-    const refreshToken = jwt.sign(
-      { sub: userId, type: 'refresh' },
-      jwtSecret,
-      { expiresIn: '7d' }
-    );
 
     res.status(200).json({
       success: true,
       data: {
         user: userProfile,
-        session: {
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          user: { id: userId, email: userProfile.email }
-        }
+        session
       }
     });
 
@@ -402,9 +334,9 @@ export const refreshToken = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { refreshToken } = req.body;
+    const incomingRefreshToken = req.body.refreshToken || req.body.refresh_token;
 
-    if (!refreshToken) {
+    if (!incomingRefreshToken) {
       res.status(400).json({
         success: false,
         message: 'Please provide refresh token'
@@ -412,10 +344,45 @@ export const refreshToken = async (
       return;
     }
 
-    // SECURITY FIX: Use refreshSession which is the correct method for token refresh
-    // getSession() is vulnerable to client-side spoofing
+    for (const secret of getJwtSecrets()) {
+      try {
+        const decoded = jwt.verify(incomingRefreshToken, secret) as any;
+
+        if (decoded?.sub && decoded?.type === 'refresh') {
+          const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('id, email, role')
+            .eq('id', decoded.sub)
+            .single();
+
+          if (userError || !user) {
+            res.status(401).json({
+              success: false,
+              message: 'Invalid refresh token'
+            });
+            return;
+          }
+
+          const { session } = issueLocalSession(user.id, user.email, user.role);
+
+          res.status(200).json({
+            success: true,
+            token: session.access_token,
+            refresh_token: session.refresh_token,
+            data: {
+              session
+            }
+          });
+
+          logger.info(`Local token refreshed for user: ${user.email}`);
+          return;
+        }
+      } catch {
+      }
+    }
+
     const { data: { session }, error: refreshError } = await supabase.auth.refreshSession({
-      refresh_token: refreshToken
+      refresh_token: incomingRefreshToken
     });
 
     if (refreshError || !session) {
@@ -429,6 +396,8 @@ export const refreshToken = async (
     // Send response
     res.status(200).json({
       success: true,
+      token: session.access_token,
+      refresh_token: session.refresh_token,
       data: {
         session
       }
@@ -543,10 +512,7 @@ export const updateDetails = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // SECURITY FIX: Use getUser() instead of getSession() to prevent client-side spoofing
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    if (!req.user?.id) {
       res.status(401).json({
         success: false,
         message: 'Not authorized'
@@ -570,7 +536,7 @@ export const updateDetails = async (
     const { data: updatedUser, error: updateError } = await supabase
       .from('users')
       .update(fieldsToUpdate)
-      .eq('id', user.id)
+      .eq('id', req.user.id)
       .select()
       .single();
 
@@ -579,14 +545,14 @@ export const updateDetails = async (
     }
 
     // If email is being updated, update auth email as well
-    if (req.body.email && req.body.email !== user.email) {
+    if (req.body.email && req.body.email !== req.user.email) {
       const { error: emailUpdateError } = await supabase.auth.admin.updateUserById(
-        user.id,
+        req.user.id,
         { email: req.body.email }
       );
 
       if (emailUpdateError) {
-        throw emailUpdateError;
+        logger.warn(`Failed to sync auth email for ${req.user.id}: ${emailUpdateError.message}`);
       }
     }
 
@@ -610,10 +576,7 @@ export const updatePassword = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // SECURITY FIX: Use getUser() instead of getSession() to prevent client-side spoofing
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    if (!req.user?.id) {
       res.status(401).json({
         success: false,
         message: 'Not authorized'
@@ -621,27 +584,70 @@ export const updatePassword = async (
       return;
     }
 
-    // Update password
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: req.body.newPassword
-    });
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide current and new password'
+      });
+      return;
+    }
+
+    const { data: dbUser, error: userLookupError } = await supabase
+      .from('users')
+      .select('id, email, password_hash')
+      .eq('id', req.user.id)
+      .single();
+
+    if (userLookupError || !dbUser?.password_hash) {
+      res.status(400).json({
+        success: false,
+        message: 'Password change is unavailable for this account'
+      });
+      return;
+    }
+
+    const passwordMatch = await bcrypt.compare(currentPassword, dbUser.password_hash);
+
+    if (!passwordMatch) {
+      res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        password_hash: hashedPassword,
+        password_changed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.user.id);
 
     if (updateError) {
       throw updateError;
     }
 
-    // Update password changed timestamp
-    await supabase
-      .from('users')
-      .update({ password_changed_at: new Date().toISOString() })
-      .eq('id', user.id);
+    const { error: authPasswordUpdateError } = await supabase.auth.admin.updateUserById(
+      req.user.id,
+      { password: newPassword }
+    );
+
+    if (authPasswordUpdateError) {
+      logger.warn(`Failed to sync auth password for ${req.user.id}: ${authPasswordUpdateError.message}`);
+    }
 
     res.status(200).json({
       success: true,
       message: 'Password updated successfully'
     });
 
-    logger.info(`User updated password: ${user.email}`);
+    logger.info(`User updated password: ${dbUser.email}`);
   } catch (error) {
     next(error);
   }

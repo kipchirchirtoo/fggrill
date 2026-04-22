@@ -54,12 +54,12 @@ class BranchSalesAnalytics:
                     b.id,
                     b.branch_id,
                     b.total_amount,
-                    b.payment_method,
-                    'booking' as source,
-                    'rooms' as category,
-                    NULL as order_type,
+                    b.payment_method::text as payment_method,
+                    'booking'::text as source,
+                    'rooms'::text as category,
+                    NULL::text as order_type,
                     b.created_at as transaction_date,
-                    b.status
+                    b.status::text as status
                 FROM bookings b
                 WHERE b.branch_id = %s
                     AND b.status NOT IN ('cancelled')
@@ -71,12 +71,12 @@ class BranchSalesAnalytics:
                     ro.id,
                     ro.branch_id,
                     ro.total_amount,
-                    ro.payment_method,
-                    'restaurant' as source,
-                    'restaurant' as category,
-                    ro.order_type,
+                    ro.payment_method::text as payment_method,
+                    'restaurant'::text as source,
+                    'restaurant'::text as category,
+                    ro.order_type::text as order_type,
                     ro.created_at as transaction_date,
-                    ro.status
+                    ro.status::text as status
                 FROM restaurant_orders ro
                 WHERE ro.branch_id = %s
                     AND ro.status NOT IN ('cancelled')
@@ -88,15 +88,15 @@ class BranchSalesAnalytics:
                     st.id,
                     st.branch_id,
                     st.total_amount,
-                    st.payment_method,
-                    'shift_transaction' as source,
-                    COALESCE(st.service_category, 'other') as category,
-                    NULL as order_type,
-                    st.transaction_date,
-                    'completed' as status
+                    st.payment_method::text as payment_method,
+                    'shift_transaction'::text as source,
+                    COALESCE(st.service_category::text, 'other') as category,
+                    NULL::text as order_type,
+                    st.created_at as transaction_date,
+                    'completed'::text as status
                 FROM shift_transactions st
                 WHERE st.branch_id = %s
-                    AND DATE(st.transaction_date) BETWEEN %s AND %s
+                    AND DATE(st.created_at) BETWEEN %s AND %s
                     {filter_conditions['shift']}
             ),
             all_sales AS (
@@ -146,6 +146,7 @@ class BranchSalesAnalytics:
             }
 
         except Exception as e:
+            conn.rollback()
             print(f"Error aggregating sales data: {str(e)}")
             raise
         finally:

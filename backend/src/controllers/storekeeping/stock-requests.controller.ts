@@ -477,6 +477,114 @@ export const approveStockRequest = async (
     }
 };
 
+// @desc    Bulk approve stock requests
+// @route   POST /api/stock-requests/bulk-approve
+// @access  Private (Auditor, Super Admin)
+export const bulkApproveStockRequests = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { request_ids, approved_quantity_notes } = req.body;
+        const userId = req.user?.id;
+
+        if (!request_ids || !Array.isArray(request_ids) || request_ids.length === 0) {
+            res.status(400).json({
+                success: false,
+                message: 'request_ids array is required and must not be empty'
+            });
+            return;
+        }
+
+        console.log(`🔍 [Bulk Approve] Starting bulk approval for ${request_ids.length} requests by user ${userId}`);
+
+        const results = [];
+        const errors = [];
+
+        // Process each request
+        for (const requestId of request_ids) {
+            try {
+                console.log(`🔍 [Bulk Approve] Processing request ${requestId}...`);
+                
+                // Fetch request items to approve with full requested quantities
+                const { data: items, error: itemsError } = await supabase
+                    .from('stock_request_items')
+                    .select('id, requested_quantity')
+                    .eq('request_id', requestId);
+
+                if (itemsError) {
+                    console.error(`❌ [Bulk Approve] Error fetching items for request ${requestId}:`, itemsError);
+                    errors.push({ requestId, error: itemsError.message });
+                    continue;
+                }
+
+                // Approve with full requested quantities
+                const item_approvals = (items || []).map(item => ({
+                    id: item.id,
+                    approved_quantity: item.requested_quantity,
+                    status: 'approved' as const
+                }));
+
+                const result = await BranchInventoryService.approveStockRequest(
+                    requestId,
+                    userId!,
+                    item_approvals,
+                    approved_quantity_notes || 'Bulk approved by auditor'
+                );
+
+                // Fetch request details for notification
+                const { data: request } = await supabase
+                    .from('stock_requests')
+                    .select('requested_by, request_number')
+                    .eq('id', requestId)
+                    .single();
+
+                results.push({ requestId, success: true, request_number: request?.request_number });
+                console.log(`✅ [Bulk Approve] Request ${requestId} (${request?.request_number}) approved successfully`);
+
+                // Notify Requester
+                if (request && request.requested_by) {
+                    notificationService.notifyUser(
+                        request.requested_by,
+                        'Stock Request Approved',
+                        `Your stock request ${request.request_number} has been approved.`,
+                        {
+                            type: 'success',
+                            category: 'stock_request',
+                            priority: 'medium',
+                            actionUrl: `/dashboard/branch-store/requests/${requestId}`,
+                            metadata: { request_id: requestId, status: 'APPROVED' }
+                        }
+                    ).catch(e => logger.error('Failed to notify requester of stock request approval', e));
+                }
+            } catch (error: any) {
+                console.error(`❌ [Bulk Approve] Error approving request ${requestId}:`, error);
+                errors.push({ requestId, error: error.message || 'Unknown error' });
+            }
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        console.log(`✅ [Bulk Approve] Completed: ${successCount}/${request_ids.length} requests approved successfully`);
+
+        res.status(200).json({
+            success: true,
+            message: `Bulk approval completed: ${successCount}/${request_ids.length} requests approved`,
+            data: {
+                approved: results,
+                errors: errors,
+                total: request_ids.length,
+                successful: successCount,
+                failed: errors.length
+            }
+        });
+    } catch (error) {
+        console.error('❌ [Bulk Approve] Error in bulk approval:', error);
+        logger.error('Error in bulk approve stock requests:', error);
+        next(error);
+    }
+};
+
 // @desc    Reject stock request
 // @route   PUT /api/stock-requests/:id/reject
 // @access  Private (Central Ops)
@@ -573,6 +681,43 @@ export const cancelStockRequest = async (
         });
     } catch (error) {
         logger.error('Error cancelling stock request:', error);
+        next(error);
+    }
+};
+
+// @desc    Get approved stock requests (for central store dispatch)
+// @route   GET /api/storekeeping/stock-requests/approved
+// @access  Private (Central Store)
+export const getApprovedRequests = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { data: requests, error } = await supabase
+            .from('stock_requests')
+            .select(`
+                *,
+                requesting_branch:branches!requesting_branch_id(id, name, code, contact_person),
+                requested_by_user:users!requested_by(id, first_name, last_name, email),
+                reviewed_by_user:users!reviewed_by(id, first_name, last_name, email),
+                items:stock_request_items(
+                    *,
+                    item:simple_items!item_sku(sku, item_name, description, unit, category, quantity)
+                )
+            `)
+            .in('status', ['APPROVED', 'PARTIALLY_APPROVED'])
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            count: requests?.length || 0,
+            data: requests || []
+        });
+    } catch (error) {
+        logger.error('Error fetching approved requests:', error);
         next(error);
     }
 };

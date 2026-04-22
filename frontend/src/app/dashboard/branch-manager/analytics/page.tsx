@@ -17,7 +17,7 @@ import CategoryBreakdownChart from './components/CategoryBreakdownChart';
 import TransactionTable from './components/TransactionTable';
 import ExportButtons from './components/ExportButtons';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface SalesFilter {
   payment_methods?: string[];
@@ -71,7 +71,7 @@ export default function BranchAnalyticsPage() {
   // Fetch analytics data
   const fetchAnalytics = async () => {
     if (!user?.branch_id) {
-      toast.error('Branch information not available');
+      setLoading(false);
       return;
     }
 
@@ -109,8 +109,10 @@ export default function BranchAnalyticsPage() {
 
   // Initial load
   useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    if (!user?.branch_id) {
+      setLoading(false);
+    }
+  }, [user?.branch_id]);
 
   // Apply filters
   const handleApplyFilters = (newFilters: SalesFilter, newDateRange: DateRange) => {
@@ -124,7 +126,7 @@ export default function BranchAnalyticsPage() {
     if (user?.branch_id) {
       fetchAnalytics();
     }
-  }, [filters, dateRange]);
+  }, [user?.branch_id, filters, dateRange]);
 
   // Export handlers
   const handleExportPDF = async () => {

@@ -39,17 +39,28 @@ export const getGuest = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const guest = await Guest.findById(req.params.id);
+    const guestId = req.params.id;
+    logger.info(`Fetching guest with ID: ${guestId}`);
+    
+    const guest = await Guest.findById(guestId);
 
     if (!guest) {
+      logger.warn(`Guest not found: ${guestId}`);
       throw new AppError('Guest not found', 404);
     }
 
+    logger.info(`Guest found: ${guest.firstName} ${guest.lastName}`);
     res.status(200).json({
       success: true,
       data: guest
     });
-  } catch (error) {
+  } catch (error: any) {
+    logger.error(`Error fetching guest ${req.params.id}:`, error);
+    logger.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
     next(error);
   }
 };

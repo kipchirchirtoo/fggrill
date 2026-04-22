@@ -98,6 +98,10 @@ const staffBase = {
   createStaffMember: (data: any) => fetchAPI<StaffMember>('/staff', { method: 'POST', body: JSON.stringify(data) }),
   updateStaffMember: (id: string | number, data: any) => fetchAPI<StaffMember>(`/staff/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteStaffMember: (id: string | number) => fetchAPI<void>(`/staff/${id}`, { method: 'DELETE' }),
+  
+  // Performance
+  getPerformance: (params?: { branch_id?: string; period?: string; staff_id?: string }) =>
+    fetchAPI<any>(`/staff/performance${buildQuery(params)}`),
   archiveStaff: (id: string | number, notes: string) => fetchAPI<StaffMember>(`/staff/${id}/archive`, { method: 'POST', body: JSON.stringify({ notes }) }),
   
   // Leave & Performance
@@ -159,10 +163,10 @@ export const staffAPI = {
   clockIn: (data?: any) => fetchAPI<any>('/staff/attendance/clock-in', { method: 'POST', body: JSON.stringify(data) }),
   clockOut: (data?: any) => fetchAPI<any>('/staff/attendance/clock-out', { method: 'POST', body: JSON.stringify(data) }),
   getStaffByIdentifier: (identifier: string) => fetchAPI<any>(`/staff/by-identifier/${encodeURIComponent(identifier)}`),
-  getAttendance: (params?: any) => fetchAPI<any[]>(`/staff/attendance`, { method: 'GET' }),
+  getAttendance: (params?: any) => fetchAPI<any[]>(`/staff/attendance${buildQuery(params)}`),
   // Attendance summary for individual staff member
   getAttendanceSummary: (staffId?: string | number) => attendanceAPI.getSummary(staffId),
-  getAttendanceReports: (params?: any) => fetchAPI<any[]>(`/staff/attendance/reports`, { method: 'GET' }),
+  getAttendanceReports: (params?: any) => fetchAPI<any[]>(`/staff/attendance/reports${buildQuery(params)}`),
   approveAttendance: (id: any) => fetchAPI<void>(`/staff/attendance/${id}/approve`, { method: 'PUT' }),
   getRoles: () => fetchAPI<any[]>('/system/roles'),
   updateLeaveRequest: (id: any, data: any) => fetchAPI<any>(`/staff/leave/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

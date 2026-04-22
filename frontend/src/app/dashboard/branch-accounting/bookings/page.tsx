@@ -561,8 +561,8 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                     )}
                                     <div className="col-span-2">
                                         <p className="text-xs text-slate-500 uppercase font-semibold">Status</p>
-                                        <Badge variant="secondary" className={getStatusStyles(selectedBooking.status)}>
-                                            {selectedBooking.status}
+                                        <Badge variant="secondary" className={getStatusStyles(selectedBooking.status || selectedBooking.booking_status)}>
+                                            {selectedBooking.status || selectedBooking.booking_status || 'Unknown'}
                                         </Badge>
                                     </div>
                                 </div>
@@ -671,6 +671,8 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
 }
 
 function getStatusStyles(status: string) {
+    if (!status) return 'bg-slate-50 text-slate-700 border-slate-100';
+    
     switch (status.toLowerCase()) {
         case 'confirmed':
             return 'bg-emerald-50 text-emerald-700 border-emerald-100';

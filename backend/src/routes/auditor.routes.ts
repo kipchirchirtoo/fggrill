@@ -150,7 +150,7 @@ router.get('/verify/expenditure', authorize([UserRole.AUDITOR, UserRole.SUPER_AD
 router.get('/verify/stock-levels', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStockLevelsVerification);
 router.get('/verify/stock-levels/export', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), exportStockLedger);
 router.get('/verify/branch-orders', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchOrdersVerification);
-router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getSoldItemsAnalysis);
+router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), getSoldItemsAnalysis);
 router.get('/verify/bar-stock', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);
 router.post('/verify/bar-stock/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyBarStockTake);
 router.get('/verify/details', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getAnomalyDetail);
@@ -165,7 +165,7 @@ router.get('/daily-logs', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, Use
 router.post('/daily-logs/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyDailyLog);
 
 // Staff Audit
-router.get('/staff-audit', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStaffAudit);
+router.get('/staff-audit', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), getStaffAudit);
 
 // Auditor Watchlist
 router.post('/watchlist', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), flagItem);

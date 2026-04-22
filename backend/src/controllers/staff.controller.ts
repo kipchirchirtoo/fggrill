@@ -267,6 +267,45 @@ export const getStaffMember = async (
     }
 
     if (!staff) {
+      // Fallback: Try to find in users table directly (for staff without profiles)
+      logger.debug?.('Staff profile not found, checking users table', { lookupId: id });
+      
+      if (isUUID) {
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (userError) {
+          logger.error('Error querying users table:', userError);
+        }
+
+        if (user) {
+          // Return user data in a format compatible with staff profile
+          res.status(200).json({
+            success: true,
+            data: {
+              id: user.id,
+              user_id: user.id,
+              first_name: user.first_name,
+              last_name: user.last_name,
+              email: user.email,
+              phone: user.phone_number,
+              role: user.role,
+              department: user.department,
+              branch_id: user.branch_id,
+              status: user.status || 'active',
+              hire_date: user.created_at,
+              photo_url: user.avatar,
+              created_at: user.created_at,
+              user: user
+            }
+          });
+          return;
+        }
+      }
+
       logger.warn('Staff member not found in getStaffMember', { lookupId: id });
       res.status(404).json({
         success: false,

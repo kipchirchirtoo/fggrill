@@ -17,14 +17,28 @@ const ScanReceiptScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     setScanned(true);
     setScanning(false);
     setLoading(true);
+    
     try {
+      // Sanitize barcode data: remove quotes, whitespace, and special characters
+      const sanitizedBarcode = data
+        .trim()                           // Remove leading/trailing whitespace
+        .replace(/^["']|["']$/g, '')      // Remove leading/trailing quotes
+        .replace(/[^\w-]/g, '');          // Remove any non-alphanumeric characters except hyphens
+      
+      console.log('📱 [SCAN] Raw barcode:', data);
+      console.log('📱 [SCAN] Sanitized barcode:', sanitizedBarcode);
+      
+      if (!sanitizedBarcode) {
+        throw new Error('Invalid barcode format');
+      }
+      
       // GET /api/cashier/bill/:bookingId
-      const bill = await cashierApi.getBill(data);
+      const bill = await cashierApi.getBill(sanitizedBarcode);
       navigation.navigate('BillDetail', { booking: bill });
     } catch (e: any) {
       Alert.alert(
         'Not Found',
-        e.response?.data?.message || `No bill found for: ${data}`,
+        e.response?.data?.message || `No bill found for the scanned barcode`,
         [
           { text: 'Try Again', onPress: () => { setScanned(false); setScanning(true); } },
           { text: 'Cancel', onPress: () => setScanned(false) },
@@ -111,8 +125,8 @@ const ScanReceiptScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           </Button>
         )}
 
-        <Button mode="outlined" icon="cash-multiple" onPress={() => navigation.navigate('UnpaidBills')} style={styles.listBtn}>
-          View Unpaid Bills
+        <Button mode="outlined" icon="history" onPress={() => navigation.navigate('Bills', { tab: 'history' })} style={styles.listBtn}>
+          View Transaction History
         </Button>
       </View>
     </View>

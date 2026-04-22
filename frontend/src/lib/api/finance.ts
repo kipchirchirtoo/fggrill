@@ -148,6 +148,10 @@ export const financeAPI = {
   // Accounting Aliases
   getInvoices: (params?: any) => accountingAPI.getInvoices(params),
   getPayments: (params?: any) => paymentsVerificationAPI.getPayments(params),
+  
+  // Revenue Oversight
+  getRevenueOverview: (params?: { branch_id?: string; date?: string; period?: string }) => 
+    fetchAPI<any>(`/finance/revenue-overview${buildQuery(params)}`),
   getInvoice: (id: string) => accountingAPI.getInvoice(id),
   createInvoice: (data: any) => accountingAPI.createInvoice(data),
   updateInvoice: (id: string, data: any) => accountingAPI.updateInvoice(id, data),

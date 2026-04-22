@@ -9,11 +9,12 @@ import { toast } from 'sonner';
 import {
     Barcode, Check, Search, Plus, Trash2, Save,
     AlertTriangle, Package, Loader2, ArrowLeft,
-    ScanLine, ShoppingCart, Info, Minus, ChevronDown
+    ScanLine, ShoppingCart, Info, Minus, ChevronDown, Printer
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { PYTHON_SERVICE_URL } from '@/lib/api/core';
 
 // Standard sound effects (using base64 or public URLs would be better, but simulating for now)
 const playSuccessSound = () => {
@@ -41,6 +42,15 @@ interface Supplier {
     id: string;
     name: string;
     code?: string;
+}
+
+interface NewItemDraft {
+    item_name: string;
+    category: string;
+    unit_of_measure: string;
+    cost_price: string;
+    reorder_level: string;
+    barcode: string;
 }
 
 export default function GoodsReceivingPage() {
@@ -82,6 +92,16 @@ export default function GoodsReceivingPage() {
     const [allCatalogItems, setAllCatalogItems] = useState<any[]>([]);
     const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
     const [catalogSearch, setCatalogSearch] = useState('');
+    const [newItemDraft, setNewItemDraft] = useState<NewItemDraft>({
+        item_name: '',
+        category: '',
+        unit_of_measure: 'pcs',
+        cost_price: '',
+        reorder_level: '10',
+        barcode: ''
+    });
+    const [isCreatingItem, setIsCreatingItem] = useState(false);
+    const [isGeneratingBarcode, setIsGeneratingBarcode] = useState(false);
 
     // Fetch Suppliers on Mount
     useEffect(() => {
@@ -229,6 +249,96 @@ export default function GoodsReceivingPage() {
         }
     }, [currentStep, allCatalogItems.length]);
 
+    useEffect(() => {
+        if (isLookupOpen) {
+            setNewItemDraft(prev => ({
+                ...prev,
+                barcode: unknownBarcode || prev.barcode,
+                item_name: prev.item_name || searchQuery
+            }));
+        }
+    }, [isLookupOpen, unknownBarcode, searchQuery]);
+
+    const getItemLabel = useCallback((item: any) => item?.item_name || item?.name || item?.description || item?.sku || 'Unnamed Item', []);
+    const getItemSku = useCallback((item: any) => item?.sku || item?.item_code || item?.item_id || item?.id || '', []);
+    const getItemUnit = useCallback((item: any) => item?.unit || item?.unit_of_measure || 'piece', []);
+
+    const printBarcodeLabel = useCallback((barcode: string, itemName: string) => {
+        if (typeof window === 'undefined') return;
+        const printWindow = window.open('', '_blank', 'width=420,height=640');
+        if (!printWindow) {
+            toast.error('Enable pop-ups to print barcode labels');
+            return;
+        }
+
+        const barcodeUrl = `${PYTHON_SERVICE_URL}/api/barcode/barcode-image/${encodeURIComponent(barcode)}?format=code128&include_text=true`;
+        printWindow.document.write(`
+            <html>
+                <head><title>${itemName} Barcode</title></head>
+                <body style="font-family: Arial, sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0;">
+                    <div style="border:1px solid #d6d3d1; border-radius:12px; padding:24px; text-align:center; width:320px;">
+                        <div style="font-size:18px; font-weight:700; margin-bottom:12px;">${itemName}</div>
+                        <img src="${barcodeUrl}" alt="${barcode}" style="max-width:100%; height:auto; margin-bottom:12px;" />
+                        <div style="font-size:14px; font-weight:600; letter-spacing:0.08em;">${barcode}</div>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => printWindow.print(), 300);
+    }, []);
+
+    const generateUniqueBarcode = useCallback(async () => {
+        const res = await storeAPI.generateBarcode({});
+        const barcode = res.data?.barcode;
+        if (!res.success || !barcode) {
+            throw new Error(res.message || 'Failed to generate barcode');
+        }
+        return barcode;
+    }, []);
+
+    const ensureItemHasBarcode = useCallback(async (item: any, preferredBarcode?: string) => {
+        if (item?.barcode) {
+            return item;
+        }
+
+        const sku = getItemSku(item);
+        if (!sku) {
+            throw new Error('Unable to resolve item SKU');
+        }
+
+        const barcodeToAssign = preferredBarcode?.trim() || await generateUniqueBarcode();
+        const updateRes = await storeAPI.updateItem(sku, { barcode: barcodeToAssign });
+        if (!updateRes.success) {
+            throw new Error(updateRes.message || 'Failed to assign barcode');
+        }
+
+        const itemName = getItemLabel(item);
+        if (typeof window !== 'undefined' && window.confirm(`${itemName} now has barcode ${barcodeToAssign}. Print label now?`)) {
+            printBarcodeLabel(barcodeToAssign, itemName);
+        }
+
+        return {
+            ...item,
+            ...(updateRes.data || {}),
+            barcode: barcodeToAssign
+        };
+    }, [generateUniqueBarcode, getItemLabel, getItemSku, printBarcodeLabel]);
+
+    const resetLookupState = useCallback(() => {
+        setIsLookupOpen(false);
+        setSearchQuery('');
+        setSearchResults([]);
+        setUnknownBarcode('');
+        setNewItemDraft({
+            item_name: '',
+            category: '',
+            unit_of_measure: 'pcs',
+            cost_price: '',
+            reorder_level: '10',
+            barcode: ''
+
     // --- LOGIC: Setup ---
 
     const handleStartScanning = () => {
@@ -253,11 +363,16 @@ export default function GoodsReceivingPage() {
             // Simplified: We always query backend or local cache for "Barcode -> SKU/ID" mapping
             // For now, assuming we search by SKU/Code in search API
 
-            const res = await storeAPI.getItems({ search: barcode, limit: 1 });
-            const item = res.data && res.data.length > 0 ? res.data[0] : null;
+            const res = await storeAPI.getItems({ search: barcode, limit: 10 });
+            const item = (res.data || []).find((candidate: any) => {
+                const candidateBarcode = String(candidate?.barcode || '').trim().toLowerCase();
+                const candidateSku = String(candidate?.sku || '').trim().toLowerCase();
+                const needle = barcode.toLowerCase();
+                return candidateBarcode === needle || candidateSku === needle;
+            }) || null;
 
             if (item) {
-                addItemToSession(item);
+                addItemToSession(item, 'scan');
                 setBarcodeInput('');
                 setScanStatus('success');
                 playSuccessSound();
@@ -278,7 +393,7 @@ export default function GoodsReceivingPage() {
 
     const addItemToSession = (item: any, via: 'scan' | 'manual' = 'manual') => {
         setScannedItems(prev => {
-            const resolvedItemId = item.sku || item.item_id || item.id;
+            const resolvedItemId = getItemSku(item);
             const existingIndex = prev.findIndex(i => i.item_id === resolvedItemId);
             if (existingIndex >= 0) {
                 // Increment
@@ -287,21 +402,21 @@ export default function GoodsReceivingPage() {
                     ...updated[existingIndex],
                     scanned_quantity: updated[existingIndex].scanned_quantity + 1
                 };
-                setLastScannedItem(`${item.name || item.item_name} (+1)`);
+                setLastScannedItem(`${getItemLabel(item)} (+1)`);
                 return updated;
             } else {
                 // Add new
                 const newItem: ScannedItem = {
                     id: Math.random().toString(36).substr(2, 9),
                     item_id: resolvedItemId,
-                    item_name: item.name || item.item_name,
-                    sku: item.sku || item.item_code,
-                    unit: item.unit || item.unit_of_measure || 'piece',
+                    item_name: getItemLabel(item),
+                    sku: getItemSku(item),
+                    unit: getItemUnit(item),
                     scanned_quantity: 1,
-                    cost_price: 0, // Fetch from PO or previous cost
+                    cost_price: Number(item.cost_price || item.unit_price || 0),
                     added_via: via
                 };
-                setLastScannedItem(`${item.name || item.item_name} (Added)`);
+                setLastScannedItem(`${getItemLabel(item)} (Added)`);
                 return [...prev, newItem];
             }
         });
@@ -321,18 +436,82 @@ export default function GoodsReceivingPage() {
         }
     };
 
-    const selectItemFromLookup = (item: any) => {
-        // Ideally we would map the barcode to this item permanently here
-        // For now, we just add it to the session
-        addItemToSession(item, 'manual');
-        setIsLookupOpen(false);
-        setSearchQuery('');
-        setSearchResults([]);
-        setUnknownBarcode('');
-        toast.success(`Identified as ${item.name}`);
+    const selectItemFromLookup = async (item: any) => {
+        try {
+            const preparedItem = await ensureItemHasBarcode(item, unknownBarcode || undefined);
+            addItemToSession(preparedItem, 'manual');
+            resetLookupState();
+            toast.success(`Identified as ${getItemLabel(preparedItem)}`);
+            setTimeout(() => barcodeInputRef.current?.focus(), 100);
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to assign barcode to selected item');
+        }
+    };
 
-        // Return focus to scanner
-        setTimeout(() => barcodeInputRef.current?.focus(), 100);
+    const handleGenerateDraftBarcode = async () => {
+        setIsGeneratingBarcode(true);
+        try {
+            const barcode = await generateUniqueBarcode();
+            setNewItemDraft(prev => ({ ...prev, barcode }));
+            toast.success(`Generated barcode ${barcode}`);
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to generate barcode');
+        } finally {
+            setIsGeneratingBarcode(false);
+        }
+    };
+
+    const handleCreateNewItem = async () => {
+        if (!newItemDraft.item_name.trim()) {
+            toast.error('Item name is required');
+            return;
+        }
+
+        setIsCreatingItem(true);
+        try {
+            let category = newItemDraft.category.trim();
+            let unit = newItemDraft.unit_of_measure.trim();
+
+            if (!category || !unit) {
+                const suggested = await storeAPI.suggestAttributes(newItemDraft.item_name.trim());
+                if (suggested.success && suggested.data) {
+                    category = category || suggested.data.category || 'other';
+                    unit = unit || suggested.data.unit_of_measure || 'pcs';
+                }
+            }
+
+            const barcode = newItemDraft.barcode.trim() || await generateUniqueBarcode();
+            const createRes = await storeAPI.createItem({
+                item_name: newItemDraft.item_name.trim(),
+                description: newItemDraft.item_name.trim(),
+                category: category || 'other',
+                unit_of_measure: unit || 'pcs',
+                cost_price: Number(newItemDraft.cost_price || 0),
+                retail_price: Number(newItemDraft.cost_price || 0),
+                reorder_level: Number(newItemDraft.reorder_level || 10),
+                barcode,
+                quantity: 0,
+                supplier: selectedSupplier?.name || undefined
+            });
+
+            if (!createRes.success || !createRes.data) {
+                throw new Error(createRes.message || 'Failed to create item');
+            }
+
+            addItemToSession(createRes.data, 'manual');
+            resetLookupState();
+            toast.success(`${getItemLabel(createRes.data)} created successfully`);
+
+            if (typeof window !== 'undefined' && window.confirm(`Barcode ${barcode} is ready. Print label now?`)) {
+                printBarcodeLabel(barcode, getItemLabel(createRes.data));
+            }
+
+            setTimeout(() => barcodeInputRef.current?.focus(), 100);
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to create item');
+        } finally {
+            setIsCreatingItem(false);
+        }
     };
 
     // --- LOGIC: Finalize ---
@@ -590,16 +769,17 @@ export default function GoodsReceivingPage() {
                                                             <button
                                                                 key={item.id || `catalog-${item.sku}-${idx}`}
                                                                 onClick={() => {
-                                                                    addItemToSession({
-                                                                        id: item.sku || item.id,
-                                                                        name: item.item_name,
-                                                                        sku: item.sku,
-                                                                        unit: item.unit_of_measure
-                                                                    }, 'manual');
-                                                                    setCatalogSearch('');
-                                                                    playSuccessSound();
-                                                                    setScanStatus('success');
-                                                                    setTimeout(() => setScanStatus('idle'), 500);
+                                                                    ensureItemHasBarcode(item)
+                                                                        .then((preparedItem) => {
+                                                                            addItemToSession(preparedItem, 'manual');
+                                                                            setCatalogSearch('');
+                                                                            playSuccessSound();
+                                                                            setScanStatus('success');
+                                                                            setTimeout(() => setScanStatus('idle'), 500);
+                                                                        })
+                                                                        .catch((error: any) => {
+                                                                            toast.error(error.message || 'Failed to prepare item barcode');
+                                                                        });
                                                                 }}
                                                                 className="w-full p-4 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group"
                                                             >
@@ -809,7 +989,7 @@ export default function GoodsReceivingPage() {
                                 <DialogTitle>Unknown Barcode: {unknownBarcode}</DialogTitle>
                             </DialogHeader>
                             <div className="py-4">
-                                <p className="text-stone-600 mb-4">This barcode was not found in the cache. Search for the item to map manually.</p>
+                                <p className="text-stone-600 mb-4">This barcode was not found. Match an existing item or create a new one and continue receiving.</p>
 
                                 <div className="relative mb-4">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
@@ -833,10 +1013,10 @@ export default function GoodsReceivingPage() {
                                         <div
                                             key={res.id}
                                             className="p-3 hover:bg-stone-50 cursor-pointer flex justify-between items-center"
-                                            onClick={() => selectItemFromLookup(res)}
+                                            onClick={() => void selectItemFromLookup(res)}
                                         >
                                             <div>
-                                                <p className="font-medium text-sm">{res.name}</p>
+                                                <p className="font-medium text-sm">{getItemLabel(res)}</p>
                                                 <p className="text-xs text-stone-400">{res.sku}</p>
                                             </div>
                                             <Plus className="h-4 w-4 text-blue-500" />
@@ -846,9 +1026,103 @@ export default function GoodsReceivingPage() {
                                         <div className="p-4 text-center text-gray-500 text-sm">No items found.</div>
                                     )}
                                 </div>
+
+                                <div className="mt-6 border-t pt-4 space-y-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="font-semibold text-stone-900">Create New Item</p>
+                                            <p className="text-xs text-stone-500">Use the scanned barcode or generate a unique store barcode.</p>
+                                        </div>
+                                        {newItemDraft.barcode ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => printBarcodeLabel(newItemDraft.barcode, newItemDraft.item_name || 'New Item')}
+                                                className="btn-secondary btn-sm"
+                                            >
+                                                <Printer className="h-4 w-4 mr-2" />
+                                                Print
+                                            </button>
+                                        ) : null}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <input
+                                            type="text"
+                                            className="input-field"
+                                            placeholder="Item name"
+                                            value={newItemDraft.item_name}
+                                            onChange={(e) => setNewItemDraft(prev => ({ ...prev, item_name: e.target.value }))}
+                                        />
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            className="input-field"
+                                            placeholder="Cost price"
+                                            value={newItemDraft.cost_price}
+                                            onChange={(e) => setNewItemDraft(prev => ({ ...prev, cost_price: e.target.value }))}
+                                        />
+                                        <select
+                                            className="input-field"
+                                            value={newItemDraft.category}
+                                            onChange={(e) => setNewItemDraft(prev => ({ ...prev, category: e.target.value }))}
+                                        >
+                                            <option value="">Select category</option>
+                                            <option value="food">Food</option>
+                                            <option value="beverage">Beverage</option>
+                                            <option value="toiletries">Toiletries</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                        <select
+                                            className="input-field"
+                                            value={newItemDraft.unit_of_measure}
+                                            onChange={(e) => setNewItemDraft(prev => ({ ...prev, unit_of_measure: e.target.value }))}
+                                        >
+                                            <option value="pcs">Pieces</option>
+                                            <option value="kg">Kilogram</option>
+                                            <option value="liters">Liters</option>
+                                            <option value="packets">Packets</option>
+                                            <option value="bottles">Bottles</option>
+                                        </select>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="input-field"
+                                            placeholder="Reorder level"
+                                            value={newItemDraft.reorder_level}
+                                            onChange={(e) => setNewItemDraft(prev => ({ ...prev, reorder_level: e.target.value }))}
+                                        />
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                className="input-field flex-1"
+                                                placeholder="Barcode"
+                                                value={newItemDraft.barcode}
+                                                onChange={(e) => setNewItemDraft(prev => ({ ...prev, barcode: e.target.value }))}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleGenerateDraftBarcode()}
+                                                disabled={isGeneratingBarcode}
+                                                className="btn-secondary whitespace-nowrap"
+                                            >
+                                                {isGeneratingBarcode ? 'Generating...' : 'Generate'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleCreateNewItem()}
+                                        disabled={isCreatingItem}
+                                        className="btn-primary w-full"
+                                    >
+                                        {isCreatingItem ? 'Creating...' : 'Create Item & Continue'}
+                                    </button>
+                                </div>
                             </div>
                             <DialogFooter>
-                                <button onClick={() => setIsLookupOpen(false)} className="btn-ghost">Cancel</button>
+                                <button onClick={resetLookupState} className="btn-ghost">Cancel</button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>

@@ -8,6 +8,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/minimal/card";
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { staffAPI } from '@/lib/api';
+import { PYTHON_SERVICE_URL } from '@/lib/config';
 import {
   RefreshCw, Calendar, Users, Timer,
   Search, Download, ChevronRight, CheckCircle2, AlertCircle
@@ -162,7 +163,7 @@ export default function BranchAttendancePage() {
         }))
       };
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`, {
+      const response = await fetch(`${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

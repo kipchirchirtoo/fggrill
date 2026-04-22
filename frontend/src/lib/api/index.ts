@@ -15,6 +15,7 @@ export * from './search';
 export * from './bar';
 export * from './guest-portal';
 export * from './admin-logs';
+export * from './branch-manager';
 
 import { authAPI, userAPI, notificationsAPI, systemAPI, idCardsAPI, channelManagerAPI, documentsAPI } from './system';
 import { bookingsAPI, roomsAPI, guestAPI, ratePlansAPI, guestLoyaltyAPI } from './rooms';
@@ -31,6 +32,7 @@ import { searchAPI, attendanceAnalyticsAPI, automationAPI, forecastingAPI } from
 import { cashierAPI, barStockRequestsAPI } from './bar';
 import { guestPortalAPI } from './guest-portal';
 import { adminLogsAPI } from './admin-logs';
+import { staffAuditAPI, profitLossAPI, stockAnalyticsAPI } from './branch-manager';
 
 // Explicitly export all API modules as named exports for better reliability and discovery
 export { 
@@ -49,6 +51,7 @@ export {
   barStockRequestsAPI, cashierAPI,
   guestPortalAPI,
   adminLogsAPI,
+  staffAuditAPI, profitLossAPI, stockAnalyticsAPI,
   // Add common aliases as named exports for backward compatibility
   bookingsAPI as folioAPI,
   roomsAPI as pricingAPI,
