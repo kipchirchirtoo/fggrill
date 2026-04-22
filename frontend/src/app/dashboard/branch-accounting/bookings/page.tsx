@@ -25,7 +25,7 @@ import {
     Users,
     Plus
 } from 'lucide-react';
-import { api, conferenceAPI, accountingAPI } from '@/lib/api';
+import { api, conferenceAPI, accountingAPI, cateringAPI } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -64,6 +64,7 @@ function BookingsManagementContent() {
     const [hotelBookings, setHotelBookings] = useState<any[]>([]);
     const [restaurantBookings, setRestaurantBookings] = useState<any[]>([]);
     const [conferenceBookings, setConferenceBookings] = useState<any[]>([]);
+    const [cateringBookings, setCateringBookings] = useState<any[]>([]);
     const [invoices, setInvoices] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -93,6 +94,11 @@ function BookingsManagementContent() {
                 if (response.success) {
                     setConferenceBookings(response.data);
                 }
+            } else if (activeTab === 'catering') {
+                const response = await cateringAPI.getBookings();
+                if (response.success) {
+                    setCateringBookings(response.data);
+                }
             } else if (activeTab === 'invoices') {
                 const response = await api.accounting.getInvoices();
                 if (response.success) {
@@ -113,6 +119,8 @@ function BookingsManagementContent() {
             if (activeTab === 'hotel') {
                 // Assuming there's a confirm endpoint or update status
                 response = await api.bookings.updateBooking(id, { status: 'confirmed' });
+            } else if (activeTab === 'catering') {
+                response = await cateringAPI.updateBooking(id, { booking_status: 'confirmed' });
             } else {
                 response = await api.restaurant.confirmRestaurantReservation(id);
             }
@@ -134,6 +142,8 @@ function BookingsManagementContent() {
             let response;
             if (activeTab === 'hotel') {
                 response = await api.bookings.cancelBooking(id, 'Cancelled by Branch Accountant');
+            } else if (activeTab === 'catering') {
+                response = await cateringAPI.cancelBooking(id);
             } else {
                 response = await api.restaurant.cancelRestaurantReservation(id, 'Cancelled by Branch Accountant');
             }
@@ -174,6 +184,15 @@ function BookingsManagementContent() {
         return matchesSearch && matchesStatus;
     });
 
+    const filteredCateringBookings = cateringBookings.filter(b => {
+        const searchStr = searchQuery.toLowerCase();
+        const customerName = (b.customer_name || '').toLowerCase();
+        const bookingNumber = (b.booking_number || '').toLowerCase();
+        const matchesSearch = customerName.includes(searchStr) || bookingNumber.includes(searchStr);
+        const matchesStatus = statusFilter === 'all' || b.booking_status === statusFilter;
+        return matchesSearch && matchesStatus;
+    });
+
     const filteredInvoices = invoices.filter(inv => {
         const searchStr = searchQuery.toLowerCase();
         const matchesSearch =
@@ -205,6 +224,10 @@ function BookingsManagementContent() {
                         <TabsTrigger value="conference" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                             <Users className="w-4 h-4 mr-2" />
                             Conference
+                        </TabsTrigger>
+                        <TabsTrigger value="catering" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                            <Utensils className="w-4 h-4 mr-2" />
+                            Catering
                         </TabsTrigger>
                         <TabsTrigger value="invoices" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                             <FileText className="w-4 h-4 mr-2" />
@@ -257,6 +280,17 @@ function BookingsManagementContent() {
                     />
                 </TabsContent>
 
+                <TabsContent value="catering" className="mt-0">
+                    <BookingList
+                        type="catering"
+                        records={filteredCateringBookings}
+                        loading={loading}
+                        onConfirm={handleConfirm}
+                        onCancel={handleCancel}
+                        onInvoiceGenerated={fetchData}
+                    />
+                </TabsContent>
+
                 <TabsContent value="invoices" className="mt-0">
                     <InvoiceList
                         records={filteredInvoices}
@@ -269,7 +303,7 @@ function BookingsManagementContent() {
 }
 
 function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGenerated }: {
-    type: 'hotel' | 'restaurant' | 'conference',
+    type: 'hotel' | 'restaurant' | 'conference' | 'catering',
     records: any[],
     loading: boolean,
     onConfirm: (id: string) => void,
@@ -302,18 +336,21 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                 notes: `Generated from ${type} booking.`,
                 items: [
                     {
-                        description: `${type.toUpperCase()} Booking - ${record.room_number || record.table_number || record.conference_hall_id || 'N/A'}`,
+                        description: type === 'catering' 
+                            ? `Catering Service - ${record.event_type || 'Event'} (${record.num_guests || 0} guests)` 
+                            : `${type.toUpperCase()} Booking - ${record.room_number || record.table_number || record.conference_hall_id || 'N/A'}`,
                         quantity: 1,
                         unit_price: record.total_amount || 0,
                         total: record.total_amount || 0
                     }
                 ],
-                type: type === 'conference' ? 'CONFERENCE' : 'GENERAL',
+                type: type === 'conference' ? 'CONFERENCE' : type === 'catering' ? 'CATERING' : 'GENERAL',
                 hotel_booking_id: type === 'hotel' ? record.id : null,
                 restaurant_reservation_id: type === 'restaurant' ? record.id : null,
                 conference_hall_id: type === 'conference' ? record.conference_hall_id : null,
                 conference_start_date: type === 'conference' ? record.start_date : null,
-                conference_end_date: type === 'conference' ? record.end_date : null
+                conference_end_date: type === 'conference' ? record.end_date : null,
+                catering_booking_id: type === 'catering' ? record.id : null
             };
 
             const res = await accountingAPI.createInvoice(invoiceData);
@@ -375,26 +412,30 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                             <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div>
                                     <p className="text-xs text-slate-500 uppercase font-semibold">
-                                        {type === 'hotel' ? 'Room' : type === 'restaurant' ? 'Table/Guests' : 'Hall'}
+                                        {type === 'hotel' ? 'Room' : type === 'restaurant' ? 'Table/Guests' : type === 'catering' ? 'Event/Guests' : 'Hall'}
                                     </p>
                                     <p className="text-sm">
                                         {type === 'hotel' 
                                             ? record.room_number 
                                             : type === 'restaurant' 
                                                 ? `${record.table_number || 'TBD'} (${record.party_size || record.guests} guests)`
-                                                : (record.conference_hall?.name || 'Hall' )}
+                                                : type === 'catering'
+                                                    ? `${record.event_type || 'Event'} (${record.num_guests || 0} guests)`
+                                                    : (record.conference_hall?.name || 'Hall' )}
                                     </p>
                                 </div>
                                 <div>
                                     <p className="text-xs text-slate-500 uppercase font-semibold">
-                                        {type === 'hotel' ? 'Check-in' : type === 'restaurant' ? 'Date/Time' : 'Start Date'}
+                                        {type === 'hotel' ? 'Check-in' : type === 'restaurant' ? 'Date/Time' : type === 'catering' ? 'Event Date' : 'Start Date'}
                                     </p>
                                     <p className="text-sm">
                                         {type === 'hotel'
                                             ? (record.check_in_date ? format(new Date(record.check_in_date), 'MMM dd, yyyy') : 'N/A')
                                             : type === 'restaurant'
                                                 ? `${format(new Date(record.reservation_date), 'MMM dd, yyyy')} ${record.reservation_time || ''}`
-                                                : (record.start_date ? format(new Date(record.start_date), 'MMM dd, yyyy HH:mm') : 'N/A')}
+                                                : type === 'catering'
+                                                    ? `${record.event_date ? format(new Date(record.event_date), 'MMM dd, yyyy') : 'N/A'} ${record.event_time || ''}`
+                                                    : (record.start_date ? format(new Date(record.start_date), 'MMM dd, yyyy HH:mm') : 'N/A')}
                                     </p>
                                 </div>
                                 <div>
@@ -432,7 +473,7 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                 >
                                     <Eye className="w-4 h-4 mr-1" /> View Details
                                 </Button>
-                                {record.status === 'pending' && (
+                                {(record.status === 'pending' || record.booking_status === 'pending') && (
                                     <Button
                                         size="sm"
                                         onClick={() => onConfirm(record.id)}
@@ -441,7 +482,7 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                         <CheckCircle2 className="w-4 h-4 mr-1" /> Confirm
                                     </Button>
                                 )}
-                                {['pending', 'confirmed'].includes(record.status) && (
+                                {(['pending', 'confirmed'].includes(record.status) || ['pending', 'confirmed'].includes(record.booking_status)) && (
                                     <Button
                                         size="sm"
                                         variant="outline"
@@ -531,23 +572,56 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                                 <p className="text-sm">{selectedBooking.room_type || 'N/A'}</p>
                                             </div>
                                         </>
+                                    ) : type === 'catering' ? (
+                                        <>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Booking Number</p>
+                                                <p className="text-sm font-medium">{selectedBooking.booking_number || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Event Type</p>
+                                                <p className="text-sm">{selectedBooking.event_type || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Event Date</p>
+                                                <p className="text-sm">{selectedBooking.event_date ? format(new Date(selectedBooking.event_date), 'MMM dd, yyyy') : 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Event Time</p>
+                                                <p className="text-sm">{selectedBooking.event_time || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Number of Guests</p>
+                                                <p className="text-sm">{selectedBooking.num_guests || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Venue</p>
+                                                <p className="text-sm">{selectedBooking.venue_address || 'N/A'}</p>
+                                            </div>
+                                            {selectedBooking.menu_details && (
+                                                <div className="col-span-2">
+                                                    <p className="text-xs text-slate-500 uppercase font-semibold">Menu Details</p>
+                                                    <p className="text-sm">{typeof selectedBooking.menu_details === 'string' ? selectedBooking.menu_details : JSON.stringify(selectedBooking.menu_details)}</p>
+                                                </div>
+                                            )}
+                                        </>
                                     ) : (
                                         <>
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase font-semibold">Reservation Number</p>
-                                                <p className="text-sm font-medium">{selectedBooking.reservation_number || 'N/A'}</p>
+                                                <p className="text-sm font-medium">{selectedBooking.reservation_number || selectedBooking.booking_number || 'N/A'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase font-semibold">Party Size</p>
-                                                <p className="text-sm">{selectedBooking.party_size || selectedBooking.number_of_guests || 'N/A'} guests</p>
+                                                <p className="text-sm">{selectedBooking.party_size || selectedBooking.number_of_guests || selectedBooking.num_guests || 'N/A'} guests</p>
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase font-semibold">Date</p>
-                                                <p className="text-sm">{selectedBooking.reservation_date ? format(new Date(selectedBooking.reservation_date), 'MMM dd, yyyy') : 'N/A'}</p>
+                                                <p className="text-sm">{selectedBooking.reservation_date || selectedBooking.event_date || selectedBooking.start_date ? format(new Date(selectedBooking.reservation_date || selectedBooking.event_date || selectedBooking.start_date), 'MMM dd, yyyy') : 'N/A'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase font-semibold">Time</p>
-                                                <p className="text-sm">{selectedBooking.reservation_time || 'N/A'}</p>
+                                                <p className="text-sm">{selectedBooking.reservation_time || selectedBooking.event_time || 'N/A'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase font-semibold">Table</p>
@@ -582,6 +656,12 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                                 <p className="text-sm font-medium">KES {selectedBooking.total_amount.toLocaleString()}</p>
                                             </div>
                                         )}
+                                        {selectedBooking.amount_paid !== undefined && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-semibold">Amount Paid</p>
+                                                <p className="text-sm">KES {(selectedBooking.amount_paid || 0).toLocaleString()}</p>
+                                            </div>
+                                        )}
                                         {selectedBooking.deposit_amount && (
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase font-semibold">Deposit</p>
@@ -591,7 +671,13 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                         {selectedBooking.payment_status && (
                                             <div>
                                                 <p className="text-xs text-slate-500 uppercase font-semibold">Payment Status</p>
-                                                <p className="text-sm">{selectedBooking.payment_status}</p>
+                                                <Badge variant="secondary" className={
+                                                    selectedBooking.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                                    selectedBooking.payment_status === 'partial' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                                    'bg-rose-50 text-rose-700 border-rose-100'
+                                                }>
+                                                    {selectedBooking.payment_status}
+                                                </Badge>
                                             </div>
                                         )}
                                     </div>

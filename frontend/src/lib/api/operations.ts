@@ -32,10 +32,16 @@ export const conferenceAPI = {
 };
 
 export const cateringAPI = {
-  getBookings: (params?: any) => fetchAPI<any[]>(`/catering/bookings${buildQuery(params)}`),
-  createBooking: (data: any) => fetchAPI<any>('/catering/bookings', { method: 'POST', body: JSON.stringify(data) }),
-  updateStatus: (id: string, status: string) => 
-    fetchAPI<void>(`/catering/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  // Catering bookings endpoints
+  getBookings: (params?: any) => fetchAPI<any[]>(`/catering-bookings${buildQuery(params)}`),
+  getBookingById: (id: string) => fetchAPI<any>(`/catering-bookings/${id}`),
+  createBooking: (data: any) => fetchAPI<any>('/catering-bookings', { method: 'POST', body: JSON.stringify(data) }),
+  updateBooking: (id: string, data: any) => fetchAPI<any>(`/catering-bookings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  cancelBooking: (id: string) => fetchAPI<any>(`/catering-bookings/${id}/cancel`, { method: 'POST' }),
+  deleteBooking: (id: string) => fetchAPI<void>(`/catering-bookings/${id}`, { method: 'DELETE' }),
+  recordPayment: (id: string, amount: number) => fetchAPI<any>(`/catering-bookings/${id}/payment`, { method: 'POST', body: JSON.stringify({ amount }) }),
+  getCalendar: (params?: any) => fetchAPI<any[]>(`/catering-bookings/calendar${buildQuery(params)}`),
+  getStatistics: (params?: any) => fetchAPI<any>(`/catering-bookings/statistics${buildQuery(params)}`),
 };
 
 // =====================================
