@@ -58,7 +58,7 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
     const loadTypes = async () => {
       try {
         const res = await roomsAPI.getRoomTypes();
-        const types = res.data || res.types || res || [];
+        const types = res.data || [];
         if (active) setRoomTypes(Array.isArray(types) ? types : []);
       } catch (e) {
         // ignore
@@ -107,11 +107,12 @@ export function ReservationModal({ isOpen, onClose }: ReservationModalProps): JS
     }
     try {
       setIsLoading(true);
-      const res = await bookingsAPI.getAvailableRooms(
-        reservationData.checkIn,
-        reservationData.checkOut,
-        reservationData.adults
-      );
+      const res = await bookingsAPI.getAvailableRooms({
+        checkIn: reservationData.checkIn,
+        checkOut: reservationData.checkOut,
+        adults: reservationData.adults,
+        branch_id: activeBranchId || undefined
+      });
       const rooms = res.data || [];
       const filtered = rooms.filter((r: any) =>
         (r.type?.id || r.type_id) === reservationData.roomTypeId

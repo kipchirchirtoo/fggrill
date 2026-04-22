@@ -1,6 +1,7 @@
 import { fetchAPI, buildQuery } from './core';
 import { 
   ApiResponse, 
+  BookingCreateResponse,
   Booking, 
   Room 
 } from './types';
@@ -55,7 +56,7 @@ export const ratePlansAPI = {
 const bookingsBase = {
   getBookings: (params?: any) => fetchAPI<Booking[]>(`/bookings${buildQuery(params)}`),
   getBooking: (id: string | number) => fetchAPI<Booking>(`/bookings/${id}`),
-  create: (data: any) => fetchAPI<Booking>('/bookings', { method: 'POST', body: JSON.stringify(data) }),
+  create: (data: any) => fetchAPI<BookingCreateResponse>('/bookings', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string | number, data: any) => fetchAPI<Booking>(`/bookings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   cancel: (id: string | number, reason?: string) => fetchAPI<void>(`/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }),
   checkIn:  (id: string | number) => fetchAPI<void>(`/bookings/${id}/check-in`,  { method: 'PUT' }),
@@ -64,9 +65,40 @@ const bookingsBase = {
   // Folio & Billing
   getFolio: (id: string | number) => fetchAPI<any>(`/folios/reservation/${id}`),
   addCharge: (id: string | number, data: any) => fetchAPI<void>(`/folios/reservation/${id}/transaction`, { method: 'POST', body: JSON.stringify(data) }),
-  
-  getAvailableRooms: (params: { start_date: string; end_date: string; room_type?: string; branch_id?: number }) =>
-    fetchAPI<Room[]>(`/bookings/available${buildQuery(params)}`),
+
+  getAvailableRooms: (
+    paramsOrCheckIn: { checkIn?: string; checkOut?: string; branch_id?: number; room_type?: string; roomTypeId?: string; adults?: number } | string,
+    maybeCheckOut?: string,
+    maybeAdultsOrBranchId?: number,
+    maybeBranchId?: number,
+  ) => {
+    const params = typeof paramsOrCheckIn === 'string'
+      ? {
+          checkIn: paramsOrCheckIn,
+          checkOut: maybeCheckOut,
+          adults: maybeAdultsOrBranchId,
+          branch_id: maybeBranchId,
+        }
+      : paramsOrCheckIn;
+
+    return fetchAPI<Room[]>(`/bookings/available${buildQuery({
+      checkIn: params.checkIn,
+      checkOut: params.checkOut,
+      branch_id: params.branch_id,
+      room_type: params.room_type ?? params.roomTypeId,
+      adults: params.adults,
+    })}`);
+  },
+
+  getPricingQuote: (data: {
+    checkInDate: string;
+    checkOutDate: string;
+    roomTypeId: string;
+    adults?: number;
+    children?: number;
+    mealPlan?: string;
+    ratePlanId?: string;
+  }) => fetchAPI<any>('/bookings/quote', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const bookingsAPI = {

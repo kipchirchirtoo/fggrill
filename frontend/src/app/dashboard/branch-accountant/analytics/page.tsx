@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { API_URL } from '@/lib/config';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,8 +17,6 @@ import PaymentMethodChart from './components/PaymentMethodChart';
 import CategoryBreakdownChart from './components/CategoryBreakdownChart';
 import TransactionTable from './components/TransactionTable';
 import ExportButtons from './components/ExportButtons';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 interface SalesFilter {
   payment_methods?: string[];

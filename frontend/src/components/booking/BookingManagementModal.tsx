@@ -12,6 +12,7 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
+import { fetchAPI } from '@/lib/api';
 
 interface Booking {
   id: string;
@@ -79,18 +80,7 @@ export function BookingManagementModal({
   const fetchBookingHistory = async () => {
     if (!booking) return;
 
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/bookings/${booking.id}/history`);
-      if (response.ok) {
-        const result = await response.json();
-        setBookingHistory(result.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching booking history:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    setBookingHistory([]);
   };
 
   const modifyBooking = async () => {
@@ -98,11 +88,8 @@ export function BookingManagementModal({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/bookings/${booking.id}/modify`, {
+      const result = await fetchAPI<any>(`/bookings/${booking.id}/modify`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           checkInDate: modificationData.checkIn,
           checkOutDate: modificationData.checkOut,
@@ -112,11 +99,10 @@ export function BookingManagementModal({
         })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to modify booking');
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to modify booking');
       }
 
-      const result = await response.json();
       onBookingUpdated(result.data);
       toast.success('Booking modified successfully');
       setActiveTab('details');
@@ -137,22 +123,18 @@ export function BookingManagementModal({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/bookings/${booking.id}/cancel`, {
+      const result = await fetchAPI<any>(`/bookings/${booking.id}/cancel`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           reason: 'Cancelled by staff',
           cancelledBy: 'staff'
         })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to cancel booking');
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to cancel booking');
       }
 
-      const result = await response.json();
       onBookingUpdated(result.data);
       toast.success('Booking cancelled successfully');
 
@@ -168,18 +150,14 @@ export function BookingManagementModal({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/bookings/${booking.id}/check-in`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const result = await fetchAPI<any>(`/bookings/${booking.id}/check-in`, {
+        method: 'PUT'
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to check in guest');
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to check in guest');
       }
 
-      const result = await response.json();
       onBookingUpdated(result.data);
       toast.success('Guest checked in successfully');
 
@@ -195,18 +173,14 @@ export function BookingManagementModal({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/bookings/${booking.id}/check-out`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const result = await fetchAPI<any>(`/bookings/${booking.id}/check-out`, {
+        method: 'PUT'
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to check out guest');
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to check out guest');
       }
 
-      const result = await response.json();
       onBookingUpdated(result.data);
       toast.success('Guest checked out successfully');
 

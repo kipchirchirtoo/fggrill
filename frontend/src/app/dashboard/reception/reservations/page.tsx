@@ -227,7 +227,12 @@ function NewReservationModal({
     }
     setIsLoading(true);
     try {
-      const response = await bookingsAPI.getAvailableRooms(checkIn, checkOut, adults + children);
+      const response = await bookingsAPI.getAvailableRooms({
+        checkIn,
+        checkOut,
+        adults: adults + children,
+        branch_id: activeBranchId || undefined
+      });
       if (response.success) {
         setAvailableRooms(response.data || []);
         setStep('room');

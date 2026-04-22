@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Save, Trash2, Plus, AlertCircle, Camera, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { storekeepingAPI } from '@/lib/api';
+import { storekeepingAPI, stockTakeAPI } from '@/lib/api';
 
 interface StockItem {
     id: string;
@@ -83,42 +83,68 @@ export default function StockCountForm({ branchId, isAuditor = false }: { branch
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-
-            // Prepare stock take items
-            const stockTakeItems = items.map(item => ({
-                item_sku: item.itemCode,
-                system_quantity: item.systemQuantity,
-                counted_quantity: item.physicalQuantity,
-                unit_cost: item.unitCost,
-                variance_reason: item.variance !== 0 ? item.reason : null,
-                notes: item.reason
-            }));
-
-            const payload = {
-                branch_id: branchId,
-                take_type: 'FULL',
-                notes: isAuditor ? 'Auditor stock count' : 'Branch stock count',
-                items: stockTakeItems,
-                status: isAuditor ? 'COMPLETED' : 'IN_PROGRESS'
-            };
-
-            const response = await fetch('/api/stock-takes', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
+            const createResult = await stockTakeAPI.createStockTake({
+                branch_id: typeof branchId === 'number' ? branchId : Number(branchId),
+                count_type: 'FULL',
+                notes: isAuditor ? 'Auditor stock count' : 'Branch stock count'
             });
 
-            if (!response.ok) throw new Error('Failed to submit stock count');
+            if (!createResult.success || !createResult.data?.id) {
+                throw new Error(createResult.message || 'Failed to create stock count');
+            }
 
-            const res = await response.json();
+            const createdStockTakeId = createResult.data.id;
+            setStockTakeId(createdStockTakeId);
 
-            if (res.success) {
-                setStockTakeId(res.data.id);
-                toast.success(isAuditor ? 'Audit count submitted successfully' : 'Stock count submitted for review');
+            const createdItemsResult = await stockTakeAPI.getStockTakeItems(createdStockTakeId);
+
+            if (!createdItemsResult.success || !createdItemsResult.data) {
+                throw new Error(createdItemsResult.message || 'Failed to load stock count items');
+            }
+
+            const itemIdMap = new Map(
+                createdItemsResult.data
+                    .filter((item: any) => item.id && item.item_sku)
+                    .map((item: any) => [String(item.item_sku), item.id])
+            );
+
+            const updateItems = items
+                .map(item => {
+                    const countItemId = itemIdMap.get(String(item.itemCode));
+
+                    if (!countItemId) {
+                        return null;
+                    }
+
+                    return {
+                        id: countItemId,
+                        counted_quantity: item.physicalQuantity,
+                        variance_reason: item.variance !== 0 ? item.reason : null,
+                        notes: item.reason
+                    };
+                })
+                .filter(Boolean);
+
+            const updateResult = await stockTakeAPI.updateStockTake(createdStockTakeId, {
+                notes: isAuditor ? 'Auditor stock count' : 'Branch stock count',
+                status: isAuditor ? 'COMPLETED' : undefined,
+                items: updateItems
+            });
+
+            if (!updateResult.success) {
+                throw new Error(updateResult.message || 'Failed to save stock count items');
+            }
+
+            if (isAuditor) {
+                toast.success('Audit count submitted successfully');
+            } else {
+                const submitResult = await stockTakeAPI.submitToAuditor(createdStockTakeId);
+
+                if (!submitResult.success) {
+                    throw new Error(submitResult.message || 'Failed to submit stock count for review');
+                }
+
+                toast.success('Stock count submitted for review');
             }
         } catch (error) {
             console.error('Failed to submit stock count:', error);

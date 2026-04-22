@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { storeAPI } from '@/lib/api';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from "@/components/ui/minimal/button";
@@ -59,7 +60,7 @@ export default function StockTakesPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedTake, setSelectedTake] = useState<StockTake | null>(null);
   const [takeItems, setTakeItems] = useState<StockTakeItem[]>([]);
-  const [newForm, setNewForm] = useState({ branch_id: 0, take_type: 'FULL', notes: '' });
+  const [newForm, setNewForm] = useState({ branch_id: 0, count_type: 'FULL', notes: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
   const [filteredTakes, setFilteredTakes] = useState<StockTake[]>([]);
@@ -89,38 +90,22 @@ export default function StockTakesPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = { 'Authorization': `Bearer ${token}` };
       const [takesRes, branchesRes] = await Promise.all([
-        fetch(`${API_URL}/api/store/stock-takes`, { headers }),
-        fetch(`${API_URL}/api/store/branches`, { headers })
+        storeAPI.getStockTakes(),
+        storeAPI.getBranches()
       ]);
-      
-      if (takesRes.ok) { 
-        const data = await takesRes.json(); 
-        if (Array.isArray(data.data)) {
-          setStockTakes(data.data); 
-        } else {
-          console.error('Invalid stock takes data format: expected array');
-          setStockTakes([]);
-        }
+
+      if (takesRes.success && Array.isArray(takesRes.data)) {
+        setStockTakes(takesRes.data);
       } else {
-        const error = await takesRes.json().catch(() => ({ message: 'Failed to fetch stock takes' }));
-        toast.error(error.message || 'Error loading stock takes');
+        toast.error(takesRes.message || 'Error loading stock takes');
         setStockTakes([]);
       }
-      
-      if (branchesRes.ok) { 
-        const data = await branchesRes.json(); 
-        if (Array.isArray(data.data)) {
-          setBranches(data.data); 
-        } else {
-          console.error('Invalid branches data format: expected array');
-          setBranches([]);
-        }
+
+      if (branchesRes.success && Array.isArray(branchesRes.data)) {
+        setBranches(branchesRes.data);
       } else {
-        const error = await branchesRes.json().catch(() => ({ message: 'Failed to fetch branches' }));
-        toast.error(error.message || 'Error loading branches');
+        toast.error(branchesRes.message || 'Error loading branches');
         setBranches([]);
       }
     } catch (error: any) { 
@@ -146,20 +131,14 @@ export default function StockTakesPage() {
     
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/store/stock-takes`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(newForm)
-      });
-      if (res.ok) {
+      const res = await storeAPI.createStockTake(newForm);
+      if (res.success) {
         toast.success('Stock take started successfully');
         setIsNewModalOpen(false);
-        setNewForm({ branch_id: 0, take_type: 'FULL', notes: '' });
+        setNewForm({ branch_id: 0, count_type: 'FULL', notes: '' });
         fetchData();
       } else {
-        const err = await res.json().catch(() => ({ message: 'Failed to start stock take' }));
-        toast.error(err.message || 'Failed to start stock take');
+        toast.error(res.message || 'Failed to start stock take');
       }
     } catch (error: any) { 
       console.error('Error starting stock take:', error);
@@ -175,22 +154,16 @@ export default function StockTakesPage() {
     setIsViewModalOpen(true);
     
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/store/stock-takes/${take.id}/items`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.data)) {
-          setTakeItems(data.data);
+      const res = await storeAPI.getStockTakeItems(take.id);
+      if (res.success) {
+        if (Array.isArray(res.data)) {
+          setTakeItems(res.data);
         } else {
-          console.error('Invalid stock take items format: expected array');
           setTakeItems([]);
           toast.error('Error loading stock take items');
         }
       } else {
-        const error = await res.json().catch(() => ({ message: 'Failed to fetch stock take items' }));
-        toast.error(error.message || 'Error loading stock take items');
+        toast.error(res.message || 'Error loading stock take items');
       }
     } catch (error: any) { 
       console.error('Error fetching items:', error);
@@ -206,19 +179,13 @@ export default function StockTakesPage() {
     }
     
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/store/stock-take-items/${itemId}`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ counted_quantity: countedQty })
-      });
+      const res = await storeAPI.updateStockTakeItem(itemId, { actual_quantity: countedQty });
       
-      if (res.ok) {
+      if (res.success) {
         // Update local state only if successful
         setTakeItems(items => items.map(i => i.id === itemId ? { ...i, counted_quantity: countedQty, status: 'COUNTED' } : i));
       } else {
-        const error = await res.json().catch(() => ({ message: 'Failed to update count' }));
-        toast.error(error.message || 'Error updating count');
+        toast.error(res.message || 'Error updating count');
       }
     } catch (error: any) { 
       console.error('Error updating count:', error);
@@ -239,19 +206,14 @@ export default function StockTakesPage() {
     
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/api/store/stock-takes/${selectedTake.id}/complete`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await storeAPI.completeStockTake(selectedTake.id);
       
-      if (res.ok) {
+      if (res.success) {
         toast.success('Stock take completed successfully');
         setIsViewModalOpen(false);
         fetchData();
       } else {
-        const error = await res.json().catch(() => ({ message: 'Failed to complete stock take' }));
-        toast.error(error.message || 'Error completing stock take');
+        toast.error(res.message || 'Error completing stock take');
       }
     } catch (error: any) { 
       console.error('Error completing stock take:', error);
@@ -412,7 +374,7 @@ export default function StockTakesPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Type</label>
-                <select value={newForm.take_type} onChange={e => setNewForm({...newForm, take_type: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">
+                <select value={newForm.count_type} onChange={e => setNewForm({...newForm, count_type: e.target.value})} className="w-full px-3 py-2 border rounded-ios-lg">
                   {TAKE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>

@@ -200,7 +200,11 @@ export function ReservationManagement({ branchId, compact = false, onReservation
 
   const fetchAvailableRooms = async (checkIn: string, checkOut: string, roomTypeId?: string) => {
     try {
-      const response = await bookingsAPI.getAvailableRooms(checkIn, checkOut);
+      const response = await bookingsAPI.getAvailableRooms({
+        checkIn,
+        checkOut,
+        branch_id: branchId
+      });
       let rooms = response.data || response.rooms || response || [];
       
       if (roomTypeId) {

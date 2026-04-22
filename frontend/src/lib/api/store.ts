@@ -156,8 +156,14 @@ export const storeAPI = {
   // Stock Takes
   getStockTakes:       () => fetchAPI<any[]>('/store/stock-takes'),
   getStockTake:        (id: string) => fetchAPI<any>(`/stock-takes/${id}`),
-  createStockTake:     (data: { branch_id: number; take_type: string; notes?: string }) =>
-    fetchAPI<any>('/store/stock-takes', { method: 'POST', body: JSON.stringify(data) }),
+  createStockTake:     (data: { branch_id: number; count_type?: string; take_type?: string; notes?: string }) =>
+    fetchAPI<any>('/store/stock-takes', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        count_type: data.count_type ?? data.take_type
+      })
+    }),
   getStockTakeItems:   (id: string) => fetchAPI<any[]>(`/store/stock-takes/${id}/items`),
   updateStockTakeItem: (id: string, data: { actual_quantity: number }) =>
     fetchAPI<void>(`/store/stock-take-items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -299,7 +305,14 @@ export const storeAPI = {
 export const stockTakeAPI = {
   getStockTakes:   () => fetchAPI<any[]>('/stock-takes'),
   getStockTake:    (id: string) => fetchAPI<any>(`/stock-takes/${id}`),
-  createStockTake: (data: any)  => fetchAPI<any>('/stock-takes',      { method: 'POST',   body: JSON.stringify(data) }),
+  getStockTakeItems: (id: string) => fetchAPI<any[]>(`/stock-takes/${id}/items`),
+  createStockTake: (data: any)  => fetchAPI<any>('/stock-takes',      {
+    method: 'POST',
+    body: JSON.stringify({
+      ...data,
+      count_type: data?.count_type ?? data?.take_type
+    })
+  }),
   updateStockTake: (id: string, data: any) => fetchAPI<void>(`/stock-takes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   submitToAuditor: (id: string) => fetchAPI<void>(`/stock-takes/${id}/submit`, { method: 'POST' }),
   deleteStockTake: (id: string) => fetchAPI<void>(`/stock-takes/${id}`,        { method: 'DELETE' }),

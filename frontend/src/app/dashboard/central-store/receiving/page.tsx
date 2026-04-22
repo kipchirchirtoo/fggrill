@@ -338,6 +338,8 @@ export default function GoodsReceivingPage() {
             cost_price: '',
             reorder_level: '10',
             barcode: ''
+        });
+    }, []);
 
     // --- LOGIC: Setup ---
 

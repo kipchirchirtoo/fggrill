@@ -45,7 +45,7 @@ export default function BranchStockTakesPage() {
     try {
       await stockTakeAPI.createStockTake({
         branch_id: user?.branch_id || (user as any)?.branchId || 1,
-        take_type: 'daily'
+        count_type: 'daily'
       });
       toast.success('Stock take session initialized');
       fetchStockTakes();

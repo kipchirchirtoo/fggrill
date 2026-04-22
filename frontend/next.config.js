@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://api.hirall.com' : 'http://localhost:5000')).replace(/\/$/, '')
+
 const nextConfig = {
     // Only use 'export' for Electron builds, not for Vercel
     // Vercel needs server-side rendering for dynamic routes
@@ -17,7 +19,7 @@ const nextConfig = {
         return [
             {
                 source: '/api/:path*',
-                destination: 'http://localhost:5000/api/:path*',
+                destination: `${apiBaseUrl}/api/:path*`,
             },
         ];
     },

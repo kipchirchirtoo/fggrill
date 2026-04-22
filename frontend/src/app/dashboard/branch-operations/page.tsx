@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
+import { API_URL } from '@/lib/config';
 import { useBranch } from '@/lib/branch-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { BranchAwareDashboardLayout } from '@/components/layout/branch-aware-dashboard-layout';
@@ -112,7 +113,7 @@ function BranchOperationsDashboardContent() {
                 <ul className="list-disc pl-5 text-xs text-stone-700">
                   <li>Branch ID: {activeBranchId}</li>
                   <li>Branch Name: {activeBranch?.name}</li>
-                  <li>URL: {`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/branch-operations/dashboard`}</li>
+                  <li>URL: {`${API_URL}/api/branch-operations/dashboard`}</li>
                 </ul>
                 <IOSButton className="mt-3" onClick={fetchDashboardData} size="sm">Retry Request</IOSButton>
               </div>

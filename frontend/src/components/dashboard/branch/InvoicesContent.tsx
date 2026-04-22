@@ -8,7 +8,7 @@ import {
     FileText, Plus, Search, Filter,
     CheckCircle2, Clock, AlertTriangle, Loader2, Download
 } from 'lucide-react';
-import { accountingAPI } from '@/lib/api';
+import { accountingAPI, reportsAPI } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface InvoicesContentProps {
@@ -90,32 +90,18 @@ export function InvoicesContent({ branchId, isAuditor = false }: InvoicesContent
     ];
 
     const generatePDF = (inv: any) => {
-        const downloadUrl = `http://localhost:5000/api/reports/generate/branded-pdf`;
-        fetch(downloadUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                reportType: 'invoice',
-                data: {
-                    invoice_number: inv.invoice_number,
-                    invoice_date: new Date(inv.invoice_date).toLocaleDateString(),
-                    due_date: new Date(inv.due_date).toLocaleDateString(),
-                    status: inv.status,
-                    customer_name: inv.customer_name || 'Customer',
-                    total_amount: inv.total_amount,
-                    items: inv.items || [{ description: 'Service', total: inv.total_amount, quantity: 1, unit_price: inv.total_amount }]
-                }
-            })
-        })
-            .then(res => res.blob())
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Invoice_${inv.invoice_number}.pdf`;
-                a.click();
-            })
-            .catch(err => toast.error('Failed to download invoice'));
+        reportsAPI.exportPdf('invoice', {
+            useRealData: false,
+            data: {
+                invoice_number: inv.invoice_number,
+                invoice_date: new Date(inv.invoice_date).toLocaleDateString(),
+                due_date: new Date(inv.due_date).toLocaleDateString(),
+                status: inv.status,
+                customer_name: inv.customer_name || 'Customer',
+                total_amount: inv.total_amount,
+                items: inv.items || [{ description: 'Service', total: inv.total_amount, quantity: 1, unit_price: inv.total_amount }]
+            }
+        }).catch(() => toast.error('Failed to download invoice'));
     };
 
     return (

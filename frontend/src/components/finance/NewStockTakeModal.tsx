@@ -59,7 +59,7 @@ export const NewStockTakeModal = ({ isOpen, onClose, onSubmit }: NewStockTakeMod
                 </div>
                 <DialogFooter className="p-4 border-t bg-stone-50">
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={() => onSubmit({ take_type: takeType, notes })} className="bg-stone-900 text-white">Start Session</Button>
+                    <Button onClick={() => onSubmit({ count_type: takeType, notes })} className="bg-stone-900 text-white">Start Session</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

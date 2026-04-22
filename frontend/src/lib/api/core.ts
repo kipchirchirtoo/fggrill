@@ -69,7 +69,7 @@ export async function fetchAPI<T>(
   options?: FetchOptions,
   baseUrl: string = API_URL,
 ): Promise<ApiResponse<T>> {
-  const isPython = baseUrl === PYTHON_API_URL;
+  const isPython = baseUrl === PYTHON_API_URL || baseUrl === REPORTS_SERVICE_URL || baseUrl === PYTHON_SERVICE_URL;
   const showToast = options?.showToast ?? false;
 
   // ── Offline guard ──────────────────────────────────────────────────────────

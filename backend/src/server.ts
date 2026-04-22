@@ -177,7 +177,7 @@ initializeApp().then(({ app, httpServer }) => {
   const PORT = process.env.PORT || 5000;
   httpServer.listen(PORT, async () => {
     logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
-    logger.info(`Health check available at http://localhost:${PORT}/api/health`);
+    logger.info(`Health check available at http://localhost:${PORT}/health`);
 
     // Connect to database in the background (prevents health check timeout)
     import('./config/database').then(({ connectDB }) => {

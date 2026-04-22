@@ -82,7 +82,7 @@ export default function BranchStockTakePage() {
         try {
             const res = await storeAPI.createStockTake({
                 branch_id: activeBranchId,
-                take_type: 'monthly', // Default or selector
+                count_type: 'monthly',
                 notes: 'Generated from Branch Accounting'
             });
 

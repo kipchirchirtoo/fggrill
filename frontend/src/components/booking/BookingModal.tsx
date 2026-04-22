@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Input } from '@/components/ui/input';
-import { roomsAPI } from '@/lib/api';
+import { bookingsAPI } from '@/lib/api';
 import { useBranch } from '@/lib/branch-context';
 
 interface BookingModalProps {
@@ -173,27 +173,28 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
 
     setIsLoading(true);
     try {
-      // Get available rooms from API
       const totalGuests = adults + children;
-      const response = await roomsAPI.getRooms({ branch_id: activeBranchId || undefined, status: 'available' });
+      const response = await bookingsAPI.getAvailableRooms({
+        checkIn,
+        checkOut,
+        branch_id: activeBranchId || undefined,
+        adults: totalGuests,
+      });
 
       if (response.success && response.data) {
-        // Convert API rooms to RoomType format and filter by occupancy
         const availableRooms = response.data
-          .filter((room: any) => room.status === 'available')
           .map((room: any) => ({
-            id: room.id,
-            name: room.room_type || 'Standard Room',
+            id: room.type?.id || room.type_id || room.id,
+            name: room.type?.name || room.room_type || 'Standard Room',
             description: `Room ${room.room_number} on Floor ${room.floor}`,
-            basePrice: room.price || 5000,
-            maxOccupancy: 2, // Default occupancy
-            amenities: ['Wifi', 'TV', 'AC'],
+            basePrice: room.type?.base_price || room.price_override || room.rate_per_night || room.price || 5000,
+            maxOccupancy: room.type?.max_occupancy || room.max_occupancy || 2,
+            amenities: room.type?.amenities || ['Wifi', 'TV', 'AC'],
             images: ['/fggallery/room1.jpeg'],
             available: 1
           }))
           .filter((room: RoomType) => room.maxOccupancy >= totalGuests);
 
-        // Group by room type to show available room types
         const roomTypeGroups = availableRooms.reduce((acc: any, room: any) => {
           const key = room.name;
           if (!acc[key]) {
@@ -225,29 +226,20 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
     setIsLoading(true);
 
     try {
-      // Calculate pricing
-      // Calculate pricing (Inclusive Logic)
-      const nights = Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24));
-      const mealPlanPrice = MEAL_PLANS.find(plan => plan.id === mealPlan)?.price || 0;
-
-      // Total Amount is Rate * Nights (Inclusive)
-      const totalAmount = (room.basePrice + mealPlanPrice) * nights;
-
-      // Back-calculate Base, Tax, and Service Charge
-      // Total = Base * 1.26
-      const baseAmount = totalAmount / 1.26;
-      const taxAmount = baseAmount * 0.16; // 16% VAT
-      const serviceCharge = baseAmount * 0.10; // 10% service charge
-
-      setPricing({
-        roomRate: room.basePrice,
-        subtotal: baseAmount, // Subtotal is essentially the base amount before taxes
-        taxAmount,
-        serviceCharge,
-        discountAmount: 0,
-        totalAmount,
-        nights
+      const response = await bookingsAPI.getPricingQuote({
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
+        roomTypeId: room.id,
+        adults,
+        children,
+        mealPlan
       });
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to calculate pricing');
+      }
+
+      setPricing(response.data);
 
       setStep(3);
     } catch (error) {
@@ -280,25 +272,18 @@ export function BookingModal({ isOpen, onClose, initialCheckIn, initialCheckOut,
         specialRequests,
         paymentMethod,
         bookingSource: 'WEBSITE',
-        depositAmount: pricing.totalAmount
+        depositAmount: pricing.totalAmount,
+        branchId: activeBranchId || undefined
       };
 
-      // Simulate API call - replace with actual booking API
-      const response = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(bookingData)
-      });
+      const result = await bookingsAPI.createBooking(bookingData);
 
-      if (!response.ok) {
-        throw new Error('Failed to create booking');
+      if (!result.success || !result.data) {
+        throw new Error(result.message || 'Failed to create booking');
       }
 
-      const result = await response.json();
-
-      toast.success(`Booking confirmed! Confirmation number: ${result.data.confirmationNumber}`);
+      const confirmationNumber = result.data.confirmationNumber || result.data.booking?.confirmation_number;
+      toast.success(`Booking confirmed! Confirmation number: ${confirmationNumber || 'Generated successfully'}`);
       setStep(5); // Success step
 
     } catch (error: any) {

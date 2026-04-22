@@ -435,6 +435,12 @@ export interface Booking {
   guest_phone?: string;
 }
 
+export interface BookingCreateResponse {
+  booking: Booking;
+  confirmationNumber: string;
+  bookingId: string;
+}
+
 // ─── Kitchen & Food Control ───────────────────────────────────────────────────
 
 export interface KitchenWastage {
