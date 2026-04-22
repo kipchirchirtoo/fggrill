@@ -1486,3 +1486,208 @@ export async function generateBrandedPayrollSummaryV2(
 
 
 
+
+
+// ── LEAVE MANAGEMENT REPORT ───────────────────────────────────────────────────
+export async function generateLeaveManagementPDF(
+  res: Response,
+  filters: {
+    branch_id?: number;
+    branch_name?: string;
+    start_date?: string;
+    end_date?: string;
+    filter_type?: 'active' | 'history' | 'all';
+    status?: string;
+  }
+) {
+  const { branch_id, branch_name, start_date, end_date, filter_type, status } = filters;
+  const branchLabel = branch_name || (branch_id ? `Branch #${branch_id}` : 'All Branches');
+  const reportTypeLabel = filter_type === 'active' ? 'Active Leaves' : 
+                          filter_type === 'history' ? 'Leave History' : 'All Leaves';
+
+  // Build query for leave requests
+  let leaveQuery = supabase
+    .from('staff_leave')
+    .select(`
+      id,
+      leave_type,
+      start_date,
+      end_date,
+      status,
+      reason,
+      created_at,
+      reported_to_duty,
+      actual_return_date,
+      staff_id,
+      staff_profiles!inner(
+        id,
+        first_name,
+        last_name,
+        id_number,
+        employee_id,
+        department,
+        branch_id
+      )
+    `)
+    .order('start_date', { ascending: false });
+
+  if (branch_id) leaveQuery = leaveQuery.eq('staff_profiles.branch_id', branch_id);
+  if (status) leaveQuery = leaveQuery.eq('status', status);
+  if (start_date) leaveQuery = leaveQuery.gte('start_date', start_date);
+  if (end_date) leaveQuery = leaveQuery.lte('end_date', end_date);
+
+  // Apply filter type logic
+  if (filter_type === 'active') {
+    const today = new Date().toISOString().split('T')[0];
+    leaveQuery = leaveQuery.eq('status', 'approved').gte('end_date', today);
+  } else if (filter_type === 'history') {
+    const today = new Date().toISOString().split('T')[0];
+    leaveQuery = leaveQuery.lt('end_date', today);
+  }
+
+  const { data: leaveRequests, error } = await leaveQuery;
+
+  if (error) {
+    logger.error('Error fetching leave requests:', error);
+    throw error;
+  }
+
+  const LEAVE_TYPE_LABELS: Record<string, string> = {
+    annual: 'Annual Leave',
+    sick: 'Sick Leave',
+    maternity: 'Maternity Leave',
+    paternity: 'Paternity Leave',
+    unpaid: 'Unpaid Leave',
+    other: 'Other'
+  };
+
+  const calculateDays = (start: string, end: string): number => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  };
+
+  const statusColor = (status: string): string => {
+    if (status === 'approved') return '#16a34a';
+    if (status === 'rejected') return '#ef4444';
+    if (status === 'pending')  return '#fbbf24';
+    return SECONDARY;
+  };
+
+  // ── Statistics ────────────────────────────────────────────────────────────
+  const stats = {
+    total: leaveRequests?.length || 0,
+    pending: leaveRequests?.filter((r: any) => r.status === 'pending').length || 0,
+    approved: leaveRequests?.filter((r: any) => r.status === 'approved').length || 0,
+    rejected: leaveRequests?.filter((r: any) => r.status === 'rejected').length || 0,
+    returned: leaveRequests?.filter((r: any) => r.reported_to_duty).length || 0,
+  };
+
+  // ── Create PDF ────────────────────────────────────────────────────────────
+  const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+  res.setHeader('Content-Type', 'application/pdf');
+  const safeBranch = branchLabel.replace(/[^a-zA-Z0-9]/g, '_');
+  res.setHeader('Content-Disposition',
+    `attachment; filename=FG_LeaveReport_${safeBranch}_${new Date().toISOString().split('T')[0]}.pdf`);
+  doc.pipe(res);
+
+  const filterParts: string[] = [];
+  filterParts.push(`Branch: ${branchLabel}`);
+  if (start_date && end_date) {
+    filterParts.push(`Period: ${fmtDate(start_date)} – ${fmtDate(end_date)}`);
+  }
+  filterParts.push(`${stats.total} records`);
+  const periodLabel = filterParts.join('  |  ');
+
+  let y = drawBrandedHeader(doc, `LEAVE MANAGEMENT REPORT — ${reportTypeLabel.toUpperCase()}`, periodLabel);
+
+  // ── Summary statistics strip ──────────────────────────────────────────────
+  const sw = (doc.page.width - 80) / 5;
+  const summaryItems = [
+    { label: 'TOTAL LEAVES', value: String(stats.total),    color: PRIMARY },
+    { label: 'PENDING',      value: String(stats.pending),  color: '#fbbf24' },
+    { label: 'APPROVED',     value: String(stats.approved), color: '#16a34a' },
+    { label: 'REJECTED',     value: String(stats.rejected), color: '#ef4444' },
+    { label: 'RETURNED',     value: String(stats.returned), color: '#3b82f6' },
+  ];
+
+  summaryItems.forEach((item, i) => {
+    const bx = 40 + i * sw;
+    doc.rect(bx, y, sw, 36).fill('#eef2f7');
+    if (i > 0) doc.strokeColor('#d0d8e4').lineWidth(0.5).moveTo(bx, y).lineTo(bx, y + 36).stroke();
+    
+    // Gold accent bar on left
+    doc.rect(bx, y, 3, 36).fill(GOLD);
+    
+    doc.fillColor(SECONDARY).fontSize(7).font('Helvetica').text(item.label, bx + 8, y + 8, { width: sw - 16 });
+    doc.fillColor(item.color).fontSize(14).font('Helvetica-Bold').text(item.value, bx + 8, y + 20, { width: sw - 16 });
+  });
+  y += 46;
+
+  // ── Table ──────────────────────────────────────────────────────────────────
+  const cols = [
+    { label: '#',           x: 42,  width: 28 },
+    { label: 'Emp ID',      x: 74,  width: 58 },
+    { label: 'Employee',    x: 136, width: 130 },
+    { label: 'ID Number',   x: 270, width: 85 },
+    { label: 'Leave Type',  x: 359, width: 95 },
+    { label: 'Start Date',  x: 458, width: 75 },
+    { label: 'End Date',    x: 537, width: 75 },
+    { label: 'Days',        x: 616, width: 45, align: 'right' },
+    { label: 'Status',      x: 665, width: 70, align: 'center' },
+    { label: 'Returned',    x: 739, width: 60, align: 'center' },
+  ];
+
+  y = drawTableHeader(doc, y, cols);
+
+  (leaveRequests || []).forEach((req: any, i: number) => {
+    if (y > doc.page.height - 70) {
+      drawFooter(doc);
+      doc.addPage();
+      y = drawBrandedHeader(doc, `LEAVE MANAGEMENT REPORT (cont.) — ${reportTypeLabel.toUpperCase()}`, periodLabel);
+      y = drawTableHeader(doc, y, cols);
+    }
+
+    const staff = req.staff_profiles || {};
+    const empName = `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || '—';
+    const empId = staff.employee_id || '—';
+    const idNumber = staff.id_number || '—';
+    const leaveType = LEAVE_TYPE_LABELS[req.leave_type] || req.leave_type;
+    const days = calculateDays(req.start_date, req.end_date);
+    const statusText = (req.status || '').toUpperCase();
+    const returnedText = req.reported_to_duty ? 'Yes' : 'No';
+
+    if (i % 2 === 0) doc.rect(40, y, doc.page.width - 80, 18).fill(ROW_BG);
+    
+    doc.fontSize(8).font('Helvetica');
+    const rowData = [
+      { value: String(i + 1),           x: 42,  width: 28, color: SECONDARY },
+      { value: empId,                   x: 74,  width: 58, color: PRIMARY },
+      { value: empName,                 x: 136, width: 130, color: PRIMARY },
+      { value: idNumber,                x: 270, width: 85, color: PRIMARY },
+      { value: leaveType,               x: 359, width: 95, color: PRIMARY },
+      { value: fmtDate(req.start_date), x: 458, width: 75, color: PRIMARY },
+      { value: fmtDate(req.end_date),   x: 537, width: 75, color: PRIMARY },
+      { value: `${days}d`,              x: 616, width: 45, color: PRIMARY, align: 'right' },
+      { value: statusText,              x: 665, width: 70, color: statusColor(req.status), align: 'center' },
+      { value: returnedText,            x: 739, width: 60, color: req.reported_to_duty ? '#16a34a' : SECONDARY, align: 'center' },
+    ];
+
+    rowData.forEach(col => {
+      doc.fillColor(col.color);
+      doc.text(col.value, col.x, y + 5, { width: col.width, align: (col.align as any) ?? 'left', ellipsis: true });
+    });
+
+    doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, y + 18).lineTo(doc.page.width - 40, y + 18).stroke();
+    y += 18;
+  });
+
+  if (!leaveRequests?.length) {
+    doc.fontSize(9).fillColor(SECONDARY).text('No leave records found for this period.', 40, y + 10);
+    y += 30;
+  }
+
+  drawFooter(doc);
+  doc.end();
+}
