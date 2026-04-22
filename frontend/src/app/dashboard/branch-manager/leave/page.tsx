@@ -11,11 +11,12 @@ import { IOSButton } from '@/components/ui/ios-button';
 import { staffAPI } from '@/lib/api';
 import {
   RefreshCw, Calendar, Users, Plus, Search, CheckCircle2, XCircle, Clock,
-  Eye, FileText, AlertCircle
+  Eye, FileText, AlertCircle, Download, Filter, History
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { downloadLeavePDF } from '@/lib/leave-pdf';
 
 interface LeaveRequest {
   id: string;
@@ -62,11 +63,18 @@ export default function LeaveManagementPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
+  const [dateFilter, setDateFilter] = useState({
+    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+  });
+  const [showDateFilter, setShowDateFilter] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showReportDutyModal, setShowReportDutyModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [leaveForm, setLeaveForm] = useState({
     staff_id: '',
@@ -118,7 +126,19 @@ export default function LeaveManagementPage() {
     
     const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
     
-    return matchesSearch && matchesStatus;
+    // Tab filtering
+    const today = new Date();
+    const endDate = new Date(req.end_date);
+    const isActive = activeTab === 'active' ? endDate >= today : endDate < today;
+    
+    // Date range filtering
+    const requestDate = new Date(req.created_at);
+    const matchesDateRange = !showDateFilter || (
+      requestDate >= new Date(dateFilter.start) && 
+      requestDate <= new Date(dateFilter.end)
+    );
+    
+    return matchesSearch && matchesStatus && isActive && matchesDateRange;
   });
 
   const getStatusColor = (status: string) => {
@@ -253,6 +273,35 @@ export default function LeaveManagementPage() {
     rejected: leaveRequests.filter(r => r.status === 'rejected').length,
   };
 
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      toast.info('Generating branded PDF report...');
+      await downloadLeavePDF(filteredRequests, {
+        branchName: activeBranch?.name || 'Branch Operations',
+        dateRange: showDateFilter ? dateFilter : undefined,
+        filterType: activeTab,
+        generatedBy: `${user?.firstName} ${user?.lastName}`
+      });
+      toast.success('PDF report generated successfully');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Failed to generate PDF report');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const setQuickDateFilter = (days: number) => {
+    const end = new Date();
+    const start = subDays(end, days);
+    setDateFilter({
+      start: format(start, 'yyyy-MM-dd'),
+      end: format(end, 'yyyy-MM-dd')
+    });
+    setShowDateFilter(true);
+  };
+
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
       <DashboardLayout>
@@ -272,6 +321,15 @@ export default function LeaveManagementPage() {
                 <RefreshCw className={`h-4 w-4 text-stone-600 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
               <IOSButton
+                onClick={handleExportPDF}
+                variant="secondary"
+                className="h-10 px-4 flex items-center gap-2"
+                disabled={isExporting || filteredRequests.length === 0}
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? 'Exporting...' : 'Export PDF'}
+              </IOSButton>
+              <IOSButton
                 onClick={() => setShowRequestModal(true)}
                 className="h-10 px-4 flex items-center gap-2"
               >
@@ -279,6 +337,36 @@ export default function LeaveManagementPage() {
                 New Request
               </IOSButton>
             </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-2 border-b border-stone-200">
+            <button
+              onClick={() => setActiveTab('active')}
+              className={`px-6 py-3 text-sm font-medium transition-colors relative ${
+                activeTab === 'active'
+                  ? 'text-amber-700 border-b-2 border-amber-600'
+                  : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Active Leaves
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-6 py-3 text-sm font-medium transition-colors relative ${
+                activeTab === 'history'
+                  ? 'text-amber-700 border-b-2 border-amber-600'
+                  : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                History
+              </div>
+            </button>
           </div>
 
           {/* Stats Overview */}
@@ -302,28 +390,99 @@ export default function LeaveManagementPage() {
           {/* Filters */}
           <Card className="border-stone-100 shadow-sm">
             <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by name or employee ID..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-10 pl-9 pr-3 text-sm bg-stone-50/50 border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none transition-all"
-                  />
+              <div className="space-y-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by name or employee ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full h-10 pl-9 pr-3 text-sm bg-stone-50/50 border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none transition-all"
+                    />
+                  </div>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="h-10 px-3 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none transition-all"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  <button
+                    onClick={() => setShowDateFilter(!showDateFilter)}
+                    className={`h-10 px-4 flex items-center gap-2 text-sm border rounded-lg transition-colors ${
+                      showDateFilter
+                        ? 'bg-amber-50 border-amber-200 text-amber-700'
+                        : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                    }`}
+                  >
+                    <Filter className="h-4 w-4" />
+                    Date Filter
+                  </button>
                 </div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-10 px-3 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none transition-all"
-                >
-                  <option value="all">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+
+                {/* Date Filter Section */}
+                {showDateFilter && (
+                  <div className="p-4 bg-stone-50 border border-stone-200 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-stone-700">Filter by Date Range</span>
+                      <button
+                        onClick={() => setShowDateFilter(false)}
+                        className="text-xs text-stone-500 hover:text-stone-700"
+                      >
+                        Clear Filter
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div>
+                        <label className="text-xs text-stone-500 mb-1 block">Start Date</label>
+                        <input
+                          type="date"
+                          value={dateFilter.start}
+                          onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
+                          className="w-full h-9 px-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-stone-500 mb-1 block">End Date</label>
+                        <input
+                          type="date"
+                          value={dateFilter.end}
+                          onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
+                          className="w-full h-9 px-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setQuickDateFilter(7)}
+                        className="h-9 px-3 text-xs bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                      >
+                        Last 7 Days
+                      </button>
+                      <button
+                        onClick={() => setQuickDateFilter(30)}
+                        className="h-9 px-3 text-xs bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                      >
+                        Last 30 Days
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDateFilter({
+                            start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+                            end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+                          });
+                        }}
+                        className="h-9 px-3 text-xs bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                      >
+                        This Month
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

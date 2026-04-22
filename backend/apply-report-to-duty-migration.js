@@ -1,79 +1,82 @@
-const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
+const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ Missing Supabase credentials in .env file');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 async function applyMigration() {
-  console.log('🚀 Applying Report to Duty Migration...\n');
-
+  const client = await pool.connect();
+  
   try {
+    console.log('🔄 Starting Report to Duty migration...\n');
+
     // Read the migration file
     const migrationPath = path.join(__dirname, 'migrations', 'add_report_to_duty_to_staff_leave.sql');
     const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
 
-    console.log('📄 Migration SQL:');
-    console.log('─'.repeat(60));
-    console.log(migrationSQL);
-    console.log('─'.repeat(60));
-    console.log();
+    console.log('📄 Migration file loaded successfully');
+    console.log('🔧 Applying migration to database...\n');
 
-    // Split by semicolon and execute each statement
-    const statements = migrationSQL
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'));
+    // Execute the migration
+    await client.query('BEGIN');
+    await client.query(migrationSQL);
+    await client.query('COMMIT');
 
-    console.log(`📊 Executing ${statements.length} SQL statements...\n`);
+    console.log('✅ Migration applied successfully!\n');
 
-    for (let i = 0; i < statements.length; i++) {
-      const statement = statements[i];
-      console.log(`[${i + 1}/${statements.length}] Executing...`);
-      
-      const { data, error } = await supabase.rpc('exec_sql', { 
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
-        sql_query: statement + ';' 
-      }).catch(async () => {
-        // Fallback: Try direct execution if RPC doesn't exist
-        return await supabase.from('_migrations').insert({ 
-          name: 'add_report_to_duty_to_staff_leave',
-          executed_at: new Date().toISOString()
-        });
+    // Verify the columns exist
+    console.log('🔍 Verifying new columns...\n');
+    const verifyQuery = `
+      SELECT column_name, data_type, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'staff_leave'
+      AND column_name IN ('actual_return_date', 'reported_to_duty', 'reported_at', 'reported_by', 'report_notes')
+      ORDER BY column_name;
+    `;
+    
+    const result = await client.query(verifyQuery);
+    
+    if (result.rows.length === 5) {
+      console.log('✅ All columns verified:');
+      result.rows.forEach(row => {
+        console.log(`   - ${row.column_name} (${row.data_type})`);
       });
-
-      if (error) {
-        console.log(`⚠️  Statement ${i + 1}: ${error.message}`);
-        // Continue with other statements even if one fails
-      } else {
-        console.log(`✅ Statement ${i + 1}: Success`);
-      }
+    } else {
+      console.log('⚠️  Warning: Expected 5 columns, found', result.rows.length);
+      result.rows.forEach(row => {
+        console.log(`   - ${row.column_name} (${row.data_type})`);
+      });
     }
 
-    console.log('\n✅ Migration completed successfully!');
-    console.log('\n📋 New columns added to staff_leave table:');
-    console.log('   • actual_return_date - Date employee actually returned');
-    console.log('   • reported_to_duty - Boolean flag for return confirmation');
-    console.log('   • reported_at - Timestamp of confirmation');
-    console.log('   • reported_by - User who confirmed the return');
-    console.log('   • report_notes - Optional notes about return');
-    console.log('\n🎉 Report to Duty feature is now ready to use!');
+    console.log('\n✅ Report to Duty migration completed successfully!');
+    console.log('📊 The following features are now available:');
+    console.log('   - Track actual return dates');
+    console.log('   - Mark employees as reported to duty');
+    console.log('   - Record who confirmed the return');
+    console.log('   - Add notes about the return to duty');
 
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('❌ Migration failed:', error.message);
-    process.exit(1);
+    console.error('\nFull error:', error);
+    throw error;
+  } finally {
+    client.release();
+    await pool.end();
   }
 }
 
-applyMigration();
+// Run the migration
+applyMigration()
+  .then(() => {
+    console.log('\n🎉 All done!');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('\n💥 Migration failed:', error);
+    process.exit(1);
+  });

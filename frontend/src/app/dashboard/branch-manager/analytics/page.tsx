@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Calendar, Download, Filter, TrendingUp, DollarSign, ShoppingCart, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { downloadBranchSalesPDF } from '@/lib/branch-sales-pdf';
+
 // Import components
 import SalesMetricsCards from './components/SalesMetricsCards';
 import FilterPanel from './components/FilterPanel';
@@ -131,39 +133,19 @@ export default function BranchAnalyticsPage() {
   const handleExportPDF = async () => {
     if (!user?.branch_id) return;
 
+    if (!salesData) {
+      toast.error('No analytics data available to export');
+      return;
+    }
+
     try {
-      toast.info('Generating PDF report...');
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/analytics/branch-sales/export/pdf`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          branch_id: user.branch_id,
-          start_date: dateRange.start,
-          end_date: dateRange.end,
-          filters
-        })
+      toast.info('Generating branded PDF report...');
+      await downloadBranchSalesPDF(salesData, {
+        startDate: dateRange.start,
+        endDate: dateRange.end,
+        branchName: (user as any).branch_name || (user as any).branch?.name || 'Branch Operations'
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate PDF report');
-      }
-
-      // Create download link
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `branch-sales-${dateRange.start}-${dateRange.end}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      toast.success('PDF report downloaded successfully');
+      toast.success('PDF report generated successfully');
     } catch (error: any) {
       console.error('Error exporting PDF:', error);
       toast.error(error.message || 'Failed to generate PDF report');

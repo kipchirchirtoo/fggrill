@@ -319,6 +319,8 @@ export const checkOutBooking = async (
     const { id } = req.params;
     const userId = req.user?.id;
 
+    logger.info(`Attempting to check out booking ${id} by user ${userId}`);
+
     // 1. Get the booking
     const { data: booking, error: fetchError } = await supabase
       .from('reservations')
@@ -327,11 +329,20 @@ export const checkOutBooking = async (
       .single();
 
     if (fetchError || !booking) {
+      logger.error(`Booking ${id} not found:`, fetchError);
       throw new AppError('Booking not found', 404);
     }
 
-    if (booking.status !== 'checked_in') {
-      throw new AppError(`Only checked-in bookings can be checked out. Current status: ${booking.status}`, 400);
+    logger.info(`Booking ${id} current status: ${booking.status}`);
+
+    // Allow checkout from 'checked_in', 'confirmed', or 'pending' status
+    const allowedStatuses = ['checked_in', 'confirmed', 'pending'];
+    if (!allowedStatuses.includes(booking.status)) {
+      logger.warn(`Cannot check out booking ${id} - status is ${booking.status}`);
+      throw new AppError(
+        `Cannot check out: Booking status is "${booking.status}". Only bookings with status ${allowedStatuses.join(', ')} can be checked out.`, 
+        400
+      );
     }
 
     // 2. Update booking status
@@ -347,7 +358,12 @@ export const checkOutBooking = async (
       .select()
       .single();
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      logger.error(`Error updating booking ${id} to checked_out:`, updateError);
+      throw updateError;
+    }
+
+    logger.info(`Successfully checked out booking ${id}`);
 
     // 3. Update room status if room is assigned
     if (booking.room_id) {
@@ -356,10 +372,12 @@ export const checkOutBooking = async (
           booking.room_id,
           RoomStatus.CLEANING,
           userId,
-          `Room set to cleaning via check-out for booking ${booking.confirmation_number}`
+          `Room set to cleaning via check-out for booking ${booking.confirmation_number || booking.reservation_number}`
         );
+        logger.info(`Room ${booking.room_id} status updated to cleaning`);
       } catch (roomError) {
         logger.error('Failed to update room status during check-out:', roomError);
+        // Don't fail the checkout if room status update fails
       }
     }
 

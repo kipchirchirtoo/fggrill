@@ -134,20 +134,88 @@ export const deleteGuest = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const guest = await Guest.findById(req.params.id);
+    const { id } = req.params;
+    const { force } = req.query; // Optional force delete parameter
 
-    if (!guest) {
+    logger.info(`Attempting to delete guest ${id}${force ? ' (force mode)' : ''}`);
+
+    // Check if guest exists
+    const { data: guest, error: fetchError } = await supabase
+      .from('guests')
+      .select('id, first_name, last_name, email')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !guest) {
+      logger.error(`Guest ${id} not found:`, fetchError);
       throw new AppError('Guest not found', 404);
     }
 
-    await guest.delete();
+    // Check if guest has ANY reservations (active or historical)
+    const { data: allReservations, error: reservationsError } = await supabase
+      .from('reservations')
+      .select('id, status, reservation_number, check_in_date, check_out_date')
+      .eq('guest_id', id);
+
+    if (reservationsError) {
+      logger.error(`Error checking guest reservations:`, reservationsError);
+      throw new AppError('Failed to check guest reservations', 500);
+    }
+
+    if (allReservations && allReservations.length > 0) {
+      // Check for active bookings
+      const activeBookings = allReservations.filter(r => 
+        ['confirmed', 'checked_in', 'pending'].includes(r.status)
+      );
+
+      if (activeBookings.length > 0) {
+        throw new AppError(
+          `Cannot delete guest with ${activeBookings.length} active booking(s). Please cancel or complete the bookings first.`,
+          400
+        );
+      }
+
+      // Guest has historical bookings but no active ones
+      if (force === 'true') {
+        // Force delete: Set guest_id to NULL in all reservations
+        logger.info(`Force deleting guest ${id} - nullifying ${allReservations.length} reservation references`);
+        
+        const { error: updateError } = await supabase
+          .from('reservations')
+          .update({ guest_id: null })
+          .eq('guest_id', id);
+
+        if (updateError) {
+          logger.error(`Error nullifying guest references:`, updateError);
+          throw new AppError('Failed to remove guest references from reservations', 500);
+        }
+      } else {
+        // Suggest force delete
+        throw new AppError(
+          `Cannot delete guest with ${allReservations.length} historical reservation(s). The guest has booking history that would be lost. If you're sure you want to delete this guest and remove their association from all reservations, add ?force=true to the request.`,
+          400
+        );
+      }
+    }
+
+    // Delete the guest
+    const { error: deleteError } = await supabase
+      .from('guests')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      logger.error(`Error deleting guest ${id}:`, deleteError);
+      throw new AppError(`Failed to delete guest: ${deleteError.message}`, 500);
+    }
+
+    logger.info(`Guest deleted successfully: ${id} (${guest.first_name} ${guest.last_name})`);
 
     res.status(200).json({
       success: true,
-      data: {}
+      data: {},
+      message: 'Guest deleted successfully'
     });
-
-    logger.info(`Guest deleted: ${req.params.id}`);
   } catch (error) {
     next(error);
   }

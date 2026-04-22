@@ -17,6 +17,8 @@ interface WaiterSales {
   waiter_id: string;
   waiter_name: string;
   email: string;
+  pos_pin?: string;
+  role?: string;
   total_orders: number;
   total_revenue: number;
   average_order_value: number;
@@ -265,7 +267,14 @@ export default function WaiterSalesPage() {
                           </td>
                           <td className="table-cell">
                             <div>
-                              <p className="text-[13px] font-medium text-stone-800">{waiter.waiter_name}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-[13px] font-medium text-stone-800">{waiter.waiter_name}</p>
+                                {waiter.pos_pin && (
+                                  <span className="px-2 py-0.5 text-[10px] font-bold bg-stone-100 text-stone-600 rounded-md font-mono">
+                                    {waiter.pos_pin}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[11px] text-stone-500">{waiter.email}</p>
                             </div>
                           </td>

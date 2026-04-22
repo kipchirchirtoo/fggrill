@@ -1210,17 +1210,46 @@ export function ConsolidatedNav() {
     </>
   );
 
-  // Branch Manager Navigation (Legacy)
+  // Executive Branch Manager Navigation
   const branchManagerNav = (
     <>
       <NavItem
         href="/dashboard/branch-manager"
-        icon={Building2}
-        label="Overview"
+        icon={LayoutDashboard}
+        label="Executive Dashboard"
         active={pathname === '/dashboard/branch-manager'}
       />
 
-      <NavGroup label="Front Desk" icon={UserCheck} defaultOpen>
+      {/* FINANCIAL PERFORMANCE */}
+      <div className="pt-3">
+        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Financial Performance</p>
+      </div>
+      <NavGroup label="Analytics & Reports" icon={TrendingUp} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-manager/analytics"
+          icon={BarChart3}
+          label="Sales Analytics"
+          active={pathname === '/dashboard/branch-manager/analytics'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/cashier-clearance"
+          icon={DollarSign}
+          label="Cashier Clearance"
+          active={pathname === '/dashboard/branch-manager/cashier-clearance'}
+        />
+      </NavGroup>
+
+      {/* GUEST SERVICES */}
+      <div className="pt-3">
+        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Guest Services</p>
+      </div>
+      <NavGroup label="Front Desk Operations" icon={UserCheck} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-manager/checkin"
+          icon={UserCheck}
+          label="Check-in/Check-out"
+          active={pathname === '/dashboard/branch-manager/checkin'}
+        />
         <NavItem
           href="/dashboard/branch-manager/reservations"
           icon={Calendar}
@@ -1228,39 +1257,58 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-manager/reservations'}
         />
         <NavItem
-          href="/dashboard/branch-manager/checkin"
-          icon={UserCheck}
-          label="Check-in"
-          active={pathname === '/dashboard/branch-manager/checkin'}
-        />
-        <NavItem
           href="/dashboard/branch-manager/arrivals"
-          icon={ArrowDownUp}
-          label="Arrivals"
+          icon={ArrowDownLeft}
+          label="Expected Arrivals"
           active={pathname === '/dashboard/branch-manager/arrivals'}
         />
         <NavItem
           href="/dashboard/branch-manager/departures"
-          icon={ArrowDownUp}
-          label="Departures"
+          icon={ArrowUpRight}
+          label="Expected Departures"
           active={pathname === '/dashboard/branch-manager/departures'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/guests"
-          icon={Users}
-          label="Guests"
-          active={pathname === '/dashboard/branch-manager/guests'}
         />
       </NavGroup>
 
-      <NavItem
-        href="/dashboard/branch-manager/rooms"
-        icon={Bed}
-        label="Rooms"
-        active={pathname === '/dashboard/branch-manager/rooms'}
-      />
+      <NavGroup label="Guest Management" icon={Users}>
+        <NavItem
+          href="/dashboard/branch-manager/guests"
+          icon={Users}
+          label="Guest Directory"
+          active={pathname === '/dashboard/branch-manager/guests'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/rooms"
+          icon={Bed}
+          label="Room Status"
+          active={pathname === '/dashboard/branch-manager/rooms'}
+        />
+      </NavGroup>
 
-      <NavGroup label="Operations" icon={Building}>
+      {/* FOOD & BEVERAGE */}
+      <div className="pt-3">
+        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Food & Beverage</p>
+      </div>
+      <NavGroup label="Restaurant Operations" icon={Utensils} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-manager/restaurant"
+          icon={UtensilsCrossed}
+          label="Restaurant Overview"
+          active={pathname === '/dashboard/branch-manager/restaurant'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/restaurant/waiter-sales"
+          icon={LineChart}
+          label="Waiter Performance"
+          active={pathname === '/dashboard/branch-manager/restaurant/waiter-sales'}
+        />
+      </NavGroup>
+
+      {/* FACILITIES & OPERATIONS */}
+      <div className="pt-3">
+        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Facilities & Operations</p>
+      </div>
+      <NavGroup label="Facility Management" icon={Building}>
         <NavItem
           href="/dashboard/branch-manager/housekeeping"
           icon={Brush}
@@ -1273,32 +1321,49 @@ export function ConsolidatedNav() {
           label="Maintenance"
           active={pathname === '/dashboard/branch-manager/maintenance'}
         />
+      </NavGroup>
+
+      {/* INVENTORY CONTROL */}
+      <div className="pt-3">
+        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Inventory Control</p>
+      </div>
+      <NavGroup label="Stock Management" icon={Package} defaultOpen>
         <NavItem
-          href="/dashboard/branch-manager/restaurant"
-          icon={Utensils}
-          label="Restaurant"
-          active={pathname === '/dashboard/branch-manager/restaurant'}
+          href="/dashboard/branch-manager/stock"
+          icon={Package}
+          label="Stock Overview"
+          active={pathname === '/dashboard/branch-manager/stock'}
         />
         <NavItem
-          href="/dashboard/branch-manager/restaurant/waiter-sales"
-          icon={TrendingUp}
-          label="Waiter Sales"
-          active={pathname === '/dashboard/branch-manager/restaurant/waiter-sales'}
+          href="/dashboard/branch-manager/stock/analytics"
+          icon={PieChart}
+          label="Stock Analytics"
+          active={pathname === '/dashboard/branch-manager/stock/analytics'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/stock-out"
+          icon={TrendingDown}
+          label="Stock Issuance"
+          active={pathname === '/dashboard/branch-manager/stock-out'}
+        />
+        <NavItem
+          href="/dashboard/branch-manager/wastage"
+          icon={Trash2}
+          label="Wastage Tracking"
+          active={pathname === '/dashboard/branch-manager/wastage'}
         />
       </NavGroup>
 
-      <NavGroup label="Staff" icon={Users}>
+      {/* HUMAN RESOURCES */}
+      <div className="pt-3">
+        <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Human Resources</p>
+      </div>
+      <NavGroup label="Staff Management" icon={Users} defaultOpen>
         <NavItem
           href="/dashboard/branch-manager/staff"
           icon={Users}
-          label="Staff"
+          label="Staff Directory"
           active={pathname === '/dashboard/branch-manager/staff'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/staff/performance"
-          icon={Award}
-          label="Performance"
-          active={pathname === '/dashboard/branch-manager/staff/performance'}
         />
         <NavItem
           href="/dashboard/branch-manager/attendance"
@@ -1308,51 +1373,15 @@ export function ConsolidatedNav() {
         />
         <NavItem
           href="/dashboard/branch-manager/leave"
-          icon={Calendar}
-          label="Leave Management"
+          icon={CalendarClock}
+          label="Leave Requests"
           active={pathname === '/dashboard/branch-manager/leave'}
         />
-      </NavGroup>
-
-      <NavGroup label="Analytics & Reports" icon={BarChart3}>
         <NavItem
-          href="/dashboard/branch-manager/analytics"
-          icon={TrendingUp}
-          label="Branch Sales"
-          active={pathname === '/dashboard/branch-manager/analytics'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/cashier-clearance"
-          icon={DollarSign}
-          label="Cashier Clearance"
-          active={pathname === '/dashboard/branch-manager/cashier-clearance'}
-        />
-      </NavGroup>
-
-      <NavGroup label="Inventory" icon={Package}>
-        <NavItem
-          href="/dashboard/branch-manager/stock"
-          icon={Package}
-          label="Stock Levels"
-          active={pathname === '/dashboard/branch-manager/stock'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/stock/analytics"
-          icon={BarChart3}
-          label="Stock Analytics"
-          active={pathname === '/dashboard/branch-manager/stock/analytics'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/stock-out"
-          icon={TrendingDown}
-          label="Stock Out"
-          active={pathname === '/dashboard/branch-manager/stock-out'}
-        />
-        <NavItem
-          href="/dashboard/branch-manager/wastage"
-          icon={Trash2}
-          label="Wastage Reports"
-          active={pathname === '/dashboard/branch-manager/wastage'}
+          href="/dashboard/branch-manager/staff/performance"
+          icon={Award}
+          label="Performance"
+          active={pathname === '/dashboard/branch-manager/staff/performance'}
         />
       </NavGroup>
     </>

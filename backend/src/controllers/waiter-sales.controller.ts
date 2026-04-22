@@ -20,37 +20,65 @@ export const getWaiterSales = async (
 
         console.log('🔍 [Waiter Sales] Fetching sales:', { branch_id, startDate, targetDate, periodDays });
 
-        // Fetch all waiters for the branch
+        // Fetch all waiters (staff with POS PINs starting with R or B)
+        // R = Restaurant waiters, B = Bar staff
         let waitersQuery = supabase
             .from('users')
-            .select('id, first_name, last_name, email, branch_id')
-            .eq('role', 'restaurant')
+            .select('id, first_name, last_name, email, branch_id, pos_pin, role')
+            .not('pos_pin', 'is', null)
             .eq('status', 'active');
 
+        // Filter by branch if specified
         if (branch_id && branch_id !== '0') {
             waitersQuery = waitersQuery.eq('branch_id', branch_id);
+            console.log(`   - Filtering waiters by branch_id: ${branch_id}`);
         }
 
-        const { data: waiters, error: waitersError } = await waitersQuery;
+        const { data: allUsers, error: waitersError } = await waitersQuery;
 
         if (waitersError) {
             console.error('❌ [Waiter Sales] Error fetching waiters:', waitersError);
             throw waitersError;
         }
 
-        console.log(`✅ [Waiter Sales] Found ${waiters?.length || 0} waiters`);
+        // Filter users with POS PINs starting with R or B
+        const waiters = (allUsers || []).filter(user => {
+            const pin = user.pos_pin?.toUpperCase();
+            return pin && (pin.startsWith('R') || pin.startsWith('B'));
+        });
+
+        console.log(`✅ [Waiter Sales] Found ${waiters.length} waiters/bar staff (filtered from ${allUsers?.length || 0} users with POS PINs)`);
+        console.log(`   - POS PINs: ${waiters.map(w => w.pos_pin).join(', ')}`);
 
         // Fetch sales data for each waiter
         const waiterSales = await Promise.all(
             (waiters || []).map(async (waiter) => {
-                // Fetch orders
-                const { data: orders } = await supabase
+                // Fetch ALL orders (using created_by as the waiter/staff field)
+                // Filter by branch_id if specified, and date range
+                // Include delivered orders and paid orders (payment_status = 'paid')
+                let ordersQuery = supabase
                     .from('restaurant_orders')
                     .select('*')
-                    .eq('staff_id', waiter.id)
+                    .eq('created_by', waiter.id)
                     .gte('created_at', `${startDate}T00:00:00`)
-                    .lte('created_at', `${targetDate}T23:59:59`)
-                    .in('status', ['completed', 'paid', 'delivered']);
+                    .lte('created_at', `${targetDate}T23:59:59`);
+
+                // Add branch filter if specified
+                if (branch_id && branch_id !== '0') {
+                    ordersQuery = ordersQuery.eq('branch_id', branch_id);
+                }
+
+                const { data: allOrders, error: ordersError } = await ordersQuery;
+
+                if (ordersError) {
+                    console.error(`❌ Error fetching orders for waiter ${waiter.id}:`, ordersError);
+                }
+
+                // Filter for completed/paid orders only
+                // Valid statuses: delivered (completed orders) or payment_status = 'paid'
+                const orders = (allOrders || []).filter(order => 
+                    order.status === 'delivered' || order.payment_status === 'paid'
+                );
 
                 const totalOrders = orders?.length || 0;
                 const totalRevenue = orders?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
@@ -58,6 +86,8 @@ export const getWaiterSales = async (
 
                 // Calculate tips if available
                 const totalTips = orders?.reduce((sum, o) => sum + Number(o.tip_amount || 0), 0) || 0;
+
+                console.log(`   - ${waiter.first_name} ${waiter.last_name} (${waiter.pos_pin}): ${totalOrders} orders, ${totalRevenue} revenue`);
 
                 // Get order items for analysis
                 const orderIds = orders?.map(o => o.id) || [];
@@ -75,6 +105,8 @@ export const getWaiterSales = async (
                     waiter_id: waiter.id,
                     waiter_name: `${waiter.first_name} ${waiter.last_name}`,
                     email: waiter.email,
+                    pos_pin: waiter.pos_pin,
+                    role: waiter.role,
                     total_orders: totalOrders,
                     total_revenue: totalRevenue,
                     average_order_value: averageOrderValue,
@@ -101,6 +133,11 @@ export const getWaiterSales = async (
         };
 
         console.log('✅ [Waiter Sales] Sales data calculated successfully');
+        console.log(`   - Total waiters: ${summary.total_waiters}`);
+        console.log(`   - Total orders: ${summary.total_orders}`);
+        console.log(`   - Total revenue: ${summary.total_revenue}`);
+        console.log(`   - Branch filter: ${branch_id || 'ALL BRANCHES'}`);
+        console.log(`   - Date range: ${startDate} to ${targetDate}`);
 
         res.status(200).json({
             success: true,
@@ -151,15 +188,18 @@ export const getWaiterPerformance = async (
             return;
         }
 
-        // Fetch orders
-        const { data: orders } = await supabase
+        // Fetch ALL orders (using created_by as the waiter/staff field)
+        const { data: allOrders } = await supabase
             .from('restaurant_orders')
             .select('*')
-            .eq('staff_id', id)
+            .eq('created_by', id)
             .gte('created_at', startDate)
             .order('created_at', { ascending: false });
 
-        const completedOrders = orders?.filter(o => ['completed', 'paid', 'delivered'].includes(o.status)) || [];
+        // Filter for completed/paid orders
+        const completedOrders = (allOrders || []).filter(o => 
+            o.status === 'delivered' || o.payment_status === 'paid'
+        );
         const totalRevenue = completedOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
         const totalTips = completedOrders.reduce((sum, o) => sum + Number(o.tip_amount || 0), 0);
         const averageOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;

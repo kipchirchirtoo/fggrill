@@ -119,7 +119,7 @@ const guestBase = {
   getGuest: (id: string | number) => fetchAPI<any>(`/guests/${id}`),
   create: (data: any) => fetchAPI<any>('/guests', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string | number, data: any) => fetchAPI<any>(`/guests/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteGuest: (id: string | number) => fetchAPI<void>(`/guests/${id}`, { method: 'DELETE' }),
+  deleteGuest: (id: string | number, force?: boolean) => fetchAPI<void>(`/guests/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' }),
   getHistory: (id: string | number) => fetchAPI<any[]>(`/guests/${id}/history`),
 };
 

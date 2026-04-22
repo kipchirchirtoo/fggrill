@@ -14,6 +14,8 @@ import {
 import Link from 'next/link';
 import { toast } from 'sonner';
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 interface StaffMember {
   id: string;
   first_name: string;
@@ -27,6 +29,7 @@ interface StaffMember {
   status: string;
   hire_date?: string;
   photo_url?: string;
+  profile_photo?: string;
   address?: string;
   emergency_contact?: string;
   emergency_phone?: string;
@@ -142,8 +145,24 @@ export default function StaffDetailPage() {
               {/* Photo */}
               <div className="flex-shrink-0">
                 <div className="w-32 h-32 rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 flex items-center justify-center overflow-hidden">
-                  {staff.photo_url ? (
-                    <img src={staff.photo_url} alt={`${staff.first_name} ${staff.last_name}`} className="w-full h-full object-cover" />
+                  {(staff.photo_url || staff.profile_photo) ? (
+                    <img 
+                      src={
+                        staff.photo_url?.startsWith('http') 
+                          ? staff.photo_url 
+                          : `${SUPABASE_URL}/storage/v1/object/public/profile/${staff.profile_photo || staff.photo_url}`
+                      } 
+                      alt={`${staff.first_name} ${staff.last_name}`} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = '<svg class="h-16 w-16 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>';
+                        }
+                      }}
+                    />
                   ) : (
                     <User className="h-16 w-16 text-stone-400" />
                   )}
