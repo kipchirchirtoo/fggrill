@@ -30,6 +30,21 @@ interface PDFMetadata {
   generatedBy: string;
 }
 
+// ── Brand constants ───────────────────────────────────────────────────────────
+const BRAND = {
+  black:      [26,  26,  26]  as [number, number, number],
+  darkGray:   [55,  55,  55]  as [number, number, number],
+  midGray:    [120, 120, 120] as [number, number, number],
+  lightGray:  [240, 240, 240] as [number, number, number],
+  white:      [255, 255, 255] as [number, number, number],
+  gold:       [212, 175, 55]  as [number, number, number],
+  success:    [22,  163, 74]  as [number, number, number],
+  danger:     [239, 68,  68]  as [number, number, number],
+  warning:    [251, 191, 36]  as [number, number, number],
+  info:       [59,  130, 246] as [number, number, number],
+  rowAlt:     [249, 249, 249] as [number, number, number],
+};
+
 const LEAVE_TYPE_LABELS: Record<string, string> = {
   annual: 'Annual Leave',
   sick: 'Sick Leave',
@@ -46,100 +61,112 @@ const calculateDays = (start: string, end: string) => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 };
 
+function statusColor(status: string): [number, number, number] {
+  if (status === 'approved') return BRAND.success;
+  if (status === 'rejected') return BRAND.danger;
+  if (status === 'pending')  return BRAND.warning;
+  return BRAND.midGray;
+}
+
+// ── Draw branded header ───────────────────────────────────────────────────────
+async function drawHeader(
+  doc: jsPDF,
+  title: string,
+  subtitle: string,
+  pageW: number
+) {
+  // Top black bar
+  doc.setFillColor(...BRAND.black);
+  doc.rect(0, 0, pageW, 28, 'F');
+
+  // Logo (try to load; fallback to text)
+  try {
+    const img = new Image();
+    img.src = '/fglogo.png';
+    await new Promise<void>((res, rej) => {
+      img.onload = () => res();
+      img.onerror = () => rej();
+      setTimeout(() => rej(new Error('timeout')), 2000);
+    });
+    doc.addImage(img, 'PNG', 8, 3, 22, 22);
+  } catch {
+    doc.setTextColor(...BRAND.white);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FG', 14, 18);
+  }
+
+  // Company name in header bar
+  doc.setTextColor(...BRAND.white);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FAMOUS GATES HOTELS', 36, 12);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Bomet, Kenya  |  famousgateshotelsbmt@gmail.com  |  0706 782 828', 36, 20);
+
+  // Right side: generated date
+  doc.setFontSize(7);
+  doc.setTextColor(...BRAND.white);
+  doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}`, pageW - 8, 18, { align: 'right' });
+
+  // Title block
+  doc.setFillColor(...BRAND.lightGray);
+  doc.rect(0, 28, pageW, 18, 'F');
+  doc.setTextColor(...BRAND.black);
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.text(title, 8, 40);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...BRAND.midGray);
+  doc.text(subtitle, pageW - 8, 40, { align: 'right' });
+
+  // Gold divider
+  doc.setDrawColor(...BRAND.gold);
+  doc.setLineWidth(1.2);
+  doc.line(0, 46, pageW, 46);
+}
+
+// ── Draw footer on every page ─────────────────────────────────────────────────
+function drawFooter(doc: jsPDF, pageW: number, pageH: number, pageNum: number, totalPages: number) {
+  doc.setDrawColor(...BRAND.gold);
+  doc.setLineWidth(0.5);
+  doc.line(8, pageH - 12, pageW - 8, pageH - 12);
+  
+  doc.setFillColor(...BRAND.black);
+  doc.rect(0, pageH - 10, pageW, 10, 'F');
+  
+  doc.setTextColor(...BRAND.white);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Famous Gates Hotels — Confidential Leave Management Record', 8, pageH - 3.5);
+  doc.text(`Page ${pageNum} of ${totalPages}`, pageW - 8, pageH - 3.5, { align: 'right' });
+}
+
 export const generateLeavePDF = async (
   leaveRequests: LeaveRequest[],
   metadata: PDFMetadata
 ) => {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  let cursorY = 20;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
 
-  // Brand Colors
-  const brandPrimary = [139, 69, 19]; // Saddle Brown
-  const brandSecondary = [218, 165, 32]; // Goldenrod
-  const brandDark = [44, 62, 80]; // Dark Blue-Gray
-  const brandLight = [245, 245, 220]; // Beige
-
-  // ===== HEADER SECTION WITH BRAND BANNER =====
-  doc.setFillColor(brandPrimary[0], brandPrimary[1], brandPrimary[2]);
-  doc.rect(0, 0, pageWidth, 45, 'F');
-  
-  doc.setFillColor(brandSecondary[0], brandSecondary[1], brandSecondary[2]);
-  doc.rect(0, 45, pageWidth, 3, 'F');
-
-  // Logo
-  try {
-    const logoUrl = '/fglogo.png';
-    const img = new Image();
-    img.src = logoUrl;
-    await Promise.race([
-      new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Logo timeout')), 3000))
-    ]);
-    doc.addImage(img, 'PNG', margin, 8, 35, 35);
-  } catch (e) {
-    console.warn('Logo not loaded, using text branding:', e);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text('FG', margin + 10, 28);
-  }
-
-  // Company name and report title
-  doc.setFontSize(24);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.text('FAMOUSGATE HOTELS', pageWidth - margin, 18, { align: 'right' });
-  
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Leave Management Report', pageWidth - margin, 28, { align: 'right' });
-  
-  doc.setFontSize(10);
-  doc.setTextColor(brandSecondary[0], brandSecondary[1], brandSecondary[2]);
-  doc.text('Excellence in Hospitality', pageWidth - margin, 36, { align: 'right' });
-
-  cursorY = 58;
-
-  // Report metadata box
-  doc.setFillColor(brandLight[0], brandLight[1], brandLight[2]);
-  doc.roundedRect(margin, cursorY, pageWidth - 2 * margin, 32, 3, 3, 'F');
-  
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
-  
-  doc.text('Branch:', margin + 5, cursorY + 8);
-  doc.setFont('helvetica', 'normal');
-  doc.text(metadata.branchName, margin + 25, cursorY + 8);
-  
-  doc.setFont('helvetica', 'bold');
-  doc.text('Report Type:', margin + 5, cursorY + 16);
-  doc.setFont('helvetica', 'normal');
   const reportTypeLabel = metadata.filterType === 'active' ? 'Active Leaves' : 
                           metadata.filterType === 'history' ? 'Leave History' : 'All Leaves';
-  doc.text(reportTypeLabel, margin + 35, cursorY + 16);
-  
+
+  const title = `LEAVE MANAGEMENT — ${reportTypeLabel.toUpperCase()}`;
+  const filterParts: string[] = [];
+  filterParts.push(`Branch: ${metadata.branchName}`);
   if (metadata.dateRange) {
-    doc.setFont('helvetica', 'bold');
-    doc.text('Period:', margin + 5, cursorY + 24);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${format(new Date(metadata.dateRange.start), 'MMM dd, yyyy')} to ${format(new Date(metadata.dateRange.end), 'MMM dd, yyyy')}`, margin + 25, cursorY + 24);
-  } else {
-    doc.setFont('helvetica', 'bold');
-    doc.text('Generated:', margin + 5, cursorY + 24);
-    doc.setFont('helvetica', 'normal');
-    doc.text(new Date().toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' }), margin + 30, cursorY + 24);
+    filterParts.push(`Period: ${format(new Date(metadata.dateRange.start), 'dd MMM yyyy')} - ${format(new Date(metadata.dateRange.end), 'dd MMM yyyy')}`);
   }
+  filterParts.push(`${leaveRequests.length} records`);
+  const subtitle = filterParts.join('  |  ');
 
-  cursorY = 100;
+  await drawHeader(doc, title, subtitle, pageW);
 
-  // ===== SUMMARY STATISTICS =====
+  // ── Summary statistics ────────────────────────────────────────────────────────
   const stats = {
     total: leaveRequests.length,
     pending: leaveRequests.filter(r => r.status === 'pending').length,
@@ -148,144 +175,122 @@ export const generateLeavePDF = async (
     returned: leaveRequests.filter(r => r.reported_to_duty).length
   };
 
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(brandPrimary[0], brandPrimary[1], brandPrimary[2]);
-  doc.text('SUMMARY STATISTICS', margin, cursorY);
-  
-  doc.setDrawColor(brandSecondary[0], brandSecondary[1], brandSecondary[2]);
-  doc.setLineWidth(1);
-  doc.line(margin, cursorY + 2, margin + 60, cursorY + 2);
-  cursorY += 12;
+  const summaryY = 50;
+  const boxW = (pageW - 16) / 5;
+  const summaryItems = [
+    { label: 'Total Leaves', value: String(stats.total), color: BRAND.black },
+    { label: 'Pending',      value: String(stats.pending), color: BRAND.warning },
+    { label: 'Approved',     value: String(stats.approved), color: BRAND.success },
+    { label: 'Rejected',     value: String(stats.rejected), color: BRAND.danger },
+    { label: 'Returned',     value: String(stats.returned), color: BRAND.info },
+  ];
 
-  // Stats cards
-  const cardWidth = (pageWidth - 2 * margin - 15) / 4;
-  const cardHeight = 24;
-  const cardSpacing = 5;
+  summaryItems.forEach((item, i) => {
+    const x = 8 + i * (boxW + 1.3);
+    doc.setFillColor(...BRAND.lightGray);
+    doc.rect(x, summaryY, boxW, 14, 'F');
+    doc.setDrawColor(...BRAND.black);
+    doc.setLineWidth(0.3);
+    doc.rect(x, summaryY, boxW, 14, 'S');
 
-  // Card 1: Total
-  doc.setFillColor(brandPrimary[0], brandPrimary[1], brandPrimary[2]);
-  doc.roundedRect(margin, cursorY, cardWidth, cardHeight, 2, 2, 'F');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(brandSecondary[0], brandSecondary[1], brandSecondary[2]);
-  doc.text('TOTAL', margin + cardWidth / 2, cursorY + 7, { align: 'center' });
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.text(stats.total.toString(), margin + cardWidth / 2, cursorY + 17, { align: 'center' });
+    // Gold accent bar
+    doc.setFillColor(...BRAND.gold);
+    doc.rect(x, summaryY, 3, 14, 'F');
 
-  // Card 2: Pending
-  doc.setFillColor(218, 165, 32);
-  doc.roundedRect(margin + cardWidth + cardSpacing, cursorY, cardWidth, cardHeight, 2, 2, 'F');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(139, 69, 19);
-  doc.text('PENDING', margin + cardWidth + cardSpacing + cardWidth / 2, cursorY + 7, { align: 'center' });
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.text(stats.pending.toString(), margin + cardWidth + cardSpacing + cardWidth / 2, cursorY + 17, { align: 'center' });
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...item.color);
+    doc.text(item.value, x + boxW / 2, summaryY + 9, { align: 'center' });
 
-  // Card 3: Approved
-  doc.setFillColor(34, 197, 94);
-  doc.roundedRect(margin + 2 * (cardWidth + cardSpacing), cursorY, cardWidth, cardHeight, 2, 2, 'F');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(22, 101, 52);
-  doc.text('APPROVED', margin + 2 * (cardWidth + cardSpacing) + cardWidth / 2, cursorY + 7, { align: 'center' });
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.text(stats.approved.toString(), margin + 2 * (cardWidth + cardSpacing) + cardWidth / 2, cursorY + 17, { align: 'center' });
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...BRAND.midGray);
+    doc.text(item.label.toUpperCase(), x + boxW / 2, summaryY + 13.5, { align: 'center' });
+  });
 
-  // Card 4: Returned
-  doc.setFillColor(59, 130, 246);
-  doc.roundedRect(margin + 3 * (cardWidth + cardSpacing), cursorY, cardWidth, cardHeight, 2, 2, 'F');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(30, 64, 175);
-  doc.text('RETURNED', margin + 3 * (cardWidth + cardSpacing) + cardWidth / 2, cursorY + 7, { align: 'center' });
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.text(stats.returned.toString(), margin + 3 * (cardWidth + cardSpacing) + cardWidth / 2, cursorY + 17, { align: 'center' });
+  // ── Table ──────────────────────────────────────────────────────────────────
+  const tableStartY = summaryY + 18;
 
-  cursorY += cardHeight + 20;
+  const head = [['#', 'Employee', 'ID Number', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Status', 'Returned']];
 
-  // ===== LEAVE REQUESTS TABLE =====
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(brandPrimary[0], brandPrimary[1], brandPrimary[2]);
-  doc.text('LEAVE REQUESTS', margin, cursorY);
-  
-  doc.setDrawColor(brandSecondary[0], brandSecondary[1], brandSecondary[2]);
-  doc.setLineWidth(0.5);
-  doc.line(margin, cursorY + 2, margin + 55, cursorY + 2);
-  cursorY += 8;
-
-  const tableData = leaveRequests.map((req) => [
-    `${req.staff?.first_name || ''} ${req.staff?.last_name || ''}`,
+  const body = leaveRequests.map((req, idx) => [
+    String(idx + 1),
+    `${req.staff?.first_name || ''} ${req.staff?.last_name || ''}`.trim() || '—',
+    req.staff?.id_number || '—',
     LEAVE_TYPE_LABELS[req.leave_type] || req.leave_type,
-    `${format(new Date(req.start_date), 'MMM dd, yyyy')} - ${format(new Date(req.end_date), 'MMM dd, yyyy')}`,
+    format(new Date(req.start_date), 'dd MMM yyyy'),
+    format(new Date(req.end_date), 'dd MMM yyyy'),
     `${calculateDays(req.start_date, req.end_date)}d`,
     req.status.toUpperCase(),
-    req.reported_to_duty ? 'Yes' : 'No'
+    req.reported_to_duty ? 'Yes' : 'No',
   ]);
 
   autoTable(doc, {
-    startY: cursorY,
-    head: [['Employee', 'Type', 'Period', 'Days', 'Status', 'Returned']],
-    body: tableData,
-    theme: 'grid',
-    headStyles: { 
-      fillColor: brandPrimary,
-      textColor: [255, 255, 255],
-      fontSize: 9,
-      fontStyle: 'bold',
-      halign: 'center'
+    startY: tableStartY,
+    head,
+    body,
+    margin: { left: 8, right: 8 },
+    tableWidth: pageW - 16,
+    styles: {
+      fontSize: 7.5,
+      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+      lineColor: [210, 210, 210],
+      lineWidth: 0.3,
+      font: 'helvetica',
+      textColor: BRAND.black,
+      overflow: 'ellipsize',
     },
-    bodyStyles: {
-      fontSize: 8,
-      textColor: brandDark
+    headStyles: {
+      fillColor: BRAND.black,
+      textColor: BRAND.white,
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'left',
+      cellPadding: { top: 4, bottom: 4, left: 3, right: 3 },
     },
     alternateRowStyles: {
-      fillColor: [250, 250, 245]
+      fillColor: BRAND.rowAlt,
     },
     columnStyles: {
-      0: { halign: 'left', cellWidth: 40 },
-      1: { halign: 'left', cellWidth: 30 },
-      2: { halign: 'left', cellWidth: 50 },
-      3: { halign: 'center', cellWidth: 15 },
-      4: { halign: 'center', cellWidth: 25 },
-      5: { halign: 'center', cellWidth: 20 }
+      0: { cellWidth: 8,  halign: 'center', textColor: BRAND.midGray },  // #
+      1: { cellWidth: 42 },                                               // Employee
+      2: { cellWidth: 28, font: 'courier', fontSize: 7 },                // ID Number
+      3: { cellWidth: 32 },                                               // Leave Type
+      4: { cellWidth: 28 },                                               // Start Date
+      5: { cellWidth: 28 },                                               // End Date
+      6: { cellWidth: 16, halign: 'center' },                            // Days
+      7: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },         // Status
+      8: { cellWidth: 20, halign: 'center' },                            // Returned
     },
-    margin: { left: margin, right: margin }
+    // Color status cells
+    didParseCell(data) {
+      if (data.section === 'body') {
+        if (data.column.index === 7) {
+          const val = String(data.cell.raw || '').toLowerCase();
+          data.cell.styles.textColor = statusColor(val);
+        }
+        if (data.column.index === 8) {
+          const val = String(data.cell.raw || '');
+          if (val === 'Yes') {
+            data.cell.styles.textColor = BRAND.success;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    },
+    // Draw footer on each page
+    didDrawPage(data) {
+      const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
+      const totalPages = (doc as any).internal.getNumberOfPages();
+      drawFooter(doc, pageW, pageH, pageNum, totalPages);
+    },
   });
 
-  // ===== BRANDED FOOTER ON ALL PAGES =====
-  const pageCount = (doc as any).internal.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
+  // Fix footer on first page too
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    
-    // Footer background
-    doc.setFillColor(brandLight[0], brandLight[1], brandLight[2]);
-    doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
-    
-    // Footer text
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(brandDark[0], brandDark[1], brandDark[2]);
-    doc.text('FamousGate Hotels | Excellence in Hospitality', pageWidth / 2, pageHeight - 7, { align: 'center' });
-    
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(brandPrimary[0], brandPrimary[1], brandPrimary[2]);
-    doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
-    
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
-    doc.text('Confidential - For Internal Use Only', margin, pageHeight - 7);
+    drawFooter(doc, pageW, pageH, i, totalPages);
   }
 
   return doc;
@@ -297,7 +302,7 @@ export const downloadLeavePDF = async (
 ) => {
   try {
     const doc = await generateLeavePDF(leaveRequests, metadata);
-    const fileName = `Leave_Report_${metadata.branchName.replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+    const fileName = `FG_LeaveReport_${metadata.branchName.replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd_HHmm')}.pdf`;
     doc.save(fileName);
     return true;
   } catch (error) {
