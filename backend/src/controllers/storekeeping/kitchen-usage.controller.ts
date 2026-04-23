@@ -162,12 +162,14 @@ export const createUsageRecord = async (
         expected_revenue: expected_revenue || 0,
         usage_date: usage_date || new Date().toISOString().split('T')[0],
         recorded_by: userId,
-        status: 'PENDING'
+        status: 'APPROVED' // Auto-approve for direct kitchen operations
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    logger.info(`[Kitchen Usage] Auto-approved record ${data.id} for kitchen operations`);
 
     // Deduct from branch stock
     try {
@@ -239,7 +241,7 @@ export const createUsageRecord = async (
 
     res.status(201).json({
       success: true,
-      message: 'Usage tracking record created and stock synced to kitchen',
+      message: 'Items automatically approved and sent to kitchen operations',
       data
     });
   } catch (error) {

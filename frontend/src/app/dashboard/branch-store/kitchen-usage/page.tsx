@@ -131,7 +131,7 @@ export default function BranchKitchenUsagePage() {
         unit_cost: formData.unit_cost,
         expected_revenue: formData.expected_revenue
       });
-      toast.success('Items issued to kitchen successfully');
+      toast.success('Items automatically approved and sent to kitchen operations');
       setAddModalOpen(false);
       setFormData({ 
         item_sku: '', 
@@ -151,6 +151,7 @@ export default function BranchKitchenUsagePage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING': return 'bg-blue-50 text-blue-600';
+      case 'APPROVED': return 'bg-green-50 text-green-600';
       case 'PARTIAL': return 'bg-yellow-50 text-yellow-600';
       case 'COMPLETED': return 'bg-green-50 text-green-600';
       case 'CLOSED': return 'bg-gray-50 text-gray-600';
@@ -170,7 +171,7 @@ export default function BranchKitchenUsagePage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Kitchen Usage Tracking</h1>
-              <p className="text-gray-500">Track items issued to kitchen and monitor usage</p>
+              <p className="text-gray-500">Issue items to kitchen - automatically approved for operations</p>
             </div>
             <div className="flex gap-2">
               <IOSButton 
@@ -313,7 +314,7 @@ export default function BranchKitchenUsagePage() {
                 Issue Items to Kitchen
               </DialogTitle>
               <DialogDescription>
-                Select items from branch stock to issue to the kitchen for tracking
+                Items issued here are automatically approved and sent to kitchen operations
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">

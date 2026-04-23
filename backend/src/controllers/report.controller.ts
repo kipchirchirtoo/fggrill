@@ -13,6 +13,7 @@ import {
   generateProcurementIntelligencePDF,
   generateHRPerformancePDF,
   generatePayrollPDF,
+  generateLeaveManagementPDF,
   generateDocumentationPDF,
 } from '../services/native-pdf-reports.service';
 
@@ -769,6 +770,17 @@ export const exportReport = async (
           await generateHRPerformancePDF(res, filters ?? {});
         } catch (pdfErr: any) {
           logger.error(`HR performance PDF error: ${pdfErr.message}`, pdfErr);
+          if (!res.headersSent) {
+            res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
+          }
+        }
+        return;
+      }
+      if (reportType === 'leave_management') {
+        try {
+          await generateLeaveManagementPDF(res, filters ?? {});
+        } catch (pdfErr: any) {
+          logger.error(`Leave management PDF error: ${pdfErr.message}`, pdfErr);
           if (!res.headersSent) {
             res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
           }

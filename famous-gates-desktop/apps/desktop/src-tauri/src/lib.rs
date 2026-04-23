@@ -14,6 +14,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:famousgates.db", services::sqlite::migrations())
@@ -66,6 +68,12 @@ pub fn run() {
             commands::security::cmd_store_token,
             commands::security::cmd_get_token,
             commands::security::cmd_delete_token,
+            // Downloads
+            commands::downloads::cmd_download_file,
+            commands::downloads::cmd_save_file,
+            commands::downloads::cmd_save_to_downloads,
+            commands::downloads::cmd_open_downloads_folder,
+            commands::downloads::cmd_show_notification,
             // App
             commands::app::cmd_get_app_info,
             commands::app::cmd_open_pos_window,

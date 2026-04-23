@@ -714,9 +714,9 @@ export async function dispatchItems(
         .select('quantity')
         .eq('branch_id', dispatch.from_branch_id)
         .eq('item_sku', item.item_sku)
-        .single();
+        .maybeSingle();
         
-      if (currentStockError && currentStockError.code !== 'PGRST116') {
+      if (currentStockError) {
         throw new Error(`Failed to verify stock for item ${item.item_sku}: ${currentStockError.message}`);
       }
 

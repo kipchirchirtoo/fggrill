@@ -16,7 +16,6 @@ import {
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { downloadLeavePDF } from '@/lib/leave-pdf';
 
 interface LeaveRequest {
   id: string;
@@ -277,12 +276,42 @@ export default function LeaveManagementPage() {
     setIsExporting(true);
     try {
       toast.info('Generating branded PDF report...');
-      await downloadLeavePDF(filteredRequests, {
-        branchName: activeBranch?.name || 'Branch Operations',
-        dateRange: showDateFilter ? dateFilter : undefined,
-        filterType: activeTab,
-        generatedBy: `${user?.firstName} ${user?.lastName}`
+      
+      const token = localStorage.getItem('token');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      
+      const filters: any = {
+        branch_id: activeBranch?.id,
+        branch_name: activeBranch?.name || 'Branch Operations',
+        filter_type: activeTab,
+      };
+      
+      if (showDateFilter && dateFilter.start && dateFilter.end) {
+        filters.start_date = dateFilter.start;
+        filters.end_date = dateFilter.end;
+      }
+      
+      const response = await fetch(`${API_URL}/api/reports/export?format=pdf&reportType=leave_management`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ filters }),
       });
+      
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `FG_LeaveReport_${activeBranch?.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
       toast.success('PDF report generated successfully');
     } catch (error) {
       console.error('Error exporting PDF:', error);

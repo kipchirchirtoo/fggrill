@@ -97,6 +97,8 @@ class DatabaseFetcher:
                 'revenue_reconciliation': self._fetch_revenue_reconciliation,
                 'sales_performance': self._fetch_sales_performance,
                 'staff_performance': self._fetch_staff_performance,
+                'stock_requests': self._fetch_stock_requests,
+                'stock_requests_history': self._fetch_stock_requests_history,
             }
             
             fetcher = fetchers.get(report_type)
@@ -3242,3 +3244,76 @@ Be concise, specific, and business-focused. Do not use bullet points or markdown
         """Fetch revenue oversight data"""
         filters = {'branch_id': branch_id, 'start_date': start_date, 'end_date': end_date}
         return self._fetch_revenue_reconciliation(filters)
+
+    def _fetch_stock_requests(self, filters: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch stock requests data"""
+        try:
+            query = self.client.table('stock_requests').select('''
+                id,
+                request_number,
+                requesting_branch_id,
+                status,
+                priority,
+                request_type,
+                reason,
+                needed_by_date,
+                created_at,
+                updated_at,
+                branches!requesting_branch_id(name),
+                stock_request_items(
+                    id,
+                    item_sku,
+                    requested_quantity,
+                    approved_quantity,
+                    status,
+                    rejection_reason
+                )
+            ''')
+            
+            # Apply filters
+            branch_id = filters.get('branch_id')
+            if branch_id:
+                query = query.eq('requesting_branch_id', branch_id)
+            
+            status_filter = filters.get('status')
+            if status_filter:
+                if ',' in status_filter:
+                    # Multiple statuses
+                    statuses = [s.strip() for s in status_filter.split(',')]
+                    query = query.in_('status', statuses)
+                else:
+                    query = query.eq('status', status_filter)
+            
+            # Default to current requests if no status specified
+            if not status_filter:
+                query = query.in_('status', ['PENDING', 'APPROVED', 'PARTIALLY_APPROVED', 'REJECTED', 'IN_TRANSIT'])
+            
+            result = query.order('created_at', desc=True).execute()
+            requests = result.data or []
+            
+            # Transform data for PDF
+            for req in requests:
+                req['branch_name'] = req.get('branches', {}).get('name', 'Unknown Branch') if req.get('branches') else 'Unknown Branch'
+                req['items'] = req.get('stock_request_items', [])
+            
+            return {
+                'data': requests,
+                'total_requests': len(requests),
+                'branch_name': filters.get('branch_name', 'All Branches')
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching stock requests: {str(e)}")
+            return {
+                'data': [],
+                'total_requests': 0,
+                'branch_name': filters.get('branch_name', 'All Branches'),
+                'error': str(e)
+            }
+
+    def _fetch_stock_requests_history(self, filters: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch stock requests history (completed/cancelled requests)"""
+        # Override status filter to only get completed requests
+        filters = filters.copy()
+        filters['status'] = 'DELIVERED,RECEIVED,CANCELLED,FULFILLED'
+        return self._fetch_stock_requests(filters)

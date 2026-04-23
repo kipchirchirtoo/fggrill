@@ -179,6 +179,18 @@ export const auditorReportsAPI = {
 
   // Branded PDF Export
   exportBrandedPdf: async (reportType: string, params: any) => {
+    // Start download tracking
+    let downloadId: string | null = null;
+    try {
+      const manager = (window as any).__downloadManager;
+      if (manager) {
+        const filename = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+        downloadId = manager.addDownload(filename);
+      }
+    } catch (e) {
+      // Download manager not available
+    }
+
     const result = await fetchAPI<Blob>(`/reports/auditor/export/${reportType}${buildQuery(params)}`, {
       responseType: 'blob'
     }, REPORTS_SERVICE_URL);
@@ -188,20 +200,50 @@ export const auditorReportsAPI = {
       
       // Check if blob has content
       if (blob.size === 0) {
+        if (downloadId) {
+          const manager = (window as any).__downloadManager;
+          manager?.updateDownload(downloadId, { status: 'failed', error: 'Empty PDF file received' });
+        }
         console.error('Received empty blob from server');
         throw new Error('Received empty PDF file from server');
       }
       
-      // Create download link
+      // Use Tauri downloads if available, otherwise fallback to browser
+      const filename = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      try {
+        // Dynamic import to avoid bundling issues
+        const { exportPDF } = await import('../tauri-downloads');
+        const success = await exportPDF(blob, filename);
+        if (success) {
+          if (downloadId) {
+            const manager = (window as any).__downloadManager;
+            manager?.updateDownload(downloadId, { status: 'completed' });
+          }
+          return true;
+        }
+        // If Tauri download fails, fall through to browser method
+      } catch (importError) {
+        // Tauri downloads not available, use browser method
+        console.log('Using browser download method');
+      }
+      
+      // Browser fallback method
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      a.download = filename;
       
       // Append to body, click, and cleanup
       document.body.appendChild(a);
       a.click();
+      
+      // Update download manager
+      if (downloadId) {
+        const manager = (window as any).__downloadManager;
+        manager?.updateDownload(downloadId, { status: 'completed' });
+      }
       
       // Cleanup
       setTimeout(() => {
@@ -210,6 +252,12 @@ export const auditorReportsAPI = {
       }, 100);
       
       return true;
+    }
+    
+    // Update download manager on failure
+    if (downloadId) {
+      const manager = (window as any).__downloadManager;
+      manager?.updateDownload(downloadId, { status: 'failed', error: 'Failed to generate PDF report' });
     }
     
     throw new Error('Failed to generate PDF report');

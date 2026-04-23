@@ -151,48 +151,163 @@ export const deleteGuest = async (
       throw new AppError('Guest not found', 404);
     }
 
-    // Check if guest has ANY reservations (active or historical)
-    const { data: allReservations, error: reservationsError } = await supabase
-      .from('reservations')
-      .select('id, status, reservation_number, check_in_date, check_out_date')
-      .eq('guest_id', id);
+    // Check all tables that reference this guest
+    const references: { table: string; count: number; active?: number }[] = [];
 
-    if (reservationsError) {
-      logger.error(`Error checking guest reservations:`, reservationsError);
-      throw new AppError('Failed to check guest reservations', 500);
+    // Check reservations
+    const { data: reservations } = await supabase
+      .from('reservations')
+      .select('id, status')
+      .eq('guest_id', id);
+    
+    if (reservations && reservations.length > 0) {
+      const active = reservations.filter(r => 
+        ['confirmed', 'checked_in', 'pending'].includes(r.status)
+      ).length;
+      references.push({ table: 'reservations', count: reservations.length, active });
     }
 
-    if (allReservations && allReservations.length > 0) {
-      // Check for active bookings
-      const activeBookings = allReservations.filter(r => 
-        ['confirmed', 'checked_in', 'pending'].includes(r.status)
-      );
+    // Check reservation_guests
+    const { data: reservationGuests } = await supabase
+      .from('reservation_guests')
+      .select('id')
+      .eq('guest_id', id);
+    if (reservationGuests && reservationGuests.length > 0) {
+      references.push({ table: 'reservation_guests', count: reservationGuests.length });
+    }
 
-      if (activeBookings.length > 0) {
+    // Check folios
+    const { data: folios } = await supabase
+      .from('folios')
+      .select('id')
+      .eq('guest_id', id);
+    if (folios && folios.length > 0) {
+      references.push({ table: 'folios', count: folios.length });
+    }
+
+    // Check customer_invoices
+    const { data: invoices } = await supabase
+      .from('customer_invoices')
+      .select('id')
+      .eq('customer_id', id);
+    if (invoices && invoices.length > 0) {
+      references.push({ table: 'customer_invoices', count: invoices.length });
+    }
+
+    // Check quotations
+    const { data: quotations } = await supabase
+      .from('quotations')
+      .select('id')
+      .eq('customer_id', id);
+    if (quotations && quotations.length > 0) {
+      references.push({ table: 'quotations', count: quotations.length });
+    }
+
+    // Check documents
+    const { data: documents } = await supabase
+      .from('documents')
+      .select('id')
+      .eq('guest_id', id);
+    if (documents && documents.length > 0) {
+      references.push({ table: 'documents', count: documents.length });
+    }
+
+    // Check guest_documents
+    const { data: guestDocs } = await supabase
+      .from('guest_documents')
+      .select('id')
+      .eq('guest_id', id);
+    if (guestDocs && guestDocs.length > 0) {
+      references.push({ table: 'guest_documents', count: guestDocs.length });
+    }
+
+    // Check rooms (current_guest)
+    const { data: rooms } = await supabase
+      .from('rooms')
+      .select('id, room_number')
+      .eq('current_guest', id);
+    if (rooms && rooms.length > 0) {
+      references.push({ table: 'rooms (current_guest)', count: rooms.length });
+    }
+
+    // If there are any references, handle them
+    if (references.length > 0) {
+      // Check for active reservations (blocking)
+      const activeReservations = references.find(r => r.table === 'reservations' && r.active && r.active > 0);
+      if (activeReservations) {
         throw new AppError(
-          `Cannot delete guest with ${activeBookings.length} active booking(s). Please cancel or complete the bookings first.`,
+          `Cannot delete guest with ${activeReservations.active} active reservation(s). Please cancel or complete the reservations first.`,
           400
         );
       }
 
-      // Guest has historical bookings but no active ones
-      if (force === 'true') {
-        // Force delete: Set guest_id to NULL in all reservations
-        logger.info(`Force deleting guest ${id} - nullifying ${allReservations.length} reservation references`);
-        
-        const { error: updateError } = await supabase
-          .from('reservations')
-          .update({ guest_id: null })
-          .eq('guest_id', id);
+      // Check for current room assignment (blocking)
+      const currentRoom = references.find(r => r.table === 'rooms (current_guest)');
+      if (currentRoom) {
+        throw new AppError(
+          `Cannot delete guest who is currently assigned to ${currentRoom.count} room(s). Please check out the guest first.`,
+          400
+        );
+      }
 
-        if (updateError) {
-          logger.error(`Error nullifying guest references:`, updateError);
-          throw new AppError('Failed to remove guest references from reservations', 500);
+      // If force mode, nullify all references
+      if (force === 'true') {
+        logger.info(`Force deleting guest ${id} - removing ${references.length} reference type(s)`);
+        
+        // Nullify references in all tables
+        const nullifyPromises = [];
+
+        if (references.find(r => r.table === 'reservations')) {
+          nullifyPromises.push(
+            supabase.from('reservations').update({ guest_id: null }).eq('guest_id', id)
+          );
+        }
+        if (references.find(r => r.table === 'reservation_guests')) {
+          nullifyPromises.push(
+            supabase.from('reservation_guests').delete().eq('guest_id', id)
+          );
+        }
+        if (references.find(r => r.table === 'folios')) {
+          nullifyPromises.push(
+            supabase.from('folios').update({ guest_id: null }).eq('guest_id', id)
+          );
+        }
+        if (references.find(r => r.table === 'customer_invoices')) {
+          nullifyPromises.push(
+            supabase.from('customer_invoices').update({ customer_id: null }).eq('customer_id', id)
+          );
+        }
+        if (references.find(r => r.table === 'quotations')) {
+          nullifyPromises.push(
+            supabase.from('quotations').update({ customer_id: null }).eq('customer_id', id)
+          );
+        }
+        if (references.find(r => r.table === 'documents')) {
+          nullifyPromises.push(
+            supabase.from('documents').update({ guest_id: null }).eq('guest_id', id)
+          );
+        }
+        if (references.find(r => r.table === 'guest_documents')) {
+          nullifyPromises.push(
+            supabase.from('guest_documents').delete().eq('guest_id', id)
+          );
+        }
+
+        const results = await Promise.allSettled(nullifyPromises);
+        const failed = results.filter(r => r.status === 'rejected');
+        
+        if (failed.length > 0) {
+          logger.error(`Failed to nullify some references:`, failed);
+          throw new AppError('Failed to remove some guest references', 500);
         }
       } else {
-        // Suggest force delete
+        // Build detailed error message
+        const refDetails = references.map(r => 
+          `${r.count} ${r.table}${r.active ? ` (${r.active} active)` : ''}`
+        ).join(', ');
+        
         throw new AppError(
-          `Cannot delete guest with ${allReservations.length} historical reservation(s). The guest has booking history that would be lost. If you're sure you want to delete this guest and remove their association from all reservations, add ?force=true to the request.`,
+          `Cannot delete guest with existing records: ${refDetails}. Add ?force=true to remove all associations and delete the guest.`,
           400
         );
       }

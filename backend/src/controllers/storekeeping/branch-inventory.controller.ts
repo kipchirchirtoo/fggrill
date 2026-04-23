@@ -91,6 +91,7 @@ export const getLowStockItems = async (
 
 /**
  * Record stock out (usage, damage, etc.)
+ * Automatically approves and syncs to department stock (Kitchen, Bar, Reception)
  */
 export const recordStockOut = async (
   req: Request,
@@ -99,6 +100,7 @@ export const recordStockOut = async (
 ): Promise<void> => {
   try {
     const branchId = req.user?.branch_id;
+    const userId = req.user?.id;
     const { item_sku, quantity, movement_type, reason, notes } = req.body;
 
     if (!branchId) {
@@ -111,21 +113,114 @@ export const recordStockOut = async (
       return;
     }
 
+    // Deduct from branch stock
     const result = await BranchInventoryService.updateBranchStock(
       branchId,
       item_sku,
       -quantity,
       movement_type || 'STOCK_OUT',
-      req.user?.id,
+      userId,
       'MANUAL',
       undefined,
       undefined,
       notes || reason
     );
 
+    // Auto-approve and sync to department stock based on reason/department
+    const department = (reason || '').toLowerCase();
+    let syncMessage = '';
+
+    try {
+      // Get item details for ledger
+      const { data: itemData } = await supabase
+        .from('simple_items')
+        .select('description, unit')
+        .eq('sku', item_sku)
+        .single();
+
+      const itemName = itemData?.description || 'Unknown Item';
+      const itemUnit = itemData?.unit || 'Unit';
+
+      if (department === 'kitchen') {
+        // Sync to kitchen stock ledger
+        const { data: currentStock } = await supabase
+          .from('kitchen_stock')
+          .select('current_balance')
+          .eq('branch_id', branchId)
+          .eq('item_sku', item_sku)
+          .single();
+
+        const openingBalance = currentStock?.current_balance || 0;
+        const closingBalance = Number(openingBalance) + Number(quantity);
+
+        await supabase
+          .from('kitchen_stock_ledger')
+          .insert({
+            branch_id: branchId,
+            item_sku,
+            item_name: itemName,
+            transaction_type: 'RECEIPT',
+            reference_type: 'STOCK_OUT',
+            reference_id: result.id,
+            opening_balance: openingBalance,
+            quantity_in: quantity,
+            quantity_out: 0,
+            closing_balance: closingBalance,
+            unit_of_measure: itemUnit,
+            user_id: userId,
+            notes: `Auto-approved from branch store: ${notes || reason || 'Stock out'}`
+          });
+
+        syncMessage = ' and synced to Kitchen operations';
+        logger.info(`[Stock Out] Auto-synced ${quantity} ${itemUnit} of ${itemName} to Kitchen`);
+
+      } else if (department === 'bar') {
+        // Sync to bar stock ledger
+        const { data: currentStock } = await supabase
+          .from('bar_stock')
+          .select('current_balance')
+          .eq('branch_id', branchId)
+          .eq('item_sku', item_sku)
+          .single();
+
+        const openingBalance = currentStock?.current_balance || 0;
+        const closingBalance = Number(openingBalance) + Number(quantity);
+
+        await supabase
+          .from('bar_stock_ledger')
+          .insert({
+            branch_id: branchId,
+            item_sku,
+            item_name: itemName,
+            transaction_type: 'RECEIPT',
+            reference_type: 'STOCK_OUT',
+            reference_id: result.id,
+            opening_balance: openingBalance,
+            quantity_in: quantity,
+            quantity_out: 0,
+            closing_balance: closingBalance,
+            unit_of_measure: itemUnit,
+            user_id: userId,
+            notes: `Auto-approved from branch store: ${notes || reason || 'Stock out'}`
+          });
+
+        syncMessage = ' and synced to Bar operations';
+        logger.info(`[Stock Out] Auto-synced ${quantity} ${itemUnit} of ${itemName} to Bar`);
+
+      } else if (department === 'housekeeping' || department === 'reception') {
+        // For housekeeping/reception, just log - they may not have separate stock tables
+        syncMessage = ` and issued to ${department.charAt(0).toUpperCase() + department.slice(1)}`;
+        logger.info(`[Stock Out] Issued ${quantity} ${itemUnit} of ${itemName} to ${department}`);
+      }
+    } catch (syncError) {
+      logger.error('[Stock Out] Failed to sync to department stock:', syncError);
+      // Don't fail the whole operation if sync fails
+      syncMessage = ' (department sync pending)';
+    }
+
     res.status(200).json({
       success: true,
-      message: `Stock out recorded: ${quantity} units`,
+      message: `Stock automatically approved${syncMessage}: ${quantity} units`,
       data: result
     });
   } catch (error) {
