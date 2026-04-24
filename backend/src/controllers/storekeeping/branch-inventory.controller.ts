@@ -161,7 +161,7 @@ export const recordStockOut = async (
             item_name: itemName,
             transaction_type: 'RECEIPT',
             reference_type: 'STOCK_OUT',
-            reference_id: result.id,
+            reference_id: null, // No specific transaction ID for manual stock out
             opening_balance: openingBalance,
             quantity_in: quantity,
             quantity_out: 0,
@@ -194,7 +194,7 @@ export const recordStockOut = async (
             item_name: itemName,
             transaction_type: 'RECEIPT',
             reference_type: 'STOCK_OUT',
-            reference_id: result.id,
+            reference_id: null, // No specific transaction ID for manual stock out
             opening_balance: openingBalance,
             quantity_in: quantity,
             quantity_out: 0,
@@ -640,41 +640,37 @@ export const dispatchItems = async (
 
       if (vehicle_id && !resolvedVehicleNumber) {
         const { data: vehicle, error: vehicleError } = await supabase.from('vehicles')
-          .select('registration_number').eq('id', vehicle_id).single();
+          .select('registration_number').eq('id', vehicle_id).maybeSingle();
         
         if (vehicleError) {
-          console.error('Database error:', vehicleError);
-          throw vehicleError;
+          // Vehicle lookup is optional - log warning and continue
+          logger.warn(`Could not fetch vehicle ${vehicle_id}: ${vehicleError.message || 'Unknown error'}`);
+        } else if (vehicle) {
+          resolvedVehicleNumber = vehicle.registration_number;
         }
-        
-        if (vehicle) resolvedVehicleNumber = vehicle.registration_number;
       }
 
       if (driver_id && !resolvedDriverName) {
         if (driver_id.startsWith('staff-')) {
           const staffId = driver_id.replace('staff-', '');
           const { data: staff, error: staffError } = await supabase.from('staff_profiles')
-            .select('first_name, last_name, phone').eq('id', staffId).single();
+            .select('first_name, last_name, phone').eq('id', staffId).maybeSingle();
           
           if (staffError) {
-            console.error('Database error:', staffError);
-            throw staffError;
-          }
-          
-          if (staff) {
+            // Staff lookup is optional - log warning and continue
+            logger.warn(`Could not fetch staff ${staffId}: ${staffError.message || 'Unknown error'}`);
+          } else if (staff) {
             resolvedDriverName = `${staff.first_name || ''} ${staff.last_name || ''}`.trim();
             if (!resolvedDriverPhone) resolvedDriverPhone = staff.phone || '';
           }
         } else {
           const { data: driver, error: driverError } = await supabase.from('drivers')
-            .select('name, phone').eq('id', driver_id).single();
+            .select('name, phone').eq('id', driver_id).maybeSingle();
           
           if (driverError) {
-            console.error('Database error:', driverError);
-            throw driverError;
-          }
-          
-          if (driver) {
+            // Driver lookup is optional - log warning and continue
+            logger.warn(`Could not fetch driver ${driver_id}: ${driverError.message || 'Unknown error'}`);
+          } else if (driver) {
             resolvedDriverName = driver.name;
             if (!resolvedDriverPhone) resolvedDriverPhone = driver.phone || '';
           }
@@ -699,21 +695,36 @@ export const dispatchItems = async (
     } catch (serviceError: any) {
       logger.error(`Dispatch error for ID ${id}:`, serviceError);
 
-      // Return appropriate status code based on error type
-      if (serviceError.message.includes('not found') || serviceError.message.includes('couldn\'t be accessed')) {
+      const msg: string = serviceError.message || '';
+
+      if (msg.includes('not found') || msg.includes('couldn\'t be accessed')) {
         res.status(404).json({
           success: false,
-          message: serviceError.message
+          message: msg
         });
-      } else if (serviceError.message.includes('already')) {
+      } else if (msg.includes('already')) {
         res.status(409).json({
           success: false,
-          message: serviceError.message
+          message: msg
+        });
+      } else if (
+        msg.startsWith('INSUFFICIENT_STOCK') ||
+        msg.includes('Insufficient stock') ||
+        msg.includes('Zero stock') ||
+        msg.includes('not registered in the central warehouse') ||
+        msg.includes('No items found in dispatch') ||
+        msg.includes('Failed to verify stock')
+      ) {
+        // Strip the internal prefix for the client-facing message
+        const clientMessage = msg.replace(/^INSUFFICIENT_STOCK:\s*/i, '');
+        res.status(400).json({
+          success: false,
+          message: clientMessage
         });
       } else {
         res.status(500).json({
           success: false,
-          message: `Failed to dispatch items: ${serviceError.message}`
+          message: `Failed to dispatch items: ${msg}`
         });
       }
     }

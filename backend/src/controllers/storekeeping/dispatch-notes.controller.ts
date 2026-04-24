@@ -173,18 +173,35 @@ export const getDispatchNote = async (
         packer:users!packer_id(id, first_name, last_name),
         dispatcher:users!dispatcher_id(id, first_name, last_name),
         receiver:users!receiver_id(id, first_name, last_name),
-        stock_request:stock_requests(id, request_number, priority),
-        items:dispatch_items(
-          *,
-          item:simple_items!item_sku(sku, item_name, description, unit_of_measure, category)
-        )
+        stock_request:stock_requests(id, request_number, priority)
       `)
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
-        if (error || !dispatch) {
+        if (error) {
+            logger.error(`Error fetching dispatch ${id}:`, error);
+            throw new AppError(`Failed to fetch dispatch: ${error.message}`, 500);
+        }
+
+        if (!dispatch) {
             throw new AppError('Dispatch note not found', 404);
         }
+
+        // Fetch dispatch items separately with item details
+        const { data: items, error: itemsError } = await supabase
+            .from('dispatch_items')
+            .select(`
+                *,
+                item:simple_items!item_sku(sku, item_name, description, unit_of_measure, category)
+            `)
+            .eq('dispatch_id', id);
+
+        if (itemsError) {
+            logger.error(`Error fetching dispatch items for ${id}:`, itemsError);
+            throw new AppError(`Failed to fetch dispatch items: ${itemsError.message}`, 500);
+        }
+
+        dispatch.items = items || [];
 
         res.status(200).json({
             success: true,
@@ -245,11 +262,11 @@ export const createDispatchNote = async (
                 .from('stock_requests')
                 .select('*, requesting_branch:branches!requesting_branch_id(code)')
                 .eq('id', finalRequestId)
-                .single();
+                .maybeSingle();
 
             if (requestError) {
                 logger.error('Error fetching stock request:', requestError);
-                throw new AppError(`Stock request not found: ${requestError.message}`, 404);
+                throw new AppError(`Stock request not found: ${requestError.message}`, 500);
             }
 
             if (!request) {
@@ -309,7 +326,7 @@ export const createDispatchNote = async (
             .from('branches')
             .select('code')
             .eq('id', to_branch_id)
-            .single();
+            .maybeSingle();
 
         if (branchError) {
             logger.error('Error fetching branch:', branchError);
@@ -347,17 +364,22 @@ export const createDispatchNote = async (
                     dispatch_notes: dispatch_notes || null,
                     status: 'DRAFT'
                 })
-                .select()
-                .single();
+                .select();
 
             if (dispatchError) {
                 logger.error('Error creating dispatch note:', dispatchError);
                 throw new AppError(`Failed to create dispatch: ${dispatchError.message}`, 500);
             }
 
+            if (!newDispatch || newDispatch.length === 0) {
+                throw new AppError('Failed to create dispatch note', 500);
+            }
+
+            const createdDispatch = newDispatch[0];
+
             // Insert dispatch items
             const dispatchItems = items.map((item: any) => ({
-                dispatch_id: newDispatch.id,
+                dispatch_id: createdDispatch.id,
                 item_sku: item.item_sku,
                 dispatched_quantity: item.dispatched_quantity || item.quantity,
                 batch_number: item.batch_number || null,
@@ -381,14 +403,23 @@ export const createDispatchNote = async (
                 .select(`
                     *,
                     from_branch:branches!from_branch_id(id, name, code),
-                    to_branch:branches!to_branch_id(id, name, code),
-                    items:dispatch_items(
-                      *,
-                      item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
-                    )
+                    to_branch:branches!to_branch_id(id, name, code)
                 `)
-                .eq('id', newDispatch.id)
-                .single();
+                .eq('id', createdDispatch.id)
+                .maybeSingle();
+
+            // Fetch dispatch items separately
+            const { data: fetchedItems } = await supabase
+                .from('dispatch_items')
+                .select(`
+                    *,
+                    item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
+                `)
+                .eq('dispatch_id', createdDispatch.id);
+
+            if (completeDispatch) {
+                completeDispatch.items = fetchedItems || [];
+            }
 
             res.status(201).json({
                 success: true,
@@ -415,17 +446,22 @@ export const createDispatchNote = async (
                 dispatch_notes: dispatch_notes || null,
                 status: 'DRAFT'
             })
-            .select()
-            .single();
+            .select();
 
         if (dispatchError) {
             logger.error('Error creating dispatch note:', dispatchError);
             throw new AppError(`Failed to create dispatch: ${dispatchError.message}`, 500);
         }
 
+        if (!newDispatch || newDispatch.length === 0) {
+            throw new AppError('Failed to create dispatch note', 500);
+        }
+
+        const createdDispatch2 = newDispatch[0];
+
         // Insert dispatch items
         const dispatchItems = items.map((item: any) => ({
-            dispatch_id: newDispatch.id,
+            dispatch_id: createdDispatch2.id,
             item_sku: item.item_sku,
             dispatched_quantity: item.dispatched_quantity || item.quantity,
             batch_number: item.batch_number || null,
@@ -449,14 +485,23 @@ export const createDispatchNote = async (
             .select(`
                 *,
                 from_branch:branches!from_branch_id(id, name, code),
-                to_branch:branches!to_branch_id(id, name, code),
-                items:dispatch_items(
-                  *,
-                  item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
-                )
+                to_branch:branches!to_branch_id(id, name, code)
             `)
-            .eq('id', newDispatch.id)
-            .single();
+            .eq('id', createdDispatch2.id)
+            .maybeSingle();
+
+        // Fetch dispatch items separately
+        const { data: fetchedItems } = await supabase
+            .from('dispatch_items')
+            .select(`
+                *,
+                item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
+            `)
+            .eq('dispatch_id', createdDispatch2.id);
+
+        if (completeDispatch) {
+            completeDispatch.items = fetchedItems || [];
+        }
 
         res.status(201).json({
             success: true,
@@ -507,14 +552,33 @@ export const updateDispatchStatus = async (
                 updateData.dispatcher_id = userId;
 
                 // Reserve stock in central warehouse
-                const { data: dispatch } = await supabase
+                const { data: dispatch, error: dispatchFetchError } = await supabase
                     .from('dispatch_notes')
-                    .select('from_branch_id, items:dispatch_items(item_sku, dispatched_quantity)')
+                    .select('from_branch_id')
                     .eq('id', id)
-                    .single();
+                    .maybeSingle();
 
-                if (dispatch?.items) {
-                    for (const item of dispatch.items) {
+                if (dispatchFetchError) {
+                    logger.error('Error fetching dispatch for stock update:', dispatchFetchError);
+                    throw dispatchFetchError;
+                }
+
+                // Fetch dispatch items separately
+                const { data: dispatchItems, error: itemsFetchError } = await supabase
+                    .from('dispatch_items')
+                    .select('item_sku, dispatched_quantity')
+                    .eq('dispatch_id', id);
+
+                if (itemsFetchError) {
+                    logger.error('Error fetching dispatch items for stock update:', itemsFetchError);
+                    throw itemsFetchError;
+                }
+
+                if (dispatch && dispatchItems) {
+                    // Type assertion to add items property
+                    const dispatchWithItems = dispatch as typeof dispatch & { items: typeof dispatchItems };
+                    dispatchWithItems.items = dispatchItems;
+                    for (const item of dispatchWithItems.items) {
                         // Deduct from central warehouse stock
                         const { error: stockError } = await supabase.rpc('update_branch_stock', {
                             p_branch_id: dispatch.from_branch_id,
@@ -555,15 +619,18 @@ export const updateDispatchStatus = async (
             .from('dispatch_notes')
             .update(updateData)
             .eq('id', id)
-            .select()
-            .single();
+            .select();
 
         if (error) throw error;
+
+        if (!dispatch || dispatch.length === 0) {
+            throw new AppError('Dispatch note not found or could not be updated', 404);
+        }
 
         res.status(200).json({
             success: true,
             message: `Dispatch status updated to ${status}`,
-            data: dispatch
+            data: dispatch[0]
         });
     } catch (error) {
         logger.error('Error updating dispatch status:', error);
@@ -586,16 +653,31 @@ export const dispatchItems = async (
         // Get dispatch details
         const { data: dispatch, error: fetchError } = await supabase
             .from('dispatch_notes')
-            .select(`
-                *,
-                items:dispatch_items(*)
-            `)
+            .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
-        if (fetchError || !dispatch) {
+        if (fetchError) {
+            logger.error(`Error fetching dispatch ${id}:`, fetchError);
+            throw new AppError(`Failed to fetch dispatch: ${fetchError.message}`, 500);
+        }
+
+        if (!dispatch) {
             throw new AppError('Dispatch note not found', 404);
         }
+
+        // Fetch dispatch items separately
+        const { data: items, error: itemsError } = await supabase
+            .from('dispatch_items')
+            .select('*')
+            .eq('dispatch_id', id);
+
+        if (itemsError) {
+            logger.error(`Error fetching dispatch items for ${id}:`, itemsError);
+            throw new AppError(`Failed to fetch dispatch items: ${itemsError.message}`, 500);
+        }
+
+        dispatch.items = items || [];
 
         if (dispatch.status === 'IN_TRANSIT') {
             throw new AppError('Dispatch is already in transit', 400);
@@ -610,41 +692,37 @@ export const dispatchItems = async (
 
         if (vehicle_id && !resolvedVehicleNumber) {
             const { data: vehicle, error: vehicleError } = await supabase.from('vehicles')
-                .select('registration_number').eq('id', vehicle_id).single();
+                .select('registration_number').eq('id', vehicle_id).maybeSingle();
             
             if (vehicleError) {
-              console.error('Database error:', vehicleError);
-              throw vehicleError;
+              // Vehicle lookup is optional - log warning and continue
+              logger.warn(`Could not fetch vehicle ${vehicle_id}: ${vehicleError.message || 'Unknown error'}`);
+            } else if (vehicle) {
+              resolvedVehicleNumber = vehicle.registration_number;
             }
-            
-            if (vehicle) resolvedVehicleNumber = vehicle.registration_number;
         }
 
         if (driver_id && !resolvedDriverName) {
             if (driver_id.startsWith('staff-')) {
                 const staffId = driver_id.replace('staff-', '');
                 const { data: staff, error: staffError } = await supabase.from('staff_profiles')
-                    .select('first_name, last_name, phone').eq('id', staffId).single();
+                    .select('first_name, last_name, phone').eq('id', staffId).maybeSingle();
                 
                 if (staffError) {
-                  console.error('Database error:', staffError);
-                  throw staffError;
-                }
-                
-                if (staff) {
+                  // Staff lookup is optional - log warning and continue
+                  logger.warn(`Could not fetch staff ${staffId}: ${staffError.message || 'Unknown error'}`);
+                } else if (staff) {
                     resolvedDriverName = `${staff.first_name || ''} ${staff.last_name || ''}`.trim();
                     if (!resolvedDriverPhone) resolvedDriverPhone = staff.phone || '';
                 }
             } else {
                 const { data: driver, error: driverError } = await supabase.from('drivers')
-                    .select('name, phone').eq('id', driver_id).single();
+                    .select('name, phone').eq('id', driver_id).maybeSingle();
                 
                 if (driverError) {
-                  console.error('Database error:', driverError);
-                  throw driverError;
-                }
-                
-                if (driver) {
+                  // Driver lookup is optional - log warning and continue
+                  logger.warn(`Could not fetch driver ${driver_id}: ${driverError.message || 'Unknown error'}`);
+                } else if (driver) {
                     resolvedDriverName = driver.name;
                     if (!resolvedDriverPhone) resolvedDriverPhone = driver.phone || '';
                 }
@@ -661,11 +739,12 @@ export const dispatchItems = async (
         if (notes) updates.notes = notes;
 
         // Perform validation, status update, and stock deduction centrally
-        await BranchInventoryService.dispatchItems(id, userId, updates);
+        const result = await BranchInventoryService.dispatchItems(id, userId, updates);
 
         res.status(200).json({
             success: true,
-            message: 'Dispatch sent to transit successfully'
+            message: 'Dispatch sent to transit successfully',
+            data: result
         });
     } catch (error) {
         logger.error('Error dispatching items:', error);
@@ -693,14 +772,38 @@ export const confirmDelivery = async (
         // Get dispatch details
         const { data: dispatch, error: fetchError } = await supabase
             .from('dispatch_notes')
-            .select(`
-        *,
-        items:dispatch_items(*)
-      `)
+            .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
-        if (fetchError || !dispatch) {
+        if (fetchError) {
+            logger.error(`Error fetching dispatch ${id}:`, fetchError);
+            throw new AppError(`Failed to fetch dispatch: ${fetchError.message}`, 500);
+        }
+
+        if (!dispatch) {
+            throw new AppError('Dispatch note not found', 404);
+        }
+
+        // Fetch dispatch items separately
+        const { data: items, error: itemsError } = await supabase
+            .from('dispatch_items')
+            .select('*')
+            .eq('dispatch_id', id);
+
+        if (itemsError) {
+            logger.error(`Error fetching dispatch items for ${id}:`, itemsError);
+            throw new AppError(`Failed to fetch dispatch items: ${itemsError.message}`, 500);
+        }
+
+        dispatch.items = items || [];
+
+        if (fetchError) {
+            logger.error(`Error fetching dispatch ${id}:`, fetchError);
+            throw new AppError(`Failed to fetch dispatch: ${(fetchError as any).message}`, 500);
+        }
+
+        if (!dispatch) {
             throw new AppError('Dispatch note not found', 404);
         }
 
@@ -840,11 +943,16 @@ export const deleteDispatchNote = async (
         const { id } = req.params;
 
         // Check if dispatch is in DRAFT status
-        const { data: dispatch } = await supabase
+        const { data: dispatch, error: fetchError } = await supabase
             .from('dispatch_notes')
             .select('status')
             .eq('id', id)
-            .single();
+            .maybeSingle();
+
+        if (fetchError) {
+            logger.error(`Error fetching dispatch ${id}:`, fetchError);
+            throw new AppError(`Failed to fetch dispatch: ${fetchError.message}`, 500);
+        }
 
         if (!dispatch) {
             throw new AppError('Dispatch note not found', 404);

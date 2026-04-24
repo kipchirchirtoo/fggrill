@@ -122,7 +122,7 @@ export async function updateBranchStock(
     .select('quantity')
     .eq('branch_id', branchId)
     .eq('item_sku', itemSku)
-    .single();
+    .maybeSingle();
 
   if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
 
@@ -172,8 +172,8 @@ export async function updateBranchStock(
     try {
       // Get item and branch names for the notification
       const [itemRes, branchRes] = await Promise.all([
-        supabase.from('simple_items').select('item_name').eq('sku', itemSku).single(),
-        supabase.from('branches').select('name').eq('id', branchId).single()
+        supabase.from('simple_items').select('item_name').eq('sku', itemSku).maybeSingle(),
+        supabase.from('branches').select('name').eq('id', branchId).maybeSingle()
       ]);
 
       const itemName = itemRes.data?.item_name || itemSku;
@@ -256,14 +256,19 @@ export async function createStockRequest(
       needed_by_date: neededByDate,
       status: 'PENDING_AUDIT'
     })
-    .select()
-    .single();
+    .select();
 
   if (requestError) throw requestError;
 
+  if (!request || request.length === 0) {
+    throw new Error('Failed to create stock request');
+  }
+
+  const createdRequest = request[0];
+
   // Add items
   const requestItems = items.map(item => ({
-    request_id: request.id,
+    request_id: createdRequest.id,
     item_sku: item.item_sku,
     requested_quantity: item.requested_quantity,
     current_branch_stock: item.current_branch_stock || 0,
@@ -285,7 +290,7 @@ export async function createStockRequest(
       .from('branches')
       .select('name')
       .eq('id', branchId)
-      .single();
+      .maybeSingle();
 
     const branchName = branchData?.name || branchCode;
 
@@ -300,7 +305,7 @@ export async function createStockRequest(
         branchId: branchId,
         actionUrl: '/dashboard/auditor/approvals',
         metadata: {
-          request_id: request.id,
+          request_id: createdRequest.id,
           branch_code: branchCode,
           branch_name: branchName
         }
@@ -310,7 +315,7 @@ export async function createStockRequest(
     logger.error('Failed to send stock request notification', error);
   }
 
-  return { ...request, items: requestItems };
+  return { ...createdRequest, items: requestItems };
 }
 
 /**
@@ -515,7 +520,7 @@ export async function approveStockRequest(
         .from('stock_requests')
         .select('request_number, requesting_branch_id')
         .eq('id', requestId)
-        .single();
+        .maybeSingle();
 
       if (requestDetails) {
         // Notify Central Storekeeper to start packing
@@ -625,14 +630,19 @@ export async function createDispatchFromRequest(
       estimated_delivery: estimatedDelivery,
       dispatch_notes: notes
     })
-    .select()
-    .single();
+    .select();
 
   if (dispatchError) throw dispatchError;
 
+  if (!dispatch || dispatch.length === 0) {
+    throw new Error('Failed to create dispatch note');
+  }
+
+  const createdDispatch = dispatch[0];
+
   // Add items
   const dispatchItems = items.map(item => ({
-    dispatch_id: dispatch.id,
+    dispatch_id: createdDispatch.id,
     item_sku: item.item_sku,
     dispatched_quantity: item.dispatched_quantity,
     batch_number: item.batch_number,
@@ -655,7 +665,7 @@ export async function createDispatchFromRequest(
 
   logger.info(`Dispatch note created: ${dispatchNumber} for request ${requestId}`);
 
-  return { ...dispatch, items: dispatchItems };
+  return { ...createdDispatch, items: dispatchItems };
 }
 
 /**
@@ -681,12 +691,9 @@ export async function dispatchItems(
     // Get dispatch details
     const { data: dispatch, error: fetchError } = await supabase
       .from('dispatch_notes')
-      .select(`
-        *,
-        items:dispatch_items(*)
-      `)
+      .select('*')
       .eq('id', dispatchId)
-      .single();
+      .maybeSingle();
 
     if (fetchError) {
       logger.error(`Error fetching dispatch ${dispatchId}:`, fetchError);
@@ -696,6 +703,20 @@ export async function dispatchItems(
     if (!dispatch) {
       throw new Error('Dispatch note not found');
     }
+
+    // Fetch dispatch items separately
+    const { data: items, error: itemsError } = await supabase
+      .from('dispatch_items')
+      .select('*')
+      .eq('dispatch_id', dispatchId);
+
+    if (itemsError) {
+      logger.error(`Error fetching dispatch items for ${dispatchId}:`, itemsError);
+      throw new Error(`Failed to fetch dispatch items: ${itemsError.message}`);
+    }
+
+    // Attach items to dispatch
+    dispatch.items = items || [];
 
     // Check if dispatch has already been processed
     if (dispatch.status !== 'READY') {
@@ -707,7 +728,9 @@ export async function dispatchItems(
       throw new Error('No items found in dispatch note');
     }
 
-    // Validate stock before processing any deductions
+    // Pre-flight stock validation — collect ALL failures before throwing
+    const stockErrors: string[] = [];
+
     for (const item of dispatch.items) {
       const { data: currentStock, error: currentStockError } = await supabase
         .from('branch_stock')
@@ -715,15 +738,41 @@ export async function dispatchItems(
         .eq('branch_id', dispatch.from_branch_id)
         .eq('item_sku', item.item_sku)
         .maybeSingle();
-        
+
       if (currentStockError) {
-        throw new Error(`Failed to verify stock for item ${item.item_sku}: ${currentStockError.message}`);
+        stockErrors.push(`[${item.item_sku}] Failed to verify stock: ${currentStockError.message}`);
+        continue;
       }
 
-      const available = currentStock?.quantity || 0;
-      if (available < item.dispatched_quantity) {
-         throw new Error(`Insufficient stock for item ${item.item_sku}. Available: ${available}, Dispatched: ${item.dispatched_quantity}`);
+      if (!currentStock) {
+        // Item has never been stocked in the central warehouse
+        stockErrors.push(
+          `[${item.item_sku}] Item is not registered in the central warehouse stock. ` +
+          `Add it to master inventory before dispatching.`
+        );
+        continue;
       }
+
+      const available = currentStock.quantity ?? 0;
+
+      if (available === 0) {
+        stockErrors.push(
+          `[${item.item_sku}] Zero stock in central warehouse. ` +
+          `Cannot dispatch ${item.dispatched_quantity} unit(s).`
+        );
+      } else if (available < item.dispatched_quantity) {
+        stockErrors.push(
+          `[${item.item_sku}] Insufficient stock. ` +
+          `Available: ${available}, Required: ${item.dispatched_quantity}.`
+        );
+      }
+    }
+
+    if (stockErrors.length > 0) {
+      throw new Error(
+        `INSUFFICIENT_STOCK: Cannot dispatch — the following items have stock issues in the central warehouse:\n` +
+        stockErrors.map((e, i) => `  ${i + 1}. ${e}`).join('\n')
+      );
     }
 
     // Deduct from central warehouse stock
@@ -750,9 +799,15 @@ export async function dispatchItems(
           });
 
         if (transitError) {
-          console.error('Database error:', transitError);
-          logger.error(`Error adding item ${item.item_sku} to in-transit:`, transitError);
-          throw transitError;
+          // Check if it's a duplicate entry (already in transit)
+          if (transitError.code === '23505') { // PostgreSQL unique violation
+            logger.warn(`Item ${item.item_sku} already in transit for dispatch ${dispatchId}`);
+            // Continue - item is already in transit, which is fine
+          } else {
+            console.error('Database error:', transitError);
+            logger.error(`Error adding item ${item.item_sku} to in-transit:`, transitError);
+            throw transitError;
+          }
         }
       } catch (itemError: any) {
         logger.error(`Error processing item ${item.item_sku}:`, itemError);
@@ -778,21 +833,36 @@ export async function dispatchItems(
     }
 
     // Update dispatch status and details
-    const { data: updatedDispatch, error: updateError } = await supabase
+    // Note: Status already validated above, no need to filter by status in UPDATE
+    const { data: updatedRows, error: updateError } = await supabase
       .from('dispatch_notes')
       .update(updateData)
       .eq('id', dispatchId)
-      .select()
-      .single();
+      .select('id, status');
 
     if (updateError) {
       logger.error(`Error updating dispatch status:`, updateError);
-      throw updateError;
+      throw new Error(`Failed to update dispatch status: ${updateError.message}`);
+    }
+
+    // Verify the update was successful
+    if (!updatedRows || updatedRows.length === 0) {
+      throw new Error(`Dispatch note ${dispatchId} not found`);
+    }
+
+    const verifyDispatch = updatedRows[0];
+    if (verifyDispatch.status !== 'IN_TRANSIT') {
+      throw new Error('Failed to update dispatch status to IN_TRANSIT');
     }
 
     logger.info(`Dispatch ${dispatch.dispatch_number} sent to transit`);
 
-    return updatedDispatch || dispatch;
+    return {
+      success: true,
+      dispatch_id: dispatchId,
+      dispatch_number: dispatch.dispatch_number,
+      status: 'IN_TRANSIT'
+    };
   } catch (error) {
     logger.error(`Error in dispatchItems:`, error);
     throw error;
@@ -823,11 +893,15 @@ export async function updateDispatchLogistics(
     .from('dispatch_notes')
     .select('id, status, dispatch_number')
     .eq('id', dispatchId)
-    .single();
+    .maybeSingle();
 
   if (fetchError) {
     logger.error(`Error fetching dispatch ${dispatchId}:`, fetchError);
     throw new Error(`Dispatch not found: ${fetchError.message}`);
+  }
+
+  if (!dispatch) {
+    throw new Error('Dispatch note not found');
   }
 
   // Allow updates only if IN_TRANSIT (or READY, though READY is usually handled by dispatchItems)
@@ -850,17 +924,20 @@ export async function updateDispatchLogistics(
     .from('dispatch_notes')
     .update(updateData)
     .eq('id', dispatchId)
-    .select()
-    .single();
+    .select();
 
   if (updateError) {
     logger.error(`Error updating dispatch logistics:`, updateError);
     throw updateError;
   }
 
+  if (!updatedDispatch || updatedDispatch.length === 0) {
+    throw new Error('Failed to update dispatch logistics');
+  }
+
   logger.info(`Dispatch ${dispatch.dispatch_number} logistics updated by ${userId}`);
 
-  return updatedDispatch;
+  return updatedDispatch[0];
 }
 
 /**
@@ -875,11 +952,26 @@ export async function confirmDelivery(
   // Get dispatch details
   const { data: dispatch, error: fetchError } = await supabase
     .from('dispatch_notes')
-    .select('*, items:dispatch_items(*)')
+    .select('*')
     .eq('id', dispatchId)
-    .single();
+    .maybeSingle();
 
   if (fetchError) throw fetchError;
+
+  if (!dispatch) {
+    throw new Error('Dispatch note not found');
+  }
+
+  // Fetch dispatch items separately
+  const { data: items, error: itemsError } = await supabase
+    .from('dispatch_items')
+    .select('*')
+    .eq('dispatch_id', dispatchId);
+
+  if (itemsError) throw itemsError;
+
+  // Attach items to dispatch
+  dispatch.items = items || [];
 
   // Update each item and add to branch stock
   for (const receivedItem of receivedItems) {
@@ -1094,7 +1186,7 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
     supabase.from('branches').select('id, name, code').in('id', toBranchIds),
     vehicleIds.length > 0 ? supabase.from('vehicles').select('id, registration_number, model').in('id', vehicleIds) : Promise.resolve({ data: [] }),
     driverIds.length > 0 ? supabase.from('drivers').select('id, name, license_number, phone').in('id', driverIds) : Promise.resolve({ data: [] }),
-    supabase.from('dispatch_items').select('*').in('dispatch_id', dispatchIds)
+    supabase.from('dispatch_items').select('id, dispatch_id, item_sku, dispatched_quantity, received_quantity, created_at').in('dispatch_id', dispatchIds)
   ]);
 
   const branches = branchesRes.data || [];
@@ -1184,7 +1276,7 @@ export async function isCentralStorekeeper(userId: string, branchId: number): Pr
     .from('branches')
     .select('is_central_warehouse')
     .eq('id', branchId)
-    .single();
+    .maybeSingle();
 
   return branch?.is_central_warehouse === true;
 }
@@ -1290,7 +1382,7 @@ export async function recordConversion(
     .select('quantity')
     .eq('branch_id', branchId)
     .eq('item_sku', rawSku)
-    .single();
+    .maybeSingle();
 
   if (rawError && rawError.code !== 'PGRST116') throw rawError;
   const currentRawQty = rawStock?.quantity || 0;
@@ -1304,7 +1396,7 @@ export async function recordConversion(
     .from('simple_items')
     .select('item_name')
     .eq('sku', producedSku)
-    .single();
+    .maybeSingle();
 
   const producedItemName = producedItem?.item_name || producedSku;
 
