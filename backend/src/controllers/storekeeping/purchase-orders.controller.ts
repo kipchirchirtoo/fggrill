@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
+import { emailService } from '../../services/email.service';
 
 // @desc    Get all purchase orders
 // @route   GET /api/purchase-orders
@@ -23,7 +24,7 @@ export const getPurchaseOrders = async (
             .order('created_at', { ascending: false });
 
         if (supplier_id) query = query.eq('supplier_id', supplier_id);
-        if (status) query = query.eq('status', status);
+        if (status) query = query.eq('status', (status as string).toLowerCase());
         if (from_date) query = query.gte('po_date', from_date);
         if (to_date) query = query.lte('po_date', to_date);
 
@@ -205,6 +206,12 @@ export const createPurchaseOrder = async (
 
         if (!supplier_id || !items || items.length === 0) {
             throw new AppError('Supplier and items are required', 400);
+        }
+
+        // Validate dates to avoid constraint violations
+        const resolvedPoDate = po_date || new Date().toISOString().split('T')[0];
+        if (expected_delivery_date && expected_delivery_date < resolvedPoDate) {
+            throw new AppError('Expected delivery date cannot be before the purchase order date', 400);
         }
 
         // Validate UUID format for supplier_id
@@ -730,6 +737,85 @@ export const deletePurchaseOrder = async (
         });
     } catch (error) {
         logger.error('Error deleting purchase order:', error);
+        next(error);
+    }
+};
+
+// @desc    Send purchase order to supplier via email
+// @route   POST /api/purchase-orders/:id/send
+// @access  Private
+export const sendPurchaseOrderToSupplier = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.id;
+
+        // Fetch PO with items and supplier
+        const { data: order, error: orderError } = await supabase
+            .from('store_purchase_orders')
+            .select('*, supplier:store_suppliers(*)')
+            .eq('id', id)
+            .single();
+
+        if (orderError || !order) {
+            throw new AppError('Purchase order not found', 404);
+        }
+
+        if (!order.supplier?.email) {
+            throw new AppError('Supplier does not have an email address configured', 400);
+        }
+
+        // Fetch items
+        const { data: items, error: itemsError } = await supabase
+            .from('store_po_items')
+            .select('*')
+            .eq('po_id', id);
+
+        if (itemsError) throw itemsError;
+
+        // Fetch item names/descriptions
+        const skus = items?.map(i => i.item_id) || [];
+        const { data: itemDetails } = await supabase
+            .from('simple_items')
+            .select('sku, description, unit_of_measure')
+            .in('sku', skus);
+
+        const enrichedItems = (items || []).map(item => {
+            const detail = itemDetails?.find(d => d.sku === item.item_id);
+            return {
+                ...item,
+                item_name: detail?.description || item.item_id
+            };
+        });
+
+        const fullOrderDetails = {
+            ...order,
+            items: enrichedItems
+        };
+
+        // Send email
+        await emailService.sendPurchaseOrderEmail(order.supplier.email, fullOrderDetails);
+
+        // Update PO status
+        await supabase
+            .from('store_purchase_orders')
+            .update({
+                sent_to_supplier: true,
+                sent_at: new Date().toISOString(),
+                sent_by_id: userId,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        res.status(200).json({
+            success: true,
+            message: `Purchase order sent to ${order.supplier.email}`
+        });
+    } catch (error) {
+        logger.error('Error sending purchase order:', error);
         next(error);
     }
 };

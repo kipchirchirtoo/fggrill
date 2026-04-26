@@ -61,6 +61,7 @@ export const procurementAPI = {
   approvePurchaseOrder:(id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/approve`, { method: 'PUT' }),
   cancelPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/cancel`,  { method: 'PUT' }),
   deletePurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`,         { method: 'DELETE' }),
+  sendPurchaseOrder:   (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/send`,    { method: 'POST' }),
 
   // GRNs
   getGRNs:    (params?: { supplier_id?: string; status?: string; po_id?: string; from_date?: string; to_date?: string }) =>

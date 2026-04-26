@@ -586,6 +586,21 @@ export default function SupplierDetailPage() {
                                                             >
                                                                 <Download className="h-4 w-4" />
                                                             </button>
+                                                            {po.status === 'approved' && (
+                                                                <button
+                                                                    className="text-stone-400 hover:text-blue-600"
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            toast.info(`Sending PO ${po.po_number} to supplier...`);
+                                                                            const res = await procurementAPI.sendPurchaseOrder(po.id);
+                                                                            if (res.success) toast.success('PO sent via email');
+                                                                        } catch (e: any) { toast.error(e.message || 'Failed to send'); }
+                                                                    }}
+                                                                    title="Send PO to Supplier"
+                                                                >
+                                                                    <Mail className="h-4 w-4" />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>

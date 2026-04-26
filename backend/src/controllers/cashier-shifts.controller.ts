@@ -36,16 +36,17 @@ export const getShiftLogs = async (
             'branch_manager',
             'accountant',
             'branch_accountant',
-            'auditor'
+            'auditor',
+            'it_manager'
         ];
         
         const isManager = managerRoles.includes((userRole || '').toString().toLowerCase()) || isGlobalRole(userRole?.toString());
         
+        // Priority: if a manager provides a cashier_id, filter by it.
+        // Otherwise, if not a manager, FORCE filter by their own userId.
         if (!isManager) {
-            // Non-managers (all cashier roles) can ONLY see their own shifts
             query = query.eq('cashier_id', userId);
         } else if (cashier_id) {
-            // Managers can filter by specific cashier if they want
             query = query.eq('cashier_id', cashier_id);
         }
 
@@ -120,17 +121,22 @@ export const getShiftLogs = async (
                     };
                 }
 
-                // Fallback: aggregate from source revenue tables by time window only (no branch filter)
+                // Fallback: aggregate from source revenue tables
+                // CRITICAL: Must filter by branch_id AND cashier_id to prevent cross-shift/cross-branch leakage
                 const [
                     { data: restOrders },
                     { data: barOrders },
                 ] = await Promise.all([
                     supabase.from('restaurant_orders')
                         .select('total_amount, payment_method')
+                        .eq('branch_id', branchId)
+                        .eq('created_by', shift.cashier_id)
                         .gte('created_at', shift.shift_start)
                         .lte('created_at', shiftEnd),
                     supabase.from('bar_orders')
                         .select('total_amount, payment_method')
+                        .eq('branch_id', branchId)
+                        .eq('created_by', shift.cashier_id)
                         .gte('created_at', shift.shift_start)
                         .lte('created_at', shiftEnd),
                 ]);
@@ -268,16 +274,21 @@ export const getShiftLog = async (
             // Step 2: fallback — aggregate from source revenue tables by time window only
             if (!rpcOk) {
                 try {
+                    // Fallback: aggregate from source revenue tables
                     const [
                         { data: restOrders },
                         { data: barOrders },
                     ] = await Promise.all([
                         supabase.from('restaurant_orders')
                             .select('total_amount, payment_method')
+                            .eq('branch_id', branchId)
+                            .eq('created_by', shift.cashier_id)
                             .gte('created_at', shift.shift_start)
                             .lte('created_at', shiftEnd),
                         supabase.from('bar_orders')
                             .select('total_amount, payment_method')
+                            .eq('branch_id', branchId)
+                            .eq('created_by', shift.cashier_id)
                             .gte('created_at', shift.shift_start)
                             .lte('created_at', shiftEnd),
                     ]);

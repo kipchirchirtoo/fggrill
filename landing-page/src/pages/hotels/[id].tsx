@@ -3,7 +3,7 @@ import HotelBranchPage from '@/components/hotel/HotelBranchPage';
 import { FALLBACK_BRANCHES } from '@/services/hotels.service';
 
 interface Props {
-  branchId: number;
+  branchId: string;
 }
 
 export default function HotelPage({ branchId }: Props) {
@@ -18,8 +18,8 @@ export const getStaticPaths: GetStaticPaths = async () => {
 };
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {
-  const branchId = Number(params?.id);
-  const branch = FALLBACK_BRANCHES.find(b => b.id === branchId);
-  if (!branch) return { notFound: true };
+  const branchId = String(params?.id);
+  // We can't easily fetch live data at build time for dynamic IDs without the API running,
+  // but we can ensure the props pass the ID string correctly.
   return { props: { branchId } };
 };

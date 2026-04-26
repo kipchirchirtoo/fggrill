@@ -39,6 +39,7 @@ export const openShift = async (req: Request, res: Response) => {
     const branch_id = req.user?.branch_id;
 
     if (!sales_point_id || opening_cash_float === undefined) {
+      logger.warn(`[openShift] Missing required fields: sales_point_id=${sales_point_id}, opening_cash_float=${opening_cash_float}`);
       return res.status(400).json({
         success: false,
         error: 'Sales point and opening cash float are required'
@@ -54,6 +55,7 @@ export const openShift = async (req: Request, res: Response) => {
       .single();
 
     if (existingShift) {
+      logger.info(`[openShift] Cashier ${cashier_id} already has an open shift: ${existingShift.shift_number}`);
       return res.status(400).json({
         success: false,
         error: `You already have an open shift: ${existingShift.shift_number}`
@@ -63,15 +65,31 @@ export const openShift = async (req: Request, res: Response) => {
     // Check if sales point already has an open shift
     const { data: pointShift } = await supabase
       .from('cashier_shifts')
-      .select('id, shift_number')
+      .select(`
+        id, 
+        shift_number, 
+        cashier_id
+      `)
       .eq('sales_point_id', sales_point_id)
       .eq('status', 'open')
       .single();
 
     if (pointShift) {
+      // Try to get cashier name for better error message
+      let cashierName = 'another cashier';
+      if (pointShift.cashier_id) {
+        const { data: u } = await supabase
+          .from('users')
+          .select('first_name, last_name')
+          .eq('id', pointShift.cashier_id)
+          .single();
+        if (u) cashierName = `${u.first_name} ${u.last_name}`;
+      }
+
+      logger.info(`[openShift] Sales point ${sales_point_id} already has an open shift: ${pointShift.shift_number} (by ${cashierName})`);
       return res.status(400).json({
         success: false,
-        error: `This sales point already has an open shift`
+        error: `This sales point already has an open shift (${pointShift.shift_number}) by ${cashierName}`
       });
     }
 
@@ -352,15 +370,19 @@ export const getShifts = async (req: Request, res: Response) => {
       `)
       .order('start_time', { ascending: false });
 
-    // Role-based filtering — DB stores roles lowercase
-    const cashierRoles = ['cashier', 'receptionist', 'kyogong_spa_cashier', 'kyogong_executive_bar_cashier', 'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'];
+    // Manager roles for Kyogong
+    const managerRoles = ['super_admin', 'general_manager', 'branch_manager', 'branch_accountant', 'auditor', 'it_manager'];
     const lowerRole = (user_role || '').toLowerCase();
-    if (cashierRoles.includes(lowerRole)) {
+    const isManager = managerRoles.includes(lowerRole);
+
+    if (!isManager) {
+      // Non-managers only see their own shifts
       query = query.eq('cashier_id', user_id);
-    } else if (lowerRole === 'branch_accountant') {
+    } else if (!['super_admin', 'general_manager', 'auditor'].includes(lowerRole)) {
+      // Branch-level managers only see their branch
       query = query.eq('branch_id', branch_id);
     }
-    // AUDITOR and SUPER_ADMIN see all
+    // Global managers see all branches (already set to order only)
 
     // Apply filters
     if (status) {

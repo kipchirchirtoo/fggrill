@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
-import { fetchAPI } from '@/lib/api';
+import { fetchAPI, buildQuery } from '@/lib/api';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -21,6 +21,7 @@ import { UserRole } from '@/lib/user-roles';
 interface ShiftLog {
     id: string;
     shift_number: string;
+    cashier_id?: string | number;
     cashier_name: string;
     shift_start: string;
     shift_end?: string;
@@ -80,8 +81,18 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
             const res = await kyogongAPI.getSalesPoints({ is_active: true });
             if (res.success && res.data) {
                 setSalesPoints(res.data);
-                if (pointCode) {
-                    const p = res.data.find((x: any) => x.code === pointCode);
+                
+                // Auto-selection based on role or pointCode
+                let targetCode = pointCode;
+                if (!targetCode) {
+                    if (user?.role === UserRole.KYOGONG_SPA_CASHIER) targetCode = 'SPA';
+                    else if (user?.role === UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER) targetCode = 'EXEC_BAR';
+                    else if (user?.role === UserRole.KYOGONG_SPORTS_BAR_CASHIER) targetCode = 'SPORTS_BAR';
+                    else if (user?.role === UserRole.KYOGONG_RECEPTION_CASHIER) targetCode = 'RECEPTION';
+                }
+
+                if (targetCode) {
+                    const p = res.data.find((x: any) => x.code === targetCode);
                     if (p) setSelectedPointId(p.id.toString());
                 } else if (res.data.length === 1) {
                     setSelectedPointId(res.data[0].id.toString());
@@ -92,13 +103,38 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
 
     const fetchShifts = async () => {
         try {
+            const isOnlyCashier = [
+                UserRole.CASHIER,
+                UserRole.KYOGONG_SPA_CASHIER,
+                UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+                UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+                UserRole.KYOGONG_RECEPTION_CASHIER
+            ].includes(user?.role as any);
+
+            const params: any = { branch_id: activeBranchId || user?.branch_id };
+            if (isOnlyCashier && user?.id) {
+                params.cashier_id = user.id;
+            }
+
             const response = isKyogong 
-                ? await kyogongAPI.getShifts({ branch_id: activeBranchId || user?.branch_id })
-                : await fetchAPI(`/cashier/shifts?branch_id=${activeBranchId || user?.branch_id}`) as any;
+                ? await kyogongAPI.getShifts(params)
+                : await fetchAPI(`/cashier/shifts${buildQuery(params)}`) as any;
             
             if (response.success) {
-                const mappedShifts: ShiftLog[] = (response.data || []).map((s: any) => ({
+                let shiftData = response.data || [];
+                
+                // Extra safety: Filter on client side if not managerial
+                if (isOnlyCashier && user?.id) {
+                    shiftData = shiftData.filter((s: any) => 
+                        s.cashier_id === user.id || 
+                        s.user_id === user.id || 
+                        s.staff_id === user.id
+                    );
+                }
+
+                const mappedShifts: ShiftLog[] = shiftData.map((s: any) => ({
                     ...s,
+                    cashier_id: s.cashier_id || s.user_id || s.staff_id,
                     shift_start: s.shift_start || s.start_time || s.opened_at,
                     shift_end: s.shift_end || s.end_time || s.closed_at,
                     opening_float: s.opening_float || s.opening_cash_float || 0,
@@ -286,7 +322,9 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
                                     >
                                         <option value="">Select Point...</option>
                                         {salesPoints.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                            <option key={p.id} value={p.id} disabled={p.is_occupied}>
+                                                {p.name} {p.is_occupied ? '(OCCUPIED)' : ''}
+                                            </option>
                                         ))}
                                     </select>
                                 </div>
@@ -354,7 +392,10 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
                                             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
                                                 <div>
                                                     <p className="text-xs text-stone-500">Cashier</p>
-                                                    <p className="font-bold">{shift.cashier_name || 'Unknown'}</p>
+                                                    <p className="font-bold">
+                                                        {shift.cashier_name || 
+                                                         (shift.cashier_id?.toString() === user?.id?.toString() ? `${user?.firstName} ${user?.lastName}` : 'Unknown')}
+                                                    </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-stone-500">Date</p>

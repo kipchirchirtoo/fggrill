@@ -10,7 +10,7 @@ import { IOSBadge } from '@/components/ui/ios-badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { procurementAPI } from '@/lib/api';
-import { FileText, Plus, Search, RefreshCw, Eye, CheckCircle2, XCircle, ShoppingCart } from 'lucide-react';
+import { FileText, Plus, Search, RefreshCw, Eye, CheckCircle2, XCircle, ShoppingCart, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -262,14 +262,34 @@ export default function PurchaseOrdersPage() {
 
                                 <div className="flex gap-2 pt-4 border-t border-stone-100">
                                     <IOSButton variant="secondary" onClick={() => setIsViewOpen(false)} className="h-9 px-4 text-xs">Close</IOSButton>
+                                    
+                                    {viewPO.status === 'draft' && (
+                                        <IOSButton onClick={() => handleApprove(viewPO.id)} className="h-9 px-4 text-xs flex-1" leftIcon={<CheckCircle2 size={14} />}>Submit for Approval</IOSButton>
+                                    )}
+
                                     {viewPO.status === 'pending_approval' && (user?.role === UserRole.AUDITOR || user?.role === UserRole.SUPER_ADMIN) && (
                                         <>
                                             <IOSButton onClick={() => handleApprove(viewPO.id)} className="h-9 px-4 text-xs flex-1" leftIcon={<CheckCircle2 size={14} />}>Approve PO</IOSButton>
                                             <IOSButton variant="secondary" onClick={() => handleCancel(viewPO.id)} className="h-9 px-4 text-xs border-red-100 text-red-500 hover:bg-red-50" leftIcon={<XCircle size={14} />}>Reject</IOSButton>
                                         </>
                                     )}
+
                                     {viewPO.status === 'approved' && (
-                                        <IOSButton variant="secondary" leftIcon={<ShoppingCart size={14} />} className="h-9 px-4 text-xs" onClick={() => window.location.href = `/dashboard/central-store/receiving?po_id=${viewPO.id}`}>Receive Goods</IOSButton>
+                                        <div className="flex gap-2 flex-1">
+                                            <IOSButton 
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await procurementAPI.sendPurchaseOrder(viewPO.id);
+                                                        if (res.success) toast.success('PO sent to supplier');
+                                                    } catch (e: any) { toast.error(e.message || 'Failed to send'); }
+                                                }}
+                                                className="h-9 px-4 text-xs flex-1 bg-[#007AFF]" 
+                                                leftIcon={<Mail size={14} />}
+                                            >
+                                                Send to Supplier
+                                            </IOSButton>
+                                            <IOSButton variant="secondary" leftIcon={<ShoppingCart size={14} />} className="h-9 px-4 text-xs flex-1" onClick={() => window.location.href = `/dashboard/central-store/receiving?po_id=${viewPO.id}`}>Receive Goods</IOSButton>
+                                        </div>
                                     )}
                                 </div>
                             </div>

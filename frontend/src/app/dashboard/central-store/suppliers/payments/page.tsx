@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
@@ -27,6 +28,7 @@ interface Invoice {
     invoice_number: string;
     po_number: string;
     balance_due: number;
+    supplier_id?: string;
 }
 
 interface Payment {
@@ -63,9 +65,9 @@ const formatCurrency = (val: any) => {
     }
 };
 
-export default function PaymentsPage() {
-    console.log("PAYMENTS_PAGE_VERSION_BUGFIX_V1");
-
+function PaymentsContent() {
+    const searchParams = useSearchParams();
+    const invoiceIdParam = searchParams.get('invoice');
 
     const { user } = useAuth();
     const [payments, setPayments] = useState<Payment[]>([]);
@@ -89,6 +91,28 @@ export default function PaymentsPage() {
         reference_number: '',
         notes: ''
     });
+
+    const preFillFromInvoice = useCallback(async (invId: string) => {
+        try {
+            const res = await procurementAPI.getInvoice(invId);
+            if (res.success && res.data) {
+                const inv = res.data;
+                setNewPayment(prev => ({
+                    ...prev,
+                    supplier_id: inv.supplier_id,
+                    invoice_id: inv.id,
+                    amount: String(inv.balance_due || inv.total_amount || '')
+                }));
+                setIsRecordModalOpen(true);
+            }
+        } catch (e) { console.error("Error pre-filling invoice:", e); }
+    }, []);
+
+    useEffect(() => {
+        if (invoiceIdParam) {
+            preFillFromInvoice(invoiceIdParam);
+        }
+    }, [invoiceIdParam, preFillFromInvoice]);
 
     const fetchSuppliers = useCallback(async () => {
         try {
@@ -455,5 +479,13 @@ export default function PaymentsPage() {
             </Dialog>
             </DashboardLayout>
         </ProtectedRoute>
+    );
+}
+
+export default function PaymentsPage() {
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center h-screen"><RefreshCw className="animate-spin text-stone-300" /></div>}>
+            <PaymentsContent />
+        </Suspense>
     );
 }

@@ -31,11 +31,28 @@ export const getSalesPoints = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    logger.info(`[getSalesPoints] Found ${salesPoints?.length || 0} sales points`);
+    // Fetch all open shifts for this branch to see which points are occupied
+    const { data: openShifts } = await supabase
+      .from('cashier_shifts')
+      .select('id, sales_point_id, cashier_id, shift_number')
+      .eq('branch_id', branch_id)
+      .eq('status', 'open');
+
+    // Map occupation status
+    const enrichedSalesPoints = (salesPoints || []).map(sp => {
+      const currentShift = (openShifts || []).find(s => s.sales_point_id === sp.id);
+      return {
+        ...sp,
+        is_occupied: !!currentShift,
+        current_shift: currentShift || null
+      };
+    });
+
+    logger.info(`[getSalesPoints] Found ${enrichedSalesPoints.length} sales points`);
 
     res.json({
       success: true,
-      data: salesPoints || []
+      data: enrichedSalesPoints
     });
   } catch (error: any) {
     logger.error('Get sales points error:', { message: error.message, stack: error.stack });

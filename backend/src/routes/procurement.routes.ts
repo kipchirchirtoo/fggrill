@@ -10,7 +10,8 @@ import {
     approvePurchaseOrder,
     cancelPurchaseOrder,
     updatePurchaseOrder,
-    deletePurchaseOrder
+    deletePurchaseOrder,
+    sendPurchaseOrderToSupplier
 } from '../controllers/storekeeping/purchase-orders.controller';
 
 import {
@@ -92,6 +93,7 @@ router.route('/purchase-orders/:id')
 
 router.put('/purchase-orders/:id/approve', authorize(procurementRoles), approvePurchaseOrder);
 router.put('/purchase-orders/:id/cancel', authorize(procurementRoles), cancelPurchaseOrder);
+router.post('/purchase-orders/:id/send', authorize(procurementRoles), sendPurchaseOrderToSupplier);
 
 // =====================================================
 // GOODS RECEIVED NOTES (GRN)

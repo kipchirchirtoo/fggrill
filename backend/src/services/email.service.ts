@@ -354,6 +354,15 @@ class EmailService {
     }
   }
 
+  async sendPurchaseOrderEmail(supplierEmail: string, poDetails: any): Promise<void> {
+    const supplierName = poDetails.supplier?.name || 'Supplier';
+    await this.sendEmail({
+      to: supplierEmail,
+      subject: `PURCHASE ORDER: ${poDetails.po_number} - Famous Gate Hotels`,
+      html: enterpriseEmailTemplates.purchaseOrder(supplierName, poDetails)
+    });
+  }
+
   private stripHtml(html: string): string {
     return html.replace(/<[^>]*>/g, '');
   }

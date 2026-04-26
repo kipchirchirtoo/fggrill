@@ -302,6 +302,40 @@ export const createGRN = async (
 
         logger.info(`GRN ${grn_number} auto-approved and stock updated`);
 
+        // 4. Create a DRAFT Supplier Invoice automatically if invoice_number is provided
+        if (invoice_number) {
+            try {
+                logger.info(`Creating draft invoice ${invoice_number} for GRN ${grn_number}...`);
+                const { error: invError } = await supabase
+                    .from('store_supplier_invoices')
+                    .insert({
+                        invoice_number,
+                        supplier_id,
+                        grn_id: newGRN.id,
+                        po_id,
+                        invoice_date: grn_date || new Date().toISOString().split('T')[0],
+                        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default 30 days
+                        subtotal: total_value,
+                        vat_rate_type: 'standard_16',
+                        vat_amount: total_value * 0.16,
+                        total_amount: total_value * 1.16,
+                        balance_due: total_value * 1.16,
+                        created_by_id: userId,
+                        status: 'draft',
+                        notes: `Automatically generated from GRN ${grn_number}`
+                    });
+                
+                if (invError) {
+                    logger.error(`Failed to create automatic invoice for GRN ${grn_number}:`, invError);
+                    // We don't fail the whole GRN if invoice creation fails, just log it
+                } else {
+                    logger.info(`Automatic draft invoice ${invoice_number} created.`);
+                }
+            } catch (err) {
+                logger.error('Error in automatic invoice creation:', err);
+            }
+        }
+
         res.status(201).json({
             success: true,
             message: 'Goods received and stock updated successfully',

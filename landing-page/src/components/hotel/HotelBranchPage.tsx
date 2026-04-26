@@ -96,18 +96,18 @@ const BRANCH_DESCRIPTIONS: Record<number, { tagline: string; story: string; high
 };
 
 const AMENITIES = [
-  { icon: '🛏️', label: 'Premium Rooms' },
-  { icon: '🍽️', label: 'Restaurant & Bar' },
-  { icon: '📶', label: 'Free WiFi' },
-  { icon: '🅿️', label: 'Free Parking' },
-  { icon: '🎉', label: 'Event Spaces' },
-  { icon: '☕', label: '24/7 Room Service' },
-  { icon: '🧺', label: 'Laundry Service' },
-  { icon: '📺', label: 'Smart TVs' },
+  { label: 'Premium Rooms' },
+  { label: 'Restaurant & Bar' },
+  { label: 'Free WiFi' },
+  { label: 'Free Parking' },
+  { label: 'Event Spaces' },
+  { label: '24/7 Room Service' },
+  { label: 'Laundry Service' },
+  { label: 'Smart TVs' },
 ];
 
 interface Props {
-  branchId: number;
+  branchId: string;
 }
 
 export default function HotelBranchPage({ branchId }: Props) {
@@ -116,11 +116,17 @@ export default function HotelBranchPage({ branchId }: Props) {
 
   useEffect(() => { setHeroLoaded(true); }, []);
 
-  const branch = FALLBACK_BRANCHES.find(b => b.id === branchId);
-  if (!branch) return null;
+  const branch = FALLBACK_BRANCHES.find(b => String(b.id) === String(branchId));
+  if (!branch) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
+      <h1 className="text-3xl font-display text-gray-900 mb-4">Branch Not Found</h1>
+      <p className="text-gray-600 mb-8">We couldn&apos;t find the hotel branch you were looking for.</p>
+      <Link href="/hotels" className="lp-btn lp-btn--gold">Back to All Hotels</Link>
+    </div>
+  );
 
-  const gallery = BRANCH_GALLERY[branchId] || [];
-  const desc = BRANCH_DESCRIPTIONS[branchId] || { tagline: '', story: '', highlight: '' };
+  const gallery = BRANCH_GALLERY[Number(branchId)] || BRANCH_GALLERY[1];
+  const desc = BRANCH_DESCRIPTIONS[Number(branchId)] || BRANCH_DESCRIPTIONS[1];
   const branchShortName = branch.name.split('—')[1]?.trim() || branch.name;
 
   return (
@@ -178,10 +184,10 @@ export default function HotelBranchPage({ branchId }: Props) {
                 </div>
                 <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                   <a href={`tel:${branch.phone}`} className="lp-btn lp-btn--gold" style={{ fontSize: '0.9rem' }}>
-                    📞 {branch.phone}
+                    Call: {branch.phone}
                   </a>
                   <a href={`mailto:${branch.email}`} className="lp-btn lp-btn--outline" style={{ fontSize: '0.9rem' }}>
-                    ✉️ Email Us
+                    Email Us
                   </a>
                 </div>
               </Reveal>
@@ -190,7 +196,7 @@ export default function HotelBranchPage({ branchId }: Props) {
                 <div className="lp-welcome__img-card">
                   <img src={gallery[1] || '/rooms-bg.jpg'} alt={`${branch.name} interior`} />
                   <div className="lp-welcome__badge">
-                    <span className="lp-welcome__badge-num">5★</span>
+                    <span className="lp-welcome__badge-num">5 Star</span>
                     <span className="lp-welcome__badge-label">Luxury Stay</span>
                   </div>
                 </div>
@@ -211,7 +217,7 @@ export default function HotelBranchPage({ branchId }: Props) {
               {AMENITIES.map((a, i) => (
                 <Reveal key={i} delay={i * 80}>
                   <div className="branch-amenity">
-                    <span className="branch-amenity__icon">{a.icon}</span>
+                    <span className="branch-amenity__dot" />
                     <span className="branch-amenity__label">{a.label}</span>
                   </div>
                 </Reveal>
@@ -234,7 +240,7 @@ export default function HotelBranchPage({ branchId }: Props) {
                   <button onClick={() => setSelectedImg(src)} className="branch-gallery__btn" aria-label={`View photo ${i + 1}`}>
                     <img src={src} alt={`${branch.name} — photo ${i + 1}`} loading="lazy" />
                     <div className="branch-gallery__overlay">
-                      <span>🔍 View</span>
+                      <span>View Gallery</span>
                     </div>
                   </button>
                 </Reveal>
@@ -290,7 +296,12 @@ export default function HotelBranchPage({ branchId }: Props) {
           transform: translateY(-6px);
           box-shadow: 0 8px 32px rgba(184,149,90,0.18);
         }
-        .branch-amenity__icon { font-size: 2.2rem; }
+        .branch-amenity__dot { 
+          width: 8px;
+          height: 8px;
+          background: var(--gold);
+          border-radius: 50%;
+        }
         .branch-amenity__label {
           font-family: var(--font-body);
           font-size: 0.9rem;

@@ -6,8 +6,8 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { storeAPI, InventoryItem } from '@/lib/api';
-import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight, ShoppingCart } from 'lucide-react';
+import { storeAPI, procurementAPI, suppliersAPI, InventoryItem } from '@/lib/api';
+import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight, ShoppingCart, ListChecks, FileText } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,6 +27,13 @@ export default function InventoryPage() {
   const [globalStats, setGlobalStats] = useState({ total: 0, inStock: 0, lowStock: 0, outOfStock: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  
+  // Procurement Planner States
+  const [viewMode, setViewMode] = useState<'inventory' | 'planner'>('inventory');
+  const [plannedItems, setPlannedItems] = useState<Set<string>>(new Set());
+  const [poModalOpen, setPoModalOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
 
   const fetchItems = useCallback(async () => {
     setIsLoading(true);
@@ -108,6 +115,55 @@ export default function InventoryPage() {
     setModalOpen(true);
   };
 
+  const fetchSuppliers = async () => {
+    try {
+      const res = await suppliersAPI.getSuppliers();
+      if (res.success) setSuppliers(res.data || []);
+    } catch (e) { /* ignore */ }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'planner') fetchSuppliers();
+  }, [viewMode]);
+
+  const toggleItemSelection = (sku: string) => {
+    const next = new Set(plannedItems);
+    if (next.has(sku)) next.delete(sku);
+    else next.add(sku);
+    setPlannedItems(next);
+  };
+
+  const handleCreateBulkPO = async () => {
+    if (!selectedSupplierId || plannedItems.size === 0) return;
+    setIsActionLoading(true);
+    try {
+      const poItems = items
+        .filter(item => plannedItems.has(item.sku))
+        .map(item => ({
+          item_id: item.sku,
+          quantity: Math.max(1, (item.reorder_level || 0) * 2 - (item.quantity || 0)), // Suggest quantity
+          unit_price: item.cost_price || 0
+        }));
+
+      const res = await procurementAPI.createPurchaseOrder({
+        supplier_id: selectedSupplierId,
+        items: poItems,
+        auto_approve: false
+      });
+
+      if (res.success) {
+        toast.success('Draft Purchase Order created successfully');
+        setPoModalOpen(false);
+        setPlannedItems(new Set());
+        window.location.href = '/dashboard/central-store/suppliers/purchase-orders';
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create PO');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const suggestAttributes = async (name: string) => {
     if (name.length < 3) return;
     try {
@@ -140,17 +196,48 @@ export default function InventoryPage() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Master Inventory</h1>
-              <p className="text-stone-500 mt-0.5">Central catalog of all items and materials</p>
+              <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">
+                {viewMode === 'inventory' ? 'Master Inventory' : 'Procurement Planner'}
+              </h1>
+              <p className="text-stone-500 mt-0.5">
+                {viewMode === 'inventory' 
+                  ? 'Central catalog of all items and materials' 
+                  : 'Identify low stock items and generate purchase orders'}
+              </p>
             </div>
             <div className="flex items-center gap-2">
+              <div className="bg-stone-100 p-1 rounded-lg flex mr-2">
+                <button 
+                  onClick={() => setViewMode('inventory')}
+                  className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${viewMode === 'inventory' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                >
+                  Inventory
+                </button>
+                <button 
+                  onClick={() => setViewMode('planner')}
+                  className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${viewMode === 'planner' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                >
+                  PO Planner
+                </button>
+              </div>
               <button onClick={fetchItems} className="btn-secondary h-10 px-3">
                 <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
-              <button onClick={openAddModal} className="btn-primary h-10">
-                <Plus className="h-4 w-4" />
-                <span>Add New Item</span>
-              </button>
+              {viewMode === 'inventory' ? (
+                <button onClick={openAddModal} className="btn-primary h-10">
+                  <Plus className="h-4 w-4" />
+                  <span>Add New Item</span>
+                </button>
+              ) : (
+                <button 
+                  onClick={() => setPoModalOpen(true)} 
+                  disabled={plannedItems.size === 0}
+                  className="btn-primary h-10 bg-emerald-600 hover:bg-emerald-700 border-emerald-600 disabled:opacity-50"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Create PO ({plannedItems.size})</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -172,7 +259,10 @@ export default function InventoryPage() {
                 <p className="text-2xl font-semibold text-stone-900 mt-1">{globalStats.inStock}</p>
               )}
             </div>
-            <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-amber-400">
+            <div 
+              onClick={() => { setViewMode('planner'); setSearchQuery(''); }}
+              className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-amber-400 cursor-pointer hover:bg-stone-50 transition-colors"
+            >
               <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Low Stock</p>
               {isLoading ? (
                 <Skeleton className="h-8 w-16 mt-1" />
@@ -195,7 +285,7 @@ export default function InventoryPage() {
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
               <input
-                placeholder="Search by name or SKU..."
+                placeholder={viewMode === 'inventory' ? "Search by name or SKU..." : "Filter low stock items..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
@@ -209,6 +299,21 @@ export default function InventoryPage() {
               <table className="w-full text-sm">
                 <thead className="bg-stone-50/50 border-b border-stone-100 text-left">
                   <tr>
+                    {viewMode === 'planner' && (
+                      <th className="p-4 w-10">
+                        <input 
+                          type="checkbox" 
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const lowStock = items.filter(i => (i.quantity ?? 0) <= (i.reorder_level ?? 0)).map(i => i.sku);
+                              setPlannedItems(new Set(lowStock));
+                            } else {
+                              setPlannedItems(new Set());
+                            }
+                          }}
+                        />
+                      </th>
+                    )}
                     <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider">Item Details</th>
                     <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider">Category</th>
                     <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider text-center">Stock Level</th>
@@ -219,52 +324,68 @@ export default function InventoryPage() {
                 <tbody className="divide-y divide-stone-50">
                   {isLoading ? (
                     Array(5).fill(0).map((_, i) => (
-                      <tr key={`skeleton-${i}`}><td colSpan={5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
+                      <tr key={`skeleton-${i}`}><td colSpan={viewMode === 'planner' ? 6 : 5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
                     ))
                   ) : items.length === 0 ? (
-                    <tr><td colSpan={5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
+                    <tr><td colSpan={viewMode === 'planner' ? 6 : 5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
                   ) : (
-                    items.map((item, idx) => {
-                      const isLow = (item.quantity ?? 0) <= (item.reorder_level ?? 0);
-                      return (
-                        <tr key={item.id ?? item.sku ?? idx} className="hover:bg-stone-50/50 transition-colors">
-                          <td className="p-4">
-                            <p className="font-medium text-stone-900">{item.item_name || item.name}</p>
-                            <p className="text-[11px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{item.sku}</p>
-                          </td>
-                          <td className="p-4">
-                            <span className="text-[12px] bg-stone-100 px-2 py-0.5 rounded text-stone-600 capitalize font-medium">{item.category}</span>
-                          </td>
-                          <td className="p-4 text-center">
-                            <div className="flex flex-col items-center">
-                              <p className={`font-semibold ${isLow ? 'text-amber-600' : 'text-stone-900'}`}>{item.quantity ?? 0} {item.unit_of_measure || item.unit}</p>
-                              <p className="text-[10px] text-stone-400 mt-0.5">Min: {item.reorder_level ?? 0}</p>
-                            </div>
-                          </td>
-                          <td className="p-4 text-right">
-                            <p className="font-medium text-stone-900">KES {formatNumber(item.cost_price || 0)}</p>
-                            <p className="text-[10px] text-stone-400 mt-0.5">Per {item.unit_of_measure || item.unit}</p>
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => window.location.href = `/dashboard/central-store/receiving?sku=${item.sku}`}
-                                className="p-2 text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                title="Receive Stock"
-                              >
-                                <ShoppingCart className="h-4 w-4" />
-                              </button>
-                              <button onClick={() => openEditModal(item)} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors">
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button onClick={() => handleDelete(item.sku)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    items
+                      .filter(item => {
+                        if (viewMode === 'planner') {
+                          return (item.quantity ?? 0) <= (item.reorder_level ?? 0);
+                        }
+                        return true;
+                      })
+                      .map((item, idx) => {
+                        const isLow = (item.quantity ?? 0) <= (item.reorder_level ?? 0);
+                        return (
+                          <tr key={item.id ?? item.sku ?? idx} className={`hover:bg-stone-50/50 transition-colors ${plannedItems.has(item.sku) ? 'bg-emerald-50/30' : ''}`}>
+                            {viewMode === 'planner' && (
+                              <td className="p-4">
+                                <input 
+                                  type="checkbox" 
+                                  checked={plannedItems.has(item.sku)}
+                                  onChange={() => toggleItemSelection(item.sku)}
+                                />
+                              </td>
+                            )}
+                            <td className="p-4">
+                              <p className="font-medium text-stone-900">{item.item_name || item.name}</p>
+                              <p className="text-[11px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{item.sku}</p>
+                            </td>
+                            <td className="p-4">
+                              <span className="text-[12px] bg-stone-100 px-2 py-0.5 rounded text-stone-600 capitalize font-medium">{item.category}</span>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex flex-col items-center">
+                                <p className={`font-semibold ${isLow ? 'text-amber-600' : 'text-stone-900'}`}>{item.quantity ?? 0} {item.unit_of_measure || item.unit}</p>
+                                <p className="text-[10px] text-stone-400 mt-0.5">Min: {item.reorder_level ?? 0}</p>
+                              </div>
+                            </td>
+                            <td className="p-4 text-right">
+                              <p className="font-medium text-stone-900">KES {formatNumber(item.cost_price || 0)}</p>
+                              <p className="text-[10px] text-stone-400 mt-0.5">Per {item.unit_of_measure || item.unit}</p>
+                            </td>
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => window.location.href = `/dashboard/central-store/receiving?sku=${item.sku}`}
+                                  className="p-2 text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                  title="Receive Stock"
+                                >
+                                  <ShoppingCart className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => openEditModal(item)} className="p-2 text-stone-400 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors">
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => handleDelete(item.sku)} className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>
@@ -384,6 +505,49 @@ export default function InventoryPage() {
                 className="btn-primary"
               >
                 {isActionLoading ? 'Saving...' : isEdit ? 'Update Catalog' : 'Add to Catalog'}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* PO Creation Modal - Procurement Planner */}
+        <Dialog open={poModalOpen} onOpenChange={setPoModalOpen}>
+          <DialogContent className="max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden rounded-xl">
+            <div className="bg-stone-50 border-b border-stone-100 p-5">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-stone-900">Create Bulk Purchase Order</DialogTitle>
+                <p className="text-[12px] text-stone-500 mt-1">Select a supplier to fulfill the selected {plannedItems.size} items.</p>
+              </DialogHeader>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Target Supplier</label>
+                <select
+                  className="w-full h-10 px-3 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400 transition-shadow"
+                  value={selectedSupplierId}
+                  onChange={(e) => setSelectedSupplierId(e.target.value)}
+                >
+                  <option value="">Select a supplier...</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.supplier_code})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg flex gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                <p className="text-[12px] text-amber-800 leading-relaxed">
+                  System will suggest quantities based on 2x Reorder Level minus current stock. You can edit these in the Draft PO before approving.
+                </p>
+              </div>
+            </div>
+            <div className="p-5 bg-stone-50 border-t border-stone-100 flex justify-end gap-2">
+              <button onClick={() => setPoModalOpen(false)} className="btn-secondary">Cancel</button>
+              <button
+                onClick={handleCreateBulkPO}
+                disabled={isActionLoading || !selectedSupplierId}
+                className="btn-primary bg-emerald-600 hover:bg-emerald-700 border-emerald-600"
+              >
+                {isActionLoading ? 'Creating PO...' : 'Generate Draft PO'}
               </button>
             </div>
           </DialogContent>

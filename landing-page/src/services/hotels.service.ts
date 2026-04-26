@@ -16,7 +16,7 @@ const ENDPOINTS = {
  */
 export const FALLBACK_BRANCHES: any[] = [
   {
-    id: 1,
+    id: '1',
     name: 'Famous Gates Hotel — Kyogong',
     location: 'Bomet, Kenya',
     address: 'Kyogong, Bomet County, Kenya',
@@ -25,7 +25,7 @@ export const FALLBACK_BRANCHES: any[] = [
     email: 'famousgatesbmt@gmail.com',
   },
   {
-    id: 2,
+    id: '2',
     name: 'Famous Gates Hotel — Bomet Town',
     location: 'Bomet, Kenya',
     address: 'Bomet Town, Bomet County, Kenya',
@@ -34,7 +34,7 @@ export const FALLBACK_BRANCHES: any[] = [
     email: 'famousgatesbmt@gmail.com',
   },
   {
-    id: 3,
+    id: '3',
     name: 'Famous Gates Hotel — Mogogoshiek',
     location: 'Bomet, Kenya',
     address: 'Mogogoshiek, Bomet County, Kenya',
@@ -43,7 +43,7 @@ export const FALLBACK_BRANCHES: any[] = [
     email: 'famousgatesbmt@gmail.com',
   },
   {
-    id: 4,
+    id: '4',
     name: 'Famous Gates Hotel — Sotik',
     location: 'Bomet, Kenya',
     address: 'Sotik, Bomet County, Kenya',
@@ -52,7 +52,7 @@ export const FALLBACK_BRANCHES: any[] = [
     email: 'famousgatesbmt@gmail.com',
   },
   {
-    id: 5,
+    id: '5',
     name: 'Famous Gates Hotel — Litein',
     location: 'Kericho, Kenya',
     address: 'Litein, Kericho County, Kenya',
@@ -61,7 +61,7 @@ export const FALLBACK_BRANCHES: any[] = [
     email: 'famousgatesbmt@gmail.com',
   },
   {
-    id: 6,
+    id: '6',
     name: 'Famous Gates Hotel — Kaplong',
     location: 'Bomet, Kenya',
     address: 'Kaplong, Bomet County, Kenya',
