@@ -1,185 +1,183 @@
 import { SEO } from '@/components/SEO';
 import Head from 'next/head';
+import { useState, useEffect, useRef } from 'react';
 import { Header, Footer } from '@/components/layout';
 
+// ——— Scroll-reveal hook ———
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold: 0.15 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { ref, visible };
+}
+
+// ——— Reveal Wrapper ———
+function Reveal({ children, delay = 0, className = '', style = {} }: { children: React.ReactNode; delay?: number; className?: string; style?: React.CSSProperties }) {
+  const { ref, visible } = useReveal();
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        ...style,
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(32px)',
+        transition: `opacity 0.8s ease ${delay}ms, transform 0.8s ease ${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function About() {
+  const [heroLoaded, setHeroLoaded] = useState(false);
+
+  useEffect(() => {
+    setHeroLoaded(true);
+  }, []);
+
   return (
     <>
       <SEO
-        title="About Us - FamousGate Hotels | Luxury Accommodation in Nairobi"
-        description="Discover FamousGate Hotels - your premier destination for luxury accommodation in Nairobi, Kenya. Experience world-class hospitality and comfort."
+        title="Our Story — FamousGate Hotels | Luxury Hospitality in Bomet"
+        description="Bomet Kenya — Discover the legacy of FamousGate Hotels. From our humble beginnings to becoming the pinnacle of luxury hospitality in Bomet."
         url="https://famousgatehotels.com/about"
         breadcrumbs={[
           { name: "About Us", item: "/about" }
         ]}
-        schemaList={[
-          JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "AboutPage",
-            "name": "About FamousGate Hotels",
-            "description": "At FamousGate Hotels, we redefine luxury hospitality in Nairobi."
-          })
-        ]}
       />
       <Head>
-        <meta name="keywords" content="about famousgate hotels, luxury hotels nairobi, hotel experience kenya, hospitality nairobi" />
+        <meta name="keywords" content="about famousgate hotels, luxury hotels bomet, hotel experience kenya, hospitality bomet" />
       </Head>
 
       <Header />
 
-      <main className="lp-page">
-        {/* Hero Section */}
-        <section className="lp-about-hero">
-          <div className="lp-container">
-            <h1 className="lp-about-hero__title">Experience Luxury & Comfort</h1>
-            <p className="lp-about-hero__subtitle">
-              Where elegance meets exceptional hospitality
+      <main>
+        {/* ===== HERO ===== */}
+        <section className="lp-hero">
+          <div className="lp-hero__bg" style={{ backgroundImage: "url('/hero-bg.jpg')" }} />
+          <div className="lp-hero__overlay" />
+          <div suppressHydrationWarning className={`lp-hero__content${heroLoaded ? ' loaded' : ''}`}>
+            <p className="lp-hero__eyebrow">Our Legacy</p>
+            <h1 className="lp-hero__title">
+              Crafting Timeless<br />
+              <em>Experiences</em>
+            </h1>
+            <div className="lp-hero__divider" />
+            <p className="lp-hero__subtitle">
+              A journey of excellence, hospitality, and the pursuit of ultimate comfort in the heart of Bomet.
             </p>
           </div>
+          <div className="lp-hero__scroll-hint">
+            <span>Scroll</span>
+            <div className="lp-hero__scroll-line" />
+          </div>
         </section>
 
-        {/* About Content */}
-        <section className="lp-section">
+        {/* ===== OUR STORY ===== */}
+        <section className="lp-welcome">
           <div className="lp-container">
-            <div className="lp-about-content">
-              <h2 className="lp-section__title">Welcome to FamousGate Hotels</h2>
-              <p className="lp-about-content__text">
-                At FamousGate Hotels, we redefine luxury hospitality in Nairobi. Our commitment to excellence
-                ensures every guest experiences unparalleled comfort, world-class amenities, and personalized service
-                that exceeds expectations.
-              </p>
-              <p className="lp-about-content__text">
-                With multiple locations across Nairobi, we offer convenient access to the city&apos;s business districts,
-                cultural attractions, and entertainment venues. Each of our hotels is designed to provide a sanctuary
-                of comfort and elegance, whether you&apos;re traveling for business or leisure.
-              </p>
-            </div>
-
-            <div className="lp-features-grid">
-              <div className="lp-feature-card">
-                <div className="lp-feature-card__icon">🏨</div>
-                <h3 className="lp-feature-card__title">Luxury Rooms</h3>
-                <p className="lp-feature-card__text">
-                  Spacious, elegantly furnished rooms with modern amenities and stunning views.
+            <div className="lp-welcome__grid">
+              <Reveal className="lp-welcome__text-col">
+                <p className="lp-eyebrow">Our Story</p>
+                <h2 className="lp-section-title">A Vision of<br /><em>Refinement</em></h2>
+                <div className="lp-divider" />
+                <p className="lp-body-text">
+                  Founded with a simple yet profound mission: to create a home away from home where luxury is not just a status, but an experience. FamousGate Hotels began as a vision to bring world-class hospitality to Bomet.
                 </p>
-              </div>
-
-              <div className="lp-feature-card">
-                <div className="lp-feature-card__icon">🍽️</div>
-                <h3 className="lp-feature-card__title">Fine Dining</h3>
-                <p className="lp-feature-card__text">
-                  Exquisite cuisine prepared by world-class chefs using the finest ingredients.
+                <p className="lp-body-text" style={{ marginTop: '1.25rem' }}>
+                  Over the years, we have grown into a collection of premier destinations, each reflecting the unique spirit of its location while maintaining the unwavering standards of the FamousGate brand.
                 </p>
-              </div>
+              </Reveal>
 
-              <div className="lp-feature-card">
-                <div className="lp-feature-card__icon">🎉</div>
-                <h3 className="lp-feature-card__title">Event Spaces</h3>
-                <p className="lp-feature-card__text">
-                  Versatile venues perfect for weddings, conferences, and special celebrations.
-                </p>
-              </div>
-
-              <div className="lp-feature-card">
-                <div className="lp-feature-card__icon">⭐</div>
-                <h3 className="lp-feature-card__title">Premium Service</h3>
-                <p className="lp-feature-card__text">
-                  24/7 concierge service dedicated to making your stay unforgettable.
-                </p>
-              </div>
+              <Reveal delay={150} className="lp-welcome__img-col">
+                <div className="lp-welcome__img-card">
+                  <img src="/rooms-bg.jpg" alt="The legacy of FamousGate Hotels" />
+                  <div className="lp-welcome__badge">
+                    <span className="lp-welcome__badge-num">15+</span>
+                    <span className="lp-welcome__badge-label">Years of Excellence</span>
+                  </div>
+                </div>
+              </Reveal>
             </div>
           </div>
         </section>
+
+        {/* ===== CORE VALUES ===== */}
+        <section className="lp-experiences" style={{ background: 'var(--warm-white)', paddingBottom: '9rem' }}>
+          <div className="lp-container">
+            <Reveal className="lp-section-header">
+              <p className="lp-eyebrow">The FG Way</p>
+              <h2 className="lp-section-title">Our Core&nbsp;<em>Values</em></h2>
+              <div className="lp-divider" />
+            </Reveal>
+
+            <div className="lp-cards">
+              {[
+                {
+                  tag: 'Hospitality',
+                  title: 'Guest-Centric Service',
+                  desc: 'Every interaction is an opportunity to exceed expectations and create lasting memories.',
+                  img: '/dining-bg.jpg',
+                },
+                {
+                  tag: 'Quality',
+                  title: 'Unwavering Excellence',
+                  desc: 'From the thread count of our linens to the seasoning of our dishes, perfection is our standard.',
+                  img: '/rooms-bg.jpg',
+                },
+                {
+                  tag: 'Innovation',
+                  title: 'Modern Luxury',
+                  desc: 'Continuously evolving to integrate the latest comforts while preserving timeless elegance.',
+                  img: '/events-bg.jpg',
+                },
+              ].map((card, i) => (
+                <Reveal key={i} delay={i * 130} className="lp-card">
+                  <div className="lp-card__img" style={{ backgroundImage: `url('${card.img}')` }}>
+                    <span className="lp-card__tag">{card.tag}</span>
+                  </div>
+                  <div className="lp-card__body">
+                    <h3 className="lp-card__title">{card.title}</h3>
+                    <p className="lp-card__desc">{card.desc}</p>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ===== STATS BAR ===== */}
+        <div className="lp-stats-bar">
+          <div className="lp-container">
+            <div className="lp-stats-bar__grid">
+              {[
+                { num: '4', label: 'Premier Branches' },
+                { num: '150+', label: 'Dedicated Staff' },
+                { num: '10k+', label: 'Happy Guests' },
+                { num: '5', label: 'Award Recognitions' },
+              ].map((stat, i) => (
+                <Reveal key={i} delay={i * 100} className="lp-stat">
+                  <div className="lp-stat__num">{stat.num}</div>
+                  <div className="lp-stat__label">{stat.label}</div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </div>
       </main>
 
       <Footer />
-
-      <style>{`
-        .lp-about-hero {
-          background: linear-gradient(135deg, #d4af37 0%, #aa8a2e 100%);
-          padding: 120px 0 80px;
-          text-align: center;
-          color: white;
-        }
-
-        .lp-about-hero__title {
-          font-family: 'Playfair Display', serif;
-          font-size: 3.5rem;
-          font-weight: 700;
-          margin-bottom: 1rem;
-        }
-
-        .lp-about-hero__subtitle {
-          font-size: 1.5rem;
-          opacity: 0.95;
-        }
-
-        .lp-about-content {
-          max-width: 800px;
-          margin: 0 auto 4rem;
-          text-align: center;
-        }
-
-        .lp-about-content__text {
-          font-size: 1.125rem;
-          line-height: 1.8;
-          color: #4a5568;
-          margin-bottom: 1.5rem;
-        }
-
-        .lp-features-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-          gap: 2rem;
-          margin-top: 3rem;
-        }
-
-        .lp-feature-card {
-          text-align: center;
-          padding: 2rem;
-          background: white;
-          border-radius: 12px;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .lp-feature-card:hover {
-          transform: translateY(-8px);
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-        }
-
-        .lp-feature-card__icon {
-          font-size: 3rem;
-          margin-bottom: 1rem;
-        }
-
-        .lp-feature-card__title {
-          font-family: 'Playfair Display', serif;
-          font-size: 1.5rem;
-          font-weight: 600;
-          margin-bottom: 0.75rem;
-          color: #2d3748;
-        }
-
-        .lp-feature-card__text {
-          color: #718096;
-          line-height: 1.6;
-        }
-
-        @media (max-width: 768px) {
-          .lp-about-hero__title {
-            font-size: 2.5rem;
-          }
-
-          .lp-about-hero__subtitle {
-            font-size: 1.25rem;
-          }
-
-          .lp-features-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </>
   );
 }

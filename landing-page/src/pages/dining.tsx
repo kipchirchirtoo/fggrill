@@ -1,231 +1,164 @@
 import { SEO } from '@/components/SEO';
 import Head from 'next/head';
+import { useState, useEffect, useRef } from 'react';
 import { Header, Footer } from '@/components/layout';
 
+// ——— Scroll-reveal hook ———
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold: 0.15 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { ref, visible };
+}
+
+// ——— Reveal Wrapper ———
+function Reveal({ children, delay = 0, className = '', style = {} }: { children: React.ReactNode; delay?: number; className?: string; style?: React.CSSProperties }) {
+  const { ref, visible } = useReveal();
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        ...style,
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(32px)',
+        transition: `opacity 0.8s ease ${delay}ms, transform 0.8s ease ${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function Dining() {
+  const [heroLoaded, setHeroLoaded] = useState(false);
+
+  useEffect(() => {
+    setHeroLoaded(true);
+  }, []);
+
   return (
     <>
       <SEO
-        title="Dining - FamousGate Hotels | Fine Dining in Nairobi"
-        description="Experience exquisite cuisine at FamousGate Hotels. Our restaurants offer fine dining with local and international flavors in elegant settings."
+        title="World-Class Dining — FamousGate Hotels | Fine Dining in Bomet"
+        description="Bomet Kenya — Experience the pinnacle of culinary excellence at FamousGate Hotels. From local delicacies to international flavors, masterfully served in Bomet."
         url="https://famousgatehotels.com/dining"
         breadcrumbs={[
           { name: "Dining", item: "/dining" }
         ]}
-        schemaList={[
-          JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Restaurant",
-            "name": "FamousGate Hotels Dining",
-            "sameAs": "https://famousgatehotels.com",
-            "address": {
-              "@type": "PostalAddress",
-              "addressLocality": "Nairobi",
-              "addressCountry": "KE"
-            }
-          })
-        ]}
       />
       <Head>
-        <meta name="keywords" content="fine dining nairobi, restaurant famousgate, hotel dining kenya, luxury restaurant nairobi" />
+        <meta name="keywords" content="fine dining bomet, restaurant famousgate, hotel dining kenya, luxury restaurant bomet" />
       </Head>
 
       <Header />
 
-      <main className="lp-page">
-        {/* Hero Section */}
-        <section className="lp-dining-hero">
-          <div className="lp-container">
-            <h1 className="lp-dining-hero__title">Culinary Excellence</h1>
-            <p className="lp-dining-hero__subtitle">
-              Savor the finest flavors from around the world
+      <main>
+        {/* ===== HERO ===== */}
+        <section className="lp-hero">
+          <div className="lp-hero__bg" style={{ backgroundImage: "url('/dining-bg.jpg')" }} />
+          <div className="lp-hero__overlay" />
+          <div suppressHydrationWarning className={`lp-hero__content${heroLoaded ? ' loaded' : ''}`}>
+            <p className="lp-hero__eyebrow">The Culinary Journey</p>
+            <h1 className="lp-hero__title">
+              Exquisite Flavors<br />
+              <em>Masterfully Served</em>
+            </h1>
+            <div className="lp-hero__divider" />
+            <p className="lp-hero__subtitle">
+              A celebration of taste and refinement, where every dish tells a story of tradition and innovation.
             </p>
+          </div>
+          <div className="lp-hero__scroll-hint">
+            <span>Scroll</span>
+            <div className="lp-hero__scroll-line" />
           </div>
         </section>
 
-        {/* Dining Content */}
-        <section className="lp-section">
+        {/* ===== DINING INTRO ===== */}
+        <section className="lp-welcome">
           <div className="lp-container">
-            <div className="lp-dining-intro">
-              <h2 className="lp-section__title">A Feast for the Senses</h2>
-              <p className="lp-dining-intro__text">
-                Our restaurants combine exceptional cuisine with elegant ambiance, creating unforgettable dining experiences.
-                From traditional Kenyan dishes to international favorites, every meal is crafted with passion and precision.
-              </p>
+            <div className="lp-welcome__grid">
+              <Reveal className="lp-welcome__text-col">
+                <p className="lp-eyebrow">Gourmet Experience</p>
+                <h2 className="lp-section-title">A Symphony of<br /><em>Taste</em></h2>
+                <div className="lp-divider" />
+                <p className="lp-body-text">
+                  Our culinary team brings world-class flavours to your table. From local specialities to international favourites, every dish is a celebration of taste and refinement.
+                </p>
+                <p className="lp-body-text" style={{ marginTop: '1.25rem' }}>
+                  We believe that dining is not just about the food — it is an atmosphere of elegance, service, and shared moments that linger in the memory.
+                </p>
+              </Reveal>
+
+              <Reveal delay={150} className="lp-welcome__img-col">
+                <div className="lp-welcome__img-card">
+                  <img src="/dining-bg.jpg" alt="Fine dining at FamousGate Hotels" />
+                  <div className="lp-welcome__badge">
+                    <span className="lp-welcome__badge-num">5★</span>
+                    <span className="lp-welcome__badge-label">Chef&apos;s Selection</span>
+                  </div>
+                </div>
+              </Reveal>
             </div>
+          </div>
+        </section>
 
-            <div className="lp-dining-grid">
-              <div className="lp-dining-card">
-                <div className="lp-dining-card__image">🍽️</div>
-                <h3 className="lp-dining-card__title">Fine Dining Restaurant</h3>
-                <p className="lp-dining-card__text">
-                  Experience gourmet cuisine in an elegant setting. Our signature restaurant offers a carefully curated menu
-                  featuring the finest local and international ingredients.
-                </p>
-                <ul className="lp-dining-card__features">
-                  <li>International & Local Cuisine</li>
-                  <li>Wine Selection</li>
-                  <li>Private Dining Available</li>
-                </ul>
-              </div>
+        {/* ===== DINING OPTIONS ===== */}
+        <section className="lp-experiences" style={{ background: 'var(--warm-white)', paddingBottom: '9rem' }}>
+          <div className="lp-container">
+            <Reveal className="lp-section-header">
+              <p className="lp-eyebrow">Our Venues</p>
+              <h2 className="lp-section-title">Discover Our&nbsp;<em>Venues</em></h2>
+              <div className="lp-divider" />
+            </Reveal>
 
-              <div className="lp-dining-card">
-                <div className="lp-dining-card__image">☕</div>
-                <h3 className="lp-dining-card__title">Café & Lounge</h3>
-                <p className="lp-dining-card__text">
-                  Relax in our comfortable café and lounge area. Perfect for casual meetings, afternoon tea,
-                  or simply unwinding with a premium coffee.
-                </p>
-                <ul className="lp-dining-card__features">
-                  <li>Specialty Coffee & Tea</li>
-                  <li>Light Meals & Pastries</li>
-                  <li>All-Day Service</li>
-                </ul>
-              </div>
-
-              <div className="lp-dining-card">
-                <div className="lp-dining-card__image">🍹</div>
-                <h3 className="lp-dining-card__title">Bar & Cocktails</h3>
-                <p className="lp-dining-card__text">
-                  Enjoy expertly crafted cocktails and premium spirits in our sophisticated bar.
-                  The perfect spot for evening drinks and socializing.
-                </p>
-                <ul className="lp-dining-card__features">
-                  <li>Signature Cocktails</li>
-                  <li>Premium Spirits</li>
-                  <li>Live Entertainment</li>
-                </ul>
-              </div>
-
-              <div className="lp-dining-card">
-                <div className="lp-dining-card__image">🥘</div>
-                <h3 className="lp-dining-card__title">Room Service</h3>
-                <p className="lp-dining-card__text">
-                  Enjoy our full menu from the comfort of your room. Our 24-hour room service ensures
-                  you can dine whenever you desire.
-                </p>
-                <ul className="lp-dining-card__features">
-                  <li>24/7 Availability</li>
-                  <li>Full Menu Selection</li>
-                  <li>In-Room Dining Experience</li>
-                </ul>
-              </div>
+            <div className="lp-cards">
+              {[
+                {
+                  tag: 'Fine Dining',
+                  title: 'Signature Restaurant',
+                  desc: 'Experience gourmet cuisine in an elegant setting. Featuring seasonal ingredients and curated wines.',
+                  img: '/dining-bg.jpg',
+                },
+                {
+                  tag: 'Casual',
+                  title: 'The Lounge & Café',
+                  desc: 'Perfect for casual meetings, afternoon tea, or simply unwinding with a premium coffee.',
+                  img: '/rooms-bg.jpg',
+                },
+                {
+                  tag: 'Evening',
+                  title: 'Bar & Cocktails',
+                  desc: 'Enjoy expertly crafted cocktails and premium spirits in our sophisticated bar.',
+                  img: '/events-bg.jpg',
+                },
+              ].map((card, i) => (
+                <Reveal key={i} delay={i * 130} className="lp-card">
+                  <div className="lp-card__img" style={{ backgroundImage: `url('${card.img}')` }}>
+                    <span className="lp-card__tag">{card.tag}</span>
+                  </div>
+                  <div className="lp-card__body">
+                    <h3 className="lp-card__title">{card.title}</h3>
+                    <p className="lp-card__desc">{card.desc}</p>
+                  </div>
+                </Reveal>
+              ))}
             </div>
           </div>
         </section>
       </main>
 
       <Footer />
-
-      <style>{`
-        .lp-dining-hero {
-          background: linear-gradient(135deg, #8b4513 0%, #654321 100%);
-          padding: 120px 0 80px;
-          text-align: center;
-          color: white;
-        }
-
-        .lp-dining-hero__title {
-          font-family: 'Playfair Display', serif;
-          font-size: 3.5rem;
-          font-weight: 700;
-          margin-bottom: 1rem;
-        }
-
-        .lp-dining-hero__subtitle {
-          font-size: 1.5rem;
-          opacity: 0.95;
-        }
-
-        .lp-dining-intro {
-          max-width: 800px;
-          margin: 0 auto 4rem;
-          text-align: center;
-        }
-
-        .lp-dining-intro__text {
-          font-size: 1.125rem;
-          line-height: 1.8;
-          color: #4a5568;
-        }
-
-        .lp-dining-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 2rem;
-          margin-top: 3rem;
-        }
-
-        .lp-dining-card {
-          background: white;
-          border-radius: 12px;
-          padding: 2rem;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .lp-dining-card:hover {
-          transform: translateY(-8px);
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-        }
-
-        .lp-dining-card__image {
-          font-size: 4rem;
-          text-align: center;
-          margin-bottom: 1.5rem;
-        }
-
-        .lp-dining-card__title {
-          font-family: 'Playfair Display', serif;
-          font-size: 1.75rem;
-          font-weight: 600;
-          margin-bottom: 1rem;
-          color: #2d3748;
-        }
-
-        .lp-dining-card__text {
-          color: #718096;
-          line-height: 1.6;
-          margin-bottom: 1.5rem;
-        }
-
-        .lp-dining-card__features {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .lp-dining-card__features li {
-          padding: 0.5rem 0;
-          color: #4a5568;
-          border-bottom: 1px solid #e2e8f0;
-        }
-
-        .lp-dining-card__features li:last-child {
-          border-bottom: none;
-        }
-
-        .lp-dining-card__features li::before {
-          content: '✓ ';
-          color: #d4af37;
-          font-weight: bold;
-          margin-right: 0.5rem;
-        }
-
-        @media (max-width: 768px) {
-          .lp-dining-hero__title {
-            font-size: 2.5rem;
-          }
-
-          .lp-dining-hero__subtitle {
-            font-size: 1.25rem;
-          }
-
-          .lp-dining-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </>
   );
 }

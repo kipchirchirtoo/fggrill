@@ -201,7 +201,7 @@ export default function Home() {
         guests: parseInt(guests),
         totalAmount: totalAmount,
         hotelName: branchName,
-        hotelAddress: branch?.address || 'Nairobi, Kenya',
+        hotelAddress: branch?.address || 'Bomet, Kenya',
         hotelPhone: '0706782828',
         hotelEmail: 'famousgatesbmt@gmail.com'
       });
@@ -251,8 +251,8 @@ export default function Home() {
         )}
       </div>
       <SEO
-        title="FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi, Kenya"
-        description="Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Nairobi, Kenya. Book your luxury stay today."
+        title="FamousGate Hotels — Luxury Stay & Fine Dining in Bomet, Kenya"
+        description="Bomet Kenya — Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Bomet. Book your luxury stay today."
         breadcrumbs={[]}
       />
       <Head>
@@ -274,7 +274,7 @@ export default function Home() {
               "address": {
                 "@type": "PostalAddress",
                 "addressCountry": "KE",
-                "addressLocality": "Nairobi"
+                "addressLocality": "Bomet"
               },
               "contactPoint": {
                 "@type": "ContactPoint",
@@ -305,7 +305,7 @@ export default function Home() {
               "address": {
                 "@type": "PostalAddress",
                 "addressCountry": "KE",
-                "addressLocality": "Nairobi"
+                "addressLocality": "Bomet"
               },
               "telephone": "+254-706-782828",
               "email": "famousgatesbmt@gmail.com",
@@ -343,7 +343,7 @@ export default function Home() {
               "address": {
                 "@type": "PostalAddress",
                 "addressCountry": "KE",
-                "addressLocality": "Nairobi"
+                "addressLocality": "Bomet"
               },
               "geo": {
                 "@type": "GeoCoordinates",
@@ -465,7 +465,7 @@ export default function Home() {
           <Reveal className="lp-dining__text">
             <p className="lp-eyebrow lp-eyebrow--light">The Culinary Journey</p>
             <h2 className="lp-section-title lp-section-title--light">
-              Gourmet Dining.<br /><em>Masterfully Served.</em>
+              World-Class Dining.<br /><em>Masterfully Served.</em>
             </h2>
             <div className="lp-divider lp-divider--gold" />
             <p className="lp-body-text lp-body-text--light">
@@ -732,7 +732,7 @@ export default function Home() {
                   </div>
                   <div className="lp-room-card__body">
                     <div className="lp-room-card__price">
-                      <span className="lp-room-card__price-val">KES {room.type?.base_price?.toLocaleString() || '5,000'}</span>
+                      <span className="lp-room-card__price-val">KES {room.type?.base_price?.toLocaleString() || '3,000'}</span>
                       <span className="lp-room-card__price-unit">/ night</span>
                     </div>
                     <ul className="lp-room-card__features">
@@ -790,7 +790,7 @@ export default function Home() {
                   </div>
                   <div className="lp-room-card__body">
                     <div className="lp-room-card__price">
-                      <span className="lp-room-card__price-val">KES {room.type?.base_price?.toLocaleString() || '5,000'}</span>
+                      <span className="lp-room-card__price-val">KES {room.type?.base_price?.toLocaleString() || '3,000'}</span>
                       <span className="lp-room-card__price-unit">/ night</span>
                     </div>
                     <ul className="lp-room-card__features">
@@ -902,7 +902,7 @@ export default function Home() {
                 </div>
                 <div className="lp-modal__summary-row lp-modal__summary-total">
                   <span>Total Amount (Est):</span>
-                  <span>KES {selectedRoom.type?.base_price?.toLocaleString() || '5,000'}</span>
+                  <span>KES {selectedRoom.type?.base_price?.toLocaleString() || '3,000'}</span>
                 </div>
               </div>
 

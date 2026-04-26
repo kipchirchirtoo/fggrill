@@ -11,8 +11,8 @@ interface SEOProps {
 }
 
 const SITE_URL = 'https://famousgatehotels.com';
-const DEFAULT_TITLE = 'FamousGate Hotels — Luxury Stay & Fine Dining in Nairobi';
-const DEFAULT_DESC = 'Experience world-class hospitality with premium rooms, gourmet dining, and exceptional service in Nairobi, Kenya.';
+const DEFAULT_TITLE = 'FamousGate Hotels — Luxury Stay & Fine Dining in Bomet';
+const DEFAULT_DESC = 'Bomet Kenya — Experience world-class hospitality with premium rooms, gourmet dining, and exceptional service in Bomet.';
 const DEFAULT_IMAGE = `${SITE_URL}/hero-bg.jpg`;
 
 export function SEO({

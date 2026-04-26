@@ -29,9 +29,9 @@ export default function Document() {
 
         {/* Geo Tags */}
         <meta name="geo.region" content="KE" />
-        <meta name="geo.placename" content="Nairobi" />
-        <meta name="geo.position" content="-1.286389;36.817223" />
-        <meta name="ICBM" content="-1.286389, 36.817223" />
+        <meta name="geo.placename" content="Bomet" />
+        <meta name="geo.position" content="-0.7813;35.3416" />
+        <meta name="ICBM" content="-0.7813, 35.3416" />
 
         {/* Contact Information */}
         <meta name="contact" content="famousgatesbmt@gmail.com" />

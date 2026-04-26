@@ -1,19 +1,55 @@
 import { SEO } from '@/components/SEO';
 import Head from 'next/head';
+import { useState, useEffect, useRef } from 'react';
 import { Header, Footer } from '@/components/layout';
 import { HotelList } from '@/components/hotel';
 import { useBranches } from '@/hooks/useHotels';
 import { Hotel } from '@/types';
-
 import Link from 'next/link';
 
-/**
- * Hotels Page
- * Displays all FamousGate Hotels properties in a grid layout
- * Requirements: 1.1, 1.3, 1.5, 7.5
- */
+// ——— Scroll-reveal hook ———
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold: 0.15 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { ref, visible };
+}
+
+// ——— Reveal Wrapper ———
+function Reveal({ children, delay = 0, className = '', style = {} }: { children: React.ReactNode; delay?: number; className?: string; style?: React.CSSProperties }) {
+  const { ref, visible } = useReveal();
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        ...style,
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(32px)',
+        transition: `opacity 0.8s ease ${delay}ms, transform 0.8s ease ${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function HotelsPage() {
+  const [heroLoaded, setHeroLoaded] = useState(false);
   const { data: branches, isLoading, error } = useBranches();
+
+  useEffect(() => {
+    setHeroLoaded(true);
+  }, []);
 
   // Transform branches to Hotel format
   const hotels: Hotel[] = (branches || [])
@@ -24,7 +60,7 @@ export default function HotelsPage() {
       location: branch.location,
       description: `Experience luxury and comfort at ${branch.name}. Located in ${branch.location}, we offer world-class amenities and exceptional service.`,
       shortDescription: `Premium hospitality in ${branch.location}`,
-      primaryImage: '/rooms-bg.jpg', // Default image, can be customized per branch
+      primaryImage: '/rooms-bg.jpg',
       images: ['/rooms-bg.jpg', '/dining-bg.jpg', '/events-bg.jpg'],
       amenities: [
         'Free WiFi',
@@ -51,91 +87,70 @@ export default function HotelsPage() {
   return (
     <>
       <SEO
-        title="Our Hotels & Locations — FamousGate Hotels in Kenya"
-        description="Discover all FamousGate Hotels locations across Kenya. Premium accommodations, world-class dining, and exceptional service. Find your perfect luxury hotel destination."
+        title="Our Hotels & Locations — FamousGate Hotels | Luxury Stay in Bomet"
+        description="Bomet Kenya — Discover the premier collection of FamousGate Hotels. From urban sanctuaries to serene escapes, find your perfect luxury stay in Bomet."
         url="https://famousgatehotels.com/hotels"
         breadcrumbs={[
           { name: "Hotels", item: "/hotels" }
         ]}
-        schemaList={[
-          JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "ItemList",
-            "name": "FamousGate Hotels Locations",
-            "description": "All FamousGate Hotels locations across Kenya",
-            "numberOfItems": hotels.length,
-            "itemListElement": hotels.map((hotel, index) => ({
-              "@type": "ListItem",
-              "position": index + 1,
-              "item": {
-                "@type": "Hotel",
-                "name": hotel.name,
-                "description": hotel.description,
-                "address": {
-                  "@type": "PostalAddress",
-                  "addressLocality": hotel.location,
-                  "addressCountry": "KE"
-                },
-                "telephone": hotel.contactInfo.phone,
-                "email": hotel.contactInfo.email
-              }
-            }))
-          })
-        ]}
       />
       <Head>
-        <meta name="keywords" content="FamousGate Hotels locations, luxury hotels Kenya, hotel branches Kenya, premium hotels Nairobi, boutique hotels Kenya, hotel destinations Kenya" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        <meta name="keywords" content="FamousGate Hotels locations, luxury hotels Bomet, hotel branches Kenya, premium hotels Bomet, boutique hotels Kenya" />
       </Head>
 
       <Header />
 
-      <main className="min-h-screen bg-neutral-50">
-        {/* Page Header */}
-        <section className="bg-gradient-to-b from-primary-50 to-white py-16 md:py-24">
-          <div className="lp-container">
-            <div className="text-center max-w-3xl mx-auto">
-              <p className="text-primary-600 font-medium mb-4 tracking-wide uppercase text-sm">
-                Our Locations
-              </p>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-neutral-900 mb-6">
-                Discover Our <em className="text-primary-600 italic">Hotels</em>
-              </h1>
-              <div className="w-24 h-1 bg-primary-500 mx-auto mb-6" />
-              <p className="text-lg text-neutral-600 leading-relaxed">
-                From urban sanctuaries to serene escapes, FamousGate Hotels offers premium
-                hospitality across multiple locations. Each property is designed to provide
-                exceptional comfort and unforgettable experiences.
-              </p>
-            </div>
+      <main>
+        {/* ===== HERO ===== */}
+        <section className="lp-hero">
+          <div className="lp-hero__bg" style={{ backgroundImage: "url('/rooms-bg.jpg')" }} />
+          <div className="lp-hero__overlay" />
+          <div suppressHydrationWarning className={`lp-hero__content${heroLoaded ? ' loaded' : ''}`}>
+            <p className="lp-hero__eyebrow">The Collection</p>
+            <h1 className="lp-hero__title">
+              Discover Our<br />
+              <em>Hotels</em>
+            </h1>
+            <div className="lp-hero__divider" />
+            <p className="lp-hero__subtitle">
+              From urban sanctuaries to serene escapes, FamousGate Hotels offers premium hospitality across multiple locations.
+            </p>
+          </div>
+          <div className="lp-hero__scroll-hint">
+            <span>Scroll</span>
+            <div className="lp-hero__scroll-line" />
           </div>
         </section>
 
-        {/* Hotels Grid */}
-        <section className="py-16 md:py-20">
+        {/* ===== HOTELS GRID ===== */}
+        <section className="lp-welcome" style={{ background: 'var(--warm-white)' }}>
           <div className="lp-container">
-            <HotelList hotels={hotels} isLoading={isLoading} error={error || null} />
+            <Reveal className="lp-section-header">
+              <p className="lp-eyebrow">Locations</p>
+              <h2 className="lp-section-title">Explore Our&nbsp;<em>Properties</em></h2>
+              <div className="lp-divider" />
+            </Reveal>
+            
+            <Reveal delay={100}>
+              <HotelList hotels={hotels} isLoading={isLoading} error={error || null} />
+            </Reveal>
           </div>
         </section>
 
-        {/* Call to Action */}
-        <section className="bg-primary-600 py-16 md:py-20">
+        {/* ===== CTA SECTION ===== */}
+        <section className="lp-stats-bar" style={{ padding: '8rem 0' }}>
           <div className="lp-container">
-            <div className="text-center max-w-2xl mx-auto">
-              <h2 className="text-3xl md:text-4xl font-display font-bold text-white mb-6">
-                Ready to Experience <em className="italic">Luxury?</em>
-              </h2>
-              <p className="text-primary-100 text-lg mb-8">
-                Book your stay today and discover why guests choose FamousGate Hotels for
-                their most memorable occasions.
-              </p>
-              <Link
-                href="/#reservations"
-                className="inline-block px-8 py-4 bg-white text-primary-600 font-semibold rounded-md hover:bg-primary-50 transition-colors duration-300"
-              >
-                Book Your Stay
-              </Link>
+            <div style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto' }}>
+              <Reveal>
+                <h2 className="lp-section-title lp-section-title--light">Ready to Experience&nbsp;<em>Luxury?</em></h2>
+                <div className="lp-divider" style={{ margin: '1.5rem auto 2.5rem' }} />
+                <p className="lp-body-text lp-body-text--light" style={{ margin: '0 auto 3rem' }}>
+                  Book your stay today and discover why guests choose FamousGate Hotels for their most memorable occasions.
+                </p>
+                <Link href="/#reservations" className="lp-btn lp-btn--gold">
+                  Book Your Stay
+                </Link>
+              </Reveal>
             </div>
           </div>
         </section>
