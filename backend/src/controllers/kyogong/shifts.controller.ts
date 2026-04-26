@@ -62,35 +62,16 @@ export const openShift = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if sales point already has an open shift
+    // Check if sales point already has an open shift (Log as warning but don't block)
     const { data: pointShift } = await supabase
       .from('cashier_shifts')
-      .select(`
-        id, 
-        shift_number, 
-        cashier_id
-      `)
+      .select('id, shift_number, cashier_id')
       .eq('sales_point_id', sales_point_id)
       .eq('status', 'open')
-      .single();
+      .maybeSingle();
 
     if (pointShift) {
-      // Try to get cashier name for better error message
-      let cashierName = 'another cashier';
-      if (pointShift.cashier_id) {
-        const { data: u } = await supabase
-          .from('users')
-          .select('first_name, last_name')
-          .eq('id', pointShift.cashier_id)
-          .single();
-        if (u) cashierName = `${u.first_name} ${u.last_name}`;
-      }
-
-      logger.info(`[openShift] Sales point ${sales_point_id} already has an open shift: ${pointShift.shift_number} (by ${cashierName})`);
-      return res.status(400).json({
-        success: false,
-        error: `This sales point already has an open shift (${pointShift.shift_number}) by ${cashierName}`
-      });
+      logger.info(`[openShift] Sales point ${sales_point_id} already has an open shift by cashier ${pointShift.cashier_id}. Allowing secondary shift.`);
     }
 
     // Generate shift number
