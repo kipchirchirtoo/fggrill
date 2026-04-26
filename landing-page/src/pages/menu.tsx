@@ -1,5 +1,4 @@
 import { SEO } from '@/components/SEO';
-import Head from 'next/head';
 import { Header, Footer } from '@/components/layout';
 import { useState, useEffect, useRef } from 'react';
 
