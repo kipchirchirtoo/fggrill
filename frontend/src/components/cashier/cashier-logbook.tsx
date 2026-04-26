@@ -34,7 +34,7 @@ interface ShiftLog {
     total_mpesa_sales: number;
     total_card_sales: number;
     transaction_count: number;
-    status: 'open' | 'closed' | 'reconciled' | 'verified';
+    status: 'OPEN' | 'CLOSED' | 'reconciled' | 'verified';
 }
 
 export function CashierLogbook({ type, source, pointCode }: { type?: string; source?: string; pointCode?: string }) {
@@ -116,41 +116,47 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
                 params.cashier_id = user.id;
             }
 
-            const response = isKyogong 
-                ? await kyogongAPI.getShifts(params)
-                : await fetchAPI(`/cashier/shifts${buildQuery(params)}`) as any;
+            // Fetch from both systems
+            const [stdRes, kyoRes] = await Promise.all([
+                fetchAPI(`/cashier/shifts${buildQuery(params)}`),
+                kyogongAPI.getShifts(params)
+            ]);
             
-            if (response.success) {
-                let shiftData = response.data || [];
-                
-                // Extra safety: Filter on client side if not managerial
-                if (isOnlyCashier && user?.id) {
-                    shiftData = shiftData.filter((s: any) => 
-                        s.cashier_id === user.id || 
-                        s.user_id === user.id || 
-                        s.staff_id === user.id
-                    );
-                }
+            let allShifts: any[] = [];
 
-                const mappedShifts: ShiftLog[] = shiftData.map((s: any) => ({
-                    ...s,
-                    cashier_id: s.cashier_id || s.user_id || s.staff_id,
-                    shift_start: s.shift_start || s.start_time || s.opened_at,
-                    shift_end: s.shift_end || s.end_time || s.closed_at,
-                    opening_float: s.opening_float || s.opening_cash_float || 0,
-                    total_sales: s.total_sales || s.total_revenue || 0,
-                    total_cash_sales: s.total_cash_sales || s.total_cash_in || 0,
-                    total_mpesa_sales: s.total_mpesa_sales || s.total_mpesa_in || 0,
-                    total_card_sales: s.total_card_sales || s.total_card_in || 0,
-                    transaction_count: s.transaction_count || s.total_transactions || 0,
-                }));
-
-                setShifts(mappedShifts);
-                const open = mappedShifts.find((s: ShiftLog) => s.status === 'open');
-                setCurrentShift(open || null);
-            } else if (response.message) {
-                toast.error(response.message);
+            if (stdRes.success) {
+                allShifts = [...allShifts, ...(stdRes.data || []).map((s: any) => ({ ...s, module: 'standard' }))];
             }
+            if (kyoRes.success) {
+                allShifts = [...allShifts, ...(kyoRes.data || []).map((s: any) => ({ ...s, module: 'kyogong' }))];
+            }
+
+            const mappedShifts: ShiftLog[] = allShifts.map((s: any) => ({
+                ...s,
+                cashier_id: s.cashier_id || s.user_id || s.staff_id,
+                shift_start: s.shift_start || s.start_time || s.opened_at,
+                shift_end: s.shift_end || s.end_time || s.closed_at,
+                opening_float: s.opening_float || s.opening_cash_float || 0,
+                total_sales: s.total_sales || s.total_revenue || 0,
+                total_cash_sales: s.total_cash_sales || s.total_cash_in || 0,
+                total_mpesa_sales: s.total_mpesa_sales || s.total_mpesa_in || 0,
+                total_card_sales: s.total_card_sales || s.total_card_in || 0,
+                transaction_count: s.transaction_count || s.total_transactions || 0,
+                status: (s.status || '').toLowerCase() as any,
+                module: s.module
+            }));
+
+            // Sort by date desc
+            mappedShifts.sort((a, b) => new Date(b.shift_start).getTime() - new Date(a.shift_start).getTime());
+
+            setShifts(mappedShifts);
+            
+            // Find active shift for the CURRENT module
+            const open = mappedShifts.find((s: any) => 
+                s.status === 'open' && 
+                (isKyogong ? s.module === 'kyogong' : s.module === 'standard')
+            );
+            setCurrentShift(open || null);
         } catch (error: any) {
             toast.error(error.message || 'Failed to load shifts');
         }
@@ -236,11 +242,13 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
     };
 
     const getStatusColor = (status: string) => {
-        switch (status) {
+        const s = (status || '').toLowerCase();
+        switch (s) {
             case 'open': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
             case 'closed': return 'bg-orange-50 text-orange-700 border-orange-200';
             case 'reconciled': return 'bg-blue-50 text-blue-700 border-blue-200';
-            case 'verified': return 'bg-purple-50 text-purple-700 border-purple-200';
+            case 'verified': 
+            case 'approved': return 'bg-purple-50 text-purple-700 border-purple-200';
             default: return 'bg-stone-50 text-stone-700 border-stone-200';
         }
     };
@@ -322,8 +330,8 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
                                     >
                                         <option value="">Select Point...</option>
                                         {salesPoints.map(p => (
-                                            <option key={p.id} value={p.id} disabled={p.is_occupied}>
-                                                {p.name} {p.is_occupied ? '(OCCUPIED)' : ''}
+                                            <option key={p.id} value={p.id}>
+                                                {p.name} {p.is_occupied ? `(OCCUPIED by ${p.current_shift?.cashier_id === user?.id ? 'YOU' : 'Another Cashier'})` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -371,7 +379,7 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
             <div>
                 <h3 className="font-bold text-stone-900 mb-4">Recent Shifts</h3>
                 <div className="space-y-3">
-                    {shifts.filter(s => s.status !== 'open').slice(0, 10).map((shift) => {
+                    {shifts.filter(s => s.status !== 'OPEN').slice(0, 10).map((shift) => {
                         const isExpanded = expandedShiftId === shift.id;
                         const variance = shift.variance ?? 0;
                         return (
@@ -385,6 +393,9 @@ export function CashierLogbook({ type, source, pointCode }: { type?: string; sou
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <span className="font-bold text-stone-900">{shift.shift_number}</span>
+                                                <span className={`px-2 py-0.5 text-[10px] font-black rounded-full border ${shift.module === 'kyogong' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+                                                    {shift.module === 'kyogong' ? 'KYOGONG' : 'FAMOUS GATE'}
+                                                </span>
                                                 <span className={`px-2 py-0.5 text-xs font-bold rounded-full border ${getStatusColor(shift.status)}`}>
                                                     {shift.status.toUpperCase()}
                                                 </span>

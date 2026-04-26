@@ -46,7 +46,7 @@ export const recordPettyCash = async (req: Request, res: Response) => {
         });
       }
 
-      if (shift.status !== 'open') {
+      if (shift.status !== 'OPEN') {
         return res.status(400).json({
           success: false,
           error: 'Cannot record petty cash for closed shift'

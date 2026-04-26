@@ -31,7 +31,7 @@ export const createTransaction = async (req: Request, res: Response) => {
       .from('cashier_shifts')
       .select('*, sales_point:sales_points(*)')
       .eq('id', shift_id)
-      .eq('status', 'open')
+      .eq('status', 'OPEN')
       .single();
 
     if (shiftError || !shift) {
@@ -259,7 +259,7 @@ export const voidTransaction = async (req: Request, res: Response) => {
       });
     }
 
-    if (transaction.shift.status !== 'open') {
+    if (transaction.shift.status !== 'OPEN') {
       return res.status(400).json({
         success: false,
         error: 'Cannot void transaction after shift is closed'

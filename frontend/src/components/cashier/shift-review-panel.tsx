@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useBranch } from '@/lib/branch-context';
 import { fetchAPI } from '@/lib/api';
+import { kyogongAPI } from '@/lib/api/kyogong';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -29,7 +30,7 @@ interface ShiftLog {
     total_mpesa_sales: number;
     total_card_sales: number;
     transaction_count: number;
-    status: 'open' | 'closed' | 'reconciled' | 'verified';
+    status: 'OPEN' | 'CLOSED' | 'reconciled' | 'verified';
     reconciliation_notes?: string;
     verification_notes?: string;
     // Revenue by source
@@ -70,12 +71,35 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
         if (!activeBranchId) return;
         try {
             const statusFilter = role === 'accountant' ? 'closed' : 'reconciled';
-            const response = await fetchAPI(`/cashier/shifts?branch_id=${activeBranchId}&status=${statusFilter}`) as any;
-            if (response.success) {
-                setShifts(response.data || []);
-            } else if (response.message) {
-                toast.error(response.message);
+            
+            // Fetch from both systems
+            const [stdRes, kyoRes] = await Promise.all([
+                fetchAPI(`/cashier/shifts?branch_id=${activeBranchId}&status=${statusFilter}`),
+                kyogongAPI.getShifts({ branch_id: activeBranchId, status: statusFilter.toUpperCase() })
+            ]);
+
+            let allShifts: any[] = [];
+
+            if (stdRes.success) {
+                allShifts = [...allShifts, ...(stdRes.data || []).map((s: any) => ({ ...s, module: 'standard' }))];
             }
+            if (kyoRes.success) {
+                allShifts = [...allShifts, ...(kyoRes.data || []).map((s: any) => ({ ...s, module: 'kyogong' }))];
+            }
+
+            // Standardize models
+            const mapped = allShifts.map((s: any) => ({
+                ...s,
+                status: (s.status || '').toLowerCase() as any,
+                shift_start: s.shift_start || s.start_time || s.opened_at,
+                total_sales: s.total_sales || s.total_revenue || 0,
+                cashier_name: s.cashier_name || (s.cashier ? `${s.cashier.first_name} ${s.cashier.last_name}`.trim() : 'N/A')
+            }));
+
+            // Sort by date desc
+            mapped.sort((a, b) => new Date(b.shift_start).getTime() - new Date(a.shift_start).getTime());
+
+            setShifts(mapped);
         } catch (error: any) {
             toast.error(error.message || 'Failed to load shifts');
         }
@@ -90,13 +114,23 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
 
         setIsLoading(true);
         try {
+            const isKyogong = (selectedShift as any).module === 'kyogong';
             const endpoint = role === 'accountant' ? 'reconcile' : 'verify';
             const noteField = role === 'accountant' ? 'reconciliation_notes' : 'verification_notes';
 
-            const response = await fetchAPI(`/cashier/shifts/${selectedShift.id}/${endpoint}`, {
-                method: 'PUT',
-                body: JSON.stringify({ [noteField]: notes })
-            }) as any;
+            let response: any;
+            if (isKyogong) {
+                if (role === 'accountant') {
+                    response = await kyogongAPI.reconcileShift(selectedShift.id, { review_notes: notes });
+                } else {
+                    response = await kyogongAPI.approveShift(selectedShift.id, { review_notes: notes });
+                }
+            } else {
+                response = await fetchAPI(`/cashier/shifts/${selectedShift.id}/${endpoint}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ [noteField]: notes })
+                });
+            }
 
             if (response.success) {
                 toast.success(`Shift ${endpoint}d successfully`);
@@ -155,7 +189,12 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                                 onClick={() => setSelectedShift(shift)}
                             >
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="font-bold text-stone-900">{shift.shift_number}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-stone-900">{shift.shift_number}</span>
+                                        <span className={`px-2 py-0.5 text-[9px] font-black rounded-full border ${(shift as any).module === 'kyogong' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+                                            {(shift as any).module === 'kyogong' ? 'KYOGONG' : 'FAMOUS GATE'}
+                                        </span>
+                                    </div>
                                     <span className="text-xs text-stone-500">
                                         {new Date(shift.shift_start).toLocaleDateString()}
                                     </span>

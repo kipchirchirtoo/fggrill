@@ -22,8 +22,9 @@ export const kyogongAPI = {
   getShifts:  (params?: any) => fetchAPI<Shift[]>(`/kyogong/shifts${buildQuery(params)}`),
   getShiftDetails: (id: string) => fetchAPI<Shift>(`/kyogong/shifts/${id}`),
   closeShift: (id: string, data: any) => fetchAPI<Shift>(`/kyogong/shifts/${id}/close`, { method: 'PUT', body: JSON.stringify(data) }),
-  approveShift: (id: string) => fetchAPI<void>(`/kyogong/shifts/${id}/approve`, { method: 'PUT' }),
-  flagShift: (id: string) => fetchAPI<void>(`/kyogong/shifts/${id}/flag`, { method: 'PUT' }),
+  reconcileShift: (id: string, data: any) => fetchAPI<void>(`/kyogong/shifts/${id}/reconcile`, { method: 'PUT', body: JSON.stringify(data) }),
+  approveShift: (id: string, data?: any) => fetchAPI<void>(`/kyogong/shifts/${id}/approve`, { method: 'PUT', body: JSON.stringify(data) }),
+  flagShift: (id: string, data?: any) => fetchAPI<void>(`/kyogong/shifts/${id}/flag`, { method: 'PUT', body: JSON.stringify(data) }),
   
   // Transactions
   createTransaction: (shiftId: string, data: any) => 

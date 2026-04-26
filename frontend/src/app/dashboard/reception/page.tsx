@@ -11,7 +11,8 @@ import {
   ChevronRight, ArrowUpRight, ArrowDownRight, Timer, UserCheck,
   Home, Utensils, Car, Wifi, Sun, Moon, CloudSun, Zap, Heart,
   Shield, Award, TrendingUp, Eye, MessageSquare, Settings, Building2,
-  Wallet, Receipt, History, UserPlus, ShieldCheck, FileCheck, Download
+  Wallet, Receipt, History, UserPlus, ShieldCheck, FileCheck, Download,
+  ClipboardList
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth-context';
@@ -39,6 +40,7 @@ import Link from 'next/link';
 import { subscribeToReceptionRealtime } from '@/lib/realtime';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
+import { CashierLogbook } from '@/components/cashier/cashier-logbook';
 import { CashierModals } from '@/components/modals/CashierModals';
 import { downloadInvoicePDF } from '@/lib/invoice-pdf';
 import { downloadConferenceInvoicePDF, printConferenceInvoicePDF } from '@/lib/conference-invoice-pdf';
@@ -371,6 +373,7 @@ export default function ReceptionDashboard(): JSX.Element {
               { id: 'conference', label: 'Conference', icon: Calendar },
               { id: 'catering', label: 'Catering', icon: Utensils },
               { id: 'cashier', label: 'Cashier', icon: Wallet },
+              { id: 'logbook', label: 'Shift Logbook', icon: ClipboardList },
               { id: 'history', label: 'History', icon: History },
             ].map((tab) => (
               <Link
@@ -939,6 +942,10 @@ export default function ReceptionDashboard(): JSX.Element {
                   </IOSCard>
                 </div>
               </div>
+            </div>
+          ) : activeTab === 'logbook' ? (
+            <div className="space-y-6">
+              <CashierLogbook />
             </div>
           ) : activeTab === 'history' ? (
             <div className="space-y-6">

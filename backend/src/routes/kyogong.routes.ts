@@ -10,6 +10,7 @@ import {
   getShifts,
   getShiftDetails,
   approveShift,
+  reconcileShift,
   flagShift,
   recalculateShiftTotals
 } from '../controllers/kyogong/shifts.controller';
@@ -268,12 +269,23 @@ router.post('/shifts/:id/recalculate',
   recalculateShiftTotals
 );
 
-// Approve shift (Branch Accountant)
-router.put('/shifts/:id/approve',
+// Reconcile shift (Branch Accountant)
+router.put('/shifts/:id/reconcile',
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.ACCOUNTANT
+  ]),
+  reconcileShift
+);
+
+// Approve shift (Auditor / Branch Accountant)
+router.put('/shifts/:id/approve',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+    UserRole.AUDITOR
   ]),
   approveShift
 );

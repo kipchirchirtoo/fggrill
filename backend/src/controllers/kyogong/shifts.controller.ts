@@ -51,7 +51,7 @@ export const openShift = async (req: Request, res: Response) => {
       .from('cashier_shifts')
       .select('id, shift_number')
       .eq('cashier_id', cashier_id)
-      .eq('status', 'open')
+      .eq('status', 'OPEN')
       .single();
 
     if (existingShift) {
@@ -67,7 +67,7 @@ export const openShift = async (req: Request, res: Response) => {
       .from('cashier_shifts')
       .select('id, shift_number, cashier_id')
       .eq('sales_point_id', sales_point_id)
-      .eq('status', 'open')
+      .eq('status', 'OPEN')
       .maybeSingle();
 
     if (pointShift) {
@@ -90,7 +90,7 @@ export const openShift = async (req: Request, res: Response) => {
         start_time: now.toISOString(),
         opening_float: opening_cash_float,
         opening_petty_cash: opening_petty_cash || 0,
-        status: 'open',
+        status: 'OPEN',
         current_float: opening_cash_float,
         expected_cash: opening_cash_float,
         total_change_given: 0,
@@ -152,7 +152,7 @@ export const getCurrentShift = async (req: Request, res: Response) => {
         )
       `)
       .eq('cashier_id', cashier_id)
-      .eq('status', 'open')
+      .in('status', ['OPEN', 'open'])
       .single();
 
     if (error && error.code !== 'PGRST116') throw error;
@@ -212,7 +212,7 @@ export const closeShift = async (req: Request, res: Response) => {
       .select('*, sales_point:sales_points(*)')
       .eq('id', id)
       .eq('cashier_id', cashier_id)
-      .eq('status', 'open')
+      .in('status', ['OPEN', 'open'])
       .single();
 
     if (fetchError || !shift) {
@@ -292,7 +292,7 @@ export const closeShift = async (req: Request, res: Response) => {
     const { data: closedShift, error: updateError } = await supabase
       .from('cashier_shifts')
       .update({
-        status: 'closed',
+        status: 'CLOSED',
         end_time: new Date().toISOString(),
         closed_at: new Date().toISOString(),
         closing_float: closing_cash_counted,
@@ -521,7 +521,11 @@ export const getShiftDetails = async (req: Request, res: Response) => {
  * Approve shift (Branch Accountant)
  * PUT /api/kyogong/shifts/:id/approve
  */
-export const approveShift = async (req: Request, res: Response) => {
+/**
+ * Reconcile shift (Branch Accountant)
+ * PUT /api/kyogong/shifts/:id/reconcile
+ */
+export const reconcileShift = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { review_notes } = req.body;
@@ -530,15 +534,14 @@ export const approveShift = async (req: Request, res: Response) => {
     const { data: shift, error } = await supabase
       .from('cashier_shifts')
       .update({
-        status: 'approved',
-        supervisor_approved: true,
+        status: 'RECONCILED',
         approved_by: reviewer_id,
         approved_at: new Date().toISOString(),
         remarks: review_notes,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
-      .eq('status', 'closed')
+      .in('status', ['CLOSED', 'open']) // Support both legacy and new status
       .select('*')
       .single();
 
@@ -548,6 +551,54 @@ export const approveShift = async (req: Request, res: Response) => {
       return res.status(404).json({
         success: false,
         error: 'Shift not found or not in closed status'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Shift reconciled successfully',
+      data: mapShiftResponse(shift)
+    });
+  } catch (error: any) {
+    console.error('Reconcile shift error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to reconcile shift'
+    });
+  }
+};
+
+/**
+ * Approve/Verify shift (Auditor)
+ * PUT /api/kyogong/shifts/:id/approve
+ */
+export const approveShift = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { review_notes } = req.body;
+    const reviewer_id = req.user?.id;
+
+    const { data: shift, error } = await supabase
+      .from('cashier_shifts')
+      .update({
+        status: 'APPROVED',
+        supervisor_approved: true,
+        approved_by: reviewer_id,
+        approved_at: new Date().toISOString(),
+        remarks: review_notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .in('status', ['CLOSED', 'RECONCILED', 'closed', 'reconciled'])
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    if (!shift) {
+      return res.status(404).json({
+        success: false,
+        error: 'Shift not found or not in reviewable status'
       });
     }
 
@@ -585,14 +636,14 @@ export const flagShift = async (req: Request, res: Response) => {
     const { data: shift, error } = await supabase
       .from('cashier_shifts')
       .update({
-        status: 'flagged',
+        status: 'FLAGGED',
         approved_by: reviewer_id,
         approved_at: new Date().toISOString(),
         remarks: review_notes,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
-      .eq('status', 'closed')
+      .eq('status', 'CLOSED')
       .select('*')
       .single();
 

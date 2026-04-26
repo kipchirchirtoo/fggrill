@@ -36,7 +36,7 @@ export const getSalesPoints = async (req: Request, res: Response) => {
       .from('cashier_shifts')
       .select('id, sales_point_id, cashier_id, shift_number')
       .eq('branch_id', branch_id)
-      .eq('status', 'open');
+      .in('status', ['OPEN', 'open']);
 
     // Map occupation status
     const enrichedSalesPoints = (salesPoints || []).map(sp => {
