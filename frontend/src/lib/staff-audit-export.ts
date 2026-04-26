@@ -52,8 +52,9 @@ export const exportTransactionsPDF = async (
     records: StaffAuditRecord[],
     options: ExportOptions
 ) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
     const margin = 20;
+    const pageWidth = 297;
     let cursorY = 20;
 
     // 1. Logo & Header
@@ -73,17 +74,17 @@ export const exportTransactionsPDF = async (
     // Title
     doc.setFontSize(22);
     doc.setTextColor(44, 62, 80);
-    doc.text('STAFF AUDIT REPORT', 190, cursorY + 10, { align: 'right' });
+    doc.text('STAFF AUDIT REPORT', pageWidth - margin, cursorY + 10, { align: 'right' });
 
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text('FamousGate Hotels', 190, cursorY + 20, { align: 'right' });
-    doc.text('Bomet, Kenya', 190, cursorY + 25, { align: 'right' });
-    doc.text('0706782828', 190, cursorY + 30, { align: 'right' });
+    doc.text('FamousGate Hotels', pageWidth - margin, cursorY + 20, { align: 'right' });
+    doc.text('Bomet, Kenya', pageWidth - margin, cursorY + 25, { align: 'right' });
+    doc.text('0706782828', pageWidth - margin, cursorY + 30, { align: 'right' });
 
     cursorY = 60;
     doc.setDrawColor(200);
-    doc.line(margin, cursorY, 190, cursorY);
+    doc.line(margin, cursorY, pageWidth - margin, cursorY);
     cursorY += 10;
 
     // 2. Report Details
@@ -121,29 +122,29 @@ export const exportTransactionsPDF = async (
     const totalOutstanding = records.reduce((sum, r) => sum + (r.outstanding_amount || 0), 0);
 
     doc.setFillColor(245, 245, 247);
-    doc.rect(margin, cursorY, 170, 32, 'F');
+    doc.rect(margin, cursorY, pageWidth - (2 * margin), 32, 'F');
 
     doc.setFontSize(9);
     doc.setTextColor(100);
-    doc.text('Total Transactions:', margin + 5, cursorY + 7);
-    doc.text('Credit Bills:', margin + 5, cursorY + 14);
-    doc.text('Advances:', margin + 5, cursorY + 21);
-    doc.text('Unpaid Bills:', margin + 5, cursorY + 28);
+    doc.text('Total Transactions:', margin + 10, cursorY + 7);
+    doc.text('Credit Bills:', margin + 10, cursorY + 14);
+    doc.text('Advances:', margin + 10, cursorY + 21);
+    doc.text('Unpaid Bills:', margin + 10, cursorY + 28);
 
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${records.length}`, margin + 50, cursorY + 7);
-    doc.text(`${creditBills.length} (${formatCurrency(creditBills.reduce((s, r) => s + r.amount, 0))})`, margin + 50, cursorY + 14);
-    doc.text(`${advances.length} (${formatCurrency(advances.reduce((s, r) => s + r.amount, 0))})`, margin + 50, cursorY + 21);
-    doc.text(`${unpaidBills.length} (${formatCurrency(unpaidBills.reduce((s, r) => s + r.amount, 0))})`, margin + 50, cursorY + 28);
+    doc.text(`${records.length}`, margin + 60, cursorY + 7);
+    doc.text(`${creditBills.length} (${formatCurrency(creditBills.reduce((s, r) => s + r.amount, 0))})`, margin + 60, cursorY + 14);
+    doc.text(`${advances.length} (${formatCurrency(advances.reduce((s, r) => s + r.amount, 0))})`, margin + 60, cursorY + 21);
+    doc.text(`${unpaidBills.length} (${formatCurrency(unpaidBills.reduce((s, r) => s + r.amount, 0))})`, margin + 60, cursorY + 28);
 
-    doc.text('Loans:', margin + 105, cursorY + 7);
-    doc.text('Total Amount:', margin + 105, cursorY + 14);
-    doc.text('Outstanding:', margin + 105, cursorY + 21);
+    doc.text('Loans:', margin + 145, cursorY + 7);
+    doc.text('Total Amount:', margin + 145, cursorY + 14);
+    doc.text('Outstanding:', margin + 145, cursorY + 21);
 
-    doc.text(`${loans.length} (${formatCurrency(loans.reduce((s, r) => s + r.amount, 0))})`, margin + 130, cursorY + 7);
-    doc.text(formatCurrency(totalAmount), margin + 130, cursorY + 14);
-    doc.text(formatCurrency(totalOutstanding), margin + 130, cursorY + 21);
+    doc.text(`${loans.length} (${formatCurrency(loans.reduce((s, r) => s + r.amount, 0))})`, margin + 185, cursorY + 7);
+    doc.text(formatCurrency(totalAmount), margin + 185, cursorY + 14);
+    doc.text(formatCurrency(totalOutstanding), margin + 185, cursorY + 21);
 
     doc.setFont('helvetica', 'normal');
     cursorY += 42;
@@ -156,7 +157,7 @@ export const exportTransactionsPDF = async (
         record.reference,
         record.type,
         record.staff_name,
-        record.description.length > 40 ? record.description.substring(0, 37) + '...' : record.description,
+        record.description.length > 60 ? record.description.substring(0, 57) + '...' : record.description,
         formatCurrency(record.amount),
         formatCurrency(record.outstanding_amount || 0),
         record.status
@@ -170,16 +171,16 @@ export const exportTransactionsPDF = async (
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 8 },
         bodyStyles: { fontSize: 8 },
         columnStyles: {
-            0: { cellWidth: 18 },
-            1: { cellWidth: 18 },
-            2: { cellWidth: 22 },
-            3: { cellWidth: 16 },
-            4: { cellWidth: 20 },
-            5: { cellWidth: 24 },
-            6: { cellWidth: 28 },
-            7: { cellWidth: 18, halign: 'right' },
+            0: { cellWidth: 22 },
+            1: { cellWidth: 22 },
+            2: { cellWidth: 28 },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 25 },
+            5: { cellWidth: 35 },
+            6: { cellWidth: 45 },
+            7: { cellWidth: 20, halign: 'right' },
             8: { cellWidth: 20, halign: 'right' },
-            9: { cellWidth: 18, halign: 'center' }
+            9: { cellWidth: 20, halign: 'center' }
         },
         margin: { left: margin, right: margin }
     });
@@ -190,8 +191,8 @@ export const exportTransactionsPDF = async (
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('FamousGate Hotels - Staff Audit System', 105, 285, { align: 'center' });
-        doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
+        doc.text('FamousGate Hotels - Staff Audit System', pageWidth / 2, 200, { align: 'center' });
+        doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, 200, { align: 'right' });
     }
 
     return doc;
@@ -202,8 +203,9 @@ export const exportSummaryPDF = async (
     summary: StaffSummary[],
     options: ExportOptions
 ) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
     const margin = 20;
+    const pageWidth = 297;
     let cursorY = 20;
 
     // 1. Logo & Header
@@ -223,17 +225,17 @@ export const exportSummaryPDF = async (
     // Title
     doc.setFontSize(22);
     doc.setTextColor(44, 62, 80);
-    doc.text('STAFF FINANCIAL SUMMARY', 190, cursorY + 10, { align: 'right' });
+    doc.text('STAFF FINANCIAL SUMMARY', pageWidth - margin, cursorY + 10, { align: 'right' });
 
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text('FamousGate Hotels', 190, cursorY + 20, { align: 'right' });
-    doc.text('Bomet, Kenya', 190, cursorY + 25, { align: 'right' });
-    doc.text('0706782828', 190, cursorY + 30, { align: 'right' });
+    doc.text('FamousGate Hotels', pageWidth - margin, cursorY + 20, { align: 'right' });
+    doc.text('Bomet, Kenya', pageWidth - margin, cursorY + 25, { align: 'right' });
+    doc.text('0706782828', pageWidth - margin, cursorY + 30, { align: 'right' });
 
     cursorY = 60;
     doc.setDrawColor(200);
-    doc.line(margin, cursorY, 190, cursorY);
+    doc.line(margin, cursorY, pageWidth - margin, cursorY);
     cursorY += 10;
 
     // 2. Report Details
@@ -259,29 +261,29 @@ export const exportSummaryPDF = async (
     const totalExposure = totalCreditBills + totalAdvances + totalLoans + totalUnpaidBills;
 
     doc.setFillColor(245, 245, 247);
-    doc.rect(margin, cursorY, 170, 35, 'F');
+    doc.rect(margin, cursorY, pageWidth - (2 * margin), 35, 'F');
 
     doc.setFontSize(9);
     doc.setTextColor(100);
-    doc.text('Total Staff Members:', margin + 5, cursorY + 7);
-    doc.text('Total Credit Bills:', margin + 5, cursorY + 14);
-    doc.text('Total Advances:', margin + 5, cursorY + 21);
-    doc.text('Total Loans:', margin + 5, cursorY + 28);
-    doc.text('Total Unpaid Bills:', margin + 5, cursorY + 35);
+    doc.text('Total Staff Members:', margin + 10, cursorY + 7);
+    doc.text('Total Credit Bills:', margin + 10, cursorY + 14);
+    doc.text('Total Advances:', margin + 10, cursorY + 21);
+    doc.text('Total Loans:', margin + 10, cursorY + 28);
+    doc.text('Total Unpaid Bills:', margin + 10, cursorY + 35);
 
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${summary.length}`, margin + 50, cursorY + 7);
-    doc.text(formatCurrency(totalCreditBills), margin + 50, cursorY + 14);
-    doc.text(formatCurrency(totalAdvances), margin + 50, cursorY + 21);
-    doc.text(formatCurrency(totalLoans), margin + 50, cursorY + 28);
-    doc.text(formatCurrency(totalUnpaidBills), margin + 50, cursorY + 35);
+    doc.text(`${summary.length}`, margin + 60, cursorY + 7);
+    doc.text(formatCurrency(totalCreditBills), margin + 60, cursorY + 14);
+    doc.text(formatCurrency(totalAdvances), margin + 60, cursorY + 21);
+    doc.text(formatCurrency(totalLoans), margin + 60, cursorY + 28);
+    doc.text(formatCurrency(totalUnpaidBills), margin + 60, cursorY + 35);
 
-    doc.text('Total Outstanding:', margin + 105, cursorY + 7);
-    doc.text('Total Exposure:', margin + 105, cursorY + 14);
+    doc.text('Total Outstanding:', margin + 145, cursorY + 7);
+    doc.text('Total Exposure:', margin + 145, cursorY + 14);
 
-    doc.text(formatCurrency(totalOutstanding), margin + 145, cursorY + 7);
-    doc.text(formatCurrency(totalExposure), margin + 145, cursorY + 14);
+    doc.text(formatCurrency(totalOutstanding), margin + 185, cursorY + 7);
+    doc.text(formatCurrency(totalExposure), margin + 185, cursorY + 14);
 
     doc.setFont('helvetica', 'normal');
     cursorY += 45;
@@ -308,16 +310,16 @@ export const exportSummaryPDF = async (
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 8 },
         bodyStyles: { fontSize: 8 },
         columnStyles: {
-            0: { cellWidth: 28 },
-            1: { cellWidth: 18 },
-            2: { cellWidth: 22 },
-            3: { cellWidth: 18 },
-            4: { cellWidth: 20, halign: 'right' },
-            5: { cellWidth: 18, halign: 'right' },
-            6: { cellWidth: 18, halign: 'right' },
-            7: { cellWidth: 20, halign: 'right' },
-            8: { cellWidth: 20, halign: 'right' },
-            9: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+            0: { cellWidth: 40 },
+            1: { cellWidth: 22 },
+            2: { cellWidth: 28 },
+            3: { cellWidth: 25 },
+            4: { cellWidth: 24, halign: 'right' },
+            5: { cellWidth: 22, halign: 'right' },
+            6: { cellWidth: 22, halign: 'right' },
+            7: { cellWidth: 24, halign: 'right' },
+            8: { cellWidth: 24, halign: 'right' },
+            9: { cellWidth: 26, halign: 'right', fontStyle: 'bold' }
         },
         margin: { left: margin, right: margin }
     });
@@ -328,8 +330,8 @@ export const exportSummaryPDF = async (
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('FamousGate Hotels - Staff Audit System', 105, 285, { align: 'center' });
-        doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
+        doc.text('FamousGate Hotels - Staff Audit System', pageWidth / 2, 200, { align: 'center' });
+        doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, 200, { align: 'right' });
     }
 
     return doc;
