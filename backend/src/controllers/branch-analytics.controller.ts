@@ -5,6 +5,8 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import { z } from 'zod';
 import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
 import { Parser } from 'json2csv';
 import {
   BranchSalesRequest,
@@ -256,7 +258,7 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
   };
 };
 
-const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promise<Buffer> => {
+const buildBrandedBranchSalesPdf = async (response: BranchSalesResponse): Promise<Buffer> => {
   return await new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     const chunks: Buffer[] = [];
@@ -265,34 +267,132 @@ const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promi
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(18).text('Branch Sales Report', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(10).text(`Branch: ${response.metadata.branch_name}`);
-    doc.text(`Period: ${response.metadata.date_range.start} to ${response.metadata.date_range.end}`);
-    doc.text(`Generated: ${new Date(response.metadata.generated_at).toLocaleString()}`);
-    doc.moveDown();
+    // Colors - Premium Palette
+    const PRIMARY = '#1a1a1a';
+    const SECONDARY = '#555555';
+    const BORDER = '#e0e0e0';
+    const ROW_BG = '#f9f9f9';
+    const HEADER_BG = '#333333';
 
-    doc.fontSize(12).text('Summary', { underline: true });
-    doc.fontSize(10).text(`Total Sales: KES ${response.data.summary.total_sales.toLocaleString()}`);
-    doc.text(`Transactions: ${response.data.summary.transaction_count.toLocaleString()}`);
-    doc.text(`Average Value: KES ${response.data.summary.avg_transaction_value.toLocaleString()}`);
-    doc.moveDown();
+    // Header Section
+    const logoPath = path.join(process.cwd(), '../frontend/public/fglogo.png');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 40, 40, { width: 60 });
+    } else {
+      // Branded Circle Placeholder
+      doc.circle(70, 70, 30).fill(PRIMARY);
+      doc.fillColor('white').fontSize(24).font('Helvetica-Bold').text('FG', 54, 60);
+    }
 
-    doc.fontSize(12).text('Recent Transactions', { underline: true });
-    doc.moveDown(0.5);
+    // Company Information (Top Right)
+    doc.fillColor(PRIMARY).fontSize(16).font('Helvetica-Bold').text('FamousGateHotels', 120, 40, { align: 'right' });
+    doc.fontSize(10).font('Helvetica').text('Bomet, Kenya', { align: 'right' });
+    doc.text('Email: famousgateshotelsbmt@gmail.com', { align: 'right' });
+    doc.text('Tel: 0706 782 828', { align: 'right' });
 
-    response.data.transactions?.slice(0, 40).forEach((transaction) => {
-      if (doc.y > 740) {
+    doc.moveDown(1);
+    doc.strokeColor(BORDER).lineWidth(1).moveTo(40, 110).lineTo(555, 110).stroke();
+
+    // Report Title & Period
+    doc.moveDown(2);
+    doc.fillColor(PRIMARY).fontSize(20).font('Helvetica-Bold').text('BRANCH SALES REPORT', { align: 'center' });
+    doc.fontSize(12).font('Helvetica-Bold').text(`Branch: ${response.metadata.branch_name}`, { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text(`Period: ${response.metadata.date_range.start} to ${response.metadata.date_range.end}`, { align: 'center' });
+    doc.text(`Generated: ${new Date(response.metadata.generated_at).toLocaleString()}`, { align: 'center' });
+
+    doc.moveDown(2);
+
+    // Summary Section
+    const summaryY = doc.y;
+    doc.rect(40, summaryY, 515, 60).fill('#f3f4f6');
+    doc.fillColor(PRIMARY).fontSize(10).font('Helvetica-Bold');
+    
+    doc.text('Total Sales:', 60, summaryY + 15);
+    doc.font('Helvetica').text(`KES ${response.data.summary.total_sales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 140, summaryY + 15);
+
+    doc.font('Helvetica-Bold').text('Transactions:', 300, summaryY + 15);
+    doc.font('Helvetica').text(`${response.data.summary.transaction_count.toLocaleString()}`, 380, summaryY + 15);
+
+    doc.font('Helvetica-Bold').text('Average Value:', 60, summaryY + 35);
+    doc.font('Helvetica').text(`KES ${response.data.summary.avg_transaction_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 140, summaryY + 35);
+
+    doc.moveDown(3);
+
+    // Table Constants
+    let currentY = doc.y;
+    const col1W = 80;  // Date
+    const col2W = 100; // Source
+    const col3W = 120; // Category
+    const col4W = 100; // Payment Method
+    const col5W = 115; // Amount
+    const rowH = 25;
+
+    // Table Header
+    doc.rect(40, currentY, 515, rowH).fill(HEADER_BG);
+    doc.fillColor('white').font('Helvetica-Bold').fontSize(10);
+    
+    doc.text('DATE', 40 + 10, currentY + 7);
+    doc.text('SOURCE', 40 + col1W + 10, currentY + 7);
+    doc.text('CATEGORY', 40 + col1W + col2W + 10, currentY + 7);
+    doc.text('PAYMENT', 40 + col1W + col2W + col3W + 10, currentY + 7);
+    doc.text('AMOUNT', 40 + col1W + col2W + col3W + col4W + 10, currentY + 7, { width: col5W - 20, align: 'right' });
+
+    currentY += rowH;
+
+    response.data.transactions?.forEach((transaction, i) => {
+      if (currentY > 720) {
         doc.addPage();
+        currentY = 40;
+        
+        // Redraw Header
+        doc.rect(40, currentY, 515, rowH).fill(HEADER_BG);
+        doc.fillColor('white').font('Helvetica-Bold').fontSize(10);
+        
+        doc.text('DATE', 40 + 10, currentY + 7);
+        doc.text('SOURCE', 40 + col1W + 10, currentY + 7);
+        doc.text('CATEGORY', 40 + col1W + col2W + 10, currentY + 7);
+        doc.text('PAYMENT', 40 + col1W + col2W + col3W + 10, currentY + 7);
+        doc.text('AMOUNT', 40 + col1W + col2W + col3W + col4W + 10, currentY + 7, { width: col5W - 20, align: 'right' });
+
+        currentY += rowH;
       }
 
-      doc
-        .fontSize(9)
-        .text(
-          `${buildDateKey(transaction.transaction_date)} | ${transaction.source} | ${String(transaction.category)} | ${String(transaction.payment_method)} | KES ${Number(transaction.total_amount || 0).toLocaleString()}`
-        );
-    });
+      if (i % 2 === 1) {
+        doc.fillColor(ROW_BG).rect(40, currentY, 515, rowH).fill();
+      }
 
+      doc.fillColor(PRIMARY).font('Helvetica').fontSize(9);
+      
+      const dateStr = buildDateKey(transaction.transaction_date);
+      const sourceStr = String(transaction.source).toUpperCase();
+      const catStr = String(transaction.category).toUpperCase();
+      const payStr = String(transaction.payment_method).toUpperCase();
+      const amtStr = Number(transaction.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      doc.text(dateStr, 40 + 10, currentY + 7);
+      doc.text(sourceStr, 40 + col1W + 10, currentY + 7);
+      doc.text(catStr, 40 + col1W + col2W + 10, currentY + 7);
+      doc.text(payStr, 40 + col1W + col2W + col3W + 10, currentY + 7);
+      doc.text(`KES ${amtStr}`, 40 + col1W + col2W + col3W + col4W + 10, currentY + 7, { width: col5W - 20, align: 'right' });
+
+      // Horizontal border
+      doc.strokeColor(BORDER).lineWidth(0.5).moveTo(40, currentY + rowH).lineTo(555, currentY + rowH).stroke();
+
+      currentY += rowH;
+    });
+    
+    // Footer Section
+    doc.moveDown(2);
+    currentY = doc.y;
+    if (currentY > 720) {
+        doc.addPage();
+        currentY = 40;
+    }
+    doc.fillColor(SECONDARY).fontSize(8).font('Helvetica');
+    doc.text('---------------------------------------------------------', { align: 'center' });
+    doc.text('FamousGate Hotels Management System', { align: 'center' });
+    doc.text('This is a computer generated document.', { align: 'center' });
+    
     doc.end();
   });
 };
@@ -588,31 +688,33 @@ export const exportBranchSalesPDF = async (req: Request, res: Response): Promise
       return;
     }
 
-    logger.info('Generating PDF report', {
+    logger.info('Generating Branded PDF report in Node.js', {
       user_id: (req as any).user?.id,
       branch_id: requestData.branch_id
     });
 
-    const response = await axios.post(
-      `${ANALYTICS_SERVICE_URL}/api/analytics/branch-sales/export/pdf`,
+    // Fetch JSON data instead of raw PDF buffer
+    const response = await axios.post<BranchSalesResponse>(
+      `${ANALYTICS_SERVICE_URL}/api/analytics/branch-sales`,
       requestData,
       {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': req.headers.authorization || ''
         },
-        responseType: 'arraybuffer',
         timeout: 60000 // 60 second timeout for report generation
       }
     );
+
+    const pdfBuffer = await buildBrandedBranchSalesPdf(response.data);
 
     const filename = `branch-sales-${requestData.branch_id}-${requestData.start_date}-${requestData.end_date}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(Buffer.from(response.data));
+    res.send(pdfBuffer);
 
-    logger.info('PDF report generated successfully', {
+    logger.info('Branded PDF report generated successfully', {
       branch_id: requestData.branch_id,
       filename
     });
@@ -626,7 +728,7 @@ export const exportBranchSalesPDF = async (req: Request, res: Response): Promise
       if (!requestData) throw new Error('Fallback request data unavailable');
       const fallbackRequestData = requestData;
       const fallbackResponse = await getFallbackBranchSalesResponse(fallbackRequestData);
-      const pdfBuffer = await buildFallbackBranchSalesPdf(fallbackResponse);
+      const pdfBuffer = await buildBrandedBranchSalesPdf(fallbackResponse);
       const filename = `branch-sales-${fallbackRequestData.branch_id}-${fallbackRequestData.start_date}-${fallbackRequestData.end_date}.pdf`;
 
       res.setHeader('Content-Type', 'application/pdf');
