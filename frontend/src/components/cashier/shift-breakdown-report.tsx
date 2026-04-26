@@ -54,6 +54,11 @@ export function ShiftBreakdownReport({ shift }: ShiftBreakdownReportProps) {
         { label: 'Conference',    value: shift.conference_revenue,    na: shift.conference_na },
         { label: 'Swimming Pool', value: shift.swimming_pool_revenue, na: shift.pool_na },
         { label: 'Pool Tokens',   value: shift.pool_token_revenue,    na: false },
+        { label: 'Spa',           value: shift.spa_revenue,           na: shift.spa_na },
+        { label: 'Sports Bar',    value: shift.sports_bar_revenue,    na: shift.sports_bar_na },
+        { label: 'Executive Bar', value: shift.executive_bar_revenue, na: shift.executive_bar_na },
+        { label: 'Catering',      value: shift.catering_revenue,      na: shift.catering_na },
+        { label: 'Car Wash',      value: shift.car_wash_revenue,      na: shift.car_wash_na },
         { label: 'Other',         value: shift.other_revenue,         na: false },
     ];
     const streamSubtotal = streams.filter(s => !s.na).reduce((sum, s) => sum + Number(s.value || 0), 0);

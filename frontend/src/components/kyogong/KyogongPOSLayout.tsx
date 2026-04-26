@@ -155,7 +155,7 @@ export function KyogongPOSLayout({
                     {activeShift && (
                         <div className="flex items-center gap-3">
                             <button
-                                onClick={() => window.location.href = '/dashboard/cashier?tab=logbook'}
+                                onClick={() => window.location.href = `/dashboard/cashier?tab=logbook&source=kyogong&point=${salesPointCode}`}
                                 className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-sm font-bold border border-blue-100 hover:bg-blue-100 transition-colors"
                             >
                                 <List className="w-4 h-4" />

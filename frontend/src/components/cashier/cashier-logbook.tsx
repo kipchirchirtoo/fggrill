@@ -12,8 +12,11 @@ import { CloseShiftModal, CloseShiftData } from './close-shift-modal';
 import { ShiftBreakdownReport } from './shift-breakdown-report';
 import {
     Clock, DollarSign, TrendingUp, CheckCircle,
-    AlertTriangle, Loader2, PlayCircle, StopCircle, ChevronDown, ChevronUp
+    AlertTriangle, Loader2, PlayCircle, StopCircle, ChevronDown, ChevronUp,
+    Store
 } from 'lucide-react';
+import { kyogongAPI } from '@/lib/api/kyogong';
+import { UserRole } from '@/lib/user-roles';
 
 interface ShiftLog {
     id: string;
@@ -33,23 +36,35 @@ interface ShiftLog {
     status: 'open' | 'closed' | 'reconciled' | 'verified';
 }
 
-export function CashierLogbook({ type }: { type?: string }) {
+export function CashierLogbook({ type, source, pointCode }: { type?: string; source?: string; pointCode?: string }) {
     const { user } = useAuth();
     const { activeBranchId } = useBranch();
     const [shifts, setShifts] = useState<ShiftLog[]>([]);
     const [currentShift, setCurrentShift] = useState<ShiftLog | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [openingFloat, setOpeningFloat] = useState('');
+    const [openingPettyCash, setOpeningPettyCash] = useState('');
+    const [salesPoints, setSalesPoints] = useState<any[]>([]);
+    const [selectedPointId, setSelectedPointId] = useState<string>('');
     const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
     const [modalShiftData, setModalShiftData] = useState<any>(null);
     const [isLoadingShift, setIsLoadingShift] = useState(false);
     const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
 
+    const isKyogong = source === 'kyogong' || [
+        UserRole.KYOGONG_SPA_CASHIER,
+        UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+        UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+        UserRole.KYOGONG_RECEPTION_CASHIER
+    ].includes(user?.role as any);
+
     const openCloseModal = async () => {
         if (!currentShift?.id) return;
         setIsLoadingShift(true);
         try {
-            const res = await fetchAPI(`/cashier/shifts/${currentShift.id}`) as any;
+            const res = isKyogong 
+                ? await kyogongAPI.getShiftDetails(currentShift.id)
+                : await fetchAPI(`/cashier/shifts/${currentShift.id}`) as any;
             setModalShiftData(res.success && res.data ? res.data : currentShift);
         } catch {
             setModalShiftData(currentShift);
@@ -59,12 +74,43 @@ export function CashierLogbook({ type }: { type?: string }) {
         }
     };
 
+    const fetchSalesPoints = async () => {
+        if (!isKyogong) return;
+        try {
+            const res = await kyogongAPI.getSalesPoints({ is_active: true });
+            if (res.success && res.data) {
+                setSalesPoints(res.data);
+                if (pointCode) {
+                    const p = res.data.find((x: any) => x.code === pointCode);
+                    if (p) setSelectedPointId(p.id.toString());
+                } else if (res.data.length === 1) {
+                    setSelectedPointId(res.data[0].id.toString());
+                }
+            }
+        } catch (e) { console.error(e); }
+    };
+
     const fetchShifts = async () => {
         try {
-            const response = await fetchAPI(`/cashier/shifts?branch_id=${activeBranchId || user?.branch_id}`) as any;
+            const response = isKyogong 
+                ? await kyogongAPI.getShifts({ branch_id: activeBranchId || user?.branch_id })
+                : await fetchAPI(`/cashier/shifts?branch_id=${activeBranchId || user?.branch_id}`) as any;
+            
             if (response.success) {
-                setShifts(response.data || []);
-                const open = response.data?.find((s: ShiftLog) => s.status === 'open');
+                const mappedShifts: ShiftLog[] = (response.data || []).map((s: any) => ({
+                    ...s,
+                    shift_start: s.shift_start || s.start_time || s.opened_at,
+                    shift_end: s.shift_end || s.end_time || s.closed_at,
+                    opening_float: s.opening_float || s.opening_cash_float || 0,
+                    total_sales: s.total_sales || s.total_revenue || 0,
+                    total_cash_sales: s.total_cash_sales || s.total_cash_in || 0,
+                    total_mpesa_sales: s.total_mpesa_sales || s.total_mpesa_in || 0,
+                    total_card_sales: s.total_card_sales || s.total_card_in || 0,
+                    transaction_count: s.transaction_count || s.total_transactions || 0,
+                }));
+
+                setShifts(mappedShifts);
+                const open = mappedShifts.find((s: ShiftLog) => s.status === 'open');
                 setCurrentShift(open || null);
             } else if (response.message) {
                 toast.error(response.message);
@@ -76,7 +122,8 @@ export function CashierLogbook({ type }: { type?: string }) {
 
     useEffect(() => {
         fetchShifts();
-    }, [activeBranchId, user?.branch_id]);
+        if (isKyogong) fetchSalesPoints();
+    }, [activeBranchId, user?.branch_id, isKyogong]);
 
     const handleStartShift = async () => {
         if (!openingFloat) {
@@ -86,19 +133,34 @@ export function CashierLogbook({ type }: { type?: string }) {
 
         setIsLoading(true);
         try {
-            const response = await fetchAPI('/cashier/shifts/start', {
-                method: 'POST',
-                body: JSON.stringify({
-                    opening_float: parseFloat(openingFloat)
-                })
-            }) as any;
+            let response;
+            if (isKyogong) {
+                if (!selectedPointId) {
+                    toast.error('Please select a sales point');
+                    setIsLoading(false);
+                    return;
+                }
+                response = await kyogongAPI.openShift({
+                    sales_point_id: parseInt(selectedPointId),
+                    opening_cash_float: parseFloat(openingFloat),
+                    opening_petty_cash: openingPettyCash ? parseFloat(openingPettyCash) : 0
+                });
+            } else {
+                response = await fetchAPI('/cashier/shifts/start', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        opening_float: parseFloat(openingFloat)
+                    })
+                }) as any;
+            }
 
             if (response.success) {
                 toast.success('Shift started successfully');
                 setOpeningFloat('');
+                setOpeningPettyCash('');
                 fetchShifts();
             } else {
-                toast.error(response.message || 'Failed to start shift');
+                toast.error(response.message || response.error || 'Failed to start shift');
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to start shift');
@@ -112,17 +174,23 @@ export function CashierLogbook({ type }: { type?: string }) {
 
         setIsLoading(true);
         try {
-            const response = await fetchAPI(`/cashier/shifts/${currentShift.id}/close`, {
-                method: 'PUT',
-                body: JSON.stringify(data)
-            }) as any;
+            const response = isKyogong
+                ? await kyogongAPI.closeShift(currentShift.id, {
+                    closing_cash_counted: data.closing_float,
+                    closing_petty_cash: 0,
+                    variance_reason: data.notes
+                })
+                : await fetchAPI(`/cashier/shifts/${currentShift.id}/close`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                }) as any;
 
             if (response.success) {
                 toast.success('Shift closed successfully');
                 setCloseShiftModalOpen(false);
                 fetchShifts();
             } else {
-                toast.error(response.message || 'Failed to close shift');
+                toast.error(response.message || response.error || 'Failed to close shift');
             }
         } catch (error: any) {
             toast.error(error.message || 'Failed to close shift');
@@ -208,17 +276,50 @@ export function CashierLogbook({ type }: { type?: string }) {
                         <p className="text-sm text-stone-500 mb-6">Start a new shift to begin processing transactions</p>
 
                         <div className="max-w-sm mx-auto space-y-3">
-                            <Input
-                                type="number"
-                                placeholder="Opening float amount (KES)"
-                                value={openingFloat}
-                                onChange={(e) => setOpeningFloat(e.target.value)}
-                                className="h-12 text-lg font-bold"
-                            />
+                            {isKyogong && salesPoints.length > 0 && (
+                                <div className="text-left mb-4">
+                                    <label className="block text-xs font-bold text-stone-500 uppercase mb-1 ml-1">Sales Point</label>
+                                    <select
+                                        value={selectedPointId}
+                                        onChange={(e) => setSelectedPointId(e.target.value)}
+                                        className="w-full h-12 px-4 rounded-xl border border-stone-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white text-sm font-bold"
+                                    >
+                                        <option value="">Select Point...</option>
+                                        {salesPoints.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            
+                            <div className="text-left">
+                                <label className="block text-xs font-bold text-stone-500 uppercase mb-1 ml-1">Opening Float (Cash)</label>
+                                <Input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={openingFloat}
+                                    onChange={(e) => setOpeningFloat(e.target.value)}
+                                    className="h-12 text-lg font-bold"
+                                />
+                            </div>
+
+                            {isKyogong && (
+                                <div className="text-left">
+                                    <label className="block text-xs font-bold text-stone-500 uppercase mb-1 ml-1">Opening Petty Cash</label>
+                                    <Input
+                                        type="number"
+                                        placeholder="0.00"
+                                        value={openingPettyCash}
+                                        onChange={(e) => setOpeningPettyCash(e.target.value)}
+                                        className="h-12 text-lg font-bold"
+                                    />
+                                </div>
+                            )}
+
                             <IOSButton
                                 onClick={handleStartShift}
-                                disabled={isLoading || !openingFloat}
-                                className="w-full bg-emerald-600 h-12"
+                                disabled={isLoading || !openingFloat || (isKyogong && !selectedPointId)}
+                                className="w-full bg-emerald-600 h-12 mt-2"
                             >
                                 {isLoading ? <Loader2 className="animate-spin mr-2" /> : <PlayCircle className="mr-2" />}
                                 Start New Shift

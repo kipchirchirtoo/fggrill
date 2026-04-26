@@ -46,6 +46,8 @@ function CashierPageContent() {
     const { user } = useAuth();
     const shortcutOverlay = useKeyboardShortcutOverlay('cashier');
     const tabParam = searchParams.get('tab') as any;
+    const sourceParam = searchParams.get('source') as any;
+    const pointParam = searchParams.get('point') as any;
     const [activeTab, setActiveTab] = useState<'station' | 'logbook' | 'insights'>(
         ['station', 'logbook', 'insights'].includes(tabParam) ? tabParam : 'station'
     );
@@ -1859,7 +1861,7 @@ function CashierPageContent() {
                         </>
                     ) : activeTab === 'logbook' ? (
                         <div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-100">
-                            <CashierLogbook type="reception" />
+                            <CashierLogbook type={sourceParam === 'kyogong' ? 'kyogong' : 'reception'} source={sourceParam} pointCode={pointParam} />
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
