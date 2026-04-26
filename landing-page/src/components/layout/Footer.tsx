@@ -119,7 +119,7 @@ export default function Footer({ className = '' }: FooterProps) {
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/>
                     <circle cx="12" cy="10" r="3" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  Bomet, Kenya
+                  Bomet, Kenya &amp; Kericho, Kenya
                 </li>
               </ul>
             </div>

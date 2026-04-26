@@ -251,12 +251,12 @@ export default function Home() {
         )}
       </div>
       <SEO
-        title="FamousGate Hotels — Luxury Stay & Fine Dining in Bomet, Kenya"
-        description="Bomet Kenya — Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Bomet. Book your luxury stay today."
+        title="FamousGate Hotels — Luxury Stay & Fine Dining | Bomet & Kericho, Kenya"
+        description="Bomet, Kenya & Kericho, Kenya — Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces across Bomet and Kericho. Book your luxury stay today."
         breadcrumbs={[]}
       />
       <Head>
-        <meta name="keywords" content="luxury hotels Nairobi, FamousGate Hotels, premium accommodation Kenya, fine dining Nairobi, hotel booking Kenya, luxury stay Nairobi, conference facilities Kenya, wedding venues Nairobi, corporate events Kenya, boutique hotels Nairobi" />
+        <meta name="keywords" content="luxury hotels Bomet, luxury hotels Kericho, FamousGate Hotels, premium accommodation Kenya, fine dining Bomet, hotel booking Kenya, luxury stay Bomet Kenya, conference facilities Kericho, wedding venues Bomet, corporate events Kenya, boutique hotels Bomet, hotel Kericho Kenya" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo_official.png" />
@@ -270,12 +270,21 @@ export default function Home() {
               "name": "FamousGate Hotels",
               "url": "https://famousgatehotels.com",
               "logo": "https://famousgatehotels.com/logo_official.png",
-              "description": "Luxury hotel chain offering premium accommodations, fine dining, and event spaces in Kenya",
-              "address": {
-                "@type": "PostalAddress",
-                "addressCountry": "KE",
-                "addressLocality": "Bomet"
-              },
+              "description": "Luxury hotel chain in Bomet and Kericho, Kenya offering premium accommodations, fine dining, and event spaces.",
+              "address": [
+                {
+                  "@type": "PostalAddress",
+                  "addressCountry": "KE",
+                  "addressLocality": "Bomet",
+                  "addressRegion": "Bomet County"
+                },
+                {
+                  "@type": "PostalAddress",
+                  "addressCountry": "KE",
+                  "addressLocality": "Kericho",
+                  "addressRegion": "Kericho County"
+                }
+              ],
               "contactPoint": {
                 "@type": "ContactPoint",
                 "telephone": "+254-706-782828",
@@ -301,15 +310,24 @@ export default function Home() {
               "@type": "Hotel",
               "name": "FamousGate Hotels",
               "image": "https://famousgatehotels.com/hero-bg.jpg",
-              "description": "Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces.",
-              "address": {
-                "@type": "PostalAddress",
-                "addressCountry": "KE",
-                "addressLocality": "Bomet"
-              },
+              "description": "Experience the pinnacle of hospitality at FamousGate Hotels. Premium rooms, world-class dining, and elegant event spaces in Bomet and Kericho, Kenya.",
+              "address": [
+                {
+                  "@type": "PostalAddress",
+                  "addressCountry": "KE",
+                  "addressLocality": "Bomet",
+                  "addressRegion": "Bomet County"
+                },
+                {
+                  "@type": "PostalAddress",
+                  "addressCountry": "KE",
+                  "addressLocality": "Kericho",
+                  "addressRegion": "Kericho County"
+                }
+              ],
               "telephone": "+254-706-782828",
               "email": "famousgatesbmt@gmail.com",
-              "priceRange": "KES 5,000 - 15,000",
+              "priceRange": "KES 3,000 - 15,000",
               "starRating": {
                 "@type": "Rating",
                 "ratingValue": "5"
@@ -340,15 +358,24 @@ export default function Home() {
               "url": "https://famousgatehotels.com",
               "telephone": "+254-706-782828",
               "email": "famousgatesbmt@gmail.com",
-              "address": {
-                "@type": "PostalAddress",
-                "addressCountry": "KE",
-                "addressLocality": "Bomet"
-              },
+              "address": [
+                {
+                  "@type": "PostalAddress",
+                  "addressCountry": "KE",
+                  "addressLocality": "Bomet",
+                  "addressRegion": "Bomet County"
+                },
+                {
+                  "@type": "PostalAddress",
+                  "addressCountry": "KE",
+                  "addressLocality": "Kericho",
+                  "addressRegion": "Kericho County"
+                }
+              ],
               "geo": {
                 "@type": "GeoCoordinates",
-                "latitude": "-1.286389",
-                "longitude": "36.817223"
+                "latitude": "-0.7813",
+                "longitude": "35.3416"
               },
               "openingHoursSpecification": {
                 "@type": "OpeningHoursSpecification",
@@ -356,7 +383,7 @@ export default function Home() {
                 "opens": "00:00",
                 "closes": "23:59"
               },
-              "priceRange": "KES 5,000 - 15,000"
+              "priceRange": "KES 3,000 - 15,000"
             })
           }}
         />
