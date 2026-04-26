@@ -12,7 +12,7 @@ function useReveal() {
     if (!el) return;
     const obs = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
-      { threshold: 0.08 }
+      { threshold: 0.05 }
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -25,8 +25,8 @@ function Reveal({ children, delay = 0, className = '' }: { children: React.React
   return (
     <div ref={ref} className={className} style={{
       opacity: visible ? 1 : 0,
-      transform: visible ? 'translateY(0)' : 'translateY(24px)',
-      transition: `opacity 0.7s ease ${delay}ms, transform 0.7s ease ${delay}ms`,
+      transform: visible ? 'translateY(0)' : 'translateY(20px)',
+      transition: `opacity 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) ${delay}ms, transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) ${delay}ms`,
     }}>
       {children}
     </div>
@@ -34,560 +34,318 @@ function Reveal({ children, delay = 0, className = '' }: { children: React.React
 }
 
 // ============================================================
-// MENU DATA — from database migration 20260114_menu_overhaul.sql
+// MENU DATA
 // ============================================================
-const MENU = [
+const MENU_SECTIONS = [
   {
-    category: 'Starters / Soups',
-    icon: '🥣',
-    emoji: '🍲',
+    title: 'Starters & Soups',
     items: [
-      { name: 'Mushroom Soup', price: 250 },
-      { name: 'Butternut Soup', price: 200 },
-      { name: 'Bone Soup (Tumbukiza)', price: 350 },
-      { name: 'Beef Stock', price: 50 },
-      { name: 'Tomato Soup', price: 200 },
-      { name: 'Vegetable Soup', price: 100 },
-      { name: 'Soup', price: 100 },
-      { name: 'Full Breakfast', price: 1000 },
+      { name: 'Mushroom Soup', price: 250, desc: 'Creamy woodland mushrooms infused with thyme' },
+      { name: 'Butternut Soup', price: 200, desc: 'Roasted squash with a hint of nutmeg and ginger' },
+      { name: 'Bone Soup (Tumbukiza)', price: 350, desc: 'Traditional slow-boiled beef stock with marrow' },
+      { name: 'Famous Salad', price: 300, desc: 'Chef\'s signature garden greens with house dressing' },
+      { name: 'Full Breakfast', price: 1000, desc: 'The complete FamousGate morning experience' },
     ],
   },
   {
-    category: 'Salads',
-    icon: '🥗',
-    emoji: '🥗',
+    title: 'Chef\'s Specials',
     items: [
-      { name: 'Cheese Onions', price: 150 },
-      { name: 'Coleslaw Salad', price: 50 },
-      { name: 'Guacamole', price: 150 },
-      { name: 'Kachumbari', price: 50 },
-      { name: "Chef's Salad", price: 100 },
-      { name: 'Famous Salad', price: 300 },
+      { name: 'Famous Platter', price: 3500, desc: 'An abundant selection of our finest meats and sides' },
+      { name: 'Full Kuku Choma', price: 1500, desc: 'Whole flame-grilled chicken with traditional spices' },
+      { name: 'Mbuzi Choma / Kg', price: 1200, desc: 'Slow-roasted goat meat, tender and smoky' },
     ],
   },
   {
-    category: 'Specials',
-    icon: '⭐',
-    emoji: '🌟',
+    title: 'Italian Selection',
     items: [
-      { name: 'Famous Platter', price: 3500 },
-      { name: 'Full Kuku Choma', price: 1500 },
+      { name: 'Famous Special Pizza', price: 1200, desc: 'Our premium combination of artisanal toppings' },
+      { name: 'Chicken BBQ Pizza', price: 1100, desc: 'Tender chicken with smoky hickory sauce' },
+      { name: 'Pasta Carbonara', price: 700, desc: 'Silky cream sauce with pancetta and parmesan' },
+      { name: 'Napolitana Pasta', price: 650, desc: 'Classic slow-cooked tomato and basil sauce' },
     ],
   },
   {
-    category: 'Indian Food',
-    icon: '🫓',
-    emoji: '🍛',
+    title: 'Main Cuisine',
     items: [
-      { name: 'Plain Naan', price: 100 },
-      { name: 'Garlic / Butter Naan', price: 150 },
-      { name: 'Methi Naan', price: 200 },
-      { name: 'Turbo Naan', price: 200 },
-      { name: 'Cheese Naan', price: 350 },
-      { name: 'Paneer Tikka', price: 800 },
-      { name: 'Chicken Tikka', price: 800 },
-      { name: 'Mutton Seekh Kebab', price: 850 },
+      { name: 'T-Bone Steak', price: 950, desc: 'Prime cut grilled to your preference' },
+      { name: 'Sirloin Steak', price: 950, desc: 'Tender aged beef with garlic herb butter' },
+      { name: 'Fish Fillet', price: 800, desc: 'Pan-seared lake Victoria tilapia with lemon' },
+      { name: 'Kienyeji Chicken', price: 800, desc: 'Traditional free-range chicken stew' },
+      { name: 'Mbuzi Fry', price: 650, desc: 'Sautéed goat meat with onions and coriander' },
     ],
   },
   {
-    category: 'Pasta',
-    icon: '🍝',
-    emoji: '🍝',
+    title: 'Indian Delicacies',
     items: [
-      { name: 'Carbonara', price: 700 },
-      { name: 'Bolognese', price: 700 },
-      { name: 'Napolitana', price: 650 },
-      { name: 'Vegetable Pasta', price: 650 },
+      { name: 'Chicken Tikka', price: 800, desc: 'Yoghurt marinated chicken from the clay oven' },
+      { name: 'Paneer Tikka', price: 800, desc: 'Grilled artisanal cottage cheese with spices' },
+      { name: 'Garlic / Butter Naan', price: 150, desc: 'Freshly baked tandoori flatbread' },
+      { name: 'Cheese Naan', price: 350, desc: 'Naan stuffed with melted mozzarella' },
     ],
   },
   {
-    category: 'Pizza',
-    icon: '🍕',
-    emoji: '🍕',
+    title: 'Accompaniments',
     items: [
-      { name: 'Margherita', price: 900 },
-      { name: 'Hawaiian', price: 1000 },
-      { name: 'Chicken BBQ', price: 1100 },
-      { name: 'Beef BBQ', price: 1100 },
-      { name: 'Famous Special', price: 1200 },
+      { name: 'Masala Chips', price: 250, desc: 'Hand-cut fries tossed in spicy tomato glaze' },
+      { name: 'Mokimo', price: 250, desc: 'Traditional mashed potatoes with maize and greens' },
+      { name: 'Ugali', price: 100, desc: 'Traditional Kenyan white maize meal' },
+      { name: 'Rice', price: 150, desc: 'Fragrant steamed long-grain basmati' },
     ],
   },
   {
-    category: 'Fish',
-    icon: '🐟',
-    emoji: '🐠',
+    title: 'Beverages',
     items: [
-      { name: 'Whole Tilapia', price: 700 },
-      { name: 'Fish Fillet', price: 800 },
-    ],
-  },
-  {
-    category: 'Steaks',
-    icon: '🥩',
-    emoji: '🥩',
-    items: [
-      { name: 'T-Bone Steak', price: 950 },
-      { name: 'Sirloin Steak', price: 950 },
-      { name: 'Pepper Steak', price: 1000 },
-      { name: 'Mushroom Steak', price: 1000 },
-    ],
-  },
-  {
-    category: 'Beef',
-    icon: '🐄',
-    emoji: '🍖',
-    items: [
-      { name: 'Beef Stew', price: 500 },
-      { name: 'Beef Fry', price: 550 },
-      { name: 'Wet Fry', price: 600 },
-    ],
-  },
-  {
-    category: 'Chicken',
-    icon: '🍗',
-    emoji: '🍗',
-    items: [
-      { name: 'Chicken Stew', price: 600 },
-      { name: 'Chicken Fry', price: 650 },
-      { name: 'Kienyeji Chicken', price: 800 },
-    ],
-  },
-  {
-    category: 'Mbuzi (Goat)',
-    icon: '🐐',
-    emoji: '🐐',
-    items: [
-      { name: 'Mbuzi Stew', price: 600 },
-      { name: 'Mbuzi Fry', price: 650 },
-      { name: 'Boiled Mbuzi', price: 600 },
-    ],
-  },
-  {
-    category: 'ChomaZone',
-    icon: '🔥',
-    emoji: '🔥',
-    items: [
-      { name: '¼ Kuku Choma', price: 400 },
-      { name: '½ Kuku Choma', price: 750 },
-      { name: 'Full Kuku Choma (CZ)', price: 1400 },
-      { name: 'Mbuzi Choma / Kg', price: 1200 },
-    ],
-  },
-  {
-    category: 'Accompaniments',
-    icon: '🍚',
-    emoji: '🍚',
-    items: [
-      { name: 'Ugali', price: 100 },
-      { name: 'Rice', price: 150 },
-      { name: 'Chips', price: 200 },
-      { name: 'Masala Chips', price: 250 },
-      { name: 'Mokimo', price: 250 },
-    ],
-  },
-  {
-    category: 'Vegetables',
-    icon: '🥬',
-    emoji: '🥦',
-    items: [
-      { name: 'Steamed Vegetables', price: 150 },
-      { name: 'Sukuma Wiki', price: 100 },
-      { name: 'Cabbage', price: 100 },
-    ],
-  },
-  {
-    category: 'Desserts',
-    icon: '🍨',
-    emoji: '🍦',
-    items: [
-      { name: 'Fruit Salad', price: 250 },
-      { name: 'Assorted Ice Cream', price: 250 },
-      { name: 'Fruit Salad with Ice Cream', price: 400 },
-    ],
-  },
-  {
-    category: 'Snacks & Bites',
-    icon: '🥐',
-    emoji: '🥐',
-    items: [
-      { name: 'Nduma', price: 100 },
-      { name: 'Sweet Potatoes', price: 100 },
-      { name: 'White Chapati', price: 50 },
-      { name: 'Chapati Roll', price: 200 },
-      { name: 'Brown Chapati', price: 70 },
-      { name: 'Mandazi (3pcs)', price: 50 },
-      { name: 'Marble Cake', price: 100 },
-      { name: 'Scones (2pcs)', price: 50 },
-      { name: 'Queen Cakes (2pcs)', price: 80 },
-      { name: 'Swiss Roll', price: 100 },
-      { name: 'Croissant (2pcs)', price: 50 },
-      { name: 'Tea Scone (2pcs)', price: 100 },
-      { name: 'Mahamri', price: 50 },
-      { name: 'Pancakes (2pcs)', price: 100 },
-      { name: 'Doughnut (2pcs)', price: 50 },
-      { name: 'Cookies (3pcs)', price: 100 },
-      { name: 'Sweet Corn', price: 100 },
-      { name: 'French Toast', price: 100 },
-      { name: 'Toast Bread', price: 50 },
-      { name: 'Naan Bread', price: 100 },
-      { name: 'Boiled Eggs', price: 100 },
-      { name: 'Poached Eggs', price: 150 },
-      { name: 'Fried Eggs', price: 100 },
-      { name: 'Plain Omelet (Broiler)', price: 150 },
-      { name: 'Plain Omelet (Kienyeji)', price: 200 },
-      { name: 'Spanish Omelet (Broiler)', price: 200 },
-      { name: 'Spanish Omelet (Kienyeji)', price: 200 },
-      { name: 'Scrambled Eggs (Broiler)', price: 150 },
-      { name: 'Scrambled Eggs (Kienyeji)', price: 200 },
-      { name: 'Kebab', price: 100 },
-      { name: 'Bacon', price: 350 },
-      { name: 'Sausages', price: 120 },
-      { name: 'Sausage Roll', price: 150 },
-      { name: 'Weetabix', price: 100 },
-      { name: 'Beef Samosa', price: 120 },
-      { name: 'Vegetable Samosa', price: 100 },
-      { name: 'Waffles', price: 100 },
-    ],
-  },
-  {
-    category: 'Cold Beverages',
-    icon: '🥤',
-    emoji: '🧃',
-    items: [
-      { name: 'Mango Juice', price: 200 },
-      { name: 'Pineapple Juice', price: 200 },
-      { name: 'Cocktail Juice', price: 200 },
-      { name: 'Passion Juice', price: 300 },
-      { name: 'Beet Root Juice', price: 200 },
-      { name: 'Mango Smoothie', price: 300 },
-      { name: 'Banana Smoothie', price: 300 },
-      { name: 'Fresh Milk', price: 100 },
-      { name: 'Mala (Mursik)', price: 100 },
-      { name: 'Strawberry Milkshake', price: 300 },
-      { name: 'Vanilla Milkshake', price: 300 },
-      { name: 'Soda (300ml)', price: 100 },
-      { name: 'Soda 500ml (Takeaway)', price: 150 },
-      { name: 'Mineral Water (500ml)', price: 50 },
-      { name: 'Mineral Water (1 Litre)', price: 100 },
-      { name: 'Mineral Water (10 Litres)', price: 500 },
-      { name: 'Delmonte', price: 450 },
-    ],
-  },
-  {
-    category: 'Hot Beverages',
-    icon: '☕',
-    emoji: '☕',
-    items: [
-      { name: 'Tea Mug', price: 50 },
-      { name: 'Tea Mug (Takeaway)', price: 100 },
-      { name: 'Tea Pot (500ml)', price: 200 },
-      { name: 'Tea Flask (1 Litre)', price: 300 },
-      { name: 'Tea Flask (2 Litres)', price: 400 },
-      { name: 'Tea Flask (3 Litres)', price: 600 },
-      { name: 'English Tea (Pot)', price: 200 },
-      { name: 'Ginger Tea (Pot)', price: 200 },
-      { name: 'Ginger Tea (Mug)', price: 100 },
-      { name: 'Tea Masala (500ml)', price: 200 },
-      { name: 'Tea Masala (1 Litre)', price: 450 },
-      { name: 'Tea Masala (2 Litres)', price: 600 },
-      { name: 'Special Tea (500ml)', price: 250 },
-      { name: 'Special Tea (1 Litre)', price: 500 },
-      { name: 'Special Tea (2 Litres)', price: 800 },
-      { name: 'Black Tea', price: 50 },
-      { name: 'Green Tea', price: 100 },
-      { name: 'Hot Lemon', price: 100 },
-      { name: 'Lemon Tea with Honey', price: 150 },
-      { name: 'Lemon Tea (500ml)', price: 200 },
-      { name: 'Lemon Tea (1 Litre)', price: 350 },
-      { name: 'Lemon Tea (2 Litres)', price: 450 },
-      { name: 'Hot Lemon with Honey', price: 150 },
-      { name: 'Milo (Mug)', price: 100 },
-      { name: 'Milo (Takeaway)', price: 200 },
-      { name: 'Milo (Tea Pot)', price: 200 },
-      { name: 'Hot Chocolate (Mug)', price: 100 },
-      { name: 'Hot Chocolate (Takeaway)', price: 200 },
-      { name: 'Hot Chocolate (Tea Pot)', price: 300 },
-      { name: 'White / Black Coffee Mug', price: 100 },
-      { name: 'White Coffee (Takeaway)', price: 200 },
-      { name: 'White / Black Coffee (500ml)', price: 200 },
-      { name: 'White Coffee (1 Litre)', price: 350 },
-      { name: 'White Coffee (2 Litres)', price: 500 },
-      { name: 'Lemon Coffee with Honey', price: 150 },
-      { name: 'Dawa / Concoction', price: 200 },
-      { name: 'Porridge / Uji', price: 100 },
+      { name: 'Fresh Mango Smoothie', price: 300, desc: 'Sun-ripened Bomet mangoes blended cold' },
+      { name: 'Vanilla Milkshake', price: 300, desc: 'Rich Madagascar vanilla bean cream' },
+      { name: 'Special Tea (Pot)', price: 250, desc: 'FamousGate signature blend from local estates' },
+      { name: 'Dawa / Concoction', price: 200, desc: 'Lemon, ginger, and honey immunity booster' },
     ],
   },
 ];
 
 export default function MenuPage() {
   const [heroLoaded, setHeroLoaded] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
 
   useEffect(() => { setHeroLoaded(true); }, []);
-
-  const filtered = MENU.map(section => ({
-    ...section,
-    items: section.items.filter(item =>
-      item.name.toLowerCase().includes(search.toLowerCase())
-    ),
-  })).filter(section =>
-    (activeCategory === null || section.category === activeCategory) &&
-    section.items.length > 0
-  );
 
   return (
     <>
       <SEO
-        title="Restaurant Menu — FamousGate Hotels | Bomet & Kericho, Kenya"
-        description="Explore FamousGate Hotels' full menu — from local Kenyan favourites to international cuisine, steaks, pizza, Indian food, beverages, and more. Available at all branches."
+        title="The Menu — FamousGate Hotels | Culinary Excellence"
+        description="Experience the finest culinary journey in Bomet and Kericho. Explore our curated menu of local favourites and international classics."
         url="https://famousgatehotels.com/menu"
         breadcrumbs={[{ name: 'Menu', item: '/menu' }]}
       />
-      <Head>
-        <meta name="keywords" content="famousgate menu, restaurant menu Bomet, hotel food menu Kenya, FamousGate restaurant, Kenyan cuisine, pizza Bomet, kuku choma Kenya" />
-      </Head>
 
-      <Header />
+      <Header hideLogo />
 
-      <main>
-        {/* ===== HERO ===== */}
-        <section className="lp-hero">
-          <div className="lp-hero__bg" style={{ backgroundImage: "url('/dining-bg.jpg')" }} />
-          <div className="lp-hero__overlay" />
-          <div suppressHydrationWarning className={`lp-hero__content${heroLoaded ? ' loaded' : ''}`}>
-            {/* Logo */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <img src="/logo_official.png" alt="FamousGate Hotels Logo" style={{ height: '80px', width: 'auto', filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.5))' }} />
-            </div>
-            <p className="lp-hero__eyebrow">Bomet & Kericho, Kenya</p>
-            <h1 className="lp-hero__title">
-              Our Restaurant<br />
-              <em>Menu</em>
-            </h1>
-            <div className="lp-hero__divider" />
-            <p className="lp-hero__subtitle">
-              From local Kenyan favourites to international delights — crafted with passion, served with excellence.
-            </p>
-          </div>
-          <div className="lp-hero__scroll-hint">
-            <span>Scroll</span>
-            <div className="lp-hero__scroll-line" />
+      <main className="menu-page">
+        {/* ===== MINIMALIST HERO ===== */}
+        <section className="menu-hero">
+          <div className="menu-hero__overlay" />
+          <div suppressHydrationWarning className={`menu-hero__content${heroLoaded ? ' loaded' : ''}`}>
+            <span className="menu-hero__eyebrow">Culinary Excellence</span>
+            <h1 className="menu-hero__title">The Menu</h1>
+            <div className="menu-hero__line" />
+            <p className="menu-hero__desc">A curated selection of seasonal ingredients and traditional flavours</p>
           </div>
         </section>
 
-        {/* ===== MENU BODY ===== */}
-        <section className="menu-section">
-          <div className="lp-container">
+        {/* ===== MENU CONTENT ===== */}
+        <section className="menu-body">
+          <div className="menu-container">
+            
+            <div className="menu-grid">
+              {MENU_SECTIONS.map((section, idx) => (
+                <div key={section.title} className="menu-section">
+                  <div className="menu-items">
+                    {section.items.map((item, iidx) => (
+                      <Reveal key={item.name} delay={(idx * 50) + (iidx * 30)}>
+                        <div className="menu-item">
+                          <div className="menu-item__header">
+                            <h3 className="menu-item__name">{item.name}</h3>
+                            <div className="menu-item__dots" />
+                            <span className="menu-item__price">{item.price.toLocaleString()}</span>
+                          </div>
+                          {item.desc && <p className="menu-item__desc">{item.desc}</p>}
+                        </div>
+                      </Reveal>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-            {/* Search & Filter Bar */}
-            <Reveal className="menu-controls">
-              <div className="menu-search-wrap">
-                <span className="menu-search-icon">🔍</span>
-                <input
-                  id="menu-search"
-                  className="menu-search"
-                  type="text"
-                  placeholder="Search menu items..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                />
-              </div>
-              <div className="menu-cats">
-                <button
-                  className={`menu-cat-btn${activeCategory === null ? ' active' : ''}`}
-                  onClick={() => setActiveCategory(null)}
-                >
-                  All
-                </button>
-                {MENU.map(s => (
-                  <button
-                    key={s.category}
-                    className={`menu-cat-btn${activeCategory === s.category ? ' active' : ''}`}
-                    onClick={() => setActiveCategory(activeCategory === s.category ? null : s.category)}
-                  >
-                    {s.icon} {s.category}
-                  </button>
-                ))}
+            {/* FINALE */}
+            <Reveal delay={400}>
+              <div className="menu-footer">
+                <div className="menu-footer__line" />
+                <p className="menu-footer__text">
+                  Prices are in Kenya Shillings (KES) inclusive of 16% VAT.<br />
+                  Please inform your server of any dietary requirements or allergies.
+                </p>
+                <div className="menu-footer__locations">
+                  Kyogong · Litein · Mogogoshiek · Sotik
+                </div>
               </div>
             </Reveal>
 
-            {/* Menu Grid */}
-            {filtered.map((section, si) => (
-              <Reveal key={section.category} delay={si * 50} className="menu-cat-block">
-                <div className="menu-cat-header">
-                  <span className="menu-cat-emoji">{section.emoji}</span>
-                  <h2 className="menu-cat-title">{section.category}</h2>
-                </div>
-                <div className="menu-items-grid">
-                  {section.items.map((item, ii) => (
-                    <Reveal key={item.name} delay={ii * 30} className="menu-item">
-                      <span className="menu-item__name">{item.name}</span>
-                      <span className="menu-item__dots" />
-                      <span className="menu-item__price">KES {item.price.toLocaleString()}</span>
-                    </Reveal>
-                  ))}
-                </div>
-              </Reveal>
-            ))}
-
-            {filtered.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '5rem 2rem', color: 'var(--gold)' }}>
-                <p style={{ fontSize: '3rem' }}>🍽️</p>
-                <p style={{ fontSize: '1.2rem', marginTop: '1rem' }}>No items match your search.</p>
-              </div>
-            )}
-
           </div>
         </section>
-
-        {/* ===== FOOTER NOTE ===== */}
-        <div className="menu-footer-note">
-          <div className="lp-container" style={{ textAlign: 'center' }}>
-            <img src="/logo_official.png" alt="FamousGate Hotels" style={{ height: '60px', marginBottom: '1.5rem', filter: 'brightness(0) invert(1) opacity(0.8)' }} />
-            <p>All prices are in <strong>Kenya Shillings (KES)</strong> and inclusive of taxes.</p>
-            <p>Menu items and prices may vary by branch. Ask our team for daily specials.</p>
-            <p style={{ marginTop: '0.75rem', opacity: 0.6, fontSize: '0.85rem' }}>
-              Kyogong · Litein · Mogogoshiek · Sotik — Bomet & Kericho, Kenya
-            </p>
-          </div>
-        </div>
       </main>
 
       <Footer />
 
-      <style>{`
-        .menu-section {
-          background: var(--warm-white);
-          padding: 5rem 0 7rem;
-        }
-        .menu-controls {
-          margin-bottom: 3.5rem;
-        }
-        .menu-search-wrap {
-          position: relative;
-          max-width: 480px;
-          margin: 0 auto 2rem;
-        }
-        .menu-search-icon {
-          position: absolute;
-          left: 1rem;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 1rem;
-        }
-        .menu-search {
-          width: 100%;
-          padding: 1rem 1rem 1rem 3rem;
-          border: 2px solid rgba(184,149,90,0.3);
-          border-radius: 50px;
-          font-family: var(--font-body);
-          font-size: 1rem;
-          background: white;
-          color: var(--charcoal);
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .menu-search:focus { border-color: var(--gold); }
-        .menu-cats {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-          justify-content: center;
-        }
-        .menu-cat-btn {
-          padding: 0.45rem 1.1rem;
-          border-radius: 50px;
-          border: 1.5px solid rgba(184,149,90,0.4);
-          background: white;
-          color: var(--charcoal);
-          font-family: var(--font-body);
-          font-size: 0.8rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s;
-          white-space: nowrap;
-        }
-        .menu-cat-btn:hover, .menu-cat-btn.active {
-          background: var(--gold);
-          color: white;
-          border-color: var(--gold);
+      <style jsx global>{`
+        :root {
+          --menu-bg: #fcfbf7;
+          --menu-text: #1a1a1a;
+          --menu-gold: #b8955a;
+          --menu-muted: #666;
+          --menu-border: rgba(26,26,26,0.1);
         }
 
-        .menu-cat-block {
-          margin-bottom: 3.5rem;
-          background: white;
-          border-radius: 20px;
-          overflow: hidden;
-          box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+        .menu-page {
+          background-color: var(--menu-bg);
+          color: var(--menu-text);
         }
-        .menu-cat-header {
+
+        /* Hero */
+        .menu-hero {
+          height: 60vh;
+          min-height: 450px;
           display: flex;
           align-items: center;
-          gap: 1rem;
-          padding: 1.5rem 2rem;
-          background: linear-gradient(90deg, var(--gold), #c9a96e);
-          color: white;
+          justify-content: center;
+          text-align: center;
+          background: url('/hero-bg.jpg') center/cover no-repeat fixed;
+          position: relative;
         }
-        .menu-cat-emoji { font-size: 1.8rem; }
-        .menu-cat-title {
-          font-family: var(--font-display);
-          font-size: 1.5rem;
-          font-weight: 600;
-          margin: 0;
-          letter-spacing: 0.04em;
+        .menu-hero__overlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0,0,0,0.55);
         }
-        .menu-items-grid {
-          padding: 1.5rem 2rem;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 0;
+        .menu-hero__content {
+          position: relative;
+          z-index: 10;
+          opacity: 0;
+          transform: translateY(20px);
+          transition: all 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
-        .menu-item {
-          display: flex;
-          align-items: baseline;
-          gap: 0.5rem;
-          padding: 0.7rem 0;
-          border-bottom: 1px dashed rgba(184,149,90,0.18);
+        .menu-hero__content.loaded {
+          opacity: 1;
+          transform: translateY(0);
         }
-        .menu-item:last-child { border-bottom: none; }
-        .menu-item__name {
+        .menu-hero__eyebrow {
+          display: block;
           font-family: var(--font-body);
-          font-size: 0.95rem;
-          color: var(--charcoal);
-          font-weight: 500;
-          flex-shrink: 0;
+          text-transform: uppercase;
+          letter-spacing: 0.3em;
+          color: var(--menu-gold);
+          font-size: 0.85rem;
+          margin-bottom: 1.5rem;
+        }
+        .menu-hero__title {
+          font-family: var(--font-display);
+          font-size: clamp(3.5rem, 8vw, 5.5rem);
+          color: white;
+          font-weight: 300;
+          margin: 0;
+        }
+        .menu-hero__line {
+          width: 60px;
+          height: 1px;
+          background: var(--menu-gold);
+          margin: 2rem auto;
+        }
+        .menu-hero__desc {
+          font-family: var(--font-display);
+          color: rgba(255,255,255,0.8);
+          font-size: 1.25rem;
+          font-style: italic;
+          max-width: 500px;
+          margin: 0 auto;
+        }
+
+        /* Body */
+        .menu-body {
+          padding: 8rem 0 10rem;
+        }
+        .menu-container {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 0 2rem;
+        }
+
+        .menu-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 4rem 6rem;
+        }
+
+        .menu-section {
+          padding-bottom: 2rem;
+        }
+
+        .menu-items {
+          display: flex;
+          flex-direction: column;
+          gap: 3rem;
+        }
+
+        .menu-item__header {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          margin-bottom: 0.75rem;
+          gap: 1rem;
+        }
+        .menu-item__name {
+          font-family: var(--font-display);
+          font-size: 1.35rem;
+          font-weight: 400;
+          margin: 0;
+          white-space: nowrap;
+          letter-spacing: 0.02em;
         }
         .menu-item__dots {
           flex: 1;
-          height: 1px;
-          border-bottom: 1px dotted rgba(0,0,0,0.15);
-          min-width: 20px;
-          margin: 0 0.5rem;
+          border-bottom: 1px dotted var(--menu-border);
           position: relative;
           top: -4px;
         }
         .menu-item__price {
           font-family: var(--font-body);
-          font-size: 0.9rem;
-          font-weight: 700;
-          color: var(--gold);
-          white-space: nowrap;
-          flex-shrink: 0;
+          font-size: 1rem;
+          font-weight: 500;
+          color: var(--menu-gold);
+          letter-spacing: 0.05em;
         }
-
-        .menu-footer-note {
-          background: var(--charcoal);
-          color: rgba(255,255,255,0.75);
-          padding: 4rem 2rem;
+        .menu-item__desc {
           font-family: var(--font-body);
           font-size: 0.95rem;
-          line-height: 2;
+          color: var(--menu-muted);
+          line-height: 1.6;
+          font-style: italic;
+          font-weight: 300;
         }
 
+        /* Footer */
+        .menu-footer {
+          margin-top: 10rem;
+          text-align: center;
+        }
+        .menu-footer__line {
+          width: 100%;
+          height: 1px;
+          background: var(--menu-border);
+          margin-bottom: 4rem;
+        }
+        .menu-footer__text {
+          font-family: var(--font-body);
+          font-size: 0.9rem;
+          color: var(--menu-muted);
+          line-height: 1.8;
+        }
+        .menu-footer__locations {
+          margin-top: 2rem;
+          font-family: var(--font-body);
+          text-transform: uppercase;
+          letter-spacing: 0.2em;
+          font-size: 0.75rem;
+          color: var(--menu-gold);
+          font-weight: 500;
+        }
+
+        @media (max-width: 900px) {
+          .menu-grid { grid-template-columns: 1fr; gap: 5rem; }
+          .menu-item__desc { max-width: 100%; }
+        }
         @media (max-width: 640px) {
-          .menu-items-grid { grid-template-columns: 1fr; padding: 1rem 1.5rem; }
-          .menu-cat-header { padding: 1.2rem 1.5rem; }
+          .menu-body { padding: 5rem 0 6rem; }
+          .menu-hero { height: 50vh; }
+          .menu-hero__title { font-size: 3rem; }
         }
       `}</style>
     </>

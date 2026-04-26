@@ -3,9 +3,10 @@ import Link from 'next/link';
 
 interface HeaderProps {
   className?: string;
+  hideLogo?: boolean;
 }
 
-export default function Header({ className = '' }: HeaderProps) {
+export default function Header({ className = '', hideLogo = false }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -35,13 +36,15 @@ export default function Header({ className = '' }: HeaderProps) {
     <header suppressHydrationWarning className={`lp-nav${scrolled ? ' lp-nav--scrolled' : ''} ${className}`}>
       <div className="lp-nav__inner">
         {/* Brand */}
-        <Link href="/" className="lp-nav__brand">
-          <img src="/fglogo.png" alt="FamousGate Logo" className="lp-nav__logo" />
-          <div className="lp-nav__brand-text">
-            <span className="lp-nav__brand-fg">FAMOUSGATE</span>
-            <span className="lp-nav__brand-grill">HOTELS</span>
-          </div>
-        </Link>
+        {!hideLogo && (
+          <Link href="/" className="lp-nav__brand">
+            <img src="/fglogo.png" alt="FamousGate Logo" className="lp-nav__logo" />
+            <div className="lp-nav__brand-text">
+              <span className="lp-nav__brand-fg">FAMOUSGATE</span>
+              <span className="lp-nav__brand-grill">HOTELS</span>
+            </div>
+          </Link>
+        )}
 
         {/* Desktop links */}
         <nav aria-label="Main Navigation">

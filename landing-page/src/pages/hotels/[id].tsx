@@ -14,7 +14,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
   const paths = FALLBACK_BRANCHES.map(b => ({
     params: { id: String(b.id) },
   }));
-  return { paths, fallback: false };
+  return { paths, fallback: 'blocking' };
 };
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {

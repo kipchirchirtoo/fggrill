@@ -59,6 +59,12 @@ const BRANCH_GALLERY: Record<number, string[]> = {
     '/FG GRILL PHOTOS/IMG_8757.JPG', '/FG GRILL PHOTOS/IMG_8758.JPG',
     '/FG GRILL PHOTOS/IMG_8762.JPG', '/FG GRILL PHOTOS/IMG_8763.JPG',
   ],
+  5: [
+    '/FG GRILL PHOTOS/IMG_8712.JPG', '/FG GRILL PHOTOS/IMG_8715.JPG',
+    '/FG GRILL PHOTOS/IMG_8722.JPG', '/FG GRILL PHOTOS/IMG_8725.JPG',
+    '/FG GRILL PHOTOS/IMG_8727.JPG', '/FG GRILL PHOTOS/IMG_8729.JPG',
+    '/FG GRILL PHOTOS/IMG_8732.JPG', '/FG GRILL PHOTOS/IMG_8733.JPG',
+  ],
 };
 
 const BRANCH_DESCRIPTIONS: Record<number, { tagline: string; story: string; highlight: string }> = {
@@ -68,9 +74,9 @@ const BRANCH_DESCRIPTIONS: Record<number, { tagline: string; story: string; high
     highlight: 'Our most celebrated property — where the FamousGate journey began.',
   },
   2: {
-    tagline: 'Kericho\'s Premier Destination',
-    story: 'Set amidst the rolling tea-covered hills of Kericho, our Litein branch offers a serene escape from the ordinary. The cool climate, breathtaking landscapes, and our signature world-class hospitality make this branch a beloved retreat for travellers exploring the Great Rift Valley. Whether you arrive for business or leisure, you leave with memories to treasure.',
-    highlight: 'Where Kericho\'s lush green landscape meets unparalleled luxury.',
+    tagline: 'Urban Luxury in Bomet Town',
+    story: 'Located in the bustling heart of Bomet Town, our town branch offers the perfect blend of convenience and sophistication. Designed for the modern traveller, this property provides a sanctuary of peace amidst the city\'s energy. With premium suites and artisanal dining, it is the premier choice for corporate meetings and urban stays.',
+    highlight: 'The definitive urban hospitality experience in Bomet.',
   },
   3: {
     tagline: 'Bomet\'s Hidden Gem',
@@ -81,6 +87,11 @@ const BRANCH_DESCRIPTIONS: Record<number, { tagline: string; story: string; high
     tagline: 'Gateway to the South Rift',
     story: 'Strategically located in Sotik — the bustling commercial hub of southern Bomet County — our Sotik branch is the go-to destination for traders, travellers, and those seeking premium accommodation along the Bomet–Narok corridor. Experience our signature hospitality as you explore the vibrant local markets, breathtaking tea estates, and warm community spirit.',
     highlight: 'The premier stop for travellers on the Bomet–Narok corridor.',
+  },
+  5: {
+    tagline: 'Kericho\'s Premier Destination',
+    story: 'Set amidst the rolling tea-covered hills of Kericho, our Litein branch offers a serene escape from the ordinary. The cool climate, breathtaking landscapes, and our signature world-class hospitality make this branch a beloved retreat for travellers exploring the Great Rift Valley. Whether you arrive for business or leisure, you leave with memories to treasure.',
+    highlight: 'Where Kericho\'s lush green landscape meets unparalleled luxury.',
   },
 };
 
