@@ -348,9 +348,7 @@ export const getShifts = async (req: Request, res: Response) => {
       .from('cashier_shifts')
       .select(`
         *,
-        cashier:users!cashier_id(id, first_name, last_name, role),
-        sales_point:sales_points(*),
-        reviewed_by_user:users!reviewed_by(id, first_name, last_name)
+        sales_point:sales_points(*)
       `)
       .order('start_time', { ascending: false });
 
@@ -382,9 +380,42 @@ export const getShifts = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    res.json({
+    if (!shifts || shifts.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Manually enrich shifts with user data since FKs are missing
+    const cashierIds = [...new Set(shifts.map(s => s.cashier_id).filter(Boolean))];
+    const reviewerIds = [...new Set(shifts.map(s => s.approved_by).filter(Boolean))];
+    const allUserIds = [...new Set([...cashierIds, ...reviewerIds])];
+
+    const userMap: Record<string, any> = {};
+    if (allUserIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, role')
+        .in('id', allUserIds);
+      
+      (users || []).forEach(u => {
+        userMap[u.id] = u;
+      });
+    }
+
+    const enrichedShifts = shifts.map(s => {
+      const enriched = {
+        ...s,
+        cashier: userMap[s.cashier_id] || null,
+        reviewed_by_user: userMap[s.approved_by] || null
+      };
+      return mapShiftResponse(enriched);
+    });
+
+    res.status(200).json({
       success: true,
-      data: (shifts || []).map(mapShiftResponse)
+      data: enrichedShifts
     });
   } catch (error: any) {
     console.error('Get shifts error:', error);
@@ -407,9 +438,7 @@ export const getShiftDetails = async (req: Request, res: Response) => {
       .from('cashier_shifts')
       .select(`
         *,
-        cashier:users!cashier_id(id, first_name, last_name, role, employee_id),
         sales_point:sales_points(*),
-        reviewed_by_user:users!approved_by(id, first_name, last_name),
         staff_assignments:shift_staff_assignments(
           id,
           staff_id,
@@ -451,9 +480,30 @@ export const getShiftDetails = async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    // Manually fetch cashier and reviewer since FKs are missing
+    const userIds = [shift.cashier_id, shift.approved_by].filter(Boolean);
+    const userMap: Record<string, any> = {};
+    
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, role, employee_id')
+        .in('id', userIds);
+      
+      (users || []).forEach(u => {
+        userMap[u.id] = u;
+      });
+    }
+
+    const enrichedShift = {
+      ...shift,
+      cashier: userMap[shift.cashier_id] || null,
+      reviewed_by_user: userMap[shift.approved_by] || null
+    };
+
+    res.status(200).json({
       success: true,
-      data: mapShiftResponse(shift)
+      data: mapShiftResponse(enrichedShift)
     });
   } catch (error: any) {
     console.error('Get shift details error:', error);
