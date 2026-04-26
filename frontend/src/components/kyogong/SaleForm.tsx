@@ -48,9 +48,9 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
     const { user } = useAuth();
     const { activeBranch } = useBranch();
 
-    const subtotal = cart.reduce((s, i) => s + i.quantity * i.unit_price, 0);
-    const tax = subtotal * 0.16;
-    const total = subtotal + tax;
+    const total = cart.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+    const subtotal = total / 1.16;
+    const tax = total - subtotal;
 
     useEffect(() => {
         fetchServices();
@@ -460,16 +460,16 @@ export function SaleForm({ shift, serviceType, onTransactionCreated }: SaleFormP
                         {/* Totals */}
                         <div className="bg-stone-50/80 backdrop-blur-sm rounded-2xl p-5 border border-stone-100 space-y-2 mb-4">
                             <div className="flex justify-between text-stone-500 text-xs font-bold uppercase tracking-widest">
-                                <span>Subtotal</span>
-                                <span>KES {subtotal.toFixed(2)}</span>
+                                <span>Subtotal (Net)</span>
+                                <span>KES {subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between text-stone-500 text-xs font-bold uppercase tracking-widest">
-                                <span>VAT (16%)</span>
-                                <span>KES {tax.toFixed(2)}</span>
+                                <span>VAT (16% Incl.)</span>
+                                <span>KES {tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center pt-3 border-t border-stone-200 mt-2">
                                 <span className="text-stone-900 font-black uppercase tracking-widest text-sm">Total</span>
-                                <span className="text-blue-600 font-black text-2xl">KES {total.toFixed(2)}</span>
+                                <span className="text-blue-600 font-black text-2xl">KES {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                         </div>
 
