@@ -22,6 +22,7 @@ export default function Header({ className = '' }: HeaderProps) {
 
   const navItems = [
     { label: 'About', href: '/about' },
+    { label: 'Menu', href: '/menu' },
     { label: 'Dining', href: '/dining' },
     { label: 'Events', href: '/events' },
     { label: 'Hotels', href: '/hotels' },
