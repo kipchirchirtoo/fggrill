@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { Header, Footer } from '@/components/layout'
 import { Breadcrumb } from '@/components/Breadcrumb'
-import Image from 'next/image'
 
 export const metadata: Metadata = {
   title: 'FG Grill Menu | Famous Gates Hotels Nairobi Restaurant',

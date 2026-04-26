@@ -59,7 +59,6 @@ export default function HomeClient() {
   const [checkOut, setCheckOut] = useState('');
   const [guests, setGuests] = useState('1');
   const [availableRooms, setAvailableRooms] = useState<any[]>([]);
-  const [allRooms, setAllRooms] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [booking, setBooking] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
@@ -88,23 +87,7 @@ export default function HomeClient() {
     };
     loadBranches();
 
-    const loadAllRooms = async () => {
-      try {
-        const today = new Date();
-        const nextWeek = new Date(today);
-        nextWeek.setDate(today.getDate() + 7);
-        const checkInStr = today.toISOString().split('T')[0];
-        const checkOutStr = nextWeek.toISOString().split('T')[0];
-        const data = await bookingService.searchAvailableRooms({
-          checkIn: checkInStr,
-          checkOut: checkOutStr
-        });
-        setAllRooms(data || []);
-      } catch (err) {
-        console.error('Failed to load rooms:', err);
-      }
-    };
-    loadAllRooms();
+    loadBranches();
   }, []);
 
   const handleSearch = async () => {
@@ -533,7 +516,7 @@ export default function HomeClient() {
          <section className="lp-results" id="search-results">
           <div className="lp-container">
             <div className="lp-results__grid">
-              {availableRooms.map((room, i) => (
+              {availableRooms.map((room) => (
                 <div key={room.id} className="lp-room-card">
                    <div className="lp-room-card__header">
                     <div className="lp-room-card__type">{room.type?.name || 'Luxury Room'}</div>
