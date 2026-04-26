@@ -336,3 +336,107 @@ export const autoDeductIngredients = async (req: Request, res: Response) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+/**
+ * Lock recipe (Manager only)
+ * POST /api/kitchen/recipes/:id/lock
+ */
+export const lockRecipe = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const userId = (req as any).user?.id;
+
+        const { data, error } = await supabase
+            .from('recipes')
+            .update({
+                is_locked: true,
+                locked_by: userId,
+                locked_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Log change
+        await supabase
+            .from('recipe_change_log')
+            .insert({
+                recipe_id: id,
+                changed_by: userId,
+                change_type: 'LOCKED',
+                change_description: 'Recipe locked by manager'
+            });
+
+        res.json({ success: true, data, message: 'Recipe locked successfully' });
+    } catch (error: any) {
+        console.error('Error locking recipe:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Unlock recipe (Manager only)
+ * POST /api/kitchen/recipes/:id/unlock
+ */
+export const unlockRecipe = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const userId = (req as any).user?.id;
+
+        const { data, error } = await supabase
+            .from('recipes')
+            .update({
+                is_locked: false,
+                locked_by: null,
+                locked_at: null
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Log change
+        await supabase
+            .from('recipe_change_log')
+            .insert({
+                recipe_id: id,
+                changed_by: userId,
+                change_type: 'UNLOCKED',
+                change_description: 'Recipe unlocked by manager'
+            });
+
+        res.json({ success: true, data, message: 'Recipe unlocked successfully' });
+    } catch (error: any) {
+        console.error('Error unlocking recipe:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Get recipe change history
+ * GET /api/kitchen/recipes/:id/history
+ */
+export const getRecipeHistory = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const { data, error } = await supabase
+            .from('recipe_change_log')
+            .select(`
+                *,
+                changed_by_user:users!changed_by(first_name, last_name)
+            `)
+            .eq('recipe_id', id)
+            .order('changed_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error fetching recipe history:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

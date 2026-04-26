@@ -34,8 +34,8 @@ from reportlab.pdfgen import canvas
 from PIL import Image as PILImage
 
 # Kyogong Brand Colors
-FG_DARK = colors.HexColor('#3C3C43')
-FG_GRAY = colors.HexColor('#8E8E93')
+FG_DARK = colors.HexColor('#1A1A1A')
+FG_GRAY = colors.HexColor('#444444')
 FG_LIGHT = colors.HexColor('#F2F2F7')
 FG_GREEN = colors.HexColor('#34C759')
 FG_ORANGE = colors.HexColor('#FF9500')
@@ -72,25 +72,25 @@ class BrandedPDFGenerator:
         self.styles.add(ParagraphStyle(
             name='ReportTitle',
             parent=self.styles['Heading1'],
-            fontSize=18,
+            fontSize=20,
             textColor=FG_DARK,
-            spaceAfter=6,
+            spaceAfter=8,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold'
         ))
         self.styles.add(ParagraphStyle(
             name='SectionHeader',
             parent=self.styles['Heading2'],
-            fontSize=12,
+            fontSize=14,
             textColor=FG_DARK,
-            spaceBefore=12,
-            spaceAfter=6,
+            spaceBefore=14,
+            spaceAfter=8,
             fontName='Helvetica-Bold'
         ))
         self.styles.add(ParagraphStyle(
             name='TableHeader',
             parent=self.styles['Normal'],
-            fontSize=9,
+            fontSize=10,
             textColor=FG_BLACK,
             fontName='Helvetica-Bold',
             alignment=TA_CENTER
@@ -98,22 +98,22 @@ class BrandedPDFGenerator:
         self.styles.add(ParagraphStyle(
             name='TableCell',
             parent=self.styles['Normal'],
-            fontSize=9,
+            fontSize=10,
             textColor=FG_BLACK,
             fontName='Helvetica'
         ))
         self.styles.add(ParagraphStyle(
             name='TableText',
             parent=self.styles['Normal'],
-            fontSize=8,
+            fontSize=9,
             textColor=FG_BLACK,
             fontName='Helvetica'
         ))
         self.styles.add(ParagraphStyle(
             name='SmallText',
             parent=self.styles['Normal'],
-            fontSize=8,
-            textColor=FG_GRAY
+            fontSize=9,
+            textColor=FG_DARK
         ))
         self.styles.add(ParagraphStyle(
             name='FooterText',
@@ -2898,21 +2898,23 @@ class BrandedPDFGenerator:
             ['AC Name:', 'FAMOUS GATES LIMITED', 'Bank:', 'ABSA BANK'],
             ['AC No:', '2041305757', 'Branch:', 'BOMET'],
         ]
-        bank_table = Table(bank_data, colWidths=[1.2*inch, 2.3*inch, 1.2*inch, 2.3*inch])
+        bank_table = Table(bank_data, colWidths=[1.5*inch, 2.25*inch, 1.5*inch, 2.25*inch])
         bank_table.setStyle(TableStyle([
             ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
             ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
             ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
-            ('BACKGROUND', (0, 0), (-1, -1), ROW_ALT),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('BACKGROUND', (0, 0), (0, -1), ROW_ALT),
+            ('BACKGROUND', (2, 0), (2, -1), ROW_ALT),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
         elements.append(bank_table)
         
         # Issuer info
         elements.append(Spacer(1, 0.1*inch))
-        elements.append(Paragraph("<i>Issued by: FamousGate Hote</i>", self.styles['SmallText']))
+        elements.append(Paragraph("<i>Issued by: FamousGate Hotels</i>", self.styles['SmallText']))
         
         return self._create_pdf(elements, filename=f"/tmp/CNF_Invoice_{data.get('invoice_number', 'EXT')}.pdf")
 

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 // ==========================================
 // SHIFT LOGBOOK
@@ -25,15 +26,26 @@ export const getShiftLogs = async (
             .select('*')
             .order('shift_start', { ascending: false });
 
-        // Filter by branch
-        if (branch_id) {
-            query = query.eq('branch_id', branch_id);
-        }
-
+        // Apply branch isolation automatically
+        query = applyBranchFilter(query, req);
+        
         // Cashiers can only see their own shifts unless they're admin/accountant/auditor
-        if (userRole === 'cashier' && !cashier_id) {
+        const managerRoles = [
+            'super_admin',
+            'general_manager', 
+            'branch_manager',
+            'accountant',
+            'branch_accountant',
+            'auditor'
+        ];
+        
+        const isManager = managerRoles.includes((userRole || '').toString().toLowerCase()) || isGlobalRole(userRole?.toString());
+        
+        if (!isManager) {
+            // Non-managers (all cashier roles) can ONLY see their own shifts
             query = query.eq('cashier_id', userId);
         } else if (cashier_id) {
+            // Managers can filter by specific cashier if they want
             query = query.eq('cashier_id', cashier_id);
         }
 
@@ -176,14 +188,29 @@ export const getShiftLog = async (
     try {
         const { id } = req.params;
 
-        const { data: shift, error: shiftError } = await supabase
-            .from('cashier_shift_logs')
-            .select('*')
-            .eq('id', id)
-            .single();
+        let query = supabase.from("cashier_shift_logs").select("*").eq("id", id);
+        query = applyBranchFilter(query, req);
+        const { data: shift, error: shiftError } = await query.single();
 
         if (shiftError) throw shiftError;
         if (!shift) throw new AppError('Shift not found', 404);
+
+        // Verify ownership - cashiers can only view their own shifts
+        const userId = req.user?.id;
+        const userRole = (req.user?.role || '').toString().toLowerCase();
+        const managerRoles = [
+            'super_admin',
+            'general_manager',
+            'branch_manager',
+            'accountant',
+            'branch_accountant',
+            'auditor'
+        ];
+        const isManager = managerRoles.includes(userRole) || isGlobalRole(userRole);
+        
+        if (!isManager && shift.cashier_id !== userId) {
+            throw new AppError('You can only view your own shifts', 403);
+        }
 
         // Get transactions
         const { data: transactions, error: txError } = await supabase
@@ -301,7 +328,7 @@ export const startShift = async (
     try {
         const { opening_float, notes } = req.body;
         const userId = req.user?.id;
-        const userName = `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim();
+        const userName = `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim();
         const branchId = req.user?.branch_id;
 
         if (!branchId) {
@@ -403,9 +430,24 @@ export const closeShift = async (
         if (shiftError) throw shiftError;
         if (!shift) throw new AppError('Shift not found', 404);
 
-        // Verify ownership
-        if (shift.cashier_id !== userId && req.user?.role !== 'super_admin') {
-            throw new AppError('You can only close your own shifts', 403);
+        // Verify ownership - allow cashier to close own shift, or managers/accountants/auditors to close any shift
+        const userRole = (req.user?.role || '').toString().toLowerCase();
+        const canCloseAnyShift = [
+            'super_admin',
+            'general_manager',
+            'branch_manager',
+            'accountant',
+            'branch_accountant',
+            'auditor'
+        ].includes(userRole) || isGlobalRole(userRole);
+        
+        if (shift.cashier_id !== userId && !canCloseAnyShift) {
+            throw new AppError('You can only close your own shifts. Please contact a manager if you need to close this shift.', 403);
+        }
+        
+        // Also ensure shift belongs to user's branch if they are not global
+        if (!isGlobalRole(userRole) && shift.branch_id !== req.user?.branch_id) {
+            throw new AppError('You can only manage shifts within your own branch', 403);
         }
 
         if (shift.status !== 'open') {
@@ -599,7 +641,7 @@ export const reconcileShift = async (
         const { reconciliation_notes } = req.body;
         const userId = req.user?.id;
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('cashier_shift_logs')
             .update({
                 status: 'reconciled',
@@ -608,9 +650,14 @@ export const reconcileShift = async (
                 reconciliation_notes,
                 updated_at: new Date().toISOString()
             })
-            .eq('id', id)
-            .select()
-            .single();
+            .eq('id', id);
+            
+        // Enforce branch isolation
+        if (!isGlobalRole(req.user?.role)) {
+            query = query.eq('branch_id', req.user?.branch_id);
+        }
+        
+        const { data, error } = await query.select().single();
 
         if (error) throw error;
 
@@ -636,7 +683,7 @@ export const verifyShift = async (
         const { verification_notes } = req.body;
         const userId = req.user?.id;
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('cashier_shift_logs')
             .update({
                 status: 'verified',
@@ -645,9 +692,14 @@ export const verifyShift = async (
                 verification_notes,
                 updated_at: new Date().toISOString()
             })
-            .eq('id', id)
-            .select()
-            .single();
+            .eq('id', id);
+            
+        // Enforce branch isolation
+        if (!isGlobalRole(req.user?.role)) {
+            query = query.eq('branch_id', req.user?.branch_id);
+        }
+        
+        const { data, error } = await query.select().single();
 
         if (error) throw error;
 
@@ -671,6 +723,41 @@ export const addShiftTransaction = async (
     try {
         const { id } = req.params;
         const { transaction_id, transaction_ref, payment_method, amount } = req.body;
+        const userId = req.user?.id;
+        const userRole = (req.user?.role || '').toString().toLowerCase();
+
+        // 1. Fetch shift to verify ownership
+        const { data: shift, error: shiftError } = await supabase
+            .from('cashier_shift_logs')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (shiftError || !shift) {
+            throw new AppError('Shift not found', 404);
+        }
+
+        // 2. Ownership & Branch check
+        const isManager = [
+            'super_admin',
+            'general_manager',
+            'branch_manager',
+            'accountant',
+            'branch_accountant',
+            'auditor'
+        ].includes(userRole) || isGlobalRole(userRole);
+
+        if (shift.cashier_id !== userId && !isManager) {
+            throw new AppError('You can only add transactions to your own shifts', 403);
+        }
+
+        if (!isGlobalRole(userRole) && shift.branch_id !== req.user?.branch_id) {
+            throw new AppError('Unauthorized branch access', 403);
+        }
+
+        if (shift.status !== 'open') {
+            throw new AppError('Cannot add transactions to a closed shift', 400);
+        }
 
         const { data, error } = await supabase
             .from('cashier_shift_transactions')

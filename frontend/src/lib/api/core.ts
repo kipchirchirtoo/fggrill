@@ -179,10 +179,11 @@ export async function fetchAPI<T>(
       // Normalize response shape if necessary
       return {
         success: result.success ?? true,
-        data: result.data ?? result,
+        data: result.data !== undefined ? result.data : result,
         message: result.message,
         count: result.count,
         pages: result.pages,
+
         stats: result.stats,
         summary: result.summary
       } as ApiResponse<T>;

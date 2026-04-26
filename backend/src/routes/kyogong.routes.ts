@@ -10,7 +10,8 @@ import {
   getShifts,
   getShiftDetails,
   approveShift,
-  flagShift
+  flagShift,
+  recalculateShiftTotals
 } from '../controllers/kyogong/shifts.controller';
 
 import {
@@ -251,6 +252,20 @@ router.put('/shifts/:id/close',
     UserRole.KYOGONG_RECEPTION_CASHIER
   ]),
   closeShift
+);
+
+// Recalculate shift totals
+router.post('/shifts/:id/recalculate',
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.CASHIER,
+    UserRole.RECEPTIONIST,
+    UserRole.KYOGONG_SPA_CASHIER,
+    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+    UserRole.KYOGONG_RECEPTION_CASHIER
+  ]),
+  recalculateShiftTotals
 );
 
 // Approve shift (Branch Accountant)

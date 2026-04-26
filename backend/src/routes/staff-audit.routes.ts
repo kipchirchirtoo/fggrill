@@ -8,17 +8,13 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication and specific roles
-router.use(protect);
-router.use(authorize('branch_manager', 'branch_accountant', 'auditor', 'super_admin', 'general_manager'));
-
 // Get staff audit trail
-router.get('/audit', getStaffAuditTrail);
+router.get('/audit', protect, authorize('branch_manager', 'branch_accountant', 'auditor', 'super_admin', 'general_manager'), getStaffAuditTrail);
 
 // Get critical actions only
-router.get('/audit/critical', getCriticalActions);
+router.get('/audit/critical', protect, authorize('branch_manager', 'branch_accountant', 'auditor', 'super_admin', 'general_manager'), getCriticalActions);
 
 // Get audit summary for specific staff member
-router.get('/:id/audit-summary', getStaffAuditSummary);
+router.get('/:id/audit-summary', protect, authorize('branch_manager', 'branch_accountant', 'auditor', 'super_admin', 'general_manager'), getStaffAuditSummary);
 
 export default router;

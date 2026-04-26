@@ -52,30 +52,45 @@ export function KyogongPOSLayout({
         setShiftLoading(true);
         try {
             const res = await kyogongAPI.getCurrentShift();
-            console.log('🌐 [Web] getCurrentShift RAW response:', JSON.stringify(res, null, 2));
-            
+
             if (res.success && res.data) {
-                console.log('🌐 [Web] Shift data:', JSON.stringify(res.data, null, 2));
-                console.log('🌐 [Web] Shift ID:', res.data.id);
-                console.log('🌐 [Web] Shift keys:', Object.keys(res.data));
-                
-                // Ensure the shift has an ID before setting it
                 if (!res.data.id) {
-                    console.error('🌐 [Web] CRITICAL ERROR: Shift data missing ID field!', res.data);
                     toast.error('Invalid shift data received. Please refresh the page.');
                     setActiveShift(null);
                     return;
                 }
                 
-                setActiveShift(res.data);
-                fetchTransactions(res.data.id);
+                // Recalculate shift totals to ensure they're up to date
+                try {
+                    await fetch(`/api/kyogong/shifts/${res.data.id}/recalculate`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    // Fetch the shift again to get updated totals
+                    const updatedRes = await kyogongAPI.getCurrentShift();
+                    if (updatedRes.success && updatedRes.data) {
+                        setActiveShift(updatedRes.data);
+                        fetchTransactions(updatedRes.data.id);
+                    } else {
+                        setActiveShift(res.data);
+                        fetchTransactions(res.data.id);
+                    }
+                } catch (recalcError) {
+                    // If recalculate fails, just use the original data
+                    console.error('Failed to recalculate shift totals:', recalcError);
+                    setActiveShift(res.data);
+                    fetchTransactions(res.data.id);
+                }
             } else {
-                console.log('🌐 [Web] No active shift found');
                 setActiveShift(null);
             }
         } catch (error) {
-            console.error('🌐 [Web] Error fetching current shift:', error);
-            toast.error('Failed to load shift data');
+            const message = error instanceof Error ? error.message : 'Failed to load shift data';
+            toast.error(message);
             setActiveShift(null);
         } finally {
             setShiftLoading(false);
@@ -83,14 +98,14 @@ export function KyogongPOSLayout({
     };
 
     const fetchTransactions = async (shiftId: string) => {
-        if (!shiftId) {
-            console.warn('Cannot fetch transactions: shiftId is undefined');
-            return;
-        }
+        if (!shiftId) return;
         try {
             const res = await kyogongAPI.getShiftTransactions(shiftId);
             if (res.success) setTransactions(res.data || []);
-        } catch { /* silent */ }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to load transactions';
+            toast.error(message);
+        }
     };
 
     const handleShiftOpened = (shift: any) => {
@@ -139,6 +154,13 @@ export function KyogongPOSLayout({
                     </div>
                     {activeShift && (
                         <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => window.location.href = '/dashboard/cashier?tab=logbook'}
+                                className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-sm font-bold border border-blue-100 hover:bg-blue-100 transition-colors"
+                            >
+                                <List className="w-4 h-4" />
+                                Shift Logbook
+                            </button>
                             <button
                                 onClick={() => setShowDynamicBillModal(true)}
                                 className="flex items-center gap-1.5 bg-orange-50 text-orange-700 px-3 py-1.5 rounded-full text-sm font-bold border border-orange-100 hover:bg-orange-100 transition-colors"

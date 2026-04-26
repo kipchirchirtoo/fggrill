@@ -1004,6 +1004,21 @@ export function ConsolidatedNav() {
         />
       </NavGroup>
 
+      <NavGroup label="Procurement" icon={ShoppingCart} defaultOpen>
+        <NavItem
+          href="/dashboard/branch-store/purchase-orders"
+          icon={FileText}
+          label="Purchase Orders"
+          active={pathname === '/dashboard/branch-store/purchase-orders'}
+        />
+        <NavItem
+          href="/dashboard/branch-store/requests"
+          icon={ShoppingCart}
+          label="Store Requisitions"
+          active={pathname === '/dashboard/branch-store/requests'}
+        />
+      </NavGroup>
+
       <NavItem
         href="/dashboard/branch-store/kitchen-usage"
         icon={Utensils}
@@ -1016,14 +1031,6 @@ export function ConsolidatedNav() {
         icon={TrendingDown}
         label="Stock Out"
         active={pathname === '/dashboard/branch-store/stock-out'}
-      />
-
-      <hr className="my-2 border-stone-100" />
-      <NavItem
-        href="/dashboard/branch-store/requests"
-        icon={ShoppingCart}
-        label="Store Requisitions"
-        active={pathname === '/dashboard/branch-store/requests'}
       />
     </>
   );

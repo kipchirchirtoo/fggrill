@@ -168,6 +168,9 @@ export const protect = async (
   }
 };
 
+// Alias for compatibility
+export const authenticateToken = protect;
+
 // Grant access to specific roles
 export const authorize = (roles: UserRole[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -179,19 +182,22 @@ export const authorize = (roles: UserRole[]) => {
       return;
     }
 
-    const userRole = String(req.user.role).toLowerCase();
-    const allowedRoles = roles.map(r => String(r).toLowerCase());
+    const userRole = String(req.user.role).toLowerCase().trim();
+    const allowedRoles = roles.map(r => String(r).toLowerCase().trim());
+
+    logger.info(`[RBAC Check] URL: ${req.originalUrl}, User Role: "${userRole}", Allowed: [${allowedRoles.join(', ')}]`);
 
     if (!allowedRoles.includes(userRole)) {
       logger.error('Authorization failed', {
         userId: req.user.id,
-        userRole,
+        userRole: `"${userRole}"`,
+        userRoleRaw: req.user.role,
         expectedOneOf: allowedRoles,
         url: req.originalUrl
       });
       res.status(403).json({
         success: false,
-        message: `User role ${req.user.role} is not authorized to access this route. Expected one of: ${roles.join(', ')}`
+        message: `[RBAC] 403 Forbidden: ${req.originalUrl} — current user lacks permission (role: ${userRole})`
       });
       return;
     }

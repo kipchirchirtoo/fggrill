@@ -84,6 +84,11 @@ import adminLogsRoutes from './admin-logs.routes';
 import adminAiRoutes from './admin-ai.route';
 import searchRoutes from './search.routes';
 import branchAnalyticsRoutes from './branch-analytics.routes';
+import buffetRoutes from './buffet.routes';
+import cateringFoodControlRoutes from './catering.routes';
+import foodControlRoutes from './foodControl.routes';
+import shiftPnLRoutes from './shiftPnL.routes';
+import branchFoodControlConfigRoutes from './branchFoodControlConfig.routes';
 
 const router = express.Router();
 
@@ -191,6 +196,13 @@ router.use('/admin-ai', adminAiRoutes);
 router.use('/search', searchRoutes);
 router.use('/analytics', branchAnalyticsRoutes);
 router.use('/dispatch', dispatchRoutes);
+
+// Food Control System routes
+router.use('/buffet', buffetRoutes);
+router.use('/catering-food-control', cateringFoodControlRoutes);
+router.use('/food-control', foodControlRoutes);
+router.use('/finance/shift-pnl', shiftPnLRoutes);
+router.use('/branch-food-control-config', branchFoodControlConfigRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

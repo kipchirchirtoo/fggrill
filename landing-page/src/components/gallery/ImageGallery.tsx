@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 
 interface ImageGalleryProps {
-  images: string[];
+  images: { url: string; alt: string }[];
   initialIndex?: number;
   onClose: () => void;
   isOpen: boolean;
@@ -10,7 +10,8 @@ interface ImageGalleryProps {
 // Image preloading utility
 const preloadImage = (src: string): Promise<void> => {
   return new Promise((resolve, reject) => {
-    const img = new Image();
+    if (typeof window === 'undefined') return resolve();
+    const img = new globalThis.Image();
     img.onload = () => resolve();
     img.onerror = reject;
     img.src = src;
@@ -64,7 +65,7 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
       setIsLoading(true);
 
       try {
-        await Promise.all(toPreload.map((idx) => preloadImage(galleryImages[idx])));
+        await Promise.all(toPreload.map((idx) => preloadImage(galleryImages[idx].url)));
 
         setLoadedImages((prev) => {
           const updated = new Set(prev);
@@ -225,12 +226,13 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
       {/* Main image display */}
       <div className="flex items-center justify-center h-full w-full p-4">
         <img
-          src={galleryImages[currentIndex]}
-          alt={`Hotel image ${currentIndex + 1} of ${galleryImages.length}`}
+          src={galleryImages[currentIndex].url}
+          alt={galleryImages[currentIndex].alt}
           className="max-w-full max-h-[80vh] object-contain"
           loading="eager"
         />
       </div>
+
 
       {/* Loading indicator */}
       {isLoading && (
@@ -259,12 +261,13 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
               aria-current={index === currentIndex ? 'true' : 'false'}
             >
               <img
-                src={image}
-                alt={`Thumbnail ${index + 1}`}
+                src={image.url}
+                alt={`Thumbnail: ${image.alt}`}
                 className="w-full h-full object-cover"
                 loading="lazy"
               />
             </button>
+
           ))}
         </div>
       </div>

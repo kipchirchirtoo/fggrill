@@ -12,12 +12,13 @@ export const getSalesPoints = async (req: Request, res: Response) => {
     const { is_active } = req.query;
     const branch_id = req.user?.branch_id;
 
+    logger.info(`[getSalesPoints] Fetching sales points for branch_id: ${branch_id}, is_active: ${is_active}`);
+
     let query = supabase
       .from('sales_points')
       .select('*')
       .order('name');
 
-    // Only filter by branch_id if it's a valid non-null value
     if (branch_id !== null && branch_id !== undefined) {
       query = query.eq('branch_id', branch_id);
     }
@@ -30,12 +31,14 @@ export const getSalesPoints = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
+    logger.info(`[getSalesPoints] Found ${salesPoints?.length || 0} sales points`);
+
     res.json({
       success: true,
       data: salesPoints || []
     });
   } catch (error: any) {
-    console.error('Get sales points error:', error);
+    logger.error('Get sales points error:', { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get sales points'
@@ -71,7 +74,7 @@ export const getSalesPointDetails = async (req: Request, res: Response) => {
       data: salesPoint
     });
   } catch (error: any) {
-    console.error('Get sales point details error:', error);
+    logger.error('Get sales point details error:', { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get sales point details'
@@ -189,7 +192,7 @@ export const createDynamicService = async (req: Request, res: Response) => {
       data: service
     });
   } catch (error: any) {
-    console.error('Create dynamic service error:', error);
+    logger.error('Create dynamic service error:', { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create dynamic service'
@@ -242,7 +245,7 @@ export const updateDynamicService = async (req: Request, res: Response) => {
       data: service
     });
   } catch (error: any) {
-    console.error('Update dynamic service error:', error);
+    logger.error('Update dynamic service error:', { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to update dynamic service'
@@ -289,7 +292,7 @@ export const getPoolTokensInventory = async (req: Request, res: Response) => {
       data: inventory || []
     });
   } catch (error: any) {
-    console.error('Get pool tokens inventory error:', error);
+    logger.error('Get pool tokens inventory error:', { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get pool tokens inventory'

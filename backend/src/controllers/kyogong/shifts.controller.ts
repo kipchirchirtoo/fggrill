@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { FloatHistoryService } from '../../services/kyogong/float-history.service';
+import { logger } from '../../utils/logger';
 
 // Helper to map shift object to what frontend expects
 const mapShiftResponse = (shift: any) => {
@@ -31,8 +32,7 @@ export const openShift = async (req: Request, res: Response) => {
     const {
       sales_point_id,
       opening_cash_float,
-      opening_petty_cash,
-      assigned_staff // Array of { staff_id, staff_role }
+      opening_petty_cash
     } = req.body;
 
     const cashier_id = req.user?.id;
@@ -63,7 +63,7 @@ export const openShift = async (req: Request, res: Response) => {
     // Check if sales point already has an open shift
     const { data: pointShift } = await supabase
       .from('cashier_shifts')
-      .select('id, shift_number, cashier_id')
+      .select('id, shift_number')
       .eq('sales_point_id', sales_point_id)
       .eq('status', 'open')
       .single();
@@ -71,16 +71,16 @@ export const openShift = async (req: Request, res: Response) => {
     if (pointShift) {
       return res.status(400).json({
         success: false,
-        error: `This sales point already has an open shift: ${pointShift.shift_number}`
+        error: `This sales point already has an open shift`
       });
     }
 
-    // Generate shift number: SHF-YYYYMMDD-HHMMSS
+    // Generate shift number
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, '0');
     const shift_number = `SHF-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 
-    // Create new shift — uses actual DB column names
+    // Create new shift
     const { data: shift, error: shiftError } = await supabase
       .from('cashier_shifts')
       .insert({
@@ -92,7 +92,6 @@ export const openShift = async (req: Request, res: Response) => {
         opening_float: opening_cash_float,
         opening_petty_cash: opening_petty_cash || 0,
         status: 'open',
-        // Initialize float tracking fields
         current_float: opening_cash_float,
         expected_cash: opening_cash_float,
         total_change_given: 0,
@@ -116,25 +115,7 @@ export const openShift = async (req: Request, res: Response) => {
         cashier_id
       );
     } catch (historyError: any) {
-      console.error('Float history error:', historyError);
-      // Don't fail shift opening if history recording fails
-    }
-
-    // Assign staff if provided
-    if (assigned_staff && Array.isArray(assigned_staff) && assigned_staff.length > 0) {
-      const staffAssignments = assigned_staff.map((staff: any) => ({
-        shift_id: shift.id,
-        staff_id: staff.staff_id,
-        staff_role: staff.staff_role
-      }));
-
-      const { error: assignError } = await supabase
-        .from('shift_staff_assignments')
-        .insert(staffAssignments);
-
-      if (assignError) {
-        console.error('Staff assignment error:', assignError);
-      }
+      logger.error('Float history error:', { message: historyError.message });
     }
 
     res.json({
@@ -143,7 +124,7 @@ export const openShift = async (req: Request, res: Response) => {
       data: mapShiftResponse(shift)
     });
   } catch (error: any) {
-    console.error('Open shift error:', error);
+    logger.error('Open shift error:', { message: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to open shift'
@@ -581,6 +562,62 @@ export const flagShift = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to flag shift'
+    });
+  }
+};
+
+
+/**
+ * Recalculate shift totals from transactions
+ * POST /api/kyogong/shifts/:id/recalculate
+ */
+export const recalculateShiftTotals = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get all non-voided transactions for this shift
+    const { data: transactions, error: txError } = await supabase
+      .from('shift_transactions')
+      .select('total_amount, cash_amount, mpesa_amount, card_amount')
+      .eq('shift_id', id)
+      .eq('is_voided', false);
+
+    if (txError) throw txError;
+
+    // Calculate totals
+    const total_revenue = transactions?.reduce((sum, tx) => sum + (tx.total_amount || 0), 0) || 0;
+    const total_cash_in = transactions?.reduce((sum, tx) => sum + (tx.cash_amount || 0), 0) || 0;
+    const total_mpesa_in = transactions?.reduce((sum, tx) => sum + (tx.mpesa_amount || 0), 0) || 0;
+    const total_card_in = transactions?.reduce((sum, tx) => sum + (tx.card_amount || 0), 0) || 0;
+    const total_transactions = transactions?.length || 0;
+
+    // Update shift
+    const { data: updatedShift, error: updateError } = await supabase
+      .from('cashier_shifts')
+      .update({
+        total_revenue,
+        total_cash_in,
+        total_mpesa_in,
+        total_card_in,
+        total_transactions,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.json({
+      success: true,
+      message: 'Shift totals recalculated successfully',
+      data: mapShiftResponse(updatedShift)
+    });
+  } catch (error: any) {
+    logger.error('Recalculate shift totals error:', { message: error.message, stack: error.stack });
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to recalculate shift totals'
     });
   }
 };

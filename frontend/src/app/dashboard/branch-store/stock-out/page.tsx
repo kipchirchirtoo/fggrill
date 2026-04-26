@@ -10,7 +10,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { storeAPI, auditAPI, auditorReportsAPI } from '@/lib/api';
-import { TrendingDown, RefreshCw, Plus, Package, Calendar, User, Clock, FileText, Tag, ChevronRight, X, FileDown, Activity, AlertTriangle, Check, ShoppingCart } from 'lucide-react';
+import { TrendingDown, RefreshCw, Plus, Package, Calendar, User, Clock, FileText, Tag, ChevronRight, X, FileDown, Activity, AlertTriangle, Check, ShoppingCart, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
@@ -79,6 +79,7 @@ export default function BranchStockOutPage() {
   const [selectedRecord, setSelectedRecord] = useState<StockMovement | null>(null);
   const [items, setItems] = useState<any[]>([]);
   const [formData, setFormData] = useState({ item_sku: '', quantity: 1, department: 'kitchen', notes: '' });
+  const [itemSearchTerm, setItemSearchTerm] = useState('');
 
   const fetchRecords = useCallback(async () => {
     setIsLoading(true);
@@ -492,15 +493,92 @@ export default function BranchStockOutPage() {
               <p className="text-sm text-gray-500 mt-1">Items are automatically approved and synced to department operations</p>
             </DialogHeader>
             <div className="space-y-4 mt-4">
-              <div><label className="text-sm font-medium">Item *</label>
-                <select value={formData.item_sku} onChange={(e) => setFormData({ ...formData, item_sku: e.target.value, quantity: 1 })} className="w-full p-2 border rounded-ios-lg">
-                  <option value="">Select item</option>
-                  {items.map((item) => (
-                    <option key={item.sku} value={item.sku} disabled={item.quantity <= 0}>
-                      {item.name} — {item.quantity <= 0 ? '⚠ Out of stock' : `${item.quantity} available`}
-                    </option>
-                  ))}
-                </select>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Item *</label>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Input
+                      type="text"
+                      placeholder="🔍 Search item by name or SKU..."
+                      value={itemSearchTerm}
+                      onChange={(e) => setItemSearchTerm(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  
+                  {itemSearchTerm && (() => {
+                    const filteredItems = items.filter(item =>
+                      item.name?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
+                      item.sku?.toLowerCase().includes(itemSearchTerm.toLowerCase())
+                    );
+                    
+                    return filteredItems.length > 0 ? (
+                      <div className="max-h-48 overflow-y-auto border-2 border-blue-200 rounded-lg bg-white shadow-lg">
+                        {filteredItems.map((item) => (
+                          <button
+                            key={item.sku}
+                            type="button"
+                            onClick={() => {
+                              setFormData({ ...formData, item_sku: item.sku, quantity: 1 });
+                              setItemSearchTerm('');
+                            }}
+                            disabled={item.quantity <= 0}
+                            className={`w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors ${
+                              item.quantity <= 0 ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-gray-900">{item.name}</p>
+                                <p className="text-xs text-gray-500">SKU: {item.sku}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className={`text-sm font-semibold ${item.quantity <= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {item.quantity <= 0 ? '⚠ Out of stock' : `${item.quantity} ${item.unit}`}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-gray-500 text-sm border border-gray-200 rounded-lg">
+                        No items found matching "{itemSearchTerm}"
+                      </div>
+                    );
+                  })()}
+                  
+                  {formData.item_sku && (() => {
+                    const selectedItem = items.find(i => i.sku === formData.item_sku);
+                    if (selectedItem) {
+                      return (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-gray-900">{selectedItem.name}</p>
+                              <p className="text-xs text-gray-500">SKU: {selectedItem.sku}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData({ ...formData, item_sku: '' });
+                                setItemSearchTerm('');
+                              }}
+                              className="p-1 hover:bg-blue-100 rounded"
+                            >
+                              <X className="h-4 w-4 text-gray-500" />
+                            </button>
+                          </div>
+                          <p className={`text-sm mt-2 font-semibold ${selectedItem.quantity <= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {selectedItem.quantity <= 0 ? '⚠ Out of stock' : `${selectedItem.quantity} ${selectedItem.unit} available`}
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                
                 {formData.item_sku && (() => {
                   const sel = items.find(i => i.sku === formData.item_sku);
                   if (sel && sel.quantity <= 0) return (

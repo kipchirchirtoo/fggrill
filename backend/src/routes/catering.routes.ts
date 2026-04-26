@@ -1,19 +1,39 @@
-import express from 'express';
+/**
+ * Catering Routes
+ */
+
+import { Router } from 'express';
+import { authenticateToken } from '../middleware/auth';
 import {
-    getCateringBookings,
-    createCateringBooking,
-    updateCateringStatus
+  getCateringEvents,
+  getCateringEvent,
+  createCateringEvent,
+  updateCateringEvent,
+  allocateStock,
+  recordActual,
+  completeEvent,
+  cancelEvent,
+  addMenuItems
 } from '../controllers/catering.controller';
-import { protect, authorize } from '../middleware/auth';
-import { UserRole } from '../models/User';
 
-const router = express.Router();
+const router = Router();
 
-// Protected routes
-router.use(protect);
+// All routes require authentication
+router.use(authenticateToken);
 
-router.get('/bookings', getCateringBookings);
-router.post('/bookings', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.RESTAURANT]), createCateringBooking);
-router.patch('/bookings/:id/status', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.RESTAURANT]), updateCateringStatus);
+// Catering event CRUD
+router.get('/events', getCateringEvents);
+router.get('/events/:id', getCateringEvent);
+router.post('/events', createCateringEvent);
+router.put('/events/:id', updateCateringEvent);
+
+// Catering event actions
+router.post('/events/:id/allocate-stock', allocateStock);
+router.post('/events/:id/record-actual', recordActual);
+router.post('/events/:id/complete', completeEvent);
+router.post('/events/:id/cancel', cancelEvent);
+
+// Menu items
+router.post('/events/:id/menu-items', addMenuItems);
 
 export default router;

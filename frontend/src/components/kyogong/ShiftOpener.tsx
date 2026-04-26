@@ -39,7 +39,7 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
         try {
             const res = await kyogongAPI.getSalesPoints({ is_active: true });
 
-            if (res.success) {
+            if (res.success && res.data) {
                 setSalesPoints(res.data);
 
                 // Auto-select by salesPointCode prop first (most specific)
@@ -54,31 +54,16 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
                 // Pre-select if only one
                 if (res.data.length === 1) {
                     setSelectedPointId(res.data[0].id.toString());
-                    return;
-                }
-
-                // Intelligent pre-selection based on Role
-                if (user?.role?.includes('spa')) {
-                    const point = res.data.find((p: any) => p.code === 'SPA');
-                    if (point) setSelectedPointId(point.id.toString());
-                } else if (user?.role?.includes('sports_bar')) {
-                    const point = res.data.find((p: any) => p.code === 'SPORTS_BAR');
-                    if (point) setSelectedPointId(point.id.toString());
-                } else if (user?.role?.includes('executive_bar')) {
-                    const point = res.data.find((p: any) => p.code === 'EXEC_BAR');
-                    if (point) setSelectedPointId(point.id.toString());
-                } else if (user?.role?.includes('reception')) {
-                    const point = res.data.find((p: any) => p.code === 'RECEPTION');
-                    if (point) setSelectedPointId(point.id.toString());
                 }
             } else {
                 setLoadError(true);
-                toast.error('Could not load sales points');
+                const message = res.error || 'Could not load sales points';
+                toast.error(message);
             }
         } catch (error) {
-            console.error('Failed to fetch sales points', error);
             setLoadError(true);
-            toast.error('Could not load sales points');
+            const message = error instanceof Error ? error.message : 'Could not load sales points';
+            toast.error(message);
         } finally {
             setIsLoadingPoints(false);
         }
@@ -86,8 +71,14 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedPointId || !openingFloat) {
-            toast.error('Please fill in all required fields');
+        
+        if (!selectedPointId) {
+            toast.error('Please select a sales point');
+            return;
+        }
+        
+        if (!openingFloat || parseFloat(openingFloat) < 0) {
+            toast.error('Please enter a valid opening float');
             return;
         }
 
@@ -99,15 +90,16 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
                 opening_petty_cash: openingPettyCash ? parseFloat(openingPettyCash) : 0
             });
 
-            if (res.success) {
+            if (res.success && res.data) {
                 toast.success('Shift opened successfully');
                 onShiftOpened(res.data);
             } else {
-                toast.error(res.error || 'Failed to open shift');
+                const message = res.error || 'Failed to open shift';
+                toast.error(message);
             }
         } catch (error) {
-            console.error('Open shift error:', error);
-            toast.error('Failed to open shift');
+            const message = error instanceof Error ? error.message : 'Failed to open shift';
+            toast.error(message);
         } finally {
             setIsSubmitting(false);
         }
@@ -143,19 +135,26 @@ export function ShiftOpener({ onShiftOpened, salesPointCode }: ShiftOpenerProps)
                                 </button>
                             </div>
                         ) : (
-                        <select
-                            value={selectedPointId}
-                            onChange={(e) => setSelectedPointId(e.target.value)}
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors bg-white text-gray-900"
-                            disabled={isLoadingPoints}
-                        >
-                            <option value="">{isLoadingPoints ? 'Loading...' : 'Select Sales Point...'}</option>
-                            {salesPoints.map(point => (
-                                <option key={point.id} value={point.id}>
-                                    {point.name}
-                                </option>
-                            ))}
-                        </select>
+                        <>
+                            <select
+                                value={selectedPointId}
+                                onChange={(e) => setSelectedPointId(e.target.value)}
+                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors bg-white text-gray-900"
+                                disabled={isLoadingPoints}
+                            >
+                                <option value="">{isLoadingPoints ? 'Loading...' : 'Select Sales Point...'}</option>
+                                {salesPoints.map(point => (
+                                    <option key={point.id} value={point.id}>
+                                        {point.name}
+                                    </option>
+                                ))}
+                            </select>
+                            {!isLoadingPoints && salesPoints.length === 0 && (
+                                <p className="text-sm text-amber-600 mt-1">
+                                    No sales points found. Please contact your administrator.
+                                </p>
+                            )}
+                        </>
                         )}
                     </div>
 

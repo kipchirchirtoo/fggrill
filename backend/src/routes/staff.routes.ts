@@ -51,20 +51,20 @@ router.post('/attendance/clock-in', clockIn);
 router.post('/attendance/clock-out', clockOut);
 
 // Protected routes
+router.use((req, res, next) => {
+  console.log('[STAFF ROUTES MIDDLEWARE] Path:', req.path, 'Method:', req.method, 'Query:', req.query);
+  next();
+});
+
 router.use(protect);
 
-// Admin, Manager, Restaurant staff, POS Kitchen, Cashier, and Auditor routes
-router.get('/',
-  authorize([
-    UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER,
-    UserRole.RESTAURANT, UserRole.POS_KITCHEN, UserRole.KITCHEN,
-    UserRole.HR_MANAGER, UserRole.CASHIER, UserRole.AUDITOR,
-    UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT,
-    UserRole.KYOGONG_SPA_CASHIER, UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
-    UserRole.KYOGONG_SPORTS_BAR_CASHIER, UserRole.KYOGONG_RECEPTION_CASHIER
-  ]),
-  getStaff
-);
+// Staff list - accessible by any authenticated user (needed for dropdowns throughout the system)
+router.get('/', (req, res, next) => {
+  console.log('[STAFF ROUTES] ✅ GET / HIT - user:', req.user?.email, 'role:', req.user?.role);
+  console.log('[STAFF ROUTES] Query params:', req.query);
+  console.log('[STAFF ROUTES] Headers:', req.headers.authorization?.substring(0, 20));
+  next();
+}, getStaff);
 
 router.post('/',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),

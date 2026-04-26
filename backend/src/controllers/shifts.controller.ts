@@ -332,6 +332,15 @@ export const checkOutShift = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
+    // Trigger shift close hook for food control system
+    try {
+      const { onShiftClose } = await import('../services/shiftCloseHook');
+      await onShiftClose(Number(id), Number(data.branch_id));
+    } catch (hookError: any) {
+      console.error('Error in shift close hook:', hookError);
+      // Don't fail the checkout if hook fails
+    }
+
     res.status(200).json({
       success: true,
       data,

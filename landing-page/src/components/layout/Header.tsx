@@ -22,11 +22,12 @@ export default function Header({ className = '' }: HeaderProps) {
 
   const navItems = [
     { label: 'About', href: '/about' },
-    { label: 'Dining', href: '/dining' },
-    { label: 'Events', href: '/events' },
-    { label: 'Hotels', href: '/hotels' },
-    { label: 'Reservations', href: '/#reservations' },
+    { label: 'Rooms', href: '/rooms' },
+    { label: 'Restaurant', href: '/restaurant' },
+    { label: 'Conferences', href: '/conferences' },
+    { label: 'Contact', href: '/contact' },
   ];
+
 
   return (
     // suppressHydrationWarning: scroll-driven class differs between SSR (always false) and

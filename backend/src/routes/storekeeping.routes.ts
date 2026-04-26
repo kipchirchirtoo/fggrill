@@ -113,6 +113,17 @@ import {
   getYieldRules
 } from '../controllers/storekeeping/conversions.controller';
 
+import {
+  getPurchaseOrders,
+  getPurchaseOrder,
+  createPurchaseOrder,
+  approvePurchaseOrder,
+  receivePurchaseOrder,
+  cancelPurchaseOrder,
+  updatePurchaseOrder,
+  deletePurchaseOrder
+} from '../controllers/storekeeping/purchase-orders.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -341,5 +352,25 @@ router.get('/kitchen-usage/accountability', authorize(allStoreRoles), getStaffAc
 
 // Get daily usage summary
 router.get('/kitchen-usage/summary', authorize(allStoreRoles), getDailyUsageSummary);
+
+// =====================================================
+// PURCHASE ORDERS ROUTES
+// =====================================================
+
+router.route('/purchase-orders')
+  .get(authorize(allStoreRoles), getPurchaseOrders)
+  .post(authorize(managerRoles), createPurchaseOrder);
+
+router.route('/purchase-orders/:id')
+  .get(authorize(allStoreRoles), getPurchaseOrder)
+  .put(authorize(managerRoles), updatePurchaseOrder)
+  .delete(authorize(managerRoles), deletePurchaseOrder);
+
+router.put('/purchase-orders/:id/approve', authorize(managerRoles), approvePurchaseOrder);
+router.post('/purchase-orders/:id/approve', authorize(managerRoles), approvePurchaseOrder);
+router.put('/purchase-orders/:id/receive', authorize(managerRoles), receivePurchaseOrder);
+router.post('/purchase-orders/:id/receive', authorize(managerRoles), receivePurchaseOrder);
+router.put('/purchase-orders/:id/cancel', authorize(managerRoles), cancelPurchaseOrder);
+router.post('/purchase-orders/:id/cancel', authorize(managerRoles), cancelPurchaseOrder);
 
 export default router;

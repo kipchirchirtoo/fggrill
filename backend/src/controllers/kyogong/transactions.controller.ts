@@ -48,12 +48,12 @@ export const createTransaction = async (req: Request, res: Response) => {
       });
     }
 
-    // Calculate totals
+    // Calculate totals WITHOUT VAT
     const subtotal = items.reduce((sum: number, item: any) =>
       sum + (item.quantity * item.unit_price), 0
     );
-    const tax_amount = subtotal * 0.16; // 16% VAT
-    const total_amount = subtotal + tax_amount - (discount_amount || 0);
+    const tax_amount = 0; // No VAT
+    const total_amount = subtotal - (discount_amount || 0);
 
     // Validate payment amounts
     const total_paid = (cash_amount || 0) + (mpesa_amount || 0) + (card_amount || 0);
@@ -139,8 +139,23 @@ export const createTransaction = async (req: Request, res: Response) => {
 
     if (itemsError) throw itemsError;
 
-    // Update shift totals - relying on DB trigger 'trigger_update_shift_totals'
-    // for standard transaction recording. Manual RPC call removed to prevent double-counting.
+    // Update shift totals manually (in case DB trigger is not working)
+    const { error: updateError } = await supabase
+      .from('cashier_shifts')
+      .update({
+        total_revenue: (shift.total_revenue || 0) + total_amount,
+        total_cash_in: (shift.total_cash_in || 0) + (cash_amount || 0),
+        total_mpesa_in: (shift.total_mpesa_in || 0) + (mpesa_amount || 0),
+        total_card_in: (shift.total_card_in || 0) + (card_amount || 0),
+        total_transactions: (shift.total_transactions || 0) + 1,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', shift_id);
+
+    if (updateError) {
+      console.error('Failed to update shift totals:', updateError);
+      // Don't fail the transaction, just log the error
+    }
 
     // Update cash float if payment method is CASH
     if (payment_method === 'CASH' && cash_amount > 0) {

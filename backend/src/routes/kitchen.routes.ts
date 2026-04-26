@@ -25,7 +25,10 @@ import {
     getRecipe,
     updateRecipe,
     deleteRecipe,
-    autoDeductIngredients
+    autoDeductIngredients,
+    lockRecipe,
+    unlockRecipe,
+    getRecipeHistory
 } from '../controllers/kitchen/recipes.controller';
 
 import {
@@ -136,6 +139,9 @@ router.get('/recipes', authorize(kitchenStaff), getRecipes);
 router.get('/recipes/:id', authorize(kitchenStaff), getRecipe);
 router.put('/recipes/:id', authorize(kitchenManagers), updateRecipe);
 router.delete('/recipes/:id', authorize(kitchenManagers), deleteRecipe);
+router.post('/recipes/:id/lock', authorize(kitchenManagers), lockRecipe);
+router.post('/recipes/:id/unlock', authorize(kitchenManagers), unlockRecipe);
+router.get('/recipes/:id/history', authorize([...kitchenStaff, UserRole.AUDITOR]), getRecipeHistory);
 
 // Auto-deduction endpoint (called by POS)
 router.post('/recipes/auto-deduct', authorize([...kitchenStaff, UserRole.RECEPTIONIST]), autoDeductIngredients);

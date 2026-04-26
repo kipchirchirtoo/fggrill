@@ -18,7 +18,7 @@ export const getPurchaseOrders = async (
             .from('store_purchase_orders')
             .select(`
                 *,
-                supplier:store_suppliers(id, name, supplier_code)
+                supplier:store_suppliers(id, name, supplier_code, branch_id)
             `)
             .order('created_at', { ascending: false });
 
@@ -35,8 +35,25 @@ export const getPurchaseOrders = async (
             return;
         }
 
+        // Filter by branch if user is branch-level (filter after fetching since branch_id is in supplier)
+        const user = (req as any).user;
+        const userBranchId = user?.branch_id || user?.branchId;
+        let filteredOrders = orders;
+        
+        if (userBranchId && !branch_id) {
+            filteredOrders = orders.filter(order => 
+                order.supplier?.branch_id === userBranchId || 
+                order.supplier?.branch_id === null // Include global suppliers
+            );
+        } else if (branch_id) {
+            filteredOrders = orders.filter(order => 
+                order.supplier?.branch_id === parseInt(branch_id as string) ||
+                order.supplier?.branch_id === null
+            );
+        }
+
         // 1. Get all items for these orders
-        const orderIds = orders.map(o => o.id);
+        const orderIds = filteredOrders.map(o => o.id);
         const { data: allItems, error: itemsError } = await supabase
             .from('store_po_items')
             .select('*')
@@ -54,7 +71,7 @@ export const getPurchaseOrders = async (
         if (detailsError) throw detailsError;
 
         // 3. Merge data
-        const enrichedOrders = orders.map(order => {
+        const enrichedOrders = filteredOrders.map(order => {
             const orderItems = (allItems || [])
                 .filter(i => i.po_id === order.id)
                 .map(i => {
@@ -172,7 +189,8 @@ export const createPurchaseOrder = async (
             special_instructions,
             items,
             payment_terms,
-            delivery_terms
+            delivery_terms,
+            auto_approve
         } = req.body;
 
         const userId = req.user?.id;
@@ -183,6 +201,7 @@ export const createPurchaseOrder = async (
         console.log('Supplier ID:', supplier_id, 'Type:', typeof supplier_id);
         console.log('Items count:', items?.length);
         console.log('Items:', JSON.stringify(items, null, 2));
+        console.log('Auto-approve:', auto_approve);
 
         if (!supplier_id || !items || items.length === 0) {
             throw new AppError('Supplier and items are required', 400);
@@ -241,33 +260,37 @@ export const createPurchaseOrder = async (
 
         console.log('Generated PO number:', po_number);
 
-        // Calculate totals based on item-level VAT rates (default to 16% if not provided)
+        // Calculate totals WITHOUT VAT
         const subtotal = resolvedItems.reduce((sum: number, item: any) =>
             sum + (Number(item.quantity) * Number(item.unit_price)), 0);
             
-        const tax_amount = resolvedItems.reduce((sum: number, item: any) => {
-            const itemVatRate = item.vat_rate !== undefined ? Number(item.vat_rate) : 16;
-            return sum + (Number(item.quantity) * Number(item.unit_price) * (itemVatRate / 100));
-        }, 0);
-        
-        const total_amount = subtotal + tax_amount;
+        const tax_amount = 0; // No VAT
+        const total_amount = subtotal; // Total equals subtotal (no tax)
 
         console.log('Calculated totals - Subtotal:', subtotal, 'Tax:', tax_amount, 'Total:', total_amount);
 
-        // Prepare PO data
+        // Prepare PO data - set status based on auto_approve flag
         const poData = {
             po_number,
             supplier_id,
-            created_by_id: userId || null, // Allow null if user ID is not available
+            created_by_id: userId || null,
             po_date: po_date || new Date().toISOString().split('T')[0],
             expected_delivery_date: expected_delivery_date || null,
             special_instructions: special_instructions || null,
             subtotal,
             tax_amount,
             total_amount,
-            status: 'draft',
+            status: auto_approve ? 'approved' : 'draft',
             payment_terms: payment_terms || 'credit_30_days',
-            delivery_terms: delivery_terms || null
+            delivery_terms: delivery_terms || null,
+            // If auto-approving, set approval fields
+            ...(auto_approve && {
+                approved_by_id: userId,
+                approved_at: new Date().toISOString(),
+                sent_to_supplier: true,
+                sent_at: new Date().toISOString(),
+                sent_by_id: userId
+            })
         };
 
         console.log('PO Data to insert:', JSON.stringify(poData, null, 2));
@@ -287,11 +310,9 @@ export const createPurchaseOrder = async (
 
             console.log('PO header created successfully:', newPO.id);
 
-            // Insert PO items with item-level VAT
+            // Insert PO items WITHOUT VAT
             const poItems = resolvedItems.map((item: any) => {
-                const itemVatRate = item.vat_rate !== undefined ? Number(item.vat_rate) : 16;
                 const lineSubtotal = Number(item.quantity) * Number(item.unit_price);
-                const lineTax = lineSubtotal * (itemVatRate / 100);
                 
                 return {
                     po_id: newPO.id,
@@ -299,8 +320,8 @@ export const createPurchaseOrder = async (
                     quantity_ordered: item.quantity,
                     quantity_pending: item.quantity,
                     unit_price: item.unit_price,
-                    tax_amount: lineTax,
-                    total_price: lineSubtotal + lineTax
+                    tax_amount: 0, // No VAT
+                    total_price: lineSubtotal // No tax added
                 };
             });
 
@@ -326,7 +347,8 @@ export const createPurchaseOrder = async (
 
             res.status(201).json({
                 success: true,
-                data: newPO
+                data: newPO,
+                message: auto_approve ? 'Purchase order created and approved automatically' : 'Purchase order created successfully'
             });
         } catch (dbError: any) {
             console.error('FULL DATABASE ERROR:', JSON.stringify(dbError, null, 2));
@@ -596,16 +618,12 @@ export const updatePurchaseOrder = async (
             }
         }
 
-        // Calculate totals based on item-level VAT rates (default to 16% if not provided)
+        // Calculate totals WITHOUT VAT
         const subtotal = resolvedItems.reduce((sum: number, item: any) =>
             sum + (Number(item.quantity) * Number(item.unit_price)), 0);
             
-        const tax_amount = resolvedItems.reduce((sum: number, item: any) => {
-            const itemVatRate = item.vat_rate !== undefined ? Number(item.vat_rate) : 16;
-            return sum + (Number(item.quantity) * Number(item.unit_price) * (itemVatRate / 100));
-        }, 0);
-        
-        const total_amount = subtotal + tax_amount;
+        const tax_amount = 0; // No VAT
+        const total_amount = subtotal; // Total equals subtotal (no tax)
 
         // Update PO
         const { data: updatedPO, error: updateError } = await supabase
@@ -634,11 +652,9 @@ export const updatePurchaseOrder = async (
             .delete()
             .eq('po_id', id);
 
-        // Insert new items
+        // Insert new items WITHOUT VAT
         const poItems = resolvedItems.map((item: any) => {
-            const itemVatRate = item.vat_rate !== undefined ? Number(item.vat_rate) : 16;
             const lineSubtotal = Number(item.quantity) * Number(item.unit_price);
-            const lineTax = lineSubtotal * (itemVatRate / 100);
 
             return {
                 po_id: id,
@@ -646,8 +662,8 @@ export const updatePurchaseOrder = async (
                 quantity_ordered: item.quantity,
                 quantity_pending: item.quantity,
                 unit_price: item.unit_price,
-                tax_amount: lineTax,
-                total_price: lineSubtotal + lineTax
+                tax_amount: 0, // No VAT
+                total_price: lineSubtotal // No tax added
             };
         });
 

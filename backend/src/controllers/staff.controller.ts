@@ -128,6 +128,9 @@ export const getStaff = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    console.log('[GET STAFF CONTROLLER] ✅ REACHED - User:', req.user?.email, 'Role:', req.user?.role);
+    console.log('[GET STAFF CONTROLLER] Query:', req.query);
+    
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 1000;
     const startIndex = (page - 1) * limit;

@@ -27,72 +27,58 @@ export const HotelCard: React.FC<HotelCardProps> = ({ hotel }) => {
 
   return (
     <>
-      <Link href={`/hotels/${hotel.id}`}>
-        <div className="group bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 cursor-pointer h-full flex flex-col">
+      <Link href={`/rooms/${hotel.id}`}>
+        <div className="group bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 cursor-pointer h-full flex flex-col border border-neutral-100">
           {/* Hotel Image */}
-          <div className="relative h-48 w-full overflow-hidden">
+          <div className="relative h-56 w-full overflow-hidden">
             <Image
               src={hotel.primaryImage}
-              alt={hotel.name}
+              alt={`${hotel.name} - Luxury Hotel Room in ${hotel.location}, Kenya`}
               fill
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
+            <div className="absolute top-4 right-4 bg-gold text-white px-3 py-1 rounded-full text-xs font-bold tracking-widest uppercase">
+              Luxury
+            </div>
           </div>
 
           {/* Hotel Info */}
-          <div className="p-4 flex-1 flex flex-col">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+          <div className="p-6 flex-1 flex flex-col">
+            <h3 className="text-2xl font-display font-bold text-gray-900 mb-2 group-hover:text-gold transition-colors">
               {hotel.name}
             </h3>
             
-            <p className="text-sm text-gray-600 mb-3 flex items-center">
-              <svg
-                className="w-4 h-4 mr-1"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                />
+            <p className="text-sm text-gray-500 mb-4 flex items-center">
+              <svg className="w-4 h-4 mr-2 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              {hotel.location}
+              {hotel.location}, Kenya
             </p>
 
-            <p className="text-sm text-gray-700 mb-4 line-clamp-3 flex-1">
+            <p className="text-gray-600 mb-6 line-clamp-3 flex-1 leading-relaxed">
               {hotel.shortDescription || hotel.description}
             </p>
 
-            <div className="mt-auto flex gap-2">
-              {/* View Room Button */}
+            <div className="mt-auto flex gap-3">
               <button
                 ref={viewRoomButtonRef}
                 onClick={handleViewRoom}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                aria-label={`View room photos for ${hotel.name}`}
+                className="flex-1 px-4 py-3 bg-neutral-900 text-white rounded-md hover:bg-neutral-800 transition-colors font-bold text-sm tracking-wide uppercase"
+                aria-label={`View photo gallery for ${hotel.name}`}
               >
-                View Room
+                Gallery
               </button>
               
-              {/* View Details Link */}
-              <span className="flex-1 px-4 py-2 text-center text-blue-600 font-medium text-sm border border-blue-600 rounded-md group-hover:bg-blue-50 transition-colors">
-                View Details →
+              <span className="flex-1 px-4 py-3 text-center text-gold font-bold text-sm border-2 border-gold rounded-md group-hover:bg-gold group-hover:text-white transition-all duration-300 uppercase tracking-wide">
+                Details
               </span>
             </div>
           </div>
         </div>
       </Link>
+
 
       {/* Image Gallery Modal */}
       <ImageGallery
