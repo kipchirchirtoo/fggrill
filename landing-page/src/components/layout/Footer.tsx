@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect } from 'react';
 
 interface FooterProps {
@@ -79,21 +77,20 @@ export default function Footer({ className = '' }: FooterProps) {
             <div className="lp-footer__col">
               <h4 className="lp-footer__heading">Explore</h4>
               <ul className="lp-footer__list">
-                <li><a href="/about">About Us</a></li>
-                <li><a href="/rooms">Rooms & Suites</a></li>
-                <li><a href="/restaurant">FG Grill Restaurant</a></li>
-                <li><a href="/conferences">Conferences</a></li>
-                <li><a href="/gallery">Photo Gallery</a></li>
+                <li><a href="#experience">Our Experience</a></li>
+                <li><a href="#dining">Dining</a></li>
+                <li><a href="#events">Events</a></li>
+                <li><a href="#branches">Branches</a></li>
               </ul>
             </div>
 
             <div className="lp-footer__col">
               <h4 className="lp-footer__heading">Services</h4>
               <ul className="lp-footer__list">
-                <li><a href="/book">Book a Room</a></li>
-                <li><a href="/restaurant/menu">View Menu</a></li>
-                <li><a href="/contact">Event Inquiry</a></li>
-                <li><a href="/contact">Support</a></li>
+                <li><a href="#reservations">Room Reservations</a></li>
+                <li><a href="#events">Private Events</a></li>
+                <li><a href="#dining">Restaurant Booking</a></li>
+                <li><a href="#reservations">Corporate Packages</a></li>
               </ul>
             </div>
 
@@ -101,20 +98,20 @@ export default function Footer({ className = '' }: FooterProps) {
               <h4 className="lp-footer__heading">Contact</h4>
               <ul className="lp-footer__list">
                 <li>
-                  <a href="tel:+254706782828">
+                  <a href="tel:0706782828">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" style={{ display: 'inline-block', marginRight: '8px', verticalAlign: 'middle' }}>
                       <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    +254 706 782 828
+                    0706782828
                   </a>
                 </li>
                 <li>
-                  <a href="mailto:info@famousgates.com">
+                  <a href="mailto:famousgatesbmt@gmail.com">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" style={{ display: 'inline-block', marginRight: '8px', verticalAlign: 'middle' }}>
                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" strokeLinecap="round" strokeLinejoin="round"/>
                       <polyline points="22,6 12,13 2,6" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    info@famousgates.com
+                    famousgatesbmt@gmail.com
                   </a>
                 </li>
                 <li>
@@ -122,7 +119,7 @@ export default function Footer({ className = '' }: FooterProps) {
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/>
                     <circle cx="12" cy="10" r="3" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  Ngong Road, Nairobi
+                  Nairobi, Kenya
                 </li>
               </ul>
             </div>
@@ -130,13 +127,13 @@ export default function Footer({ className = '' }: FooterProps) {
             <div className="lp-footer__col">
               <h4 className="lp-footer__heading">Hours</h4>
               <ul className="lp-footer__list">
-                <li>Hotel: 24/7</li>
-                <li>FG Grill: 7 AM - 11 PM</li>
-                <li>Reception: 24/7</li>
+                <li>Monday - Friday: 24/7</li>
+                <li>Saturday - Sunday: 24/7</li>
+                <li>Restaurant: 6:00 AM - 11:00 PM</li>
+                <li>Reception: Always Open</li>
               </ul>
             </div>
           </div>
-
         </div>
 
         <div className="lp-footer__bottom">

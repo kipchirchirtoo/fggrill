@@ -1,22 +1,9 @@
+# Allow all search engines to crawl the site
 User-agent: *
 Allow: /
 
+# Sitemap location
+Sitemap: https://famousgatehotels.com/sitemap.xml
+
+# Disallow admin or private pages if any
 Disallow: /api/
-Disallow: /admin/
-Disallow: /dashboard/
-Disallow: /_next/
-Disallow: /server-sitemap.xml
-
-Sitemap: https://famousgates.com/sitemap.xml
-
-# Google specific
-User-agent: Googlebot
-Allow: /
-Disallow: /api/
-
-# Image crawler
-User-agent: Googlebot-Image
-Allow: /images/
-Allow: /public/
-
-Host: famousgates.com

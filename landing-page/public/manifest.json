@@ -1,31 +1,27 @@
 {
-  "name": "Famous Gates Hotels",
-  "short_name": "FG Hotels",
-  "description": "Luxury Hotel in Nairobi, Kenya. Book rooms, FG Grill restaurant, conference facilities.",
+  "name": "FamousGate Hotels",
+  "short_name": "FamousGate",
+  "description": "Luxury hotels offering premium accommodations, fine dining, and exceptional service in Kenya",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#1a1a2e",
+  "theme_color": "#d4af37",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "/logo_official.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/logo_official.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any maskable"
     }
   ],
-  "categories": ["travel", "food", "business"],
-  "screenshots": [
-    {
-      "src": "/screenshots/homepage.jpg",
-      "sizes": "1280x720",
-      "type": "image/jpeg"
-    }
-  ]
+  "categories": ["travel", "hospitality", "lifestyle"],
+  "lang": "en-US",
+  "dir": "ltr"
 }

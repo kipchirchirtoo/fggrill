@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
@@ -24,12 +22,11 @@ export default function Header({ className = '' }: HeaderProps) {
 
   const navItems = [
     { label: 'About', href: '/about' },
-    { label: 'Rooms', href: '/rooms' },
-    { label: 'Restaurant', href: '/restaurant' },
-    { label: 'Conferences', href: '/conferences' },
-    { label: 'Contact', href: '/contact' },
+    { label: 'Dining', href: '/dining' },
+    { label: 'Events', href: '/events' },
+    { label: 'Hotels', href: '/hotels' },
+    { label: 'Reservations', href: '/#reservations' },
   ];
-
 
   return (
     // suppressHydrationWarning: scroll-driven class differs between SSR (always false) and
