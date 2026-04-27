@@ -1372,18 +1372,19 @@ export async function generateBrandedPayrollSummaryV2(
   const C = [
     { label: '#',          x: 36,   width: 25 },
     { label: 'Emp ID',     x: 61,   width: 55 },
-    { label: 'Staff Name', x: 116,  width: 155 },
-    { label: 'Role',       x: 271,  width: 95 },
-    { label: 'Basic',      x: 366,  width: 80,  align: 'right' },
-    { label: 'Additions',  x: 446,  width: 75,  align: 'right' },
-    { label: 'Gross',      x: 521,  width: 85,  align: 'right' },
-    { label: 'NSSF',       x: 606,  width: 65,  align: 'right' },
-    { label: 'SHIF',       x: 671,  width: 65,  align: 'right' },
-    { label: 'Loans',      x: 736,  width: 65,  align: 'right' },
-    { label: 'Advances',   x: 801,  width: 65,  align: 'right' },
-    { label: 'Credits',    x: 866,  width: 70,  align: 'right' },
-    { label: 'Total Ded.', x: 936,  width: 85,  align: 'right' },
-    { label: 'Net Pay',    x: 1021, width: 90,  align: 'right' },
+    { label: 'Staff Name', x: 116,  width: 130 },
+    { label: 'Role',       x: 246,  width: 80 },
+    { label: 'Basic',      x: 326,  width: 80,  align: 'right' },
+    { label: 'Additions',  x: 406,  width: 75,  align: 'right' },
+    { label: 'Gross',      x: 481,  width: 85,  align: 'right' },
+    { label: 'NSSF',       x: 566,  width: 65,  align: 'right' },
+    { label: 'SHIF',       x: 631,  width: 65,  align: 'right' },
+    { label: 'Loans',      x: 696,  width: 65,  align: 'right' },
+    { label: 'Advances',   x: 761,  width: 65,  align: 'right' },
+    { label: 'Unpaid Bills', x: 826, width: 75,  align: 'right' },
+    { label: 'Other Ded.', x: 901,  width: 70,  align: 'right' },
+    { label: 'Total Ded.', x: 971,  width: 85,  align: 'right' },
+    { label: 'Net Pay',    x: 1056, width: 90,  align: 'right' },
   ];
 
   const drawTHeader = (d: PDFKit.PDFDocument, curY: number) => {
@@ -1399,7 +1400,7 @@ export async function generateBrandedPayrollSummaryV2(
 
   // Running totals (computed from actual records)
   let sumBasic = 0, sumAdditions = 0, sumGross = 0, sumNssf = 0, sumShif = 0;
-  let sumLoans = 0, sumAdvances = 0, sumCredits = 0, sumTotalDed = 0, sumNet = 0;
+  let sumLoans = 0, sumAdvances = 0, sumUnpaid = 0, sumOther = 0, sumTotalDed = 0, sumNet = 0;
 
   records.forEach((r, i) => {
     if (y > 790) { // Page break — A3 landscape is 842pt, leave room for footer
@@ -1414,7 +1415,6 @@ export async function generateBrandedPayrollSummaryV2(
     doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
 
     // Extract categories from deductions JSONB array
-    // Categories used: 'nssf', 'shif', 'loan', 'advance', 'credit_bills', 'absenteeism', 'uniform', 'paye', etc.
     const ded: any[] = Array.isArray(r.deductions) ? r.deductions : [];
     const getAmt = (cat: string) => ded
       .filter((d: any) => (d.category || '').toLowerCase() === cat.toLowerCase())
@@ -1424,7 +1424,10 @@ export async function generateBrandedPayrollSummaryV2(
     const shif      = getAmt('shif');
     const loans     = getAmt('loan');
     const advances  = getAmt('advance');
-    const credits   = getAmt('credit_bills');
+    const unpaid    = getAmt('unpaid_bills');
+    // Other covers anything else (credit_bills, absenteeism, etc.)
+    const other     = parseFloat(r.total_deductions || 0) - (nssf + shif + loans + advances + unpaid);
+    
     const additions = parseFloat(r.total_additions || 0);
     const basic     = parseFloat(r.basic_salary || 0);
     const gross     = parseFloat(r.gross_pay || 0);
@@ -1439,7 +1442,8 @@ export async function generateBrandedPayrollSummaryV2(
     sumShif      += shif;
     sumLoans     += loans;
     sumAdvances  += advances;
-    sumCredits   += credits;
+    sumUnpaid    += unpaid;
+    sumOther     += other;
     sumTotalDed  += totalDed;
     sumNet       += netPay;
 
@@ -1455,9 +1459,10 @@ export async function generateBrandedPayrollSummaryV2(
       { v: shif > 0 ? fmt(shif) : '—',                x: C[8].x, w: C[8].width, a: 'right' },
       { v: loans > 0 ? fmt(loans) : '—',              x: C[9].x, w: C[9].width, a: 'right' },
       { v: advances > 0 ? fmt(advances) : '—',        x: C[10].x, w: C[10].width, a: 'right' },
-      { v: credits > 0 ? fmt(credits) : '—',          x: C[11].x, w: C[11].width, a: 'right' },
-      { v: fmt(totalDed),                              x: C[12].x, w: C[12].width, a: 'right' },
-      { v: fmt(netPay),                                x: C[13].x, w: C[13].width, a: 'right' },
+      { v: unpaid > 0 ? fmt(unpaid) : '—',            x: C[11].x, w: C[11].width, a: 'right' },
+      { v: other > 0 ? fmt(other) : '—',              x: C[12].x, w: C[12].width, a: 'right' },
+      { v: fmt(totalDed),                              x: C[13].x, w: C[13].width, a: 'right' },
+      { v: fmt(netPay),                                x: C[14].x, w: C[14].width, a: 'right' },
     ];
 
     values.forEach(val => {
@@ -1481,9 +1486,10 @@ export async function generateBrandedPayrollSummaryV2(
     { v: fmt(sumShif),      x: C[8].x,  w: C[8].width },
     { v: fmt(sumLoans),     x: C[9].x,  w: C[9].width },
     { v: fmt(sumAdvances),  x: C[10].x, w: C[10].width },
-    { v: fmt(sumCredits),   x: C[11].x, w: C[11].width },
-    { v: fmt(sumTotalDed),  x: C[12].x, w: C[12].width },
-    { v: fmt(sumNet),       x: C[13].x, w: C[13].width },
+    { v: fmt(sumUnpaid),    x: C[11].x, w: C[11].width },
+    { v: fmt(sumOther),     x: C[12].x, w: C[12].width },
+    { v: fmt(sumTotalDed),  x: C[13].x, w: C[13].width },
+    { v: fmt(sumNet),       x: C[14].x, w: C[14].width },
   ];
 
   sumCols.forEach(sc => {

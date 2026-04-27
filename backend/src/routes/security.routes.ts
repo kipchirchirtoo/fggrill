@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { protect, authorize } from '../middleware/auth';
 import * as securityController from '../controllers/security.controller';
 
 const router = Router();
 
 // All routes require super admin authentication
-router.use(authenticate);
+router.use(protect);
 router.use(authorize(['super_admin']));
 
 // Security configuration

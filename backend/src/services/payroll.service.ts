@@ -186,10 +186,14 @@ export class PayrollService {
       }
     }
 
-    // 3. Credit bills
+    // 3. Credit bills (Differentiate between staff credits and migrated unpaid bills)
     for (const bill of batchData.bills.get(staff.id) || []) {
+      const isUnpaidBill = (bill.description || '').toLowerCase().includes('unsettled') || 
+                           (bill.description || '').toLowerCase().includes('pending order');
+      
       dynamicDeductions.push({
-        category: 'credit_bills', source: 'system',
+        category: isUnpaidBill ? 'unpaid_bills' : 'credit_bills',
+        source: 'system',
         source_table: 'staff_credit_bills', source_id: bill.id,
         amount: parseFloat(bill.amount || '0'),
         reference: bill.description || 'Credit bill',
@@ -210,11 +214,11 @@ export class PayrollService {
       });
     }
 
-    // 5. POS unpaid bills (keyed by waiter_id)
+    // 5. POS unpaid bills (explicitly tagged as unpaid_bills)
     for (const pos of batchData.posBillsRaw) {
       if (pos.waiter_id === staff.id || pos.customer_id === staff.id) {
         dynamicDeductions.push({
-          category: 'credit_bills', source: 'system',
+          category: 'unpaid_bills', source: 'system',
           source_table: 'unpaid_bills', source_id: pos.id,
           amount: parseFloat(pos.balance_amount || '0'),
           reference: `POS Bill: ${pos.bill_number} - ${pos.customer_name}`,

@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import db from '../db';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { migratePendingBills } from '../jobs/migrate-pending-bills.job';
 import { paymentVerificationService } from '../services/payment.verification.service';
 import { mpesaService } from '../services/mpesa.service';
 import notificationService from '../services/notification.service';
@@ -2978,6 +2979,14 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
             .single();
 
         if (error) throw error;
+
+        // Trigger automatic migration of unpaid bills for this branch
+        try {
+            await migratePendingBills(shift.branch_id);
+        } catch (migErr) {
+            logger.error(`Error triggering pending bills migration on shift close:`, migErr);
+            // Don't fail the whole request if migration fails
+        }
 
         // Check for unresolved kitchen variances for this shift/date
         // Variance is unresolved if variance != 0 and reason_id is null
