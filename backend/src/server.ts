@@ -72,19 +72,18 @@ initializeApp().then(({ app, httpServer }) => {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   // CORS configuration - MUST be before all other middleware
+  const allowedOrigins = [
+    'https://famousgate.hirall.com',
+    'https://api.hirall.com',
+    'https://services.hirall.com',
+    'https://famousgatehotels.com',
+    'https://www.famousgatehotels.com'
+  ];
+
   const corsOptions = {
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow requests with no origin (mobile apps, curl, Postman)
       if (!origin) return callback(null, true);
-
-      // Exact match origins
-      const allowedOrigins = [
-        'https://famousgate.hirall.com',
-        'https://api.hirall.com',
-        'https://services.hirall.com',
-        'https://famousgatehotels.com',
-        'https://www.famousgatehotels.com'
-      ];
 
       // Check exact matches
       if (allowedOrigins.includes(origin)) {
@@ -96,9 +95,11 @@ initializeApp().then(({ app, httpServer }) => {
         return callback(null, true);
       }
 
-      // Allow localhost (development only) - case-insensitive
-      if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
-        return callback(null, true);
+      // Development only - allow localhost
+      if (process.env.NODE_ENV !== 'production') {
+        if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+          return callback(null, true);
+        }
       }
 
       // Allow Electron custom protocols
@@ -107,6 +108,7 @@ initializeApp().then(({ app, httpServer }) => {
       }
 
       // Reject all others
+      logger.warn(`CORS blocked origin: ${origin}`);
       return callback(new Error('CORS not allowed'), false);
     },
     credentials: true,
@@ -139,12 +141,38 @@ initializeApp().then(({ app, httpServer }) => {
   // Static files
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-  // Rate limiting - relaxed for development
-  const limiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: 1000 // limit each IP to 1000 requests per minute
+  // Rate limiting - aggressive for auth and financial endpoints
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20, // 20 requests per 15 minutes
+    message: 'Too many authentication attempts, please try again later',
+    standardHeaders: true,
+    legacyHeaders: false,
   });
-  app.use(limiter);
+
+  const financialLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 30, // 30 requests per minute
+    message: 'Too many requests to financial endpoints',
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  const generalLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: process.env.NODE_ENV === 'production' ? 100 : 1000,
+    message: 'Too many requests, please slow down',
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Apply rate limiters to specific routes
+  app.use('/api/auth', authLimiter);
+  app.use('/api/payment', financialLimiter);
+  app.use('/api/accounting', financialLimiter);
+  app.use('/api/finance', financialLimiter);
+  app.use('/api/cashier', financialLimiter);
+  app.use(generalLimiter);
 
   // API routes
   app.use('/api', routes);

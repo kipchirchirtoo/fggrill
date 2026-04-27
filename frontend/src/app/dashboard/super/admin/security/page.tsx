@@ -25,12 +25,35 @@ import {
   Download,
   RefreshCw,
   Search,
-  ChevronDown
+  ChevronDown,
+  Key,
+  Database,
+  FileText,
+  Zap,
+  ShieldAlert,
+  ShieldCheck,
+  UserX,
+  Settings,
+  Bell,
+  Terminal,
+  Code,
+  Fingerprint,
+  Wifi,
+  WifiOff,
+  HardDrive,
+  Cpu,
+  BarChart3,
+  Target,
+  Crosshair
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SecurityMap } from '@/components/security/SecurityMap';
 import { IPLookup } from '@/components/security/IPLookup';
 import { SecurityAnalytics } from '@/components/security/SecurityAnalytics';
+import { RLSPolicyMonitor } from '@/components/security/RLSPolicyMonitor';
+import { APISecurityMonitor } from '@/components/security/APISecurityMonitor';
+import { SecurityConfigPanel } from '@/components/security/SecurityConfigPanel';
+import { RealTimeSecurityDashboard } from '@/components/security/RealTimeSecurityDashboard';
 import { exportToCSV, exportToJSON, exportToPDF } from '@/utils/exportSecurityReport';
 
 interface SecurityLog {
@@ -69,7 +92,7 @@ export default function SecurityDashboardPage() {
   const [logs, setLogs] = useState<SecurityLog[]>([]);
   const [stats, setStats] = useState<SecurityStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<'analytics' | 'access' | 'threats' | 'geo' | 'sessions'>('analytics');
+  const [selectedTab, setSelectedTab] = useState<'analytics' | 'access' | 'threats' | 'geo' | 'sessions' | 'rls' | 'api' | 'config'>('analytics');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'failed'>('all');
   const [filterThreat, setFilterThreat] = useState<'all' | 'suspicious' | 'clean'>('all');
@@ -281,18 +304,21 @@ export default function SecurityDashboardPage() {
           {/* Tabs - Stone Theme */}
           <div className="bg-white rounded-lg shadow-sm border border-stone-100">
             <div className="border-b border-stone-100">
-              <div className="flex gap-4 px-6">
+              <div className="flex gap-2 px-6 overflow-x-auto">
                 {[
                   { id: 'analytics', label: 'Analytics', icon: TrendingUp },
                   { id: 'access', label: 'Access Control', icon: Lock },
                   { id: 'threats', label: 'Threat Detection', icon: AlertTriangle },
                   { id: 'geo', label: 'Geolocation', icon: Globe },
-                  { id: 'sessions', label: 'Active Sessions', icon: Activity }
+                  { id: 'sessions', label: 'Active Sessions', icon: Activity },
+                  { id: 'rls', label: 'RLS Policies', icon: Database },
+                  { id: 'api', label: 'API Security', icon: Zap },
+                  { id: 'config', label: 'Configuration', icon: Settings }
                 ].map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => setSelectedTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-4 py-4 border-b-2 transition-colors text-sm font-medium ${
+                    className={`flex items-center gap-2 px-4 py-4 border-b-2 transition-colors text-sm font-medium whitespace-nowrap ${
                       selectedTab === tab.id
                         ? 'border-stone-900 text-stone-900'
                         : 'border-transparent text-stone-500 hover:text-stone-900'
@@ -344,7 +370,10 @@ export default function SecurityDashboardPage() {
             {/* Content based on selected tab */}
             <div className="p-6">
               {selectedTab === 'analytics' && (
-                <SecurityAnalytics logs={filteredLogs} />
+                <div className="space-y-6">
+                  <RealTimeSecurityDashboard />
+                  <SecurityAnalytics logs={filteredLogs} />
+                </div>
               )}
               {selectedTab === 'access' && (
                 <AccessControlTab logs={filteredLogs} getThreatBadge={getThreatBadge} />
@@ -357,6 +386,15 @@ export default function SecurityDashboardPage() {
               )}
               {selectedTab === 'sessions' && (
                 <ActiveSessionsTab logs={filteredLogs} />
+              )}
+              {selectedTab === 'rls' && (
+                <RLSPolicyMonitor />
+              )}
+              {selectedTab === 'api' && (
+                <APISecurityMonitor />
+              )}
+              {selectedTab === 'config' && (
+                <SecurityConfigPanel />
               )}
             </div>
           </div>

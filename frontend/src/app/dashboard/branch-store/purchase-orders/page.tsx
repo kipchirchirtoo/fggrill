@@ -114,7 +114,7 @@ function PurchaseOrdersContent() {
       const headers = { 'Authorization': `Bearer ${token}` };
       
       const [ordersRes, suppliersRes, itemsRes] = await Promise.all([
-        fetch(`${API_URL}/api/store/purchase-orders${statusFilter ? `?status=${statusFilter}` : ''}`, { headers }),
+        fetch(`${API_URL}/api/store/purchase-orders?source_module=branch_store${statusFilter ? `&status=${statusFilter}` : ''}`, { headers }),
         fetch(`${API_URL}/api/store/suppliers?scope=branch`, { headers }), // BRANCH SPECIFIC SUPPLIERS
         fetch(`${API_URL}/api/store/items?limit=500`, { headers })
       ]);
@@ -149,7 +149,7 @@ function PurchaseOrdersContent() {
         return;
       }
       
-      const response = await fetch(`${API_URL}/api/store/purchase-orders`, {
+      const response = await fetch(`${API_URL}/api/store/purchase-orders?source_module=branch_store`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -191,7 +191,7 @@ function PurchaseOrdersContent() {
   const handleApprove = async (orderId: string) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/purchase-orders/${orderId}/approve`, {
+      const response = await fetch(`${API_URL}/api/store/purchase-orders/${orderId}/approve?source_module=branch_store`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -210,7 +210,7 @@ function PurchaseOrdersContent() {
   const handleReceive = async (orderId: string) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/store/purchase-orders/${orderId}/receive`, {
+      const response = await fetch(`${API_URL}/api/store/purchase-orders/${orderId}/receive?source_module=branch_store`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });

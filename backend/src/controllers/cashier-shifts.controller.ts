@@ -465,6 +465,36 @@ export const closeShift = async (
             throw new AppError('Shift is already closed', 400);
         }
 
+        // ==========================================
+        // VALIDATION: Check for unpaid bills
+        // ==========================================
+        const shiftEndTimestamp = new Date().toISOString();
+        
+        const [
+            { data: unpaidRestOrders },
+            { data: unpaidBarOrders }
+        ] = await Promise.all([
+            supabase.from('restaurant_orders')
+                .select('id, order_number')
+                .eq('branch_id', shift.branch_id)
+                .gte('created_at', shift.shift_start)
+                .lte('created_at', shiftEndTimestamp)
+                .eq('payment_status', 'pending'),
+            supabase.from('bar_orders')
+                .select('id, order_number')
+                .eq('branch_id', shift.branch_id)
+                .gte('created_at', shift.shift_start)
+                .lte('created_at', shiftEndTimestamp)
+                .eq('payment_status', 'pending')
+        ]);
+
+        const totalUnpaid = (unpaidRestOrders?.length || 0) + (unpaidBarOrders?.length || 0);
+
+        if (totalUnpaid > 0) {
+            throw new AppError(`Cannot close shift. There are ${totalUnpaid} unsettled bills for this shift period. Please clear all bills or record them as credit bills before closing.`, 400);
+        }
+        // ==========================================
+
         // Calculate summary from transactions
         const { data: summary } = await supabase
             .rpc('calculate_shift_summary', { p_shift_id: id });

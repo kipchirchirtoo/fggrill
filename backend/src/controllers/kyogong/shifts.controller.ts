@@ -222,6 +222,39 @@ export const closeShift = async (req: Request, res: Response) => {
       });
     }
 
+    // ==========================================
+    // VALIDATION: Check for unpaid bills
+    // ==========================================
+    const shiftEndTimestamp = new Date().toISOString();
+    
+    const [
+        { data: unpaidRestOrders },
+        { data: unpaidBarOrders }
+    ] = await Promise.all([
+        supabase.from('restaurant_orders')
+            .select('id, order_number')
+            .eq('branch_id', shift.branch_id)
+            .gte('created_at', shift.start_time)
+            .lte('created_at', shiftEndTimestamp)
+            .eq('payment_status', 'pending'),
+        supabase.from('bar_orders')
+            .select('id, order_number')
+            .eq('branch_id', shift.branch_id)
+            .gte('created_at', shift.start_time)
+            .lte('created_at', shiftEndTimestamp)
+            .eq('payment_status', 'pending')
+    ]);
+
+    const totalUnpaid = (unpaidRestOrders?.length || 0) + (unpaidBarOrders?.length || 0);
+
+    if (totalUnpaid > 0) {
+        return res.status(400).json({
+            success: false,
+            error: `Cannot close shift. There are ${totalUnpaid} unsettled bills for this shift period. Please clear all bills or record them as credit bills before closing.`
+        });
+    }
+    // ==========================================
+
     // 1. Get detailed reconciliation totals using the new RPC
     const { data: totals, error: totalsError } = await supabase.rpc('get_shift_reconciliation_totals', { 
       p_shift_id: id 

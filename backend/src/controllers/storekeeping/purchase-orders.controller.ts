@@ -3,6 +3,7 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { emailService } from '../../services/email.service';
+import { applyModuleBranchFilter, setModuleBranchOnCreate } from '../../middleware/moduleAccess';
 
 // @desc    Get all purchase orders
 // @route   GET /api/purchase-orders
@@ -13,7 +14,10 @@ export const getPurchaseOrders = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { branch_id, status, from_date, to_date, supplier_id } = req.query;
+        const { status, from_date, to_date, supplier_id } = req.query;
+        const user = (req as any).user;
+        const sourceModule = (req as any).sourceModule;
+        const enforcedBranchId = (req as any).enforcedBranchId;
 
         let query = supabase
             .from('store_purchase_orders')
@@ -23,6 +27,10 @@ export const getPurchaseOrders = async (
             `)
             .order('created_at', { ascending: false });
 
+        // CRITICAL: Apply module and branch filters at query level
+        query = applyModuleBranchFilter(query, req);
+
+        // Apply additional filters
         if (supplier_id) query = query.eq('supplier_id', supplier_id);
         if (status) query = query.eq('status', (status as string).toLowerCase());
         if (from_date) query = query.gte('po_date', from_date);
@@ -36,22 +44,8 @@ export const getPurchaseOrders = async (
             return;
         }
 
-        // Filter by branch if user is branch-level (filter after fetching since branch_id is in supplier)
-        const user = (req as any).user;
-        const userBranchId = user?.branch_id || user?.branchId;
+        // No post-fetch filtering needed - database query handles it
         let filteredOrders = orders;
-        
-        if (userBranchId && !branch_id) {
-            filteredOrders = orders.filter(order => 
-                order.supplier?.branch_id === userBranchId || 
-                order.supplier?.branch_id === null // Include global suppliers
-            );
-        } else if (branch_id) {
-            filteredOrders = orders.filter(order => 
-                order.supplier?.branch_id === parseInt(branch_id as string) ||
-                order.supplier?.branch_id === null
-            );
-        }
 
         // 1. Get all items for these orders
         const orderIds = filteredOrders.map(o => o.id);
@@ -277,10 +271,10 @@ export const createPurchaseOrder = async (
         console.log('Calculated totals - Subtotal:', subtotal, 'Tax:', tax_amount, 'Total:', total_amount);
 
         // Prepare PO data - set status based on auto_approve flag
-        const poData = {
+        // CRITICAL: Apply module and branch scoping
+        const poData = setModuleBranchOnCreate({
             po_number,
             supplier_id,
-            created_by_id: userId || null,
             po_date: po_date || new Date().toISOString().split('T')[0],
             expected_delivery_date: expected_delivery_date || null,
             special_instructions: special_instructions || null,
@@ -298,7 +292,11 @@ export const createPurchaseOrder = async (
                 sent_at: new Date().toISOString(),
                 sent_by_id: userId
             })
-        };
+        }, req);
+
+        // Override created_by_id with the correct field name
+        poData.created_by_id = userId || null;
+        delete (poData as any).created_by;
 
         console.log('PO Data to insert:', JSON.stringify(poData, null, 2));
 

@@ -45,7 +45,7 @@ export const procurementAPI = {
   getSuppliers: (params?: { status?: string; category?: string; search?: string }) => fetchAPI<any>(`/suppliers${buildQuery(params)}`),
   getSupplier:  (id: string) => fetchAPI<any>(`/suppliers/${id}`),
 
-  // Purchase Orders
+  // Purchase Orders - Central Store Module
   getPurchaseOrders: (params?: { 
     supplier_id?: string; 
     status?: string; 
@@ -53,15 +53,36 @@ export const procurementAPI = {
     to_date?: string;
     limit?: number;
     page?: number;
-  }) =>
-    fetchAPI<any>(`/procurement/purchase-orders${buildQuery(params)}`),
-  getPurchaseOrder:  (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`),
-  createPurchaseOrder: (data: any) => fetchAPI<any>('/procurement/purchase-orders', { method: 'POST', body: JSON.stringify(normalizePurchaseOrderPayload(data)) }),
-  updatePurchaseOrder: (id: string, data: any) => fetchAPI<any>(`/procurement/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify(normalizePurchaseOrderPayload(data)) }),
-  approvePurchaseOrder:(id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/approve`, { method: 'PUT' }),
-  cancelPurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/cancel`,  { method: 'PUT' }),
-  deletePurchaseOrder: (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}`,         { method: 'DELETE' }),
-  sendPurchaseOrder:   (id: string) => fetchAPI<any>(`/procurement/purchase-orders/${id}/send`,    { method: 'POST' }),
+    source_module?: string; // NEW: Module filter
+  }) => {
+    // Default to central_store module for procurement API
+    const moduleParams = { source_module: 'central_store', ...params };
+    return fetchAPI<any>(`/procurement/purchase-orders${buildQuery(moduleParams)}`);
+  },
+  getPurchaseOrder:  (id: string, params?: { source_module?: string }) => {
+    const moduleParams = { source_module: 'central_store', ...params };
+    return fetchAPI<any>(`/procurement/purchase-orders/${id}${buildQuery(moduleParams)}`);
+  },
+  createPurchaseOrder: (data: any) => {
+    const payload = { ...normalizePurchaseOrderPayload(data), source_module: 'central_store' };
+    return fetchAPI<any>('/procurement/purchase-orders', { 
+      method: 'POST', 
+      body: JSON.stringify(payload) 
+    });
+  },
+  updatePurchaseOrder: (id: string, data: any) => 
+    fetchAPI<any>(`/procurement/purchase-orders/${id}`, { 
+      method: 'PUT', 
+      body: JSON.stringify(normalizePurchaseOrderPayload(data)) 
+    }),
+  approvePurchaseOrder:(id: string, params?: { source_module?: string }) => 
+    fetchAPI<any>(`/procurement/purchase-orders/${id}/approve${buildQuery(params)}`, { method: 'PUT' }),
+  cancelPurchaseOrder: (id: string, params?: { source_module?: string }) => 
+    fetchAPI<any>(`/procurement/purchase-orders/${id}/cancel${buildQuery(params)}`,  { method: 'PUT' }),
+  deletePurchaseOrder: (id: string, params?: { source_module?: string }) => 
+    fetchAPI<any>(`/procurement/purchase-orders/${id}${buildQuery(params)}`,         { method: 'DELETE' }),
+  sendPurchaseOrder:   (id: string, params?: { source_module?: string }) => 
+    fetchAPI<any>(`/procurement/purchase-orders/${id}/send${buildQuery(params)}`,    { method: 'POST' }),
 
   // GRNs
   getGRNs:    (params?: { supplier_id?: string; status?: string; po_id?: string; from_date?: string; to_date?: string }) =>

@@ -325,7 +325,7 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
         setIsInvoicing(true);
         try {
             const invoiceData = {
-                customer_id: record.customer_id || record.guest_id, // Map from booking
+                // Don't send customer_id - let backend create ad-hoc customer from name/email
                 customer_name: record.customer_name || record.guest_name,
                 customer_email: record.customer_email || record.guest_email || record.email,
                 invoice_date: new Date().toISOString().split('T')[0],

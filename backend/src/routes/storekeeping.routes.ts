@@ -1,6 +1,7 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import { validateModuleAccess, enforceBranchScoping, SourceModule } from '../middleware/moduleAccess';
 import multer from 'multer';
 
 // Configure multer for memory storage
@@ -356,21 +357,83 @@ router.get('/kitchen-usage/summary', authorize(allStoreRoles), getDailyUsageSumm
 // =====================================================
 // PURCHASE ORDERS ROUTES
 // =====================================================
+// PURCHASE ORDERS (Branch Store Module)
+// =====================================================
 
 router.route('/purchase-orders')
-  .get(authorize(allStoreRoles), getPurchaseOrders)
-  .post(authorize(managerRoles), createPurchaseOrder);
+  .get(
+    authorize(allStoreRoles), 
+    validateModuleAccess([SourceModule.BRANCH_STORE]),
+    enforceBranchScoping,
+    getPurchaseOrders
+  )
+  .post(
+    authorize(managerRoles), 
+    validateModuleAccess([SourceModule.BRANCH_STORE]),
+    enforceBranchScoping,
+    createPurchaseOrder
+  );
 
 router.route('/purchase-orders/:id')
-  .get(authorize(allStoreRoles), getPurchaseOrder)
-  .put(authorize(managerRoles), updatePurchaseOrder)
-  .delete(authorize(managerRoles), deletePurchaseOrder);
+  .get(
+    authorize(allStoreRoles), 
+    validateModuleAccess([SourceModule.BRANCH_STORE]),
+    enforceBranchScoping,
+    getPurchaseOrder
+  )
+  .put(
+    authorize(managerRoles), 
+    validateModuleAccess([SourceModule.BRANCH_STORE]),
+    enforceBranchScoping,
+    updatePurchaseOrder
+  )
+  .delete(
+    authorize(managerRoles), 
+    validateModuleAccess([SourceModule.BRANCH_STORE]),
+    enforceBranchScoping,
+    deletePurchaseOrder
+  );
 
-router.put('/purchase-orders/:id/approve', authorize(managerRoles), approvePurchaseOrder);
-router.post('/purchase-orders/:id/approve', authorize(managerRoles), approvePurchaseOrder);
-router.put('/purchase-orders/:id/receive', authorize(managerRoles), receivePurchaseOrder);
-router.post('/purchase-orders/:id/receive', authorize(managerRoles), receivePurchaseOrder);
-router.put('/purchase-orders/:id/cancel', authorize(managerRoles), cancelPurchaseOrder);
-router.post('/purchase-orders/:id/cancel', authorize(managerRoles), cancelPurchaseOrder);
+router.put('/purchase-orders/:id/approve', 
+  authorize(managerRoles), 
+  validateModuleAccess([SourceModule.BRANCH_STORE]),
+  enforceBranchScoping,
+  approvePurchaseOrder
+);
+
+router.post('/purchase-orders/:id/approve', 
+  authorize(managerRoles), 
+  validateModuleAccess([SourceModule.BRANCH_STORE]),
+  enforceBranchScoping,
+  approvePurchaseOrder
+);
+
+router.put('/purchase-orders/:id/receive', 
+  authorize(managerRoles), 
+  validateModuleAccess([SourceModule.BRANCH_STORE]),
+  enforceBranchScoping,
+  receivePurchaseOrder
+);
+
+router.post('/purchase-orders/:id/receive', 
+  authorize(managerRoles), 
+  validateModuleAccess([SourceModule.BRANCH_STORE]),
+  enforceBranchScoping,
+  receivePurchaseOrder
+);
+
+router.put('/purchase-orders/:id/cancel', 
+  authorize(managerRoles), 
+  validateModuleAccess([SourceModule.BRANCH_STORE]),
+  enforceBranchScoping,
+  cancelPurchaseOrder
+);
+
+router.post('/purchase-orders/:id/cancel', 
+  authorize(managerRoles), 
+  validateModuleAccess([SourceModule.BRANCH_STORE]),
+  enforceBranchScoping,
+  cancelPurchaseOrder
+);
 
 export default router;

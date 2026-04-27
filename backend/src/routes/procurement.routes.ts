@@ -1,6 +1,9 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import { validateModuleAccess, enforceBranchScoping, SourceModule } from '../middleware/moduleAccess';
+import { validateBody, validateQuery, validateParams } from '../middleware/validation';
+import { CreatePOSchema, UpdatePOSchema, QueryPOSchema, POIdSchema } from '../schemas/purchaseOrder.schema';
 
 // Import controllers
 import {
@@ -83,17 +86,68 @@ const allProcurementStaff = [...new Set([...procurementRoles, ...storeRoles, ...
 // PURCHASE ORDERS
 // =====================================================
 router.route('/purchase-orders')
-    .get(authorize(allProcurementStaff), getPurchaseOrders)
-    .post(authorize(procurementRoles), createPurchaseOrder);
+    .get(
+        authorize(allProcurementStaff), 
+        validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+        enforceBranchScoping,
+        validateQuery(QueryPOSchema),
+        getPurchaseOrders
+    )
+    .post(
+        authorize(procurementRoles), 
+        validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+        enforceBranchScoping,
+        validateBody(CreatePOSchema),
+        createPurchaseOrder
+    );
 
 router.route('/purchase-orders/:id')
-    .get(authorize(allProcurementStaff), getPurchaseOrder)
-    .put(authorize(procurementRoles), updatePurchaseOrder)
-    .delete(authorize(procurementRoles), deletePurchaseOrder);
+    .get(
+        authorize(allProcurementStaff), 
+        validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+        enforceBranchScoping,
+        validateParams(POIdSchema),
+        getPurchaseOrder
+    )
+    .put(
+        authorize(procurementRoles), 
+        validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+        enforceBranchScoping,
+        validateParams(POIdSchema),
+        validateBody(UpdatePOSchema),
+        updatePurchaseOrder
+    )
+    .delete(
+        authorize(procurementRoles), 
+        validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+        enforceBranchScoping,
+        validateParams(POIdSchema),
+        deletePurchaseOrder
+    );
 
-router.put('/purchase-orders/:id/approve', authorize(procurementRoles), approvePurchaseOrder);
-router.put('/purchase-orders/:id/cancel', authorize(procurementRoles), cancelPurchaseOrder);
-router.post('/purchase-orders/:id/send', authorize(procurementRoles), sendPurchaseOrderToSupplier);
+router.put('/purchase-orders/:id/approve', 
+    authorize(procurementRoles), 
+    validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+    enforceBranchScoping,
+    validateParams(POIdSchema),
+    approvePurchaseOrder
+);
+
+router.put('/purchase-orders/:id/cancel', 
+    authorize(procurementRoles), 
+    validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+    enforceBranchScoping,
+    validateParams(POIdSchema),
+    cancelPurchaseOrder
+);
+
+router.post('/purchase-orders/:id/send', 
+    authorize(procurementRoles), 
+    validateModuleAccess([SourceModule.CENTRAL_STORE, SourceModule.BRANCH_STORE, SourceModule.BRANCH_ACCOUNTING]),
+    enforceBranchScoping,
+    validateParams(POIdSchema),
+    sendPurchaseOrderToSupplier
+);
 
 // =====================================================
 // GOODS RECEIVED NOTES (GRN)

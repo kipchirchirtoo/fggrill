@@ -62,6 +62,7 @@ export default function AuditorPurchasesPage() {
         setIsLoading(true);
         try {
             const token = localStorage.getItem('token');
+            // Auditors can see all modules - don't filter by source_module
             const response = await fetch(`${API_URL}/api/procurement/purchase-orders${statusFilter ? `?status=${statusFilter}` : ''}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
