@@ -89,6 +89,7 @@ import cateringFoodControlRoutes from './catering.routes';
 import foodControlRoutes from './foodControl.routes';
 import shiftPnLRoutes from './shiftPnL.routes';
 import branchFoodControlConfigRoutes from './branchFoodControlConfig.routes';
+import securityRoutes from './security.routes';
 
 const router = express.Router();
 
@@ -196,6 +197,7 @@ router.use('/admin-ai', adminAiRoutes);
 router.use('/search', searchRoutes);
 router.use('/analytics', branchAnalyticsRoutes);
 router.use('/dispatch', dispatchRoutes);
+router.use('/security', securityRoutes);
 
 // Food Control System routes
 router.use('/buffet', buffetRoutes);

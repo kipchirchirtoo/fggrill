@@ -58,23 +58,209 @@ export default function AdminDocsPage() {
   );
 
   const handleDownloadPDF = async (guide?: ModuleGuide) => {
-    toast.info('Connecting to generation service...');
+    toast.info('Generating PDF documentation...');
     try {
-      const token = localStorage.getItem('token');
+      // Dynamic import of jsPDF
+      const { default: jsPDF } = await import('jspdf');
       
-      const payload = {
-        reportType: 'documentation',
-        format: 'pdf',
-        filters: {
-          moduleId: guide?.id || 'all'
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const contentWidth = pageWidth - (margin * 2);
+      let yPosition = margin;
+
+      // Helper function to add new page if needed
+      const checkPageBreak = (requiredSpace: number) => {
+        if (yPosition + requiredSpace > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+          return true;
         }
+        return false;
       };
 
-      await reportAPI.exportReport(payload as any);
+      // Helper function to add text with word wrap
+      const addWrappedText = (text: string, fontSize: number, isBold: boolean = false) => {
+        doc.setFontSize(fontSize);
+        doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+        const lines = doc.splitTextToSize(text, contentWidth);
+        lines.forEach((line: string) => {
+          checkPageBreak(fontSize * 0.5);
+          doc.text(line, margin, yPosition);
+          yPosition += fontSize * 0.5;
+        });
+      };
+
+      // Cover Page
+      doc.setFillColor(41, 37, 36); // stone-900
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
       
-      toast.success('Documentation prepared by HIRALL SOLUTIONS');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(32);
+      doc.setFont('helvetica', 'bold');
+      doc.text('FamousGate Hotels', pageWidth / 2, 80, { align: 'center' });
+      
+      doc.setFontSize(24);
+      doc.text('Systems Documentation', pageWidth / 2, 100, { align: 'center' });
+      
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'normal');
+      doc.text(guide ? guide.title : 'Complete Employee Manual', pageWidth / 2, 120, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.text('Prepared by HIRALL SOLUTIONS', pageWidth / 2, pageHeight - 40, { align: 'center' });
+      doc.text(new Date().toLocaleDateString(), pageWidth / 2, pageHeight - 30, { align: 'center' });
+      doc.text('CONFIDENTIAL - INTERNAL USE ONLY', pageWidth / 2, pageHeight - 20, { align: 'center' });
+
+      // Content pages
+      const guidesToInclude = guide ? [guide] : moduleGuides;
+
+      for (const currentGuide of guidesToInclude) {
+        doc.addPage();
+        yPosition = margin;
+        doc.setTextColor(0, 0, 0);
+
+        // Module Title
+        doc.setFillColor(245, 245, 244); // stone-100
+        doc.rect(margin, yPosition, contentWidth, 15, 'F');
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(28, 25, 23); // stone-900
+        doc.text(currentGuide.title, margin + 5, yPosition + 10);
+        yPosition += 20;
+
+        // Description
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(87, 83, 78); // stone-600
+        addWrappedText(currentGuide.description, 11);
+        yPosition += 10;
+
+        // Key Capabilities
+        checkPageBreak(20);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(28, 25, 23);
+        doc.text('KEY CAPABILITIES', margin, yPosition);
+        yPosition += 8;
+
+        currentGuide.features.forEach((feature) => {
+          checkPageBreak(15);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(68, 64, 60); // stone-700
+          
+          // Bullet point
+          doc.circle(margin + 2, yPosition - 2, 1, 'F');
+          
+          const featureLines = doc.splitTextToSize(feature, contentWidth - 10);
+          featureLines.forEach((line: string, index: number) => {
+            if (index > 0) checkPageBreak(5);
+            doc.text(line, margin + 6, yPosition);
+            yPosition += 5;
+          });
+          yPosition += 2;
+        });
+
+        yPosition += 5;
+
+        // Content
+        checkPageBreak(20);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(28, 25, 23);
+        doc.text('DETAILED OVERVIEW', margin, yPosition);
+        yPosition += 8;
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(68, 64, 60);
+        
+        const contentParagraphs = currentGuide.content.split('\n').filter(p => p.trim());
+        contentParagraphs.forEach((paragraph) => {
+          if (paragraph.trim().startsWith('###')) {
+            yPosition += 5;
+            checkPageBreak(10);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(paragraph.replace(/###/g, '').trim(), margin, yPosition);
+            yPosition += 7;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+          } else if (paragraph.trim().startsWith('####')) {
+            yPosition += 3;
+            checkPageBreak(8);
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text(paragraph.replace(/####/g, '').trim(), margin, yPosition);
+            yPosition += 6;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+          } else if (paragraph.trim()) {
+            checkPageBreak(10);
+            const lines = doc.splitTextToSize(paragraph.trim(), contentWidth);
+            lines.forEach((line: string) => {
+              checkPageBreak(5);
+              doc.text(line, margin, yPosition);
+              yPosition += 5;
+            });
+            yPosition += 2;
+          }
+        });
+
+        yPosition += 5;
+
+        // Operational Steps
+        checkPageBreak(20);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(28, 25, 23);
+        doc.text('OPERATIONAL STEPS', margin, yPosition);
+        yPosition += 8;
+
+        currentGuide.howToUse.forEach((step, index) => {
+          checkPageBreak(15);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(255, 255, 255);
+          doc.setFillColor(28, 25, 23);
+          doc.rect(margin, yPosition - 5, 8, 8, 'F');
+          doc.text(String(index + 1), margin + 4, yPosition + 1, { align: 'center' });
+          
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(68, 64, 60);
+          const stepLines = doc.splitTextToSize(step, contentWidth - 12);
+          stepLines.forEach((line: string, lineIndex: number) => {
+            if (lineIndex > 0) checkPageBreak(5);
+            doc.text(line, margin + 12, yPosition);
+            yPosition += 5;
+          });
+          yPosition += 3;
+        });
+
+        // Footer for each module
+        yPosition += 10;
+        checkPageBreak(15);
+        doc.setDrawColor(231, 229, 228); // stone-200
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 5;
+        doc.setFontSize(8);
+        doc.setTextColor(168, 162, 158); // stone-400
+        doc.text(`Document Reference: FAMOUSGATE-DOC-${currentGuide.id.toUpperCase()}-2026`, margin, yPosition);
+        doc.text('© HIRALL SOLUTIONS', pageWidth - margin, yPosition, { align: 'right' });
+      }
+
+      // Save the PDF
+      const filename = guide 
+        ? `FamousGate_${guide.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+        : `FamousGate_Complete_Manual_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      doc.save(filename);
+      
+      toast.success('Documentation PDF generated successfully!');
     } catch (e: any) {
-      toast.error('PDF generation failed. Please try again later.');
+      toast.error('PDF generation failed. Please try again.');
       console.error('PDF Export Error:', e);
     }
   };

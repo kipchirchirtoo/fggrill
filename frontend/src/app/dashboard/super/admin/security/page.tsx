@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { UserRole } from '@/lib/auth-context';
-import { adminLogsAPI } from '@/lib/api';
+import { adminLogsAPI, securityAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import {
   Shield,
@@ -480,27 +480,67 @@ function AccessControlTab({ logs, getThreatBadge }: { logs: SecurityLog[]; getTh
 
 // Threat Detection Tab Component
 function ThreatDetectionTab({ logs, threatStats }: { logs: SecurityLog[]; threatStats: any }) {
+  const [blockingIP, setBlockingIP] = useState<string | null>(null);
   const suspiciousLogs = logs.filter(l => l.is_suspicious);
+
+  const handleBlockIP = async (ipAddress: string, email: string) => {
+    if (!confirm(`Are you sure you want to block IP address ${ipAddress}?\n\nThis will prevent all access from this IP address.`)) {
+      return;
+    }
+
+    setBlockingIP(ipAddress);
+    try {
+      const response = await securityAPI.blockIP(ipAddress, `Blocked due to suspicious activity from ${email}`);
+      if (response.success) {
+        toast.success(`IP address ${ipAddress} has been blocked`);
+        // Refresh data after blocking
+        window.location.reload();
+      } else {
+        throw new Error(response.error || 'Failed to block IP');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to block IP address');
+      console.error(error);
+    } finally {
+      setBlockingIP(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
       {/* Threat Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-stone-900">
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-red-500">
           <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">High Threat</div>
-          <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.highThreat}</div>
+          <div className="text-2xl font-semibold text-red-600 mt-1">{threatStats.highThreat}</div>
+          <div className="mt-2 flex items-center text-[11px] text-stone-500">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            <span>Requires attention</span>
+          </div>
         </div>
-        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-amber-500">
           <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">VPN Detected</div>
-          <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.vpn}</div>
+          <div className="text-2xl font-semibold text-amber-600 mt-1">{threatStats.vpn}</div>
+          <div className="mt-2 flex items-center text-[11px] text-stone-500">
+            <WifiOff className="h-3 w-3 mr-1" />
+            <span>VPN connections</span>
+          </div>
         </div>
-        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-amber-500">
           <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Proxy Detected</div>
-          <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.proxy}</div>
+          <div className="text-2xl font-semibold text-amber-600 mt-1">{threatStats.proxy}</div>
+          <div className="mt-2 flex items-center text-[11px] text-stone-500">
+            <Server className="h-3 w-3 mr-1" />
+            <span>Proxy connections</span>
+          </div>
         </div>
-        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
+        <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm border-l-4 border-l-stone-900">
           <div className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Suspicious</div>
           <div className="text-2xl font-semibold text-stone-900 mt-1">{threatStats.suspicious}</div>
+          <div className="mt-2 flex items-center text-[11px] text-stone-500">
+            <Shield className="h-3 w-3 mr-1" />
+            <span>Flagged activities</span>
+          </div>
         </div>
       </div>
 
@@ -509,31 +549,51 @@ function ThreatDetectionTab({ logs, threatStats }: { logs: SecurityLog[]; threat
         <h3 className="text-sm font-semibold text-stone-900 mb-4 uppercase tracking-wider">Suspicious Activity</h3>
         <div className="space-y-3">
           {suspiciousLogs.length === 0 ? (
-            <div className="text-center py-8 text-stone-500">
-              <Shield className="h-12 w-12 mx-auto mb-2 text-stone-300" />
-              <p>No suspicious activity detected</p>
+            <div className="text-center py-12 bg-stone-50 rounded-lg border border-stone-100">
+              <Shield className="h-16 w-16 mx-auto mb-3 text-green-500" />
+              <p className="text-lg font-medium text-stone-900 mb-1">All Clear!</p>
+              <p className="text-stone-500">No suspicious activity detected</p>
             </div>
           ) : (
             suspiciousLogs.map(log => (
-              <div key={log.id} className="bg-stone-50 border border-stone-200 rounded-lg p-4">
+              <div key={log.id} className="bg-red-50 border border-red-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="h-5 w-5 text-stone-900" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="h-5 w-5 text-red-600" />
                       <span className="font-semibold text-stone-900">{log.email}</span>
-                      <span className="text-sm text-stone-600">
+                      <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full font-medium">
                         Threat Score: {log.threat_score}/100
                       </span>
                     </div>
-                    <div className="text-sm text-stone-700 space-y-1">
-                      <div>IP: {log.ip_address}</div>
-                      <div>Location: {log.geo_city}, {log.geo_country}</div>
-                      <div>Reason: {log.threat_reason || 'Suspicious pattern detected'}</div>
-                      <div>Time: {new Date(log.created_at).toLocaleString()}</div>
+                    <div className="text-sm text-stone-700 space-y-1.5 ml-7">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-stone-400" />
+                        <span className="font-mono">{log.ip_address}</span>
+                        {log.is_vpn && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">VPN</span>}
+                        {log.is_proxy && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">Proxy</span>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-stone-400" />
+                        <span>{log.geo_city || 'Unknown'}, {log.geo_country || 'Unknown'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-stone-400" />
+                        <span className="font-medium">Reason:</span> {log.threat_reason || 'Suspicious pattern detected'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-stone-400" />
+                        <span>{new Date(log.created_at).toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
-                  <button className="px-3 py-1 bg-stone-900 text-white text-sm rounded hover:bg-black transition-colors">
-                    Block IP
+                  <button 
+                    onClick={() => handleBlockIP(log.ip_address, log.email)}
+                    disabled={blockingIP === log.ip_address}
+                    className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <Ban className="h-4 w-4" />
+                    {blockingIP === log.ip_address ? 'Blocking...' : 'Block IP'}
                   </button>
                 </div>
               </div>
@@ -622,71 +682,166 @@ function GeolocationTab({ logs, logsByCountry }: { logs: SecurityLog[]; logsByCo
 
 // Active Sessions Tab Component
 function ActiveSessionsTab({ logs }: { logs: SecurityLog[] }) {
-  // Get unique active sessions (last 24 hours, successful logins)
-  const activeSessions = logs
-    .filter(l => l.status === 'success')
-    .filter(l => new Date(l.created_at).getTime() > Date.now() - 24 * 60 * 60 * 1000)
-    .reduce((acc, log) => {
-      const key = `${log.email}-${log.ip_address}`;
-      if (!acc[key] || new Date(log.created_at) > new Date(acc[key].created_at)) {
-        acc[key] = log;
-      }
-      return acc;
-    }, {} as Record<string, SecurityLog>);
+  const [terminatingSession, setTerminatingSession] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const sessions = Object.values(activeSessions);
+  useEffect(() => {
+    fetchActiveSessions();
+  }, []);
+
+  const fetchActiveSessions = async () => {
+    setLoading(true);
+    try {
+      const response = await securityAPI.getActiveSessions();
+      if (response.success && response.data) {
+        setSessions(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to fetch active sessions');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to fetch active sessions');
+      console.error(error);
+      // Fallback to logs-based sessions
+      const activeSessions = logs
+        .filter(l => l.status === 'success')
+        .filter(l => new Date(l.created_at).getTime() > Date.now() - 24 * 60 * 60 * 1000)
+        .reduce((acc, log) => {
+          const key = `${log.email}-${log.ip_address}`;
+          if (!acc[key] || new Date(log.created_at) > new Date(acc[key].created_at)) {
+            acc[key] = log;
+          }
+          return acc;
+        }, {} as Record<string, SecurityLog>);
+      setSessions(Object.values(activeSessions));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTerminateSession = async (userId: string, email: string) => {
+    if (!confirm(`Are you sure you want to terminate the session for ${email}?\n\nThis will log out the user immediately.`)) {
+      return;
+    }
+
+    setTerminatingSession(userId);
+    try {
+      const response = await securityAPI.terminateSession(userId);
+      if (response.success) {
+        toast.success(`Session terminated for ${email}`);
+        // Refresh sessions after termination
+        await fetchActiveSessions();
+      } else {
+        throw new Error(response.error || 'Failed to terminate session');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to terminate session');
+      console.error(error);
+    } finally {
+      setTerminatingSession(null);
+    }
+  };
+
+  const handleTerminateAll = async () => {
+    if (!confirm(`Are you sure you want to terminate ALL ${sessions.length} active sessions?\n\nThis will log out all users immediately.`)) {
+      return;
+    }
+
+    try {
+      const response = await securityAPI.terminateAllSessions();
+      if (response.success) {
+        toast.success(`All ${sessions.length} sessions terminated`);
+        await fetchActiveSessions();
+      } else {
+        throw new Error(response.error || 'Failed to terminate all sessions');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to terminate all sessions');
+      console.error(error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin h-8 w-8 border-4 border-stone-900 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-stone-900 uppercase tracking-wider">Active Sessions ({sessions.length})</h3>
-        <button className="px-4 py-2 bg-stone-900 text-white rounded-lg hover:bg-black flex items-center gap-2 text-sm transition-colors">
+        <button 
+          onClick={handleTerminateAll}
+          disabled={sessions.length === 0}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm transition-colors"
+        >
           <Ban className="h-4 w-4" />
           Terminate All
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {sessions.map(session => (
-          <div key={session.id} className="bg-white border border-stone-100 rounded-lg p-4 shadow-sm">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center">
-                  <Users className="h-5 w-5 text-stone-600" />
+      {sessions.length === 0 ? (
+        <div className="text-center py-12 text-stone-500">
+          <Activity className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>No active sessions in the last 24 hours</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {sessions.map(session => {
+            // Handle both admin_logs format and user session format
+            const userId = session.user_id || session.id;
+            const userEmail = session.email;
+            const userName = session.user ? `${session.user.first_name} ${session.user.last_name}` : 'Unknown User';
+            
+            return (
+              <div key={session.id} className="bg-white border border-stone-100 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center">
+                      <Users className="h-5 w-5 text-stone-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-stone-900">{userEmail}</div>
+                      <div className="text-sm text-stone-500">{userName}</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleTerminateSession(userId, userEmail)}
+                    disabled={terminatingSession === userId}
+                    className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {terminatingSession === userId ? 'Terminating...' : 'Terminate'}
+                  </button>
                 </div>
-                <div>
-                  <div className="font-medium text-stone-900">{session.email}</div>
-                  <div className="text-sm text-stone-500">
-                    {session.user ? `${session.user.first_name} ${session.user.last_name}` : 'Unknown User'}
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-stone-600">
+                    <Server className="h-4 w-4" />
+                    <span className="font-mono">{session.ip_address}</span>
+                    {session.is_vpn && <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">VPN</span>}
+                    {session.is_proxy && <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">Proxy</span>}
+                  </div>
+                  <div className="flex items-center gap-2 text-stone-600">
+                    <MapPin className="h-4 w-4" />
+                    <span>{session.geo_city || 'Unknown'}, {session.geo_country || 'Unknown'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-stone-600">
+                    <Activity className="h-4 w-4" />
+                    <span>{session.device_info?.browser || 'Unknown'} on {session.device_info?.os || 'Unknown'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-stone-600">
+                    <Clock className="h-4 w-4" />
+                    <span>Last active: {new Date(session.created_at).toLocaleString()}</span>
                   </div>
                 </div>
               </div>
-              <button className="text-stone-600 hover:text-stone-900 text-sm font-medium">
-                Terminate
-              </button>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-stone-600">
-                <Server className="h-4 w-4" />
-                <span className="font-mono">{session.ip_address}</span>
-              </div>
-              <div className="flex items-center gap-2 text-stone-600">
-                <MapPin className="h-4 w-4" />
-                <span>{session.geo_city}, {session.geo_country}</span>
-              </div>
-              <div className="flex items-center gap-2 text-stone-600">
-                <Activity className="h-4 w-4" />
-                <span>{session.device_info?.browser} on {session.device_info?.os}</span>
-              </div>
-              <div className="flex items-center gap-2 text-stone-600">
-                <Clock className="h-4 w-4" />
-                <span>Last active: {new Date(session.created_at).toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

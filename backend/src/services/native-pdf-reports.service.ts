@@ -1159,27 +1159,71 @@ export async function generateDocumentationPDF(
     // Module Giant Title
     const mY = doc.y;
     doc.rect(V_LEFT, mY, CONTENT_W, 35).lineWidth(2).strokeColor('#0f172a').stroke();
-    doc.font('Courier-Bold').fontSize(16).fillColor('#0f172a').text(`[MOD_${mi+1}] ARCHITECTURE: ${m.title.toUpperCase()}`, V_LEFT + 15, mY + 11);
+    doc.font('Courier-Bold').fontSize(16).fillColor('#0f172a').text(`[MOD_${mi+1}] ${m.title.toUpperCase()}`, V_LEFT + 15, mY + 11);
     doc.y = mY + 45;
 
-    drawDataRow('CORE_OBJECTIVE', m.purpose);
-    drawDataRow('ACCESS_ROLES', m.role);
+    // Module Description
+    drawDataRow('MODULE_DESCRIPTION', m.description);
     
-    drawModuleHeader(`${mi + 1}.1 COMPONENT TOPOLOGY`);
-    drawTechnicalGrid(['ID', 'Feature Designation', 'Registry'], m.components.map((c, ci) => [String(ci + 1), c.name, 'VERIFIED_ACTIVE']), [40, 345, 110]);
-
-    drawModuleHeader(`${mi + 1}.2 SYSTEM PROTOCOLS (SOP)`);
-    m.workflows.forEach((w, wi) => {
-      ensureSpace(120);
-      doc.font('Courier-Bold').fontSize(10).fillColor('#0f172a').text(` » SUB_PROCESS: [${mi+1}.${wi+1}] ${w.title.toUpperCase()}`);
-      drawTechnicalGrid(['STP', 'Instruction Flow Execution'], w.steps.map((s, si) => [String(si + 1), s]), [40, 455]);
+    // Key Features Section
+    drawModuleHeader(`${mi + 1}.1 KEY CAPABILITIES`);
+    m.features.forEach((feature, fi) => {
+      ensureSpace(40);
+      const featureParts = feature.split(':');
+      const featureName = featureParts[0].trim();
+      const featureDesc = featureParts.length > 1 ? featureParts.slice(1).join(':').trim() : '';
+      
+      doc.font('Courier-Bold').fontSize(9).fillColor('#0f172a').text(`[${fi + 1}] ${featureName}`, V_LEFT, doc.y);
+      doc.y += 12;
+      if (featureDesc) {
+        doc.font('Courier').fontSize(9).fillColor('#334155').text(featureDesc, V_LEFT + 20, doc.y, { width: CONTENT_W - 20 });
+        doc.y += 15;
+      }
     });
+    doc.y += 10;
 
-    drawModuleHeader(`${mi + 1}.3 FAULT RESOLUTION MATRIX`);
-    drawTechnicalGrid(['Fault Event Trigger', 'Recovery Routine Path'], m.troubleshooting.map(t => [t.issue, t.resolution]), [200, 295]);
+    // Deep Dive Content Section
+    drawModuleHeader(`${mi + 1}.2 DEEP DIVE ANALYSIS`);
+    const contentLines = m.content.split('\n').filter(line => line.trim());
+    contentLines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      
+      ensureSpace(30);
+      
+      if (trimmed.startsWith('###')) {
+        // Main section header
+        const headerText = trimmed.replace(/###/g, '').trim();
+        doc.font('Courier-Bold').fontSize(11).fillColor('#0f172a').text(headerText, V_LEFT, doc.y);
+        doc.y += 18;
+      } else if (trimmed.startsWith('####')) {
+        // Sub-section header
+        const subHeaderText = trimmed.replace(/####/g, '').trim();
+        doc.font('Courier-Bold').fontSize(10).fillColor('#334155').text(`» ${subHeaderText}`, V_LEFT, doc.y);
+        doc.y += 15;
+      } else if (trimmed.startsWith('-')) {
+        // Bullet point
+        const bulletText = trimmed.substring(1).trim();
+        const bulletHeight = doc.heightOfString(bulletText, { width: CONTENT_W - 25 });
+        ensureSpace(bulletHeight + 8);
+        doc.font('Courier').fontSize(9).fillColor('#1e293b').text(`• ${bulletText}`, V_LEFT + 15, doc.y, { width: CONTENT_W - 25 });
+        doc.y += bulletHeight + 5;
+      } else {
+        // Regular paragraph
+        const paraHeight = doc.heightOfString(trimmed, { width: CONTENT_W });
+        ensureSpace(paraHeight + 8);
+        doc.font('Courier').fontSize(9).fillColor('#1e293b').text(trimmed, V_LEFT, doc.y, { width: CONTENT_W });
+        doc.y += paraHeight + 8;
+      }
+    });
+    doc.y += 10;
+
+    // Operational Steps Section
+    drawModuleHeader(`${mi + 1}.3 OPERATIONAL STEPS`);
+    drawTechnicalGrid(['Step', 'Instruction'], m.howToUse.map((step, si) => [String(si + 1), step]), [50, 445]);
     
     drawModuleHeader(`${mi+1}.4 LEGAL & COMPLIANCE`);
-    const disclaimer = 'All data handled strictly per FamousGate Privacy Policy 2026. Access to this module requires Hirall Enterprise JWT clearance.';
+    const disclaimer = 'All data handled strictly per FamousGate Privacy Policy 2026. Access to this module requires Hirall Enterprise JWT clearance. Developed by HIRALL SOLUTIONS.';
     const dh = doc.heightOfString(disclaimer, { width: CONTENT_W });
     ensureSpace(dh + 20);
     doc.font('Courier').fontSize(10).text(disclaimer, { align: 'justify' });

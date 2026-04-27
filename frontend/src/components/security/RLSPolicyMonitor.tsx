@@ -1,74 +1,46 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, CheckCircle, Database, Eye, Lock } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Database, Eye, Lock, ShieldCheck, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface RLSPolicy {
-  table_name: string;
-  policy_name: string;
-  policy_type: string;
-  enabled: boolean;
-  last_violation?: string;
-  violation_count: number;
-}
+import { securityAPI, RLSPolicy } from '@/lib/api';
 
 export function RLSPolicyMonitor() {
   const [policies, setPolicies] = useState<RLSPolicy[]>([]);
   const [loading, setLoading] = useState(true);
-  const [violations, setViolations] = useState<any[]>([]);
 
   useEffect(() => {
     fetchRLSStatus();
   }, []);
 
   const fetchRLSStatus = async () => {
+    setLoading(true);
     try {
-      // Mock data - replace with actual API call
-      const mockPolicies: RLSPolicy[] = [
-        {
-          table_name: 'store_purchase_orders',
-          policy_name: 'po_module_branch_isolation',
-          policy_type: 'SELECT',
-          enabled: true,
-          violation_count: 0
-        },
-        {
-          table_name: 'accounting_ar_invoices',
-          policy_name: 'invoice_branch_isolation',
-          policy_type: 'SELECT',
-          enabled: true,
-          violation_count: 2,
-          last_violation: new Date().toISOString()
-        },
-        {
-          table_name: 'payments',
-          policy_name: 'payment_branch_isolation',
-          policy_type: 'SELECT',
-          enabled: true,
-          violation_count: 0
-        },
-        {
-          table_name: 'simple_items',
-          policy_name: 'items_branch_isolation',
-          policy_type: 'SELECT',
-          enabled: true,
-          violation_count: 1,
-          last_violation: new Date(Date.now() - 3600000).toISOString()
-        }
-      ];
-
-      setPolicies(mockPolicies);
-      setLoading(false);
-    } catch (error) {
-      toast.error('Failed to fetch RLS policies');
+      const response = await securityAPI.getRLSPolicies();
+      if (response.success && response.data) {
+        setPolicies(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to fetch RLS policies');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to fetch RLS policies');
+      console.error(error);
+    } finally {
       setLoading(false);
     }
   };
 
   const totalPolicies = policies.length;
   const enabledPolicies = policies.filter(p => p.enabled).length;
-  const totalViolations = policies.reduce((sum, p) => sum + p.violation_count, 0);
+  const totalViolations = policies.reduce((sum, p) => sum + (p.violation_count || 0), 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin h-8 w-8 border-4 border-stone-900 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -164,16 +136,12 @@ export function RLSPolicyMonitor() {
       <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
         <h4 className="text-sm font-semibold text-stone-900 mb-3">Quick Actions</h4>
         <div className="flex flex-wrap gap-2">
-          <button className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors">
-            <Eye className="h-4 w-4 inline mr-2" />
-            View All Violations
-          </button>
-          <button className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors">
-            <Database className="h-4 w-4 inline mr-2" />
-            Test Policies
-          </button>
-          <button className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors">
-            <RefreshCw className="h-4 w-4 inline mr-2" />
+          <button 
+            onClick={fetchRLSStatus}
+            disabled={loading}
+            className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`h-4 w-4 inline mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh Status
           </button>
         </div>

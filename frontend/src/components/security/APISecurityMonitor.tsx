@@ -1,18 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Shield, Zap, AlertTriangle, CheckCircle, TrendingUp, Activity, Clock, Target } from 'lucide-react';
-
-interface APIEndpoint {
-  path: string;
-  method: string;
-  requests_24h: number;
-  avg_response_time: number;
-  error_rate: number;
-  rate_limit: number;
-  blocked_requests: number;
-  last_attack?: string;
-}
+import { Shield, Zap, AlertTriangle, CheckCircle, TrendingUp, Activity, Clock, Target, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import { securityAPI, APIEndpoint } from '@/lib/api';
 
 export function APISecurityMonitor() {
   const [endpoints, setEndpoints] = useState<APIEndpoint[]>([]);
@@ -22,61 +13,44 @@ export function APISecurityMonitor() {
     avg_response_time: 0,
     active_rate_limits: 0
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchAPIStats();
   }, []);
 
-  const fetchAPIStats = () => {
-    // Mock data - replace with actual API
-    const mockEndpoints: APIEndpoint[] = [
-      {
-        path: '/api/auth/login',
-        method: 'POST',
-        requests_24h: 1247,
-        avg_response_time: 145,
-        error_rate: 2.3,
-        rate_limit: 20,
-        blocked_requests: 34,
-        last_attack: new Date(Date.now() - 7200000).toISOString()
-      },
-      {
-        path: '/api/payment/create',
-        method: 'POST',
-        requests_24h: 892,
-        avg_response_time: 234,
-        error_rate: 0.5,
-        rate_limit: 30,
-        blocked_requests: 12
-      },
-      {
-        path: '/api/accounting/invoices',
-        method: 'GET',
-        requests_24h: 3421,
-        avg_response_time: 89,
-        error_rate: 0.2,
-        rate_limit: 100,
-        blocked_requests: 5
-      },
-      {
-        path: '/api/procurement/purchase-orders',
-        method: 'POST',
-        requests_24h: 567,
-        avg_response_time: 178,
-        error_rate: 1.1,
-        rate_limit: 30,
-        blocked_requests: 8
+  const fetchAPIStats = async () => {
+    setLoading(true);
+    try {
+      const response = await securityAPI.getAPIMetrics();
+      if (response.success && response.data) {
+        setEndpoints(response.data.endpoints || []);
+        setStats({
+          total_requests: response.data.totalRequests || 0,
+          blocked_requests: response.data.rateLimitViolations || 0,
+          avg_response_time: response.data.endpoints?.length 
+            ? Math.round(response.data.endpoints.reduce((sum, e) => sum + e.avgResponseTime, 0) / response.data.endpoints.length)
+            : 0,
+          active_rate_limits: response.data.endpoints?.length || 0
+        });
+      } else {
+        throw new Error(response.error || 'Failed to fetch API metrics');
       }
-    ];
-
-    setEndpoints(mockEndpoints);
-    setStats({
-      total_requests: mockEndpoints.reduce((sum, e) => sum + e.requests_24h, 0),
-      blocked_requests: mockEndpoints.reduce((sum, e) => sum + e.blocked_requests, 0),
-      avg_response_time: Math.round(mockEndpoints.reduce((sum, e) => sum + e.avg_response_time, 0) / mockEndpoints.length),
-      active_rate_limits: mockEndpoints.length
-    });
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to fetch API security metrics');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin h-8 w-8 border-4 border-stone-900 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -149,68 +123,65 @@ export function APISecurityMonitor() {
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {endpoints.map((endpoint, index) => (
-                <tr key={index} className="hover:bg-stone-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div>
-                      <span className={`inline-block px-2 py-1 text-xs font-mono font-semibold rounded ${
-                        endpoint.method === 'POST' ? 'bg-blue-100 text-blue-700' :
-                        endpoint.method === 'GET' ? 'bg-green-100 text-green-700' :
-                        endpoint.method === 'PUT' ? 'bg-amber-100 text-amber-700' :
-                        'bg-red-100 text-red-700'
+              {endpoints.map((endpoint, index) => {
+                // Extract method and path from endpoint string
+                const endpointStr = endpoint.endpoint || '';
+                const parts = endpointStr.split(' ');
+                const method = parts[0] || 'GET';
+                const path = parts.slice(1).join(' ') || endpointStr;
+                
+                return (
+                  <tr key={index} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div>
+                        <span className={`inline-block px-2 py-1 text-xs font-mono font-semibold rounded ${
+                          method === 'POST' ? 'bg-blue-100 text-blue-700' :
+                          method === 'GET' ? 'bg-green-100 text-green-700' :
+                          method === 'PUT' ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {method}
+                        </span>
+                        <span className="ml-2 font-mono text-sm text-stone-900">{path}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-stone-900 font-medium">
+                      {endpoint.requests?.toLocaleString() || 0}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className={`font-medium ${
+                        endpoint.avgResponseTime < 100 ? 'text-green-600' :
+                        endpoint.avgResponseTime < 200 ? 'text-blue-600' :
+                        endpoint.avgResponseTime < 300 ? 'text-amber-600' :
+                        'text-red-600'
                       }`}>
-                        {endpoint.method}
+                        {endpoint.avgResponseTime}ms
                       </span>
-                      <span className="ml-2 font-mono text-sm text-stone-900">{endpoint.path}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-stone-900 font-medium">
-                    {endpoint.requests_24h.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className={`font-medium ${
-                      endpoint.avg_response_time < 100 ? 'text-green-600' :
-                      endpoint.avg_response_time < 200 ? 'text-blue-600' :
-                      endpoint.avg_response_time < 300 ? 'text-amber-600' :
-                      'text-red-600'
-                    }`}>
-                      {endpoint.avg_response_time}ms
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className={`font-medium ${
-                      endpoint.error_rate < 1 ? 'text-green-600' :
-                      endpoint.error_rate < 3 ? 'text-amber-600' :
-                      'text-red-600'
-                    }`}>
-                      {endpoint.error_rate}%
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-stone-900">
-                    {endpoint.rate_limit} req/min
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    {endpoint.blocked_requests > 0 ? (
-                      <span className="text-red-600 font-medium">{endpoint.blocked_requests}</span>
-                    ) : (
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className={`font-medium ${
+                        endpoint.errors < 1 ? 'text-green-600' :
+                        endpoint.errors < 3 ? 'text-amber-600' :
+                        'text-red-600'
+                      }`}>
+                        {endpoint.errors}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-stone-900">
+                      N/A
+                    </td>
+                    <td className="px-6 py-4 text-sm">
                       <span className="text-stone-400">0</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {endpoint.last_attack ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
-                        <AlertTriangle className="h-3 w-3" />
-                        Recent attack
-                      </span>
-                    ) : (
+                    </td>
+                    <td className="px-6 py-4">
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
                         <CheckCircle className="h-3 w-3" />
                         Healthy
                       </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -218,9 +189,19 @@ export function APISecurityMonitor() {
 
       {/* Rate Limit Configuration */}
       <div className="bg-stone-50 border border-stone-200 rounded-lg p-6">
-        <h4 className="text-sm font-semibold text-stone-900 mb-4 uppercase tracking-wider">
-          Rate Limit Configuration
-        </h4>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-semibold text-stone-900 uppercase tracking-wider">
+            Rate Limit Configuration
+          </h4>
+          <button 
+            onClick={fetchAPIStats}
+            disabled={loading}
+            className="px-3 py-1.5 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-700 hover:bg-stone-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white border border-stone-200 rounded-lg p-4">
             <p className="text-xs font-semibold text-stone-500 uppercase mb-2">Auth Endpoints</p>

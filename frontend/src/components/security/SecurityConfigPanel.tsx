@@ -1,88 +1,78 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings, Shield, Key, Bell, Lock, Zap, Database, Globe, AlertTriangle, CheckCircle, Save } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface SecurityConfig {
-  // Authentication
-  jwt_expiry_minutes: number;
-  refresh_token_rotation: boolean;
-  session_timeout_minutes: number;
-  max_failed_attempts: number;
-  lockout_duration_minutes: number;
-  
-  // Rate Limiting
-  auth_rate_limit: number;
-  financial_rate_limit: number;
-  general_rate_limit: number;
-  
-  // Security Features
-  require_2fa_for_admin: boolean;
-  require_2fa_for_financial: boolean;
-  ip_whitelist_enabled: boolean;
-  geo_blocking_enabled: boolean;
-  vpn_detection_enabled: boolean;
-  
-  // Audit & Monitoring
-  log_all_api_calls: boolean;
-  alert_on_suspicious_activity: boolean;
-  alert_on_failed_logins: number;
-  alert_on_role_changes: boolean;
-  
-  // Database Security
-  rls_enabled: boolean;
-  backup_frequency_hours: number;
-  encryption_at_rest: boolean;
-}
+import { securityAPI, SecurityConfig } from '@/lib/api';
 
 export function SecurityConfigPanel() {
-  const [config, setConfig] = useState<SecurityConfig>({
-    jwt_expiry_minutes: 15,
-    refresh_token_rotation: true,
-    session_timeout_minutes: 480,
-    max_failed_attempts: 5,
-    lockout_duration_minutes: 15,
-    
-    auth_rate_limit: 20,
-    financial_rate_limit: 30,
-    general_rate_limit: 100,
-    
-    require_2fa_for_admin: true,
-    require_2fa_for_financial: false,
-    ip_whitelist_enabled: false,
-    geo_blocking_enabled: false,
-    vpn_detection_enabled: true,
-    
-    log_all_api_calls: true,
-    alert_on_suspicious_activity: true,
-    alert_on_failed_logins: 3,
-    alert_on_role_changes: true,
-    
-    rls_enabled: true,
-    backup_frequency_hours: 24,
-    encryption_at_rest: true
-  });
-
+  const [config, setConfig] = useState<SecurityConfig | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<'auth' | 'rate' | 'features' | 'audit' | 'database'>('auth');
 
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const fetchConfig = async () => {
+    try {
+      const response = await securityAPI.getConfig();
+      if (response.success && response.data) {
+        setConfig(response.data);
+      }
+    } catch (error) {
+      toast.error('Failed to load security configuration');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = async () => {
+    if (!config) return;
+
     setSaving(true);
     try {
-      // API call to save configuration
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.success('Security configuration saved successfully');
-    } catch (error) {
-      toast.error('Failed to save configuration');
+      const response = await securityAPI.updateConfig(config);
+      if (response.success) {
+        toast.success('Security configuration saved successfully');
+        setConfig(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to save configuration');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save configuration');
+      console.error(error);
     } finally {
       setSaving(false);
     }
   };
 
   const updateConfig = (key: keyof SecurityConfig, value: any) => {
-    setConfig(prev => ({ ...prev, [key]: value }));
+    if (!config) return;
+    setConfig(prev => prev ? { ...prev, [key]: value } : null);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin h-8 w-8 border-4 border-stone-900 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <div className="text-center py-12">
+        <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-red-500" />
+        <p className="text-stone-900 font-medium">Failed to load configuration</p>
+        <button onClick={fetchConfig} className="mt-4 btn-primary">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

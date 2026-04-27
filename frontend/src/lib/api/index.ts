@@ -16,6 +16,7 @@ export * from './bar';
 export * from './guest-portal';
 export * from './admin-logs';
 export * from './branch-manager';
+export * from './security';
 
 import { authAPI, userAPI, notificationsAPI, systemAPI, idCardsAPI, channelManagerAPI, documentsAPI } from './system';
 import { bookingsAPI, roomsAPI, guestAPI, ratePlansAPI, guestLoyaltyAPI } from './rooms';
@@ -33,6 +34,7 @@ import { cashierAPI, barStockRequestsAPI } from './bar';
 import { guestPortalAPI } from './guest-portal';
 import { adminLogsAPI } from './admin-logs';
 import { staffAuditAPI, profitLossAPI, stockAnalyticsAPI } from './branch-manager';
+import { securityAPI } from './security';
 
 // Explicitly export all API modules as named exports for better reliability and discovery
 export { 
@@ -48,6 +50,7 @@ export {
   kyogongAPI,
   employeePortalAPI,
   searchAPI, attendanceAnalyticsAPI, automationAPI, forecastingAPI,
+  securityAPI,
   barStockRequestsAPI, cashierAPI,
   guestPortalAPI,
   adminLogsAPI,

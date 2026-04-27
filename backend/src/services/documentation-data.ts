@@ -1,510 +1,448 @@
 export interface DetailedModuleDoc {
   id: string;
   title: string;
-  category: string;
-  role: string;
-  purpose: string;
-  components: { name: string; description: string; actions: string[] }[];
-  workflows: { title: string; steps: string[]; outcome: string }[];
-  advancedFeatures: { name: string; description: string }[];
-  troubleshooting: { issue: string; resolution: string }[];
-  operationalFlow: string;
+  icon: string;
+  description: string;
+  features: string[];
+  content: string;
+  howToUse: string[];
 }
 
 export const detailedDocs: DetailedModuleDoc[] = [
   {
     id: 'auditor',
-    title: 'Auditor & Compliance Hub',
-    category: 'INTEGRITY',
-    role: 'Financial Auditor / Compliance Officer',
-    purpose: 'To ensure every transaction in FamousGate Hotels is accurate, authorized, and verifiable.',
-    components: [
-      {
-        name: 'Revenue Oversight Dashboard',
-        description: 'A high-level view of all revenue streams filtered by branch, date, and payment method.',
-        actions: ['Filter by date range', 'Export to Excel', 'View trend lines']
-      },
-      {
-        name: 'Financial Verification Tool',
-        description: 'Interface for matching manual bank entries with system-recorded payments.',
-        actions: ['Mark as Verified', 'Flag Discrepancy', 'Attach Bank Slip']
-      }
+    title: 'Auditor Module',
+    icon: 'ShieldCheck',
+    description: 'The internal control and compliance hub for verifying system integrity and financial accuracy.',
+    features: [
+      'Revenue Oversight: Monitoring real-time revenue streams across all branches.',
+      'Financial Verification: Reconciling payment gateways (e.g., M-Pesa, Bank) with system records.',
+      'Sales Audit: Confirming operational sales records for accuracy and identifying anomalies.',
+      'Inventory Audits: Verifying physical stock against system-reported levels.',
+      'Compliance Checks: Ensuring all operational activities adhere to company policies.'
     ],
-    workflows: [
-      {
-        title: 'Daily Reconciliation Flow',
-        steps: [
-          'Pull system revenue report for the previous 24 hours.',
-          'Identify all M-Pesa and Card payments in the log.',
-          'Verify these payments appear in the relevant bank/provider statements.',
-          'Mark each transaction as "Verified" in the Auditor module.'
-        ],
-        outcome: 'Discrepancy-free financial records.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Anomaly Detection', description: 'System flags unusually high discount rates or void patterns for immediate review.' }
-    ],
-    troubleshooting: [
-      { issue: 'Payment not found in bank statement', resolution: 'Check if payment was sent to the wrong branch till or if provider delay exists.' }
-    ],
-    operationalFlow: 'The Auditor starts the day by reviewing the previous day’s revenue. They cross-reference the digital records with physical banking slips and provider statements (M-Pesa, Card). Any discrepancies are immediately flagged to the Branch Manager and Accountant.'
+    content: `
+      ### Role & Purpose
+      The Auditor role is critical for maintaining the financial and operational health of FamousGate Hotels. Unlike managers who focus on performance, the Auditor focuses on **integrity**. They are the second pair of eyes that ensures what is recorded in the system matches reality.
+
+      ### Key Workflows
+      #### 1. Revenue Oversight
+      Auditors monitor the "Pulse" of the business. By checking the Revenue Oversight dashboard, you can see if a branch is performing as expected. Significant drops or spikes might indicate errors or potential fraud.
+
+      #### 2. Financial Reconciliation
+      One of the most important tasks is verifying that money actually hit the bank. Auditors cross-reference the system's "Payments" records with external statements from M-Pesa or Banks. If the system says KES 5,000 was paid, the Auditor must verify it exists in the destination account.
+
+      #### 3. Void & Discount Audit
+      Auditors meticulously review voided bills and discounts. High volumes of voids or unauthorized discounts are red flags that require investigation.
+    `,
+    howToUse: [
+      'Navigate to /dashboard/auditor/revenue-oversight daily to check for anomalies.',
+      'Use the Financial Verification tool to match system payments with bank statements.',
+      'Review Sales Audit reports weekly and flag any discrepancies for manager review.',
+      'Conduct spot-checks of inventory by selecting "Inventory Audit" and comparing physical counts.'
+    ]
   },
   {
     id: 'branch-storekeeper',
-    title: 'Branch Storekeeper Module',
-    category: 'SUPPLY CHAIN',
-    role: 'Local Warehouse Manager',
-    purpose: 'Managing local branch inventory, ensuring supply availability, and tracking usage.',
-    components: [
-      {
-        name: 'Stock Request Portal',
-        description: 'Electronic requisition system for ordering supplies from Central Store.',
-        actions: ['Browse Master Catalog', 'Specify Quantities', 'Track Request Status']
-      },
-      {
-        name: 'Delivery Verification Screen',
-        description: 'Interface for confirming receipt of goods from Central Store.',
-        actions: ['Record Received Qty', 'Flag Damages', 'Sign Off Digitally']
-      }
+    title: 'Branch Storekeeper',
+    icon: 'Package',
+    description: 'Managing local branch inventory, ensuring supply availability, and tracking usage.',
+    features: [
+      'Stock Level Monitoring: Real-time visibility of local warehouse inventory.',
+      'Stock Requests: Raising requisitions to the Central Store for replenishment.',
+      'Delivery Receipt: Confirming and verifying incoming dispatches from Central.',
+      'Usage Recording: Tracking stock out due to sales, kitchen usage, or bar transfers.',
+      'Local Stock Takes: Performing regular physical counts to ensure system accuracy.'
     ],
-    workflows: [
-      {
-        title: 'Replenishment Flow',
-        steps: [
-          'Identify items falling below the re-order point via "Low Stock Alerts".',
-          'Create a "Stock Request" and submit for Manager approval.',
-          'Once approved by Branch Manager, it goes to Central Store for fulfillment.',
-          'Receive physical goods, verify quantities on the "Delivery Confirmation" screen, and update local stock.'
-        ],
-        outcome: 'Maintained stock levels with no operational downtime.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Internal Transfer Logic', description: 'Enables moving stock between departments like Bar to Kitchen for specific event needs.' }
-    ],
-    troubleshooting: [
-      { issue: 'Stock levels don’t match physical count', resolution: 'Check if usage (wastage/sales) was recorded correctly or run a Re-sync.' }
-    ],
-    operationalFlow: 'The Storekeeper maintains the local pulse of supplies. They ensure that the Kitchen never runs out of ingredients and the Bar never runs out of drinks. Every item movement, whether incoming from Central or outgoing to a department, must be logged.'
+    content: `
+      ### Local Inventory Management
+      As a Branch Storekeeper, your primary responsibility is ensuring the branch never runs out of critical items while maintaining accurate records.
+
+      ### Critical Processes
+      #### 1. The Requisition Flow
+      When stock is low, you must initiate a "Stock Request." Be specific about quantities and urgency. Once Central approves it, you will see it as a "Pending Delivery."
+
+      #### 2. Receiving Goods
+      Never confirm a delivery without a physical count. When a dispatch note arrives, verify every item. If there is a discrepancy (e.g., 10 requested, 8 received), mark it in the system before confirming.
+
+      #### 3. Tracking "Stock Out"
+      Items leave the store for various reasons:
+      - **Kitchen Usage**: Moving ingredients to the kitchen.
+      - **Bar Usage**: Moving drinks to the POS area.
+      - **Damage/Wastage**: Recording items that can no longer be sold.
+    `,
+    howToUse: [
+      'Check the "Low Stock Alerts" every morning to plan your requests.',
+      'Create a "Stock Request" for items reaching the reorder point.',
+      'When a vehicle arrives, open "Incoming Dispatches," verify items, and hit "Confirm Receipt."',
+      'Record all "Kitchen Usage" or "Bar Transfers" immediately to keep stock levels live.'
+    ]
   },
   {
     id: 'central-storekeeper',
-    title: 'Central Storekeeper Module',
-    category: 'LOGISTICS',
-    role: 'Central Warehouse Master',
-    purpose: 'The warehouse master responsible for the entire supply chain and branch fulfillment.',
-    components: [
-      {
-        name: 'Branch Request Queue',
-        description: 'Consolidated view of all stock requests from all hotel branches.',
-        actions: ['Approve/Reject Requests', 'Partial Fulfill', 'Calculate Priority']
-      },
-      {
-        name: 'Fleet Dispatch Manager',
-        description: 'Logistics tool for assigning vehicles and drivers to deliveries.',
-        actions: ['Select Vehicle', 'Assign Driver', 'Print Dispatch Note']
-      }
+    title: 'Central Storekeeper',
+    icon: 'Truck',
+    description: 'The warehouse master responsible for the entire supply chain and branch fulfillment.',
+    features: [
+      'Master Catalog Management: Creating and maintaining SKU details and categories.',
+      'Procurement: Managing suppliers, purchase orders, and receiving bulk shipments.',
+      'Branch Fulfillment: Reviewing, approving, and dispatching requests from branches.',
+      'Logistics Management: Assigning vehicles and drivers to delivery notes.',
+      'Global Inventory Oversight: Managing the main warehouse stock levels.'
     ],
-    workflows: [
-      {
-        title: 'Dispatch & Logistics Flow',
-        steps: [
-          'Review pending branch requests and check Central Warehouse availability.',
-          'Approve requests and generate a "Pick List" for the warehouse team.',
-          'Once items are packed, create a "Dispatch Record" in the system.',
-          'Assign a fleet vehicle and driver to the dispatch note.',
-          'Complete the dispatch, which notifies the receiving branch.'
-        ],
-        outcome: 'Efficient distribution of goods across the enterprise.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Supplier Performance Tracking', description: 'Audits how quickly suppliers fulfill Purchase Orders compared to their lead times.' }
-    ],
-    troubleshooting: [
-      { issue: 'Out of stock at Central', resolution: 'Raise a bulk Purchase Order to the main supplier immediately.' }
-    ],
-    operationalFlow: 'The Central Storekeeper is the master controller of the company’s inventory assets. They balance the needs of all branches while managing the main repository of goods.'
+    content: `
+      ### The Heart of Logistics
+      The Central Storekeeper manages the "Master Inventory." You are responsible for ensuring the Central Warehouse is stocked and that all branches receive their supplies on time.
+
+      ### Key Operations
+      #### 1. Request Processing
+      Branches depend on you. View "Pending Requests" daily. You can approve the full amount, partial amounts based on availability, or reject with a valid reason.
+
+      #### 2. Dispatching & Logistics
+      Once a request is approved, you must "Create Dispatch." This involves selecting the items, assigning a Vehicle (Fleet) and a Driver. The system generates a "Dispatch Note" which must travel with the goods.
+
+      #### 3. Supplier Management
+      Managing relationships with vendors is key. Use the Procurement module to track Purchase Orders (POs) and ensure that when items arrive at Central, they are correctly "Received" into the system.
+    `,
+    howToUse: [
+      'Review all "Pending Branch Requests" every morning at 9:00 AM.',
+      'Use the "Dispatch" tool to bundle approved requests and assign drivers.',
+      'Maintain the "Master Catalog" by adding new items or updating prices as they change.',
+      'Run a "Global Stock Report" weekly to identify items needing bulk procurement.'
+    ]
   },
   {
     id: 'branch-acc',
     title: 'Branch Accountant',
-    category: 'FINANCE',
-    role: 'Branch Financial Officer',
-    purpose: 'Managing branch-level finances, payments, bankings, and local expenditure.',
-    components: [
-      {
-        name: 'Banking Record Module',
-        description: 'Digital register for tracking all cash and cheque deposits.',
-        actions: ['Log Deposit', 'Record Slip No', 'Upload Receipt Photo']
-      },
-      {
-        name: 'Petty Cash Manager',
-        description: 'Tracking and replenishment tool for local branch expenses.',
-        actions: ['Issue Cash', 'Verify Receipt', 'Request Top-up']
-      }
+    icon: 'Landmark',
+    description: 'Managing branch-level finances, payments, bankings, and local expenditure.',
+    features: [
+      'Banking Records: Recording cash/cheque deposits into the company bank accounts.',
+      'Bill Settlements: Processing and verifying payments for guest bills.',
+      'Credit Management: Tracking staff and corporate credit bills and collections.',
+      'Petty Cash: Managing local operational expenses and top-up requests.',
+      'Shift Review: Reconciling cashier shift reports with actual collections.'
     ],
-    workflows: [
-      {
-        title: 'End of Day Reconciliation',
-        steps: [
-          'Collect shift reports from all cashiers.',
-          'Verify total cash, m-pesa, and card receipts matching the system expected total.',
-          'Identify any "Variances" (Shortages/Overages) and log them.',
-          'Prepare the banking slip for the day’s cash collection.'
-        ],
-        outcome: 'Finalized and audited branch financial daily report.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Credit Bill Ageing', description: 'System tracks outstanding corporate and staff credits by age (30/60/90 days).' }
-    ],
-    troubleshooting: [
-      { issue: 'Cash shortage', resolution: 'Interview the cashier, check for unrecorded transactions, and log the shortage in their account.' }
-    ],
-    operationalFlow: 'The Branch Accountant ensures the financial loop is closed every day. No money leaves or enters the branch without being recorded in the system.'
+    content: `
+      ### Financial Accuracy at the Branch
+      The Branch Accountant ensures that all revenue collected at the branch is accounted for and securely banked. You act as the financial gatekeeper for the branch.
+
+      ### Essential Workflows
+      #### 1. Daily Banking
+      When cash and cheques are collected from cashiers, they must be banked. You are responsible for recording the **Bank Slip Number** and **Date** in the "Record Banking" module. This creates a traceable link between the branch and the bank.
+
+      #### 2. Credit Bill Management
+      Some guests or staff may have "Credit Facilities." You must track these bills in the "Credit Bills" section. For staff, these are often deducted later from payroll. For corporate clients, you must track when the invoice is paid.
+
+      #### 3. Petty Cash Control
+      Minor branch expenses (e.g., buying small supplies) are paid through Petty Cash. Every cent must be backed by a receipt and recorded in the system.
+    `,
+    howToUse: [
+      'Reconcile cashier shifts every evening using the "Shift Review" tool.',
+      'Record all bank deposits immediately after returning from the bank.',
+      'Audit the "Petty Cash" tin daily and ensure total cash + receipts = float amount.',
+      'Follow up on "Pending Credit Bills" every Monday to ensure timely collection.'
+    ]
   },
   {
     id: 'reception',
     title: 'Reception Module',
-    category: 'OPERATIONS',
-    role: 'Front Office Agent / Receptionist',
-    purpose: 'The front-facing operational module for managing guest stays and room inventory.',
-    components: [
-      {
-        name: 'Room Status Map',
-        description: 'Visual grid of all rooms, categorized by status (Clean, Dirty, Occupied).',
-        actions: ['Check-In Guest', 'Change Status', 'View Room Details']
-      },
-      {
-        name: 'Reservation Calendar',
-        description: 'Timeline view of all future and past bookings.',
-        actions: ['New Booking', 'Edit dates', 'Cancel Reservation']
-      }
+    icon: 'Bed',
+    description: 'The front-facing operational module for managing guest stays and room inventory.',
+    features: [
+      'Reservation Management: Booking and tracking future guest stays.',
+      'Guest Check-In: Smooth onboarding of guests with ID verification and room assignment.',
+      'Room Status Oversight: Real-time view of Clean, Dirty, and Occupied rooms.',
+      'Bill Generation: Consolidating accommodation and service charges for check-out.',
+      'Guest Database: Maintaining a history of guest preferences and records.'
     ],
-    workflows: [
-      {
-        title: 'Seamless Check-In Flow',
-        steps: [
-          'Greet guest and search for their reservation or create a walk-in.',
-          'Verify ID/Passport and record details in the system.',
-          'Select an available "Clean" room from the room map.',
-          'Complete check-in, which notifies Housekeeping and activates the guest folio.'
-        ],
-        outcome: 'Guest correctly onboarded and room status updated to "Occupied".'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Folio Management', description: 'Consolidates all guest charges from restaurant, bar, and laundry into one final bill.' }
-    ],
-    troubleshooting: [
-      { issue: 'Room not ready', resolution: 'Contact Housekeeping via the internal status dash to prioritize the clean-up.' }
-    ],
-    operationalFlow: 'Reception is the face of FamousGate Hotels. The team ensures that every guest has a smooth arrival and departure while maintaining 100% room occupancy accuracy.'
+    content: `
+      ### The Guest Experience
+      Reception is the first and last point of contact for guests. Accuracy here ensures a professional image and prevents lost revenue.
+
+      ### Core Processes
+      #### 1. The Check-In Process
+      Always verify the guest's ID. When checking in, assign a "Clean" room from the pool. Ensure the "Rate Plan" (e.g., Bed & Breakfast vs Half Board) is correct as this affects billing.
+
+      #### 2. Room Status Coordination
+      You must watch the "Room Map" closely. When a guest checks out, the room automatically becomes "Dirty." It remains unavailable for check-in until the Housekeeping module marks it as "Clean."
+
+      #### 3. Billing & Check-Out
+      Before a guest leaves, pull up their "Folio." This summarizes all charges: room, restaurant, bar, and any other services. Ensure all payments are recorded before closing the booking.
+    `,
+    howToUse: [
+      'Use the "Reservations Calendar" to manage bookings and avoid overbooking.',
+      'Always update the "Guest ID" and "Contact Number" during check-in for security.',
+      'Coordinate with Housekeeping via the "Room Status" dash if a guest needs an early check-in.',
+      'Generate the "Expected Arrivals" report every morning to prepare for the day.'
+    ]
   },
   {
     id: 'superadmin',
     title: 'Superadmin Module',
-    category: 'GOVERNANCE',
-    role: 'System Administrator',
-    purpose: 'Global control over system roles, security, and branch configurations.',
-    components: [
-      {
-        name: 'User Management',
-        description: 'The master list of all employees and their access levels.',
-        actions: ['Add User', 'Deactivate Account', 'Edit Profile']
-      },
-      {
-        name: 'System Audit Logs',
-        description: 'A searchable log of all important system actions.',
-        actions: ['Filter by User', 'Filter by Action', 'Export Logs']
-      }
+    icon: 'Shield',
+    description: 'The master control center for system configuration, security, and global oversight.',
+    features: [
+      'User Identity Management: Creating accounts and assigning roles/permissions.',
+      'Branch Configuration: Managing branch details, departments, and settings.',
+      'Global Audit Logs: Complete history of every action taken in the system.',
+      'System Configuration: Setting global parameters like tax rates and currencies.',
+      'Security Oversight: Monitoring login attempts and system health.'
     ],
-    workflows: [
-      {
-        title: 'Security Audit Flow',
-        steps: [
-          'Open the Global Audit logs weekly.',
-          'Search for sensitive actions like "Delete Reservation" or "Manual Discount".',
-          'Verify these actions were performed by authorized managers.',
-          'Flag any suspicious login attempts from unrecognized IP addresses.'
-        ],
-        outcome: 'Maintained system security and accountability.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Custom Permission Builder', description: 'Create unique roles by toggling over 50 individual system permissions.' }
-    ],
-    troubleshooting: [
-      { issue: 'Branch not showing data', resolution: 'Check branch activation status and verified user assignment to that branch.' }
-    ],
-    operationalFlow: 'Superadmins act as the guardians of the system data. They configure the environment to match the specific operational needs of FamousGate Hotels.'
+    content: `
+      ### Technical Governance
+      The Superadmin is responsible for the overall setup and security of FamousGate Hotels. This role is typically for IT managers or system owners.
+
+      ### Responsibilities
+      #### 1. Role-Based Access Control (RBAC)
+      The most critical task is ensuring users have the *correct* permissions. Never give more access than needed. For example, a Receptionist should not have "Delete User" permissions.
+
+      #### 2. Branch Hierarchy
+      Superadmins manage the relationships between branches. They define which branch is the "Central Warehouse" and which are "Operational Branches."
+
+      #### 3. Auditing the Auditors
+      The Global Audit Log is the "black box" of the system. If something goes wrong, the Superadmin uses these logs to see exactly who did what and when.
+    `,
+    howToUse: [
+      'Deactivate users immediately upon their exit from the company.',
+      'Monitor "Audit Logs" weekly for any unauthorized or suspicious activity.',
+      'Update "System Settings" only after coordinating with the General Manager.',
+      'Use the "Manage Branches" tool to add or modify location details as the business grows.'
+    ]
   },
   {
     id: 'bar-pos',
     title: 'Restaurant & Bar POS',
-    category: 'SALES',
-    role: 'Waiter / Barman / Service Staff',
-    purpose: 'Detailed service-point interface for taking food and beverage orders and managing table tabs.',
-    components: [
-      {
-        name: 'Digital Table Map',
-        description: 'Visual layout of the restaurant/bar floor showing open and closed tables.',
-        actions: ['Open Table', 'Close Bill', 'Split Items']
-      },
-      {
-        name: 'Touch Order Interface',
-        description: 'Speed-optimized menu for quick item selection and customization.',
-        actions: ['Add to Cart', 'Apply Topping', 'Send to Kitchen']
-      }
+    icon: 'Utensils',
+    description: 'Detailed service-point interface for taking food and beverage orders and managing table tabs.',
+    features: [
+      'Point of Sale (POS): Touch-optimized interface for quick ordering.',
+      'Table Management: Visual layout of restaurant tables and their current status.',
+      'Kitchen/Bar Printing: Automated communication with preparation areas.',
+      'Order Modification: Handling voids, edits, and special guest requests.',
+      'Bill Splitting: Interactive tools for splitting checks by item or person.'
     ],
-    workflows: [
-      {
-        title: 'Order to Table Flow',
-        steps: [
-          'Select a table or "Open Tab" for the customer.',
-          'Punch in items (Drinks/Food) using the touch interface.',
-          'Hit "Send" to automatically print chits for the Kitchen and Bar.',
-          'Track order through "Preparing" and "Ready" statuses on the status board.'
-        ],
-        outcome: 'Accurate order communication and timely service.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Inventory sync', description: 'Instantly reduces item counts as sales are made to prevent selling out-of-stock items.' }
-    ],
-    troubleshooting: [
-      { issue: 'Wrong item sent', resolution: 'Use the "Void with Reason" function immediately and notify the supervisor.' }
-    ],
-    operationalFlow: 'The POS is the engine of service. Staff use it to maintain speed during peak hours while ensuring that every item served is accounted for financially.'
+    content: `
+      ### F&B Operational Flow
+      The Restaurant & Bar POS is the main tool for service staff. It bridges the gap between the guest at the table and the kitchen staff at the stove.
+
+      ### Core Functions
+      #### 1. Opening a Tab
+      Select the table from the map. Every item ordered is added to this table's "Open Tab."
+
+      #### 2. Order Communication
+      When you "Save" or "Send" an order, the system instantly prints chits in the Kitchen or Bar. No more walking back and forth to deliver orders.
+
+      #### 3. Service Status
+      The system tracks "Preparation Time." If a dish is not marked ready on the Kitchen Display, it shows up as "Pending" on your POS, helping you manage guest expectations.
+    `,
+    howToUse: [
+      'Always start by selecting the correct Table or Room number.',
+      'Use "Special Instructions" for allergies or dietary requirements.',
+      'Check the "Ready for Pickup" notification before heading to the kitchen.',
+      'Close bills only when payment is confirmed or "Posted to Room".'
+    ]
   },
   {
     id: 'manager',
     title: 'Managerial Oversight',
-    category: 'LEADERSHIP',
-    role: 'Branch Manager / GM',
-    purpose: 'Oversight tools for Branch Managers and GMs to monitor performance and drive results.',
-    components: [
-      {
-        name: 'KPI Performance Dash',
-        description: 'Real-time metrics on revenue, room occupancy, and average basket value.',
-        actions: ['Compare with Target', 'View Historical Trends', 'Branch Ranking']
-      },
-      {
-        name: 'Managerial Approval Queue',
-        description: 'In-app notification system for actions requiring higher authorization.',
-        actions: ['Approve Rebate', 'Authorize Discount', 'Approve Expense']
-      }
+    icon: 'TrendingUp',
+    description: 'Oversight tools for Branch Managers and GMs to monitor performance and drive results.',
+    features: [
+      'Performance Dashboards: Real-time KPIs for revenue, occupancy, and costs.',
+      'Staff Scheduling: Managing rosters and attendance for the branch.',
+      'Operational Approvals: Authorizing requisitions, voids, and high-value payments.',
+      'Branch Reports: Generating daily, weekly, and monthly operational summaries.',
+      'Asset Tracking: Monitoring maintenance and status of branch equipment.'
     ],
-    workflows: [
-      {
-        title: 'Operational Drill-Down',
-        steps: [
-          'Open the Performance Dashboard every morning.',
-          'Identify departments with low revenue or high wastage.',
-          'Drill down into individual transactions to understand the root cause.',
-          'Schedule a team briefing to address issues and set corrective targets.'
-        ],
-        outcome: 'Data-driven leadership and operational improvement.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Forecasting Engine', description: 'Uses historical data to predict next week’s occupancy and ingredient needs.' }
-    ],
-    troubleshooting: [
-      { issue: 'Dashboard showing zero data', resolution: 'Verify that previous day sales were successfully synced and closed by cashiers.' }
-    ],
-    operationalFlow: 'Managers lead by looking at the numbers and the people. The system provides the visibility they need to steer the branch toward profitability.'
+    content: `
+      ### Leading Branch Operations
+      Managers use FamousGate Hotels to make data-driven decisions. You move from doing tasks to overseeing outcomes.
+
+      ### Priorities
+      #### 1. Operational Rhythm
+      Check the "Dashboard" every morning. Look at yesterday's revenue and today's expected occupancy. Use this to adjust staffing levels.
+
+      #### 2. Control & Approvals
+      The system routes critical actions to you for approval. For example, a large Stock Request from your Storekeeper requires your "Manager Approval" before it reaches Central Store.
+
+      #### 3. People Management
+      Review "Attendance" and "Leave" requests. Ensure your team is correctly scheduled and that labor costs are within budget.
+    `,
+    howToUse: [
+      'Review and "Approve" all pending Stock Requests by 10:00 AM daily.',
+      'Use the "KPI Dashboard" to identify low-performing areas and address them.',
+      'Monitor "Staff Attendance" in real-time to ensure adequate coverage.',
+      'Review "Wastage Reports" weekly to identify areas for cost reduction.'
+    ]
   },
   {
     id: 'hr',
     title: 'HR & Personnel',
-    category: 'TALENT',
-    role: 'HR Manager / Payroll Officer',
-    purpose: 'Complete lifecycle management of company employees from onboarding to payroll.',
-    components: [
-      {
-        name: 'Employee Master File',
-        description: 'The secure repository for all employee documents and certifications.',
-        actions: ['Upload Contract', 'Track Leave Balance', 'Issue Warning']
-      },
-      {
-        name: 'Payroll Processor',
-        description: 'Automated engine for calculating net pay and statutory deductions.',
-        actions: ['Calculate Payroll', 'Generate Payslips', 'Export KRA/NSSF reports']
-      }
+    icon: 'Users',
+    description: 'Complete lifecycle management of company employees from onboarding to payroll.',
+    features: [
+      'Employee Profiles: Central database of ID, KRA PIN, Bank Details, and Role.',
+      'Payroll Engine: Automatic calculation of salaries, NSSF, SHIF, and Housing Levy.',
+      'Leave Management: Workflow for applying and approving time off.',
+      'Attendance Registry: Digital clock-in/out terminal for all staff.',
+      'Performance Records: Tracking employee history and role changes.'
     ],
-    workflows: [
-      {
-        title: 'Monthly Payroll Cycle',
-        steps: [
-          'Audit attendance logs from the digital clocking terminals.',
-          'Review approved leave requests and overtime claims.',
-          'Run the payroll engine to calculate statutory deductions (SHIF, NSSF, PAYE).',
-          'Generate and distribute digital payslips to all employees.'
-        ],
-        outcome: 'Accurate, compliant, and timely payment to staff.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Automatic Tax Brackets', description: 'System stays updated with the latest KRA tax laws to ensure 100% compliance.' }
-    ],
-    troubleshooting: [
-      { issue: 'Incorrect deduction', resolution: 'Check employee profile for manual adjustments or incorrect statutory tier assignment.' }
-    ],
-    operationalFlow: 'The HR team ensures that FamousGate Hotels is a compliant employer and that every staff member is fairly rewarded for their contribution.'
+    content: `
+      ### Managing our People
+      The HR module ensures that all staff are correctly registered and that their compensation is processed accurately and legally.
+
+      ### Key Pillars
+      #### 1. Statutory Compliance
+      FamousGate Hotels automatically calculates required deductions:
+      - **NSSF**: Tier I and II retirement savings.
+      - **SHIF**: The Social Health Insurance Fund.
+      - **Housing Levy**: Government-mandated contribution.
+      - **PAYE**: Tax deductions based on current KRA brackets.
+
+      #### 2. Attendance & Punctuality
+      Staff use the "Digital Terminal" to clock in. As HR, you must audit these logs. The system flags "Late In" or "Early Out" based on their assigned shifts.
+
+      #### 3. Payroll Cycle
+      At the end of the month, "Run Payroll." The system gathers attendance data, applies any "Adjustments" (like advances or credit bill deductions), and generates payslips.
+    `,
+    howToUse: [
+      'Ensure every new staff member has their "KRA PIN" and "Bank Details" entered immediately.',
+      'Review and "Approve" leave requests timely to help Managers with scheduling.',
+      'Check "Attendance Logs" weekly for any unverified clock-outs.',
+      'Generate and "Email Payslips" immediately after payroll approval.'
+    ]
   },
   {
     id: 'general-cashier',
     title: 'General Cashier Module',
-    category: 'REVENUE',
-    role: 'Central Cashier',
-    purpose: 'The centralized revenue hub for bill settlement, payment verification, and master shift management.',
-    components: [
-      {
-        name: 'Settlement Desk',
-        description: 'Multi-payment interface for clearing complex guest bills.',
-        actions: ['Select Payment Method', 'Apply Voucher', 'Partial Settlement']
-      },
-      {
-        name: 'M-Pesa Verification Portal',
-        description: 'Live API connection to Safaricom to verify transaction legitimacy.',
-        actions: ['Check Reference', 'Verify Amount', 'Search by Phone']
-      }
+    icon: 'Wallet',
+    description: 'The centralized revenue hub for bill settlement, payment verification, and master shift management.',
+    features: [
+      'Centralized Bill Settlement: Lookup and close bills from any department (Hotel, Restaurant, Bar).',
+      'Multi-Mode Payment: Handling Cash, M-Pesa, Card, and Credit settlements.',
+      'Payment Verification: Real-time M-Pesa API integration to verify transaction codes.',
+      'Shift Master: Managing "Logbook" and "End of Day" tallies across all revenue points.',
+      'Bill Lookup: Searching for unpaid bills by Guest Name, Room, or Order Number.'
     ],
-    workflows: [
-      {
-        title: 'Master Shift Closure',
-        steps: [
-          'Finish all pending bill settlements.',
-          'Download the system "Trial Balance" for the current shift.',
-          'Count physical cash and match against the system expected total.',
-          'Generate the final "Shift Report" and hand over to the Accountant.'
-        ],
-        outcome: 'Zero-variance shift handover and secure revenue collection.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Split Settlement', description: 'Allows a guest to pay part of the bill in Cash and part via M-Pesa or Card.' }
-    ],
-    troubleshooting: [
-      { issue: 'Transaction code not found', resolution: 'Ask guest to refresh their M-Pesa messages or check for a reversal from Safaricom.' }
-    ],
-    operationalFlow: 'General Cashiers are the final financial checkpoint. They ensure that for every service provided, the correct payment has been collected.'
+    content: `
+      ### The Final Transaction Point
+      The General Cashier module is where all operational revenue is finalized. It is the primary interface for bill settlement and financial reconciliation.
+
+      ### Critical Responsibilities
+      #### 1. Bill Consolidation
+      Guests may have room charges, spa treatments, and restaurant bills. You use "Bill Lookup" to consolidate these into one final settlement.
+
+      #### 2. Payment Integrity
+      Every M-Pesa payment must be verified. The system allows you to search for payments by amount or reference to ensure the guest has actually sent the money.
+
+      #### 3. Shift Accountability
+      Closing a shift is a rigorous process. You must reconcile your Physical Cash with the "System Expected" amount. Any discrepancies are logged as Overages or Shortages for the Accountant.
+    `,
+    howToUse: [
+      'Use the "Unpaid Bills" list to monitor outstanding payments across the branch.',
+      'Always verify M-Pesa codes via the "Verify Payment" tool before closing a bill.',
+      'Print a "POS Receipt" for every transaction—duplicates can be accessed via "History".',
+      'Follow the "Shift Closure" checklist to ensure all collections are handed over correctly.'
+    ]
   },
   {
     id: 'famousgate-services',
     title: 'FamousGate Service POS',
-    category: 'SERVICES',
-    role: 'Spa Therapist / Specialist Staff',
-    purpose: 'Dedicated POS interfaces for specialized service points such as Spa, Specialty Bars, and Lounges.',
-    components: [
-      {
-        name: 'Service Booking Board',
-        description: 'Appointment-based interface for tracking sessions and therapists.',
-        actions: ['Book Session', 'Assign Staff', 'Track Duration']
-      },
-      {
-        name: 'Outlet Sales Interface',
-        description: 'Niche-specific product list (e.g., Spa Oils, Premium Pours).',
-        actions: ['Sell Service', 'Sell Product', 'Post to Room Folio']
-      }
+    icon: 'RefreshCw',
+    description: 'Dedicated POS interfaces for specialized service points such as Spa, Specialty Bars, and Lounges.',
+    features: [
+      'Niche POS Layouts: Customized interfaces for Spa treatments, Bar drinks, or Club services.',
+      'Sales Point Logic: Each point has a unique code (e.g., SPA, EXEC_BAR) for accurate tracking.',
+      'Service to Bill: Orders are instantly converted to bills that can be paid on-site or "Posted to Room".',
+      'Outlet Inventory: Tracking stock specifically allocated to the individual service point.',
+      'Specialty Reporting: Analyzing performance per specific service outlet.'
     ],
-    workflows: [
-      {
-        title: 'Professional Service Flow',
-        steps: [
-          'Verify the guest identity and room number.',
-          'Select the specific service (e.g., Massage) or product being purchased.',
-          'Assign the therapist/staff member providing the service.',
-          'Charge the service directly or "Post to Room" for later settlement.'
-        ],
-        outcome: 'Seamless guest service experience with automated tracking.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Commission Engine', description: 'Automatically calculates staff commissions based on the services they performed.' }
-    ],
-    troubleshooting: [
-      { issue: 'Guest name not found', resolution: 'Check if they have officially checked in at the main Reception.' }
-    ],
-    operationalFlow: 'Service POS points are designed for high-end guest interactions, allowing for personalized service tracking and flexible billing.'
+    content: `
+      ### Outlet-Specific Operations
+      FamousGate Hotels operates multiple specialty outlets. These "Service Points" require dedicated POS logic to handle specific services (like massage sessions or premium beverage pours).
+
+      ### Workflow Differences
+      #### 1. Service Recording
+      Unlike a restaurant where you order by plate, Service POS points often handle "Sessions" or "Specialty Pours." The interface is optimized for these specific SKU types.
+
+      #### 2. Localized Responsibility
+      Each Service Point is its own cost center. The cashier at these points manages their own local mini-shift, which eventually rolls up into the main branch report.
+
+      #### 3. Posting to Room
+      Common in Spas and Specialty Bars, "Post to Room" is a key feature here. It allows guests to enjoy services without carrying cash, with the cost appearing on their main hotel folio.
+    `,
+    howToUse: [
+      'Verify the "Sales Point Code" on your login to ensure you are in the correct outlet.',
+      'For Spa services, ensure the correct "Technician" is assigned to the service for commission tracking.',
+      'Use the "Inventory" tab to check local stock levels before taking large orders.',
+      'When posting to a room, verify the guest name and room number twice.'
+    ]
   },
   {
     id: 'kitchen-display',
     title: 'Kitchen Display System (KDS)',
-    category: 'KITCHEN',
-    role: 'Head Chef / Kitchen Staff',
-    purpose: 'Real-time order visualization for kitchen staff to manage food preparation and timing.',
-    components: [
-      {
-        name: 'Live Order Grid',
-        description: 'Large-font display of all active orders with preparation timers.',
-        actions: ['Accept Order', 'Bump Order', 'View Recipes']
-      },
-      {
-        name: 'Production Summary',
-        description: 'Aggregated view of how many steaks or burgers are needed across all tables.',
-        actions: ['Check Total Counts', 'Prioritize Cooking']
-      }
+    icon: 'Layout',
+    description: 'Real-time order visualization for kitchen staff to manage food preparation and timing.',
+    features: [
+      'Live Order Feed: Orders appear instantly as they are saved at the POS.',
+      'Preparing Status: Marking orders as "In Progress" to inform servers.',
+      'Ready Alerts: Notifying the server as soon as the food is ready for pickup.',
+      'Timing Tracking: Monitoring how long each dish takes to prepare.',
+      'Item Categorization: Separating Starters, Mains, and Sides for logical workflow.'
     ],
-    workflows: [
-      {
-        title: 'Kitchen Production Flow',
-        steps: [
-          'Watch the grid for new incoming orders from POS.',
-          'Tap "Start" to notify servers that preparation has begun.',
-          'Follow the digital item card for special guest instructions.',
-          'Tap "Complete" when done to alert the waiter for pickup.'
-        ],
-        outcome: 'Reduced "Order to Table" wait times and improved food quality.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Station Routing', description: 'Automatically sends Grill items to the Grill screen and Pastries to the Pastries screen.' }
-    ],
-    troubleshooting: [
-      { issue: 'Order taking too long', resolution: 'The system highlights the ticket in Red—assign more chefs to that specific table.' }
-    ],
-    operationalFlow: 'The KDS is the brain of the kitchen. It removes the stress of lost tickets and ensure the kitchen produces exactly what the guest asked for.'
+    content: `
+      ### Cooking with Coordination
+      The KDS replaces traditional paper chits. It ensures that no order is lost and that the kitchen works in perfect sync with the restaurant.
+
+      ### Workflow
+      #### 1. Order Arrival
+      New orders appear at the top of the grid. They indicate the **Table Number**, **Items**, and any **Special Instructions** (e.g., "No onions").
+
+      #### 2. Preparation
+      When the chef starts cooking, tap "Start Preparing." This updates the POS status, so the Waiter knows the order is being handled.
+
+      #### 3. Bumping Orders
+      When the dish is finished, tap "Mark Ready." This "Bumps" the order from the main display and alerts the Waiter to pick it up.
+    `,
+    howToUse: [
+      'Keep the display clear by tapping "Mark Ready" as soon as the food hits the pass.',
+      'Watch the "Elapsed Time" timers—red indicates the order is taking too long.',
+      'Use the "Grid View" for high-volume periods to see more orders at once.',
+      'Read "Special Requests" carefully—they are highlighted for your attention.'
+    ]
   },
   {
     id: 'kitchen-ops',
     title: 'Kitchen Operations',
-    category: 'KITCHEN',
-    role: 'Executive Chef / Store Coord',
-    purpose: 'Back-of-house management for recipes, wastage, and kitchen inventory requisitions.',
-    components: [
-      {
-        name: 'Recipe Costing Tool',
-        description: 'Detailed breakdown of ingredient costs for every menu item.',
-        actions: ['Adjust Recipe', 'Calculate Margin', 'Update Prices']
-      },
-      {
-        name: 'Wastage Register',
-        description: 'Interface for logging burned, spoiled, or returned food items.',
-        actions: ['Log Waste', 'Specify Reason', 'Get Mgr Approval']
-      }
+    icon: 'Activity',
+    description: 'Back-of-house management for recipes, wastage, and kitchen inventory requisitions.',
+    features: [
+      'Kitchen Requisitions: Requesting ingredients from the Branch Store.',
+      'Recipe Management: Documenting ingredients and costs for menu items.',
+      'Wastage Tracking: Recording spoiled or burned ingredients to adjust stock.',
+      'Kitchen Stock: Tracking "Sub-Store" inventory levels within the kitchen.',
+      'Usage Analysis: Comparing expected vs actual ingredient consumption.'
     ],
-    workflows: [
-      {
-        title: 'Stock Control Flow',
-        steps: [
-          'Calculate daily needs and raise a "Kitchen Requisition" to the Storekeeper.',
-          'At the end of service, record any items that were wasted or spoiled.',
-          'The system calculates the "Variance" between items sold and ingredients used.',
-          'Review the usage report to optimize future ordering.'
-        ],
-        outcome: 'Minimized cost of sales and reduced food waste.'
-      }
-    ],
-    advancedFeatures: [
-      { name: 'Inventory Depletion Logic', description: 'Automatically deducts individual ingredients (e.g., 200g Beef) from stock when a Burger is sold.' }
-    ],
-    troubleshooting: [
-      { issue: 'High ingredient variance', resolution: 'Audit recipe measurements and ensure every single waste item is being logged.' }
-    ],
-    operationalFlow: 'Kitchen Operations ensure that the kitchen is not just cooking, but operating as a profitable business unit.'
+    content: `
+      ### Beyond the Stove
+      Kitchen Operations handle the "Science" and "Stock" behind the food. It ensures profitability by managing ingredients and reducing waste.
+
+      ### Key Tasks
+      #### 1. Requesting Ingredients
+      The kitchen doesn't manage bulk stock; the Storekeeper does. Use "Requisitions" to request what you need for the day (e.g., 5kg Beef, 10kg Onions).
+
+      #### 2. Recording Wastage
+      Food waste is money lost. If ingredients spoil or a dish is prepared incorrectly, it must be recorded as "Wastage." This helps management identify patterns (e.g., poor storage or training issues).
+
+      #### 3. Kitchen Inventory
+      Keep track of your "Kitchen Stock." At the end of the day, your physical ingredients should match what the system says you have left after accounting for the day's sales.
+    `,
+    howToUse: [
+      'Submit your "Daily Requisition" before 10:00 AM to give the Storekeeper time to prepare.',
+      'Document every instance of "Wastage" with a specific reason (e.g., "Spoilage" or "Overcooked").',
+      'Follow the "Standard Recipes" to ensure consistent quality and cost control.',
+      'Conduct a "Kitchen Stock-Take" every Sunday evening.'
+    ]
   }
 ];
