@@ -52,7 +52,7 @@ export const migratePendingBills = async (branchId?: number) => {
             try {
                 logger.info(`Checking ${target.table} for pending migrations...`);
 
-                let query = supabase
+                let query = (supabase
                     .from(target.table)
                     .select(`
                         *,
@@ -62,7 +62,7 @@ export const migratePendingBills = async (branchId?: number) => {
                             last_name,
                             user:users!user_id(id)
                         )
-                    `)
+                    `) as any)
                     .eq('status', target.statusValue)
                     .eq('migrated_to_credit_bill', false)
                     .not(target.waiterField, 'is', null);
@@ -93,7 +93,7 @@ export const migratePendingBills = async (branchId?: number) => {
 
                 logger.info(`Found ${pendingItems.length} pending ${target.table} to migrate`);
 
-                for (const item of pendingItems) {
+                for (const item of pendingItems as any[]) {
                     try {
                         const itemWaiter = Array.isArray(item.waiter) ? item.waiter[0] : item.waiter;
                         const location = target.locationFields

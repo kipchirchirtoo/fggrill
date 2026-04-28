@@ -3,14 +3,20 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-if (!process.env.SUPABASE_PROJECT_URL && !process.env.SUPABASE_URL) {
-  throw new Error('Missing Supabase URL: set SUPABASE_PROJECT_URL or SUPABASE_URL');
-}
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
+const supabaseUrl = process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+if (!supabaseUrl || supabaseUrl === 'undefined' || supabaseUrl === 'null') {
+  const errorMsg = 'CRITICAL: Supabase URL is missing (Admin Client). Set SUPABASE_PROJECT_URL or SUPABASE_URL in environment.';
+  console.error(errorMsg);
+  throw new Error(errorMsg);
 }
 
-const supabaseUrl = (process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL)!;
+if (!supabaseServiceKey || supabaseServiceKey === 'undefined' || supabaseServiceKey === 'null') {
+  const errorMsg = 'CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing (Admin Client).';
+  console.error(errorMsg);
+  throw new Error(errorMsg);
+}
 
 /**
  * Admin Supabase client with service role key
@@ -20,7 +26,7 @@ const supabaseUrl = (process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_UR
  */
 export const supabaseAdmin = createClient(
   supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  supabaseServiceKey,
   {
     auth: {
       autoRefreshToken: false,

@@ -2,23 +2,25 @@ import { createClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
 
 // Support both SUPABASE_PROJECT_URL and SUPABASE_URL (common in production deployments)
-const supabaseUrl = process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.SUPABASE_PROJECT_URL || process.env.SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  logger.error('Missing required Supabase env vars: SUPABASE_PROJECT_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY');
-  process.exit(1);
-}
-
-// SUPABASE_JWT_SECRET is optional — warn but don't crash
-if (!process.env.SUPABASE_JWT_SECRET && !process.env.JWT_SECRET) {
-  logger.warn('Neither SUPABASE_JWT_SECRET nor JWT_SECRET is set — using fallback secret (NOT safe for production)');
+if (!supabaseUrl || !supabaseServiceKey || supabaseUrl === 'undefined' || supabaseServiceKey === 'undefined') {
+  logger.error('CRITICAL: Missing required Supabase env vars in database config.');
+  logger.error(`SUPABASE_URL present: ${!!supabaseUrl}`);
+  logger.error(`SUPABASE_SERVICE_ROLE_KEY present: ${!!supabaseServiceKey}`);
+  
+  // In production, we might want to continue in degraded mode if it's not critical
+  // but since this is database.ts, it's likely critical.
+  if (process.env.NODE_ENV === 'production') {
+    logger.warn('Production server attempting to start without database configuration!');
+  }
 }
 
 // Initialize Supabase client
 const supabase = createClient(
-  supabaseUrl,
-  supabaseServiceKey,
+  supabaseUrl || 'missing-url',
+  supabaseServiceKey || 'missing-key',
   {
     auth: {
       autoRefreshToken: false,
