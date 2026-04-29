@@ -277,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const redirectToDashboard = (role: UserRole, isCentral?: boolean) => {
     const roleRedirects: Record<UserRole, string> = {
       [UserRole.SUPER_ADMIN]: '/dashboard/admin',
+      [UserRole.DIRECTOR]: '/dashboard/director',
       [UserRole.GENERAL_MANAGER]: '/dashboard/gm',
       [UserRole.BRANCH_MANAGER]: '/dashboard/branch-manager',
       [UserRole.CENTRAL_STOREKEEPER]: '/dashboard/central-store',

@@ -38,7 +38,13 @@ async function migrate() {
     const appliedMigrations = new Set(rows.map(r => r.name));
 
     // 4. Run pending migrations
+    const targetFile = process.argv[2];
+    
     for (const file of files) {
+      if (targetFile && file !== targetFile && !targetFile.endsWith(file)) {
+          continue;
+      }
+
       if (appliedMigrations.has(file)) {
         console.log(`Skipping already applied migration: ${file}`);
         continue;

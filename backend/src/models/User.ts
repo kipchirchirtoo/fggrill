@@ -7,6 +7,7 @@ export enum UserRole {
   SUPER_ADMIN = 'super_admin',
   GENERAL_MANAGER = 'general_manager',
   BRANCH_MANAGER = 'branch_manager',
+  DIRECTOR = 'director',
 
   // Front Office & Reception
   RECEPTIONIST = 'receptionist',

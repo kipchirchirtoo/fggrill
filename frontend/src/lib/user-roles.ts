@@ -5,6 +5,7 @@
 export enum UserRole {
     // Admin roles
     SUPER_ADMIN = 'super_admin',
+    DIRECTOR = 'director',
 
     // Legacy roles - to be migrated
     GENERAL_MANAGER = 'general_manager',

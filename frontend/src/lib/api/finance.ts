@@ -159,6 +159,30 @@ export const financeAPI = {
   // From errors
   processPayment: (data: any) => fetchAPI<any>('/finance/payments/process', { method: 'POST', body: JSON.stringify(data) }),
 
+  // Financial Workspace
+  workspace: {
+    getDailyRecords: (params?: any) => fetchAPI<any[]>(`/finance/workspace/daily${buildQuery(params)}`),
+    getDailyRecordByDate: (date: string, params?: any) => fetchAPI<any>(`/finance/workspace/daily/${date}${buildQuery(params)}`),
+    saveDailyRecord: (data: any) => fetchAPI<any>('/finance/workspace/daily', { method: 'POST', body: JSON.stringify(data) }),
+    getMonthlyAdjustments: (params?: any) => fetchAPI<any[]>(`/finance/workspace/monthly${buildQuery(params)}`),
+    saveMonthlyAdjustment: (data: any) => fetchAPI<any>('/finance/workspace/monthly', { method: 'POST', body: JSON.stringify(data) })
+  },
+
+  director: {
+    getOverview: (params?: any) => fetchAPI<any>(`/finance/director/overview${buildQuery(params)}`),
+    getPayments: (params?: any) => fetchAPI<any>(`/finance/director/payments${buildQuery(params)}`),
+    getBanking: (params?: any) => fetchAPI<any>(`/finance/director/banking${buildQuery(params)}`),
+    getVisuals: (params?: any) => fetchAPI<any>(`/finance/director/visuals${buildQuery(params)}`),
+    getDiscrepancies: (params?: any) => fetchAPI<any[]>(`/finance/discrepancies${buildQuery(params)}`),
+  },
+
+  discrepancies: {
+    getFlags: (params?: any) => fetchAPI<any[]>(`/finance/discrepancies${buildQuery(params)}`),
+    createFlag: (data: any) => fetchAPI<any>('/finance/discrepancies', { method: 'POST', body: JSON.stringify(data) }),
+    respond: (id: string, data: any) => fetchAPI<any>(`/finance/discrepancies/${id}/respond`, { method: 'PATCH', body: JSON.stringify(data) }),
+    finalize: (id: string, data: any) => fetchAPI<any>(`/finance/discrepancies/${id}/finalize`, { method: 'PATCH', body: JSON.stringify(data) }),
+  },
+
   accounting: accountingAPI,
   banking: bankingAPI,
   paymentsVerification: paymentsVerificationAPI,

@@ -735,6 +735,13 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
+        href="/dashboard/branch-accountant/financial-workspace"
+        icon={Calendar}
+        label="Financial Workspace"
+        active={pathname === '/dashboard/branch-accountant/financial-workspace'}
+      />
+
+      <NavItem
         href="/dashboard/branch-accounting/shift-review"
         icon={BookOpen}
         label="Shift Reconciliation"
@@ -784,13 +791,6 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
-        href="/dashboard/branch-accounting/purchases?tab=invoices"
-        icon={Receipt}
-        label="Supplier Invoices"
-        active={pathname === '/dashboard/branch-accounting/purchases'}
-      />
-
-      <NavItem
         href="/dashboard/branch-accounting/food-control"
         icon={Utensils}
         label="Food Control"
@@ -811,48 +811,12 @@ export function ConsolidatedNav() {
         active={pathname.includes('/dashboard/branch-accounting/invoices')}
       />
 
-      <NavGroup label="Financial Analytics" icon={BarChart3} defaultOpen>
-        <NavItem
-          href="/dashboard/branch-accountant/analytics"
-          icon={TrendingUp}
-          label="Branch Sales"
-          active={pathname === '/dashboard/branch-accountant/analytics'}
-        />
-        <NavItem
-          href="/dashboard/branch-accountant/cashier-clearance"
-          icon={DollarSign}
-          label="Sales Clearance"
-          active={pathname === '/dashboard/branch-accountant/cashier-clearance'}
-        />
-        <NavItem
-          href="/dashboard/branch-accountant/sold-items"
-          icon={Package}
-          label="Sold Items Analytics"
-          active={pathname === '/dashboard/branch-accountant/sold-items'}
-        />
-        <NavItem
-          href="/dashboard/branch-accountant/revenue-oversight"
-          icon={Target}
-          label="Revenue Oversight"
-          active={pathname === '/dashboard/branch-accountant/revenue-oversight'}
-        />
-      </NavGroup>
-
       <NavItem
         href="/dashboard/branch-accountant/staff/audit"
         icon={Shield}
         label="Staff Audit Trail"
         active={pathname === '/dashboard/branch-accountant/staff/audit'}
       />
-
-      <NavGroup label="Reports" icon={FileText} defaultOpen>
-        <NavItem
-          href="/dashboard/branch-accountant/reports/profit-loss"
-          icon={PieChart}
-          label="Profit & Loss"
-          active={pathname === '/dashboard/branch-accountant/reports/profit-loss'}
-        />
-      </NavGroup>
     </>
   );
 
@@ -1512,6 +1476,53 @@ export function ConsolidatedNav() {
     </>
   );
 
+  // Director Navigation
+  const directorNav = (
+    <>
+      <NavItem
+        href="/dashboard/director"
+        icon={LayoutDashboard}
+        label="Global Financial Overview"
+        active={pathname === '/dashboard/director'}
+      />
+
+      <NavGroup label="Financial Intelligence" icon={TrendingUp} defaultOpen>
+        <NavItem
+          href="/dashboard/director/payments"
+          icon={CreditCard}
+          label="Payment Intelligence"
+          active={pathname === '/dashboard/director/payments'}
+        />
+        <NavItem
+          href="/dashboard/director/banking"
+          icon={Building}
+          label="Banking Control"
+          active={pathname === '/dashboard/director/banking'}
+        />
+      </NavGroup>
+
+      <NavItem
+        href="/dashboard/director/discrepancies"
+        icon={AlertCircle}
+        label="Discrepancy Control"
+        active={pathname === '/dashboard/director/discrepancies'}
+      />
+
+      <NavItem
+        href="/dashboard/director/drill-down"
+        icon={Target}
+        label="Deep Drill-Down"
+        active={pathname === '/dashboard/director/drill-down'}
+      />
+
+      <hr className="my-4 border-stone-100" />
+      <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Audit & HR Oversight</p>
+      {auditorNav}
+      <hr className="my-4 border-stone-100" />
+      {hrNav}
+    </>
+  );
+
   // Kyogong POS Navigation
   const kyogongNav = (posLabel: string, posPath: string) => (
     <>
@@ -1561,6 +1572,11 @@ export function ConsolidatedNav() {
       );
     }
 
+
+    // Director Navigation
+    if (user.role === UserRole.DIRECTOR) {
+      return directorNav;
+    }
 
     // General Manager Navigation
     if (user.role === UserRole.GENERAL_MANAGER) {

@@ -24,6 +24,9 @@ import {
   saveDailyLog,
   updateDailyLogStatus
 } from '../controllers/finance.controller';
+import { FinancialWorkspaceController } from '../controllers/financial-workspace.controller';
+import { DirectorController } from '../controllers/director.controller';
+import { DiscrepancyController } from '../controllers/discrepancies.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 import { supabase } from '../config/database';
@@ -104,6 +107,33 @@ router.post('/daily-logs',
 router.put('/daily-logs/:id/status',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   updateDailyLogStatus
+);
+
+// ============== FINANCIAL WORKSPACE ==============
+
+router.get('/workspace/daily',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getDailyRecords
+);
+
+router.get('/workspace/daily/:date',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getDailyRecordByDate
+);
+
+router.post('/workspace/daily',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  saveDailyRecord
+);
+
+router.get('/workspace/monthly',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getMonthlyAdjustments
+);
+
+router.post('/workspace/monthly',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  saveMonthlyAdjustment
 );
 
 // ============== ADVANCED FINANCIAL TOOLS ==============
@@ -337,6 +367,48 @@ router.get('/branches',
       res.status(500).json({ success: false, error: error.message });
     }
   }
+);
+
+// DIRECTOR DASHBOARD ROUTES
+router.get('/director/overview',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorController.getGlobalOverview
+);
+
+router.get('/director/payments',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorController.getPaymentIntelligence
+);
+
+router.get('/director/banking',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorController.getBankingControl
+);
+
+router.get('/director/visuals',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorController.getVisualData
+);
+
+// DISCREPANCY & FLAG ROUTES
+router.get('/discrepancies',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  DiscrepancyController.getFlags
+);
+
+router.post('/discrepancies',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.AUDITOR]),
+  DiscrepancyController.createFlag
+);
+
+router.patch('/discrepancies/:id/respond',
+  authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  DiscrepancyController.respondToFlag
+);
+
+router.patch('/discrepancies/:id/finalize',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR]),
+  DiscrepancyController.finalizeFlag
 );
 
 export default router;
