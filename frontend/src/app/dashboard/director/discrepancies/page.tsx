@@ -22,10 +22,20 @@ export default function DiscrepancyControlPage() {
     try {
       const res = await financeAPI.director.getDiscrepancies(filter);
       if (res.success) {
-        setFlags(res.data);
+        setFlags(res.data || []);
+      } else {
+        toast.error(res.message || 'Failed to fetch discrepancies');
       }
-    } catch (error) {
-      toast.error('Failed to fetch discrepancies');
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch discrepancies';
+      
+      if (message.includes('403') || message.includes('Forbidden')) {
+        toast.error('Access Denied: You need director or auditor role');
+      } else {
+        toast.error(message);
+      }
+      
+      console.error('Discrepancy Control Error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +97,13 @@ export default function DiscrepancyControlPage() {
           </div>
 
           {/* Flags Feed */}
-          <div className="space-y-4">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#007AFF]"></div>
+              <p className="text-stone-500 text-sm">Loading discrepancies...</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
             {flags.length === 0 && !isLoading && (
               <div className="bg-stone-50 border border-dashed border-stone-200 rounded-3xl p-12 text-center">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />

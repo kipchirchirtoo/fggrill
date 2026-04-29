@@ -131,7 +131,7 @@ export const financeAPI = {
   createExpense: (data: any) => fetchAPI<any>('/finance/expenses', { method: 'POST', body: JSON.stringify(data) }),
   
   // Compatibility & Extensions
-  getBranches: () => fetchAPI<any[]>('/system/branches'),
+  getBranches: () => fetchAPI<any[]>('/finance/branches'),
   getBudgets:   (params?: any) => accountingAPI.getBudgets(params),
   createBudget: (data: any)    => fetchAPI<any>('/accounting/budgets', { method: 'POST', body: JSON.stringify(data) }),
   updateBudget: (id: string, data: any) => fetchAPI<any>(`/accounting/budgets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

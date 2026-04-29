@@ -20,11 +20,25 @@ export class DiscrepancyController {
       if (severity) query = query.eq('severity', severity);
 
       const { data, error } = await query;
+      
+      if (error && error.code === 'PGRST116') {
+        return res.status(200).json({ 
+          success: true, 
+          data: [],
+          message: 'Discrepancy flags table not found. Please run migrations.'
+        });
+      }
+      
       if (error) throw error;
 
-      return res.status(200).json({ success: true, data });
+      return res.status(200).json({ success: true, data: data || [] });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      console.error('Get Flags Error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message,
+        data: []
+      });
     }
   }
 

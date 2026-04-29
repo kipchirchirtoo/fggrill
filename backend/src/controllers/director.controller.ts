@@ -20,6 +20,22 @@ export class DirectorController {
       }
 
       const { data: dailyData, error: dailyError } = await query;
+      
+      // If table doesn't exist, return empty data instead of error
+      if (dailyError && dailyError.code === 'PGRST116') {
+        return res.status(200).json({
+          success: true,
+          data: {
+            totalRevenue: 0,
+            totalExpenses: 0,
+            netProfit: 0,
+            profitMargin: 0,
+            recordCount: 0
+          },
+          message: 'No financial records table found. Please run migrations.'
+        });
+      }
+      
       if (dailyError) throw dailyError;
 
       // Aggregating monthly adjustments (Fixed costs)
@@ -27,11 +43,11 @@ export class DirectorController {
         .from('monthly_financial_adjustments')
         .select('total_monthly_expenses');
       
-      if (monthlyError) throw monthlyError;
+      // Ignore error if table doesn't exist
+      const monthlyExpenses = monthlyError ? 0 : monthlyData?.reduce((sum, r) => sum + Number(r.total_monthly_expenses || 0), 0) || 0;
 
       const totalRevenue = dailyData?.reduce((sum, r) => sum + Number(r.total_revenue || 0), 0) || 0;
       const dailyExpenses = dailyData?.reduce((sum, r) => sum + Number(r.total_expenses || 0), 0) || 0;
-      const monthlyExpenses = monthlyData?.reduce((sum, r) => sum + Number(r.total_monthly_expenses || 0), 0) || 0;
       
       const totalExpenses = dailyExpenses + monthlyExpenses;
       const netProfit = totalRevenue - totalExpenses;
@@ -48,7 +64,18 @@ export class DirectorController {
         }
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      console.error('Director Overview Error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message,
+        data: {
+          totalRevenue: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          profitMargin: 0,
+          recordCount: 0
+        }
+      });
     }
   }
 
@@ -68,6 +95,15 @@ export class DirectorController {
       }
 
       const { data, error } = await query;
+      
+      if (error && error.code === 'PGRST116') {
+        return res.status(200).json({
+          success: true,
+          data: { mpesa: 0, cash: 0, card: 0, total: 0 },
+          message: 'No financial records found'
+        });
+      }
+      
       if (error) throw error;
 
       let mpesa = 0, cash = 0, card = 0;
@@ -89,7 +125,12 @@ export class DirectorController {
         }
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      console.error('Payment Intelligence Error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message,
+        data: { mpesa: 0, cash: 0, card: 0, total: 0 }
+      });
     }
   }
 
@@ -109,6 +150,15 @@ export class DirectorController {
       }
 
       const { data, error } = await query;
+      
+      if (error && error.code === 'PGRST116') {
+        return res.status(200).json({
+          success: true,
+          data: [],
+          message: 'No financial records found'
+        });
+      }
+      
       if (error) throw error;
 
       // Group by branch
@@ -131,7 +181,7 @@ export class DirectorController {
         branchSummary[bId].totalBanked += Number(record.banking_data?.banked || 0);
         branchSummary[bId].totalUnbanked += Number(record.unbanked_cash || 0);
         
-        if (Number(record.unbanked_cash) > 1000) { // arbitrary threshold for flags
+        if (Number(record.unbanked_cash) > 1000) {
             branchSummary[bId].flagCount++;
         }
       });
@@ -141,7 +191,12 @@ export class DirectorController {
         data: Object.values(branchSummary)
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      console.error('Banking Control Error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message,
+        data: []
+      });
     }
   }
 
@@ -161,6 +216,15 @@ export class DirectorController {
       }
 
       const { data, error } = await query;
+      
+      if (error && error.code === 'PGRST116') {
+        return res.status(200).json({
+          success: true,
+          data: { trends: [], branchPerformance: [] },
+          message: 'No financial records found'
+        });
+      }
+      
       if (error) throw error;
 
       // Revenue trends over time
@@ -187,7 +251,12 @@ export class DirectorController {
         }
       });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: error.message });
+      console.error('Visual Data Error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message,
+        data: { trends: [], branchPerformance: [] }
+      });
     }
   }
 }

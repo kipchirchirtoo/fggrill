@@ -25,10 +25,20 @@ export default function BankingControlPage() {
     try {
       const res = await financeAPI.director.getBanking(dateRange);
       if (res.success) {
-        setBankingData(res.data);
+        setBankingData(res.data || []);
+      } else {
+        toast.error(res.message || 'Failed to fetch banking data');
       }
-    } catch (error) {
-      toast.error('Failed to fetch banking data');
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch banking data';
+      
+      if (message.includes('403') || message.includes('Forbidden')) {
+        toast.error('Access Denied: You need director role');
+      } else {
+        toast.error(message);
+      }
+      
+      console.error('Banking Control Error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +83,20 @@ export default function BankingControlPage() {
           </div>
 
           {/* Branch Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#007AFF]"></div>
+              <p className="text-stone-500 text-sm">Loading banking data...</p>
+            </div>
+          ) : bankingData.length === 0 ? (
+            <div className="bg-stone-50 border border-dashed border-stone-200 rounded-2xl p-12 text-center">
+              <Landmark className="w-12 h-12 text-stone-300 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-stone-800 mb-2">No Banking Data</h3>
+              <p className="text-stone-500">No banking records found for the selected date range.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {bankingData.map((branch) => (
               <BranchBankingCard key={branch.id} branch={branch} />
             ))}
@@ -145,10 +168,9 @@ export default function BankingControlPage() {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+              </div>
+            </>
+          )}
       </DashboardLayout>
     </ProtectedRoute>
   );

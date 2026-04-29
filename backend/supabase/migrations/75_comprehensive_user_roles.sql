@@ -1,0 +1,74 @@
+-- Comprehensive User Roles Update
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE user_role AS ENUM ('guest');
+    END IF;
+END $$;
+
+-- Add all roles from backend UserRole enum
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'super_admin';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'general_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'branch_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'director';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'receptionist';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'front_desk_supervisor';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'concierge';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'bell_captain';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'bellhop';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'housekeeping';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'housekeeping_supervisor';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'room_attendant';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'laundry_attendant';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'restaurant';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'restaurant_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'head_chef';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'sous_chef';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'line_cook';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'prep_cook';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'waiter';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'waitress';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'head_waiter';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'bartender';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'barista';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'food_runner';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'busser';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'host_hostess';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'pos_kitchen';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'kitchen';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'kitchen_operations';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'kitchen_helper';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'dishwasher';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'maintenance';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'maintenance_supervisor';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'electrician';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'plumber';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'hvac_technician';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'groundskeeper';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'security_supervisor';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'security_guard';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'night_auditor';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'accountant';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'branch_accountant';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'auditor';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'finance_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'hr_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'payroll_clerk';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'cashier';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'kyogong_spa_cashier';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'kyogong_executive_bar_cashier';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'kyogong_sports_bar_cashier';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'kyogong_reception_cashier';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'central_storekeeper';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'branch_storekeeper';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'inventory_clerk';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'purchasing_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'procurement';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'storekeeper';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'branch_operations_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'central_operations_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'facilities_manager';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'employee';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'driver';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'guest';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'manager';

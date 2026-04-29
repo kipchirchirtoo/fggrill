@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { UserRole } from '@/lib/user-roles';
+import { financeAPI } from '@/lib/api/finance';
 import { 
   Search, ChevronRight, Building, Calendar, 
   Database, User, ArrowRight, Layers, FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 export default function DrillDownPage() {
   const [level, setLevel] = useState<'COMPANY' | 'BRANCH' | 'DATE' | 'STREAM'>('COMPANY');
@@ -17,6 +19,23 @@ export default function DrillDownPage() {
     date: null,
     stream: null
   });
+  const [branches, setBranches] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch branches on mount
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const response = await financeAPI.getBranches();
+        if (response.success) {
+          setBranches(response.data || []);
+        }
+      } catch (error) {
+        toast.error('Failed to load branches');
+      }
+    };
+    fetchBranches();
+  }, []);
 
   const path = [
     { label: 'Famous Gate Hotels', level: 'COMPANY' },
@@ -86,15 +105,21 @@ export default function DrillDownPage() {
             <div className="p-8">
               {level === 'COMPANY' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {['Famous Gate Kyogong', 'Famous Gate Thika', 'Famous Gate Kitengela'].map(name => (
-                    <DrillCard 
-                      key={name}
-                      icon={<Building className="w-6 h-6" />}
-                      title={name}
-                      subtitle="Branch View"
-                      onClick={() => handleNavigate('BRANCH', { name })}
-                    />
-                  ))}
+                  {branches.length > 0 ? (
+                    branches.map(branch => (
+                      <DrillCard 
+                        key={branch.id}
+                        icon={<Building className="w-6 h-6" />}
+                        title={branch.name}
+                        subtitle="Branch View"
+                        onClick={() => handleNavigate('BRANCH', { id: branch.id, name: branch.name })}
+                      />
+                    ))
+                  ) : (
+                    <div className="col-span-3 text-center text-stone-400 py-12">
+                      {isLoading ? 'Loading branches...' : 'No branches available'}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -130,23 +155,12 @@ export default function DrillDownPage() {
                 <div className="space-y-4">
                   <div className="bg-stone-50 p-6 rounded-2xl border border-dashed border-stone-200 text-center">
                     <Database className="w-10 h-10 text-stone-300 mx-auto mb-4" />
-                    <p className="text-stone-500 font-medium">Viewing granular entries for {selections.stream} on {format(new Date(selections.date), 'MMM d, yyyy')}</p>
-                    <div className="mt-8 grid grid-cols-1 gap-2 text-left">
-                       {Array.from({ length: 5 }).map((_, i) => (
-                         <div key={i} className="bg-white p-4 rounded-xl border border-stone-100 flex justify-between items-center shadow-sm">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-xs font-bold">#{i+1}</div>
-                              <div>
-                                <p className="font-bold text-stone-900">Transaction TXN-00{i+1}</p>
-                                <p className="text-xs text-stone-500">Recorded by Branch Accountant</p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                               <p className="font-black text-[#007AFF]">KES {(Math.random() * 50000).toFixed(0)}</p>
-                               <button className="text-[10px] font-bold text-stone-400 hover:text-[#007AFF] uppercase tracking-widest">View Details</button>
-                            </div>
-                         </div>
-                       ))}
+                    <p className="text-stone-500 font-medium">
+                      Detailed transaction data for {selections.stream} on {format(new Date(selections.date), 'MMM d, yyyy')}
+                    </p>
+                    <div className="mt-8 text-stone-400">
+                      <p className="text-sm">Transaction-level drill-down coming soon</p>
+                      <p className="text-xs mt-2">This feature will show individual transactions, invoices, and payment records</p>
                     </div>
                   </div>
                 </div>

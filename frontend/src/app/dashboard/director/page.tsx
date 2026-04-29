@@ -35,10 +35,29 @@ export default function DirectorDashboard() {
         financeAPI.director.getVisuals(dateRange)
       ]);
 
-      if (overviewRes.success) setOverview(overviewRes.data);
-      if (visualRes.success) setVisualData(visualRes.data);
-    } catch (error) {
-      toast.error('Failed to fetch dashboard data');
+      if (overviewRes.success) {
+        setOverview(overviewRes.data);
+      } else {
+        toast.error(overviewRes.message || 'Failed to fetch overview data');
+      }
+      
+      if (visualRes.success) {
+        setVisualData(visualRes.data);
+      } else {
+        toast.error(visualRes.message || 'Failed to fetch visual data');
+      }
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch dashboard data';
+      
+      if (message.includes('403') || message.includes('Forbidden')) {
+        toast.error('Access Denied: You need director role to view this dashboard');
+      } else if (message.includes('401') || message.includes('Unauthorized')) {
+        toast.error('Please log in to access this dashboard');
+      } else {
+        toast.error(message);
+      }
+      
+      console.error('Director Dashboard Error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +101,30 @@ export default function DirectorDashboard() {
             </div>
           </div>
 
-          {/* Stats Cards */}
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#007AFF]"></div>
+              <p className="text-stone-500 text-sm">Loading director dashboard...</p>
+            </div>
+          ) : !overview ? (
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center">
+              <AlertCircle className="w-12 h-12 text-rose-600 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-rose-900 mb-2">Access Denied</h3>
+              <p className="text-rose-700 mb-4">
+                You need the <strong>director</strong> role to access this dashboard.
+              </p>
+              <div className="bg-white rounded-xl p-4 text-left text-sm space-y-2">
+                <p className="font-bold text-stone-900">To fix this:</p>
+                <ol className="list-decimal list-inside space-y-1 text-stone-600">
+                  <li>Run: <code className="bg-stone-100 px-2 py-0.5 rounded">node backend/fix-director-role.js your-email@example.com</code></li>
+                  <li>Log out and log back in</li>
+                  <li>Refresh this page</li>
+                </ol>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard 
               title="Total Revenue" 
@@ -176,9 +218,8 @@ export default function DirectorDashboard() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
       </DashboardLayout>
     </ProtectedRoute>
   );
