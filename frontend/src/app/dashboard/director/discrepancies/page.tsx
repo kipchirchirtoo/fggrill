@@ -7,7 +7,7 @@ import { UserRole } from '@/lib/user-roles';
 import { financeAPI } from '@/lib/api/finance';
 import { 
   AlertTriangle, CheckCircle2, Clock, MessageSquare, 
-  ShieldAlert, User, Calendar, Filter, Search, MoreHorizontal
+  ShieldAlert, User, Calendar, Filter, Search, MoreHorizontal, XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -16,15 +16,32 @@ export default function DiscrepancyControlPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [flags, setFlags] = useState<any[]>([]);
   const [filter, setFilter] = useState({ status: '', severity: '' });
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedFlag, setSelectedFlag] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchFlags = async () => {
     setIsLoading(true);
     try {
-      const res = await financeAPI.director.getDiscrepancies(filter);
-      if (res.success) {
-        setFlags(res.data || []);
+      const token = localStorage.getItem('token');
+      let url = `/api/finance/discrepancies?`;
+      if (filter.status) url += `status=${filter.status}&`;
+      if (filter.severity) url += `severity=${filter.severity}&`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setFlags(result.data || []);
       } else {
-        toast.error(res.message || 'Failed to fetch discrepancies');
+        toast.error(result.message || 'Failed to fetch discrepancies');
       }
     } catch (error: any) {
       const message = error instanceof Error ? error.message : 'Failed to fetch discrepancies';
@@ -44,6 +61,96 @@ export default function DiscrepancyControlPage() {
   useEffect(() => {
     fetchFlags();
   }, [filter]);
+
+  const handleCreateFlag = async (formData: any) => {
+    setIsSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/finance/discrepancies', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success('Discrepancy flag created successfully');
+        setShowCreateModal(false);
+        fetchFlags();
+      } else {
+        toast.error(result.message || 'Failed to create flag');
+      }
+    } catch (error) {
+      toast.error('Failed to create discrepancy flag');
+      console.error('Create Flag Error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRespondToFlag = async (flagId: string, response: string) => {
+    setIsSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/finance/discrepancies/${flagId}/respond`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ accountant_response: response })
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast.success('Response submitted successfully');
+        setShowDetailModal(false);
+        fetchFlags();
+      } else {
+        toast.error(result.message || 'Failed to submit response');
+      }
+    } catch (error) {
+      toast.error('Failed to submit response');
+      console.error('Respond Error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFinalizeFlag = async (flagId: string, resolution: string) => {
+    setIsSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/finance/discrepancies/${flagId}/finalize`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ director_resolution: resolution, status: 'RESOLVED' })
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast.success('Flag finalized successfully');
+        setShowDetailModal(false);
+        fetchFlags();
+      } else {
+        toast.error(result.message || 'Failed to finalize flag');
+      }
+    } catch (error) {
+      toast.error('Failed to finalize flag');
+      console.error('Finalize Error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <ProtectedRoute roles={[UserRole.DIRECTOR, UserRole.AUDITOR, UserRole.SUPER_ADMIN]}>
@@ -70,7 +177,10 @@ export default function DiscrepancyControlPage() {
                 <option value="RESOLVED">Resolved</option>
                 <option value="ESCALATED">Escalated</option>
               </select>
-              <button className="bg-[#007AFF] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-[#0056b3] transition-colors">
+              <button className="bg-[#007AFF] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-[#0056b3] transition-colors" onClick={() => setShowCreateModal(true)}>
+                Create New Flag
+              </button>
+              <button className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-700 transition-colors">
                 Generate Audit Report
               </button>
             </div>
@@ -113,17 +223,299 @@ export default function DiscrepancyControlPage() {
               )}
               
               {flags.map((flag) => (
-                <DiscrepancyCard key={flag.id} flag={flag} />
+                <DiscrepancyCard key={flag.id} flag={flag} onViewDetails={(f) => { setSelectedFlag(f); setShowDetailModal(true); }} />
               ))}
             </div>
           )}
         </div>
+
+        {/* Create Flag Modal */}
+        {showCreateModal && (
+          <CreateFlagModal 
+            onClose={() => setShowCreateModal(false)}
+            onSubmit={handleCreateFlag}
+            isSubmitting={isSubmitting}
+          />
+        )}
+
+        {/* Detail Modal */}
+        {showDetailModal && selectedFlag && (
+          <FlagDetailModal 
+            flag={selectedFlag}
+            onClose={() => { setShowDetailModal(false); setSelectedFlag(null); }}
+            onRespond={handleRespondToFlag}
+            onFinalize={handleFinalizeFlag}
+            isSubmitting={isSubmitting}
+          />
+        )}
       </DashboardLayout>
     </ProtectedRoute>
   );
 }
 
-function DiscrepancyCard({ flag }: any) {
+function CreateFlagModal({ onClose, onSubmit, isSubmitting }: any) {
+  const [formData, setFormData] = useState({
+    flag_type: 'MISSING_DOCUMENTATION',
+    severity: 'MEDIUM',
+    description: '',
+    branch_id: '',
+    record_date: format(new Date(), 'yyyy-MM-dd')
+  });
+  const [branches, setBranches] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const response = await fetch('/api/finance/branches');
+        const result = await response.json();
+        if (result.success) setBranches(result.data || []);
+      } catch (error) {
+        console.error('Failed to fetch branches:', error);
+      }
+    };
+    fetchBranches();
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <h3 className="text-2xl font-bold text-stone-900 mb-6">Create Discrepancy Flag</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-2">Branch</label>
+            <select 
+              value={formData.branch_id}
+              onChange={(e) => setFormData({...formData, branch_id: e.target.value})}
+              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF]"
+              required
+            >
+              <option value="">Select Branch</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-2">Flag Type</label>
+            <select 
+              value={formData.flag_type}
+              onChange={(e) => setFormData({...formData, flag_type: e.target.value})}
+              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF]"
+              required
+            >
+              <option value="MISSING_DOCUMENTATION">Missing Documentation</option>
+              <option value="AMOUNT_MISMATCH">Amount Mismatch</option>
+              <option value="UNAUTHORIZED_TRANSACTION">Unauthorized Transaction</option>
+              <option value="POLICY_VIOLATION">Policy Violation</option>
+              <option value="SUSPICIOUS_ACTIVITY">Suspicious Activity</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-2">Severity</label>
+            <select 
+              value={formData.severity}
+              onChange={(e) => setFormData({...formData, severity: e.target.value})}
+              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF]"
+              required
+            >
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="CRITICAL">Critical</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-2">Record Date</label>
+            <input 
+              type="date"
+              value={formData.record_date}
+              onChange={(e) => setFormData({...formData, record_date: e.target.value})}
+              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF]"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-2">Description</label>
+            <textarea 
+              value={formData.description}
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF] min-h-[120px]"
+              placeholder="Describe the discrepancy in detail..."
+              required
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border-2 border-stone-200 rounded-xl font-bold text-stone-700 hover:bg-stone-50"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              className="flex-1 px-4 py-2 bg-[#007AFF] text-white rounded-xl font-bold hover:bg-[#0056b3] disabled:opacity-50"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Creating...' : 'Create Flag'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function FlagDetailModal({ flag, onClose, onRespond, onFinalize, isSubmitting }: any) {
+  const [response, setResponse] = useState('');
+  const [resolution, setResolution] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'respond' | 'finalize'>('details');
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h3 className="text-2xl font-bold text-stone-900">Discrepancy Details</h3>
+            <p className="text-sm text-stone-500 mt-1">Flag ID: {flag.id}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-lg">
+            <XCircle className="w-6 h-6 text-stone-400" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-stone-200">
+          <button 
+            onClick={() => setActiveTab('details')}
+            className={`px-4 py-2 font-bold ${activeTab === 'details' ? 'text-[#007AFF] border-b-2 border-[#007AFF]' : 'text-stone-500'}`}
+          >
+            Details
+          </button>
+          <button 
+            onClick={() => setActiveTab('respond')}
+            className={`px-4 py-2 font-bold ${activeTab === 'respond' ? 'text-[#007AFF] border-b-2 border-[#007AFF]' : 'text-stone-500'}`}
+          >
+            Respond
+          </button>
+          <button 
+            onClick={() => setActiveTab('finalize')}
+            className={`px-4 py-2 font-bold ${activeTab === 'finalize' ? 'text-[#007AFF] border-b-2 border-[#007AFF]' : 'text-stone-500'}`}
+          >
+            Finalize
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'details' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-1">Branch</p>
+                <p className="text-sm font-medium text-stone-900">{flag.branches?.name || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-1">Flag Type</p>
+                <p className="text-sm font-medium text-stone-900">{flag.flag_type?.replace('_', ' ')}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-1">Severity</p>
+                <span className={`inline-block px-2 py-1 rounded-full text-xs font-bold ${
+                  flag.severity === 'CRITICAL' ? 'bg-rose-100 text-rose-700' :
+                  flag.severity === 'HIGH' ? 'bg-orange-100 text-orange-700' :
+                  flag.severity === 'MEDIUM' ? 'bg-amber-100 text-amber-700' :
+                  'bg-blue-100 text-blue-700'
+                }`}>
+                  {flag.severity}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-1">Status</p>
+                <p className="text-sm font-medium text-stone-900">{flag.status?.replace('_', ' ')}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-1">Record Date</p>
+                <p className="text-sm font-medium text-stone-900">{format(new Date(flag.record_date), 'MMM d, yyyy')}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-1">Created</p>
+                <p className="text-sm font-medium text-stone-900">{format(new Date(flag.created_at), 'MMM d, yyyy HH:mm')}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-bold text-stone-400 uppercase mb-2">Description</p>
+              <p className="text-sm text-stone-700 bg-stone-50 p-4 rounded-xl">{flag.description}</p>
+            </div>
+            {flag.accountant_response && (
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-2">Accountant Response</p>
+                <p className="text-sm text-stone-700 bg-blue-50 p-4 rounded-xl border-l-4 border-blue-500">{flag.accountant_response}</p>
+              </div>
+            )}
+            {flag.director_resolution && (
+              <div>
+                <p className="text-xs font-bold text-stone-400 uppercase mb-2">Director Resolution</p>
+                <p className="text-sm text-stone-700 bg-emerald-50 p-4 rounded-xl border-l-4 border-emerald-500">{flag.director_resolution}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'respond' && (
+          <div className="space-y-4">
+            <p className="text-sm text-stone-600">Provide a response to this discrepancy flag (Accountant/Branch Manager):</p>
+            <textarea 
+              value={response}
+              onChange={(e) => setResponse(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF] min-h-[150px]"
+              placeholder="Enter your response..."
+            />
+            <button 
+              onClick={() => onRespond(flag.id, response)}
+              disabled={!response.trim() || isSubmitting}
+              className="w-full px-4 py-3 bg-[#007AFF] text-white rounded-xl font-bold hover:bg-[#0056b3] disabled:opacity-50"
+            >
+              {isSubmitting ? 'Submitting...' : 'Submit Response'}
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'finalize' && (
+          <div className="space-y-4">
+            <p className="text-sm text-stone-600">Provide final resolution and close this flag (Director only):</p>
+            <textarea 
+              value={resolution}
+              onChange={(e) => setResolution(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF] min-h-[150px]"
+              placeholder="Enter final resolution..."
+            />
+            <button 
+              onClick={() => onFinalize(flag.id, resolution)}
+              disabled={!resolution.trim() || isSubmitting}
+              className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Finalizing...' : 'Finalize & Close Flag'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DiscrepancyCard({ flag, onViewDetails }: any) {
   const severityColors: any = {
     LOW: 'bg-blue-50 text-blue-700 border-blue-100',
     MEDIUM: 'bg-amber-50 text-amber-700 border-amber-100',
@@ -174,7 +566,7 @@ function DiscrepancyCard({ flag }: any) {
             <div title="Accountant" className="w-8 h-8 rounded-full bg-[#007AFF] border-2 border-white flex items-center justify-center text-xs font-bold text-white">B</div>
           </div>
 
-          <button className="p-2 hover:bg-stone-100 rounded-lg transition-colors">
+          <button className="p-2 hover:bg-stone-100 rounded-lg transition-colors" onClick={() => onViewDetails(flag)}>
             <MoreHorizontal className="w-5 h-5 text-stone-400" />
           </button>
         </div>

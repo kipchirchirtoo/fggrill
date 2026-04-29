@@ -183,7 +183,14 @@ export const authorize = (roles: UserRole[]) => {
     }
 
     const userRole = String(req.user.role).toLowerCase().trim();
-    const allowedRoles = roles.map(r => String(r).toLowerCase().trim());
+    let allowedRoles = roles.map(r => String(r).toLowerCase().trim());
+    
+    // DIRECTOR has access to all AUDITOR and HR_MANAGER functionalities
+    if (allowedRoles.includes('auditor') || allowedRoles.includes('hr_manager')) {
+      if (!allowedRoles.includes('director')) {
+        allowedRoles.push('director');
+      }
+    }
 
     logger.info(`[RBAC Check] URL: ${req.originalUrl}, User Role: "${userRole}", Allowed: [${allowedRoles.join(', ')}]`);
 

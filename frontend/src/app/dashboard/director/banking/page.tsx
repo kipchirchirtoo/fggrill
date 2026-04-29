@@ -23,11 +23,32 @@ export default function BankingControlPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const res = await financeAPI.director.getBanking(dateRange);
-      if (res.success) {
-        setBankingData(res.data || []);
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `/api/finance/director/banking-reconciliation?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Transform branch data for display
+        const branches = result.data.branches || [];
+        setBankingData(branches.map((branch: any) => ({
+          id: branch.name,
+          name: branch.name,
+          totalExpected: branch.deposits || 0,
+          totalBanked: branch.reconciled || 0,
+          totalUnbanked: (branch.deposits || 0) - (branch.reconciled || 0),
+          flagCount: branch.pending > 1000 ? 1 : 0
+        })));
       } else {
-        toast.error(res.message || 'Failed to fetch banking data');
+        toast.error(result.message || 'Failed to fetch banking data');
       }
     } catch (error: any) {
       const message = error instanceof Error ? error.message : 'Failed to fetch banking data';

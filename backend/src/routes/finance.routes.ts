@@ -32,6 +32,7 @@ import {
   saveMonthlyAdjustment
 } from '../controllers/financial-workspace.controller';
 import { DirectorController } from '../controllers/director.controller';
+import { DirectorEnhancedController } from '../controllers/director-enhanced.controller';
 import { DiscrepancyController } from '../controllers/discrepancies.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -39,7 +40,19 @@ import { supabase } from '../config/database';
 
 const router = express.Router();
 
-// Protected routes
+// Public/unauthenticated routes
+router.get('/branches', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('branches').select('id, name, code');
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (error: any) {
+    console.error('Get branches error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Apply authentication to all other routes
 router.use(protect);
 
 // Guest and staff routes
@@ -379,6 +392,27 @@ router.get('/branches',
 router.get('/director/overview',
   authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
   DirectorController.getGlobalOverview
+);
+
+// Enhanced Director Routes
+router.get('/director/comprehensive',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorEnhancedController.getComprehensiveDashboard
+);
+
+router.get('/director/payment-breakdown',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorEnhancedController.getPaymentBreakdown
+);
+
+router.get('/director/banking-reconciliation',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorEnhancedController.getBankingReconciliation
+);
+
+router.get('/director/export-pdf',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorEnhancedController.exportPDFReport
 );
 
 router.get('/director/payments',

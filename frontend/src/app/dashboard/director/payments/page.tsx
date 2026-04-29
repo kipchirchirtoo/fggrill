@@ -29,15 +29,38 @@ export default function PaymentIntelligencePage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const response = await financeAPI.director.getPayments(dateRange);
-      if (response.success) {
-        setPaymentData(response.data);
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `/api/finance/director/payment-breakdown?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Transform the breakdown data for display
+        const breakdown = result.data.breakdown || {};
+        setPaymentData({
+          total: result.data.total || 0,
+          mpesa: breakdown.mpesa || 0,
+          cash: breakdown.cash || 0,
+          card: breakdown.card || 0,
+          bank_transfer: breakdown.bank_transfer || 0,
+          byBranch: result.data.byBranch || [],
+          byDate: result.data.byDate || []
+        });
       } else {
-        toast.error('Failed to fetch payment data');
+        toast.error(result.message || 'Failed to fetch payment data');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch payment data';
       toast.error(message);
+      console.error('Payment Data Error:', error);
     } finally {
       setIsLoading(false);
     }
