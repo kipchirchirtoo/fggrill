@@ -104,18 +104,19 @@ export default function DiscrepancyControlPage() {
             </div>
           ) : (
             <div className="space-y-4">
-            {flags.length === 0 && !isLoading && (
-              <div className="bg-stone-50 border border-dashed border-stone-200 rounded-3xl p-12 text-center">
-                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-stone-800">System is Clean</h3>
-                <p className="text-stone-500">No discrepancies detected or manual flags raised.</p>
-              </div>
-            )}
-            
-            {flags.map((flag) => (
-              <DiscrepancyCard key={flag.id} flag={flag} />
-            ))}
-          </div>
+              {flags.length === 0 && !isLoading && (
+                <div className="bg-stone-50 border border-dashed border-stone-200 rounded-3xl p-12 text-center">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-stone-800">System is Clean</h3>
+                  <p className="text-stone-500">No discrepancies detected or manual flags raised.</p>
+                </div>
+              )}
+              
+              {flags.map((flag) => (
+                <DiscrepancyCard key={flag.id} flag={flag} />
+              ))}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

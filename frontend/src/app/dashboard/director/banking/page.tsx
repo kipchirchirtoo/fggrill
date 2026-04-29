@@ -168,9 +168,12 @@ export default function BankingControlPage() {
                     );
                   })}
                 </tbody>
-              </div>
+              </table>
+            </div>
+          </div>
             </>
           )}
+        </div>
       </DashboardLayout>
     </ProtectedRoute>
   );

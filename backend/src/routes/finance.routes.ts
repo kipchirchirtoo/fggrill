@@ -24,7 +24,13 @@ import {
   saveDailyLog,
   updateDailyLogStatus
 } from '../controllers/finance.controller';
-import { FinancialWorkspaceController } from '../controllers/financial-workspace.controller';
+import {
+  getDailyRecords,
+  getDailyRecordByDate,
+  saveDailyRecord,
+  getMonthlyAdjustments,
+  saveMonthlyAdjustment
+} from '../controllers/financial-workspace.controller';
 import { DirectorController } from '../controllers/director.controller';
 import { DiscrepancyController } from '../controllers/discrepancies.controller';
 import { protect, authorize } from '../middleware/auth';

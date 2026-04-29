@@ -218,8 +218,11 @@ export default function DirectorDashboard() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+          </div>
             </>
           )}
+        </div>
       </DashboardLayout>
     </ProtectedRoute>
   );
