@@ -165,7 +165,8 @@ export default function CommunicationsPage() {
   const fetchAvailableUsers = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_URL}/api/users`, {
+      // Use the staff endpoint which is accessible
+      const response = await fetch(`${API_URL}/api/staff`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -406,7 +407,16 @@ export default function CommunicationsPage() {
       toast.success(`${callType === "voice" ? "Voice" : "Video"} call started`);
     } catch (error: any) {
       console.error("Call error:", error);
-      toast.error(error.message || "Failed to start call");
+      
+      // Provide helpful error messages
+      let errorMessage = "Failed to start call";
+      if (error.message.includes("permission denied") || error.message.includes("Permission denied")) {
+        errorMessage = "Camera/microphone access denied. Please allow permissions in your browser settings.";
+      } else if (error.message.includes("not found")) {
+        errorMessage = "No camera or microphone found. Please connect a device.";
+      }
+      
+      toast.error(errorMessage, { duration: 5000 });
       setShowCallModal(false);
     }
   };
@@ -1403,9 +1413,24 @@ function CallModal({ callType, channel, onClose, onJoin }: any) {
           <h3 className="text-2xl font-bold text-stone-900 mb-2">
             Start {callType === "voice" ? "Voice" : "Video"} Call
           </h3>
-          <p className="text-stone-600 mb-6">
+          <p className="text-stone-600 mb-4">
             Start a {callType} call in <span className="font-semibold">{channel?.name}</span>
           </p>
+          
+          {/* Permission Notice */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-left">
+            <div className="flex gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <p className="font-semibold mb-1">Permission Required</p>
+                <p className="text-xs">
+                  Your browser will ask for {callType === "video" ? "camera and microphone" : "microphone"} access. 
+                  Please click "Allow" to start the call.
+                </p>
+              </div>
+            </div>
+          </div>
+          
           <div className="flex gap-3">
             <button
               onClick={onClose}
