@@ -356,15 +356,19 @@ export function hasPermission(user: User | null, permission: string): boolean {
 }
 
 export function hasRole(user: User | null, roles: UserRole[]): boolean {
-  if (!user) return false;
+  if (!user || !user.role) return false;
 
-  const userRole = (user.role as string).toLowerCase().trim();
-  const normalizedRoles = roles.map(r => (r as string).toLowerCase().trim());
-
+  const userRole = String(user.role).toLowerCase().trim();
+  
   // Global override: Super Admins and Directors have universal view access
   if (userRole === 'super_admin' || userRole === 'director') {
     return true;
   }
+
+  // If no specific roles are required, but user is authenticated
+  if (!roles || roles.length === 0) return true;
+
+  const normalizedRoles = roles.map(r => String(r).toLowerCase().trim());
 
   // General Managers have broad access to operational dashboards
   if (userRole === 'general_manager' && !normalizedRoles.includes('super_admin') && !normalizedRoles.includes('director')) {

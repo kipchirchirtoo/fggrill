@@ -761,7 +761,14 @@ export async function generatePayrollPDF(
         status:      r.status || 'draft',
       };
     })
-    .filter((r: any) => !branch_id || r.branchId === branch_id);
+    .filter((r: any) => !branch_id || r.branchId === branch_id)
+    .sort((a: any, b: any) => {
+      // Sort by Branch first
+      const branchCmp = (a.branchName || '').localeCompare(b.branchName || '');
+      if (branchCmp !== 0) return branchCmp;
+      // Then by Employee ID
+      return (a.empId || '').localeCompare(b.empId || '', undefined, { numeric: true, sensitivity: 'base' });
+    });
 
   const totalBasic = rows.reduce((s: number, r: any) => s + r.basicSalary, 0);
   const totalDed   = rows.reduce((s: number, r: any) => s + r.totalDed, 0);

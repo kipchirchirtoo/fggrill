@@ -158,7 +158,7 @@ export default function AuditorDashboard() {
     ];
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]}>
+        <ProtectedRoute allowedRoles={[UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR]}>
             <DashboardLayout>
                 <div className="space-y-8 pb-12">
                     {/* Header */}

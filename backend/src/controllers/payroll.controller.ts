@@ -755,24 +755,26 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
     const { data: records, error } = await query;
     if (error) throw error;
 
-    // Fetch staff roles for each record (payroll_records.staff_id → staff_profiles.id)
+    // Fetch staff roles and employee IDs for each record
     const staffUserIds = (records || []).map((r: any) => r.staff_id).filter(Boolean);
-    let roleMap = new Map<string, string>();
+    let staffProfiles: any[] = [];
     if (staffUserIds.length > 0) {
-      const { data: staffProfiles } = await supabase
+      const { data } = await supabase
         .from('staff_profiles')
-        .select('id, role, position, department')
+        .select('id, role, position, department, id_number')
         .in('id', staffUserIds);
-      (staffProfiles || []).forEach((sp: any) => {
-        roleMap.set(sp.id, sp.position || sp.role || sp.department || 'Staff');
-      });
+      staffProfiles = data || [];
     }
-
-    // Enrich records with role
-    const enrichedRecords = (records || []).map((r: any) => ({
-      ...r,
-      role: roleMap.get(r.staff_id) || r.role || 'Staff',
-    }));
+ 
+    // Enrich records with role and sort by employee ID
+    const enrichedRecords = (records || []).map((r: any) => {
+      const profile = staffProfiles.find((p: any) => p.id === r.staff_id);
+      return {
+        ...r,
+        role: profile?.position || profile?.role || profile?.department || r.role || 'Staff',
+        employee_id: profile?.id_number || r.employee_id || r.id_number || '',
+      };
+    }).sort((a, b) => (a.employee_id || '').localeCompare(b.employee_id || '', undefined, { numeric: true, sensitivity: 'base' }));
 
     // Always recalculate totals from actual records (never trust stale run totals)
     const totals = enrichedRecords.reduce((acc: any, r: any) => ({

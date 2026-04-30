@@ -128,7 +128,7 @@ export default function HRDashboard() {
     ];
 
     return (
-        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]}>
+        <ProtectedRoute allowedRoles={[UserRole.HR_MANAGER, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.DIRECTOR]}>
             <DashboardLayout>
                 <div className="space-y-8 animate-ios-fade-in">
                     {/* Header */}

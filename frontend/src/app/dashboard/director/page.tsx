@@ -9,7 +9,8 @@ import {
   TrendingUp, TrendingDown, DollarSign, Users, Building, 
   Package, AlertTriangle, Download, RefreshCw, Calendar,
   ArrowUpRight, ArrowDownRight, Eye, FileText, BarChart3,
-  PieChart as PieIcon, Activity, CheckCircle2, XCircle
+  PieChart as PieIcon, Activity, CheckCircle2, XCircle,
+  ShieldCheck, Briefcase, ShoppingCart, Layers
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -553,6 +554,36 @@ export default function DirectorDashboardEnhanced() {
                 label="Review Tasks"
                 icon={<FileText className="w-5 h-5" />}
                 href="/dashboard/director/tasks"
+              />
+            </div>
+          </div>
+
+          {/* Connected Departments */}
+          <div className="bg-stone-50/50 p-8 rounded-3xl border-2 border-stone-200">
+            <h3 className="text-sm font-black text-stone-700 uppercase tracking-widest mb-6 flex items-center gap-2">
+              <Layers className="w-5 h-5 text-indigo-600" />
+              Connected Departments
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <QuickActionButton 
+                label="Auditor Portal"
+                icon={<ShieldCheck className="w-5 h-5" />}
+                href="/dashboard/auditor"
+              />
+              <QuickActionButton 
+                label="HR Command"
+                icon={<Users className="w-5 h-5" />}
+                href="/dashboard/hr"
+              />
+              <QuickActionButton 
+                label="Financial Workspace"
+                icon={<Briefcase className="w-5 h-5" />}
+                href="/dashboard/branch-accountant/financial-workspace"
+              />
+              <QuickActionButton 
+                label="Procurement"
+                icon={<ShoppingCart className="w-5 h-5" />}
+                href="/dashboard/procurement"
               />
             </div>
           </div>
