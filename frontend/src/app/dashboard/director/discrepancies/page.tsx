@@ -180,7 +180,35 @@ export default function DiscrepancyControlPage() {
               <button className="bg-[#007AFF] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-[#0056b3] transition-colors" onClick={() => setShowCreateModal(true)}>
                 Create New Flag
               </button>
-              <button className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-700 transition-colors">
+              <button
+                className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-emerald-700 transition-colors flex items-center gap-2"
+                onClick={() => {
+                  const token = localStorage.getItem('token');
+                  let url = `/api/finance/discrepancies/export?`;
+                  if (filter.status)   url += `status=${filter.status}&`;
+                  if (filter.severity) url += `severity=${filter.severity}&`;
+                  // Open in new tab — browser will handle PDF download
+                  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://api.fggrill.com';
+                  const link = document.createElement('a');
+                  link.href = `${apiBase}${url}`;
+                  // Pass token via Authorization header requires a fetch, so we use a hidden form approach
+                  fetch(`${apiBase}${url}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  })
+                    .then(res => {
+                      if (!res.ok) throw new Error('Export failed');
+                      return res.blob();
+                    })
+                    .then(blob => {
+                      const blobUrl = URL.createObjectURL(blob);
+                      link.href = blobUrl;
+                      link.download = `Discrepancy_Audit_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+                      link.click();
+                      URL.revokeObjectURL(blobUrl);
+                    })
+                    .catch(() => toast.error('Failed to generate audit report'));
+                }}
+              >
                 Generate Audit Report
               </button>
             </div>

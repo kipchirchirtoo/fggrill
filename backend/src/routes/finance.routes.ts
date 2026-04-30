@@ -437,6 +437,11 @@ router.get('/director/visuals',
 );
 
 // DISCREPANCY & FLAG ROUTES
+router.get('/discrepancies/export',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.AUDITOR, UserRole.GENERAL_MANAGER]),
+  DiscrepancyController.exportAuditReport
+);
+
 router.get('/discrepancies',
   authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
   DiscrepancyController.getFlags
