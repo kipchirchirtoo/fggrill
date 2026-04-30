@@ -280,16 +280,19 @@ export default function CommunicationsPage() {
       if (result.success) {
         toast.success("Message deleted");
         fetchMessages(selectedChannel.id);
+      } else {
+        toast.error(result.error || "Failed to delete message");
       }
-    } catch (error) {
-      toast.error("Failed to delete message");
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      toast.error(error.message || "Failed to delete message");
     }
   };
 
   const reactToMessage = async (messageId: string, emoji: string) => {
     try {
       const token = localStorage.getItem("token");
-      await fetch(
+      const response = await fetch(
         `${API_URL}/api/communications/messages/${messageId}/react`,
         {
           method: "POST",
@@ -300,9 +303,17 @@ export default function CommunicationsPage() {
           body: JSON.stringify({ emoji }),
         }
       );
-      fetchMessages(selectedChannel.id, true);
-    } catch (error) {
+      
+      const result = await response.json();
+      if (result.success) {
+        fetchMessages(selectedChannel.id, true);
+      } else {
+        console.error("React error:", result.error);
+        toast.error("Failed to add reaction");
+      }
+    } catch (error: any) {
       console.error("React Error:", error);
+      toast.error(error.message || "Failed to add reaction");
     }
   };
 
@@ -768,11 +779,44 @@ function MessageBubbleModern({ message, currentUser, onReply, onDelete, onReact 
   const [showActions, setShowActions] = useState(false);
   const isOwn = message.user_id === currentUser?.id;
 
+  const handleReact = (emoji: string) => {
+    console.log('React button clicked:', message.id, emoji);
+    if (onReact) {
+      onReact(message.id, emoji);
+    } else {
+      console.error('onReact handler is not defined');
+    }
+  };
+
+  const handleReply = () => {
+    console.log('Reply button clicked:', message);
+    if (onReply) {
+      onReply(message);
+    } else {
+      console.error('onReply handler is not defined');
+    }
+  };
+
+  const handleDelete = () => {
+    console.log('Delete button clicked:', message.id);
+    if (onDelete) {
+      onDelete(message.id);
+    } else {
+      console.error('onDelete handler is not defined');
+    }
+  };
+
   return (
     <div
       className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      onMouseEnter={() => {
+        console.log('Mouse entered message bubble');
+        setShowActions(true);
+      }}
+      onMouseLeave={() => {
+        console.log('Mouse left message bubble');
+        setShowActions(false);
+      }}
     >
       {!isOwn && (
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
@@ -873,24 +917,24 @@ function MessageBubbleModern({ message, currentUser, onReply, onDelete, onReact 
 
           {showActions && (
             <div
-              className={`absolute top-0 ${isOwn ? "left-0 -translate-x-full" : "right-0 translate-x-full"} flex gap-1 bg-white border border-gray-200 rounded-xl shadow-xl p-1.5 ml-2 mr-2`}
+              className={`absolute top-0 ${isOwn ? "left-0 -translate-x-full" : "right-0 translate-x-full"} flex gap-1 bg-white border border-gray-200 rounded-xl shadow-xl p-1.5 ml-2 mr-2 z-10`}
             >
               <button
-                onClick={() => onReact(message.id, "👍")}
+                onClick={() => handleReact("👍")}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
                 title="Like"
               >
                 👍
               </button>
               <button
-                onClick={() => onReact(message.id, "❤️")}
+                onClick={() => handleReact("❤️")}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
                 title="Love"
               >
                 ❤️
               </button>
               <button
-                onClick={() => onReact(message.id, "😊")}
+                onClick={() => handleReact("😊")}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
                 title="Smile"
               >
@@ -898,7 +942,7 @@ function MessageBubbleModern({ message, currentUser, onReply, onDelete, onReact 
               </button>
               <div className="w-px bg-gray-200 mx-1"></div>
               <button
-                onClick={() => onReply(message)}
+                onClick={handleReply}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
                 title="Reply"
               >
@@ -906,7 +950,7 @@ function MessageBubbleModern({ message, currentUser, onReply, onDelete, onReact 
               </button>
               {isOwn && (
                 <button
-                  onClick={() => onDelete(message.id)}
+                  onClick={handleDelete}
                   className="p-1.5 hover:bg-rose-100 rounded-lg transition-all"
                   title="Delete"
                 >
@@ -927,7 +971,7 @@ function MessageBubbleModern({ message, currentUser, onReply, onDelete, onReact 
             ).map(([emoji, count]: any) => (
               <button
                 key={emoji}
-                onClick={() => onReact(message.id, emoji)}
+                onClick={() => handleReact(emoji)}
                 className="bg-white hover:bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1 text-xs flex items-center gap-1.5 shadow-sm transition-all"
               >
                 <span>{emoji}</span>
