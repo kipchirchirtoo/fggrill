@@ -52,8 +52,10 @@ export const exportTransactionsPDF = async (
     records: StaffAuditRecord[],
     options: ExportOptions
 ) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'landscape' });
     const margin = 20;
+    const pageWidth = doc.internal.pageSize.width;
+    const rightMargin = pageWidth - margin;
     let cursorY = 20;
 
     // 1. Logo & Header
@@ -73,17 +75,17 @@ export const exportTransactionsPDF = async (
     // Title
     doc.setFontSize(22);
     doc.setTextColor(44, 62, 80);
-    doc.text('STAFF AUDIT REPORT', 190, cursorY + 10, { align: 'right' });
+    doc.text('STAFF AUDIT REPORT', rightMargin, cursorY + 10, { align: 'right' });
 
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text('FamousGate Hotels', 190, cursorY + 20, { align: 'right' });
-    doc.text('Bomet, Kenya', 190, cursorY + 25, { align: 'right' });
-    doc.text('0706782828', 190, cursorY + 30, { align: 'right' });
+    doc.text('FamousGate Hotels', rightMargin, cursorY + 20, { align: 'right' });
+    doc.text('Bomet, Kenya', rightMargin, cursorY + 25, { align: 'right' });
+    doc.text('0706782828', rightMargin, cursorY + 30, { align: 'right' });
 
     cursorY = 60;
     doc.setDrawColor(200);
-    doc.line(margin, cursorY, 190, cursorY);
+    doc.line(margin, cursorY, rightMargin, cursorY);
     cursorY += 10;
 
     // 2. Report Details
@@ -121,7 +123,7 @@ export const exportTransactionsPDF = async (
     const totalOutstanding = records.reduce((sum, r) => sum + (r.outstanding_amount || 0), 0);
 
     doc.setFillColor(245, 245, 247);
-    doc.rect(margin, cursorY, 170, 32, 'F');
+    doc.rect(margin, cursorY, pageWidth - (margin * 2), 32, 'F');
 
     doc.setFontSize(9);
     doc.setTextColor(100);
@@ -170,16 +172,16 @@ export const exportTransactionsPDF = async (
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 8 },
         bodyStyles: { fontSize: 8 },
         columnStyles: {
-            0: { cellWidth: 18 },
-            1: { cellWidth: 18 },
-            2: { cellWidth: 22 },
-            3: { cellWidth: 16 },
-            4: { cellWidth: 20 },
-            5: { cellWidth: 24 },
-            6: { cellWidth: 28 },
-            7: { cellWidth: 18, halign: 'right' },
-            8: { cellWidth: 20, halign: 'right' },
-            9: { cellWidth: 18, halign: 'center' }
+            0: { cellWidth: 22 },
+            1: { cellWidth: 22 },
+            2: { cellWidth: 26 },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 24 },
+            5: { cellWidth: 32 },
+            6: { cellWidth: 36 },
+            7: { cellWidth: 25, halign: 'right' },
+            8: { cellWidth: 25, halign: 'right' },
+            9: { cellWidth: 25, halign: 'center' }
         },
         margin: { left: margin, right: margin }
     });
@@ -190,8 +192,9 @@ export const exportTransactionsPDF = async (
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('FamousGate Hotels - Staff Audit System', 105, 285, { align: 'center' });
-        doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
+        const pageHeight = doc.internal.pageSize.height;
+        doc.text('FamousGate Hotels - Staff Audit System', pageWidth / 2, pageHeight - 10, { align: 'center' });
+        doc.text(`Page ${i} of ${pageCount}`, rightMargin, pageHeight - 10, { align: 'right' });
     }
 
     return doc;
@@ -202,8 +205,10 @@ export const exportSummaryPDF = async (
     summary: StaffSummary[],
     options: ExportOptions
 ) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'landscape' });
     const margin = 20;
+    const pageWidth = doc.internal.pageSize.width;
+    const rightMargin = pageWidth - margin;
     let cursorY = 20;
 
     // 1. Logo & Header
@@ -223,17 +228,17 @@ export const exportSummaryPDF = async (
     // Title
     doc.setFontSize(22);
     doc.setTextColor(44, 62, 80);
-    doc.text('STAFF FINANCIAL SUMMARY', 190, cursorY + 10, { align: 'right' });
+    doc.text('STAFF FINANCIAL SUMMARY', rightMargin, cursorY + 10, { align: 'right' });
 
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text('FamousGate Hotels', 190, cursorY + 20, { align: 'right' });
-    doc.text('Bomet, Kenya', 190, cursorY + 25, { align: 'right' });
-    doc.text('0706782828', 190, cursorY + 30, { align: 'right' });
+    doc.text('FamousGate Hotels', rightMargin, cursorY + 20, { align: 'right' });
+    doc.text('Bomet, Kenya', rightMargin, cursorY + 25, { align: 'right' });
+    doc.text('0706782828', rightMargin, cursorY + 30, { align: 'right' });
 
     cursorY = 60;
     doc.setDrawColor(200);
-    doc.line(margin, cursorY, 190, cursorY);
+    doc.line(margin, cursorY, rightMargin, cursorY);
     cursorY += 10;
 
     // 2. Report Details
@@ -259,7 +264,7 @@ export const exportSummaryPDF = async (
     const totalExposure = totalCreditBills + totalAdvances + totalLoans + totalUnpaidBills;
 
     doc.setFillColor(245, 245, 247);
-    doc.rect(margin, cursorY, 170, 35, 'F');
+    doc.rect(margin, cursorY, pageWidth - (margin * 2), 35, 'F');
 
     doc.setFontSize(9);
     doc.setTextColor(100);
@@ -308,16 +313,16 @@ export const exportSummaryPDF = async (
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 8 },
         bodyStyles: { fontSize: 8 },
         columnStyles: {
-            0: { cellWidth: 28 },
-            1: { cellWidth: 18 },
-            2: { cellWidth: 22 },
-            3: { cellWidth: 18 },
-            4: { cellWidth: 20, halign: 'right' },
-            5: { cellWidth: 18, halign: 'right' },
-            6: { cellWidth: 18, halign: 'right' },
-            7: { cellWidth: 20, halign: 'right' },
-            8: { cellWidth: 20, halign: 'right' },
-            9: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+            0: { cellWidth: 32 },
+            1: { cellWidth: 20 },
+            2: { cellWidth: 26 },
+            3: { cellWidth: 24 },
+            4: { cellWidth: 24, halign: 'right' },
+            5: { cellWidth: 24, halign: 'right' },
+            6: { cellWidth: 24, halign: 'right' },
+            7: { cellWidth: 24, halign: 'right' },
+            8: { cellWidth: 26, halign: 'right' },
+            9: { cellWidth: 33, halign: 'right', fontStyle: 'bold' }
         },
         margin: { left: margin, right: margin }
     });
@@ -328,8 +333,9 @@ export const exportSummaryPDF = async (
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('FamousGate Hotels - Staff Audit System', 105, 285, { align: 'center' });
-        doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
+        const pageHeight = doc.internal.pageSize.height;
+        doc.text('FamousGate Hotels - Staff Audit System', pageWidth / 2, pageHeight - 10, { align: 'center' });
+        doc.text(`Page ${i} of ${pageCount}`, rightMargin, pageHeight - 10, { align: 'right' });
     }
 
     return doc;

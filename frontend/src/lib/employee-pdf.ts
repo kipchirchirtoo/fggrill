@@ -100,7 +100,17 @@ export const generateEmployeePDF = async (staff: StaffMember[], options: PDFOpti
     cursorY = (doc as any).lastAutoTable.finalY + 15;
 
     // 3. Main Employee Data Table
-    const tableData = staff.map((member) => {
+    const sortedStaff = [...staff].sort((a, b) => {
+        const branchA = options.branchMap?.[a.branch_id || ''] || a.branch_id || '';
+        const branchB = options.branchMap?.[b.branch_id || ''] || b.branch_id || '';
+        if (branchA !== branchB) return branchA.localeCompare(branchB);
+        
+        const idA = a.id_number || a.id.substring(0, 8).toUpperCase();
+        const idB = b.id_number || b.id.substring(0, 8).toUpperCase();
+        return idA.localeCompare(idB);
+    });
+
+    const tableData = sortedStaff.map((member) => {
         const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim();
         const branchName = member.branch_id && options.branchMap ? (options.branchMap[member.branch_id] || member.branch_id) : (member.branch_id || '-');
         const deptName = member.department && options.departmentMap ? (options.departmentMap[member.department] || member.department) : (member.department || '-');

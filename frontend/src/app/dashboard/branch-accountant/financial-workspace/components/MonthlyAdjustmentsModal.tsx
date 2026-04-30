@@ -18,6 +18,7 @@ interface MonthlyAdjustmentsModalProps {
 export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId }: MonthlyAdjustmentsModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   
+  const [activeTab, setActiveTab] = useState<'expenses' | 'statements'>('expenses');
   const [adjustments, setAdjustments] = useState({
     electricity: 0,
     salaries: 0,
@@ -30,7 +31,15 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
     licenses: 0
   });
 
-  const [subscriptions, setSubscriptions] = useState<any>({});
+  const [subscriptions, setSubscriptions] = useState({
+    entries: [] as Array<{ description: string, amount: number }>,
+    total: 0
+  });
+
+  const [statements, setStatements] = useState({
+    cash_flow: { entries: [] as any[], notes: '' },
+    balance_sheet: { entries: [] as any[], notes: '' }
+  });
   
   useEffect(() => {
     const fetchAdjustments = async () => {
@@ -53,7 +62,14 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
             levy: data.levy || 0,
             licenses: data.licenses || 0
           });
-          setSubscriptions(data.subscriptions || {});
+          setSubscriptions({
+            entries: data.subscriptions?.entries || [],
+            total: data.subscriptions?.total || 0
+          });
+          setStatements({
+            cash_flow: data.cash_flow_data || { entries: [], notes: '' },
+            balance_sheet: data.balance_sheet_data || { entries: [], notes: '' }
+          });
         }
       } catch (error) {
         console.error('Failed to fetch monthly adjustments:', error);
@@ -75,7 +91,12 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
         fiscal_year: year,
         fiscal_month: month,
         ...adjustments,
-        subscriptions,
+        subscriptions: {
+          entries: subscriptions.entries,
+          total: subscriptions.entries.reduce((sum, e) => sum + Number(e.amount), 0)
+        },
+        cash_flow_data: statements.cash_flow,
+        balance_sheet_data: statements.balance_sheet,
         total_monthly_expenses: totalMonthlyExpenses
       });
       toast.success('Monthly adjustments saved successfully');
@@ -85,6 +106,62 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Helper component for entry lists
+  const EntryList = ({ 
+    entries, 
+    onChange, 
+    label 
+  }: { 
+    entries: any[], 
+    onChange: (entries: any[]) => void, 
+    label: string
+  }) => {
+    const addEntry = () => onChange([...entries, { description: '', amount: 0 }]);
+    const removeEntry = (index: number) => onChange(entries.filter((_, i) => i !== index));
+    const updateEntry = (index: number, field: string, value: any) => {
+      const newEntries = [...entries];
+      newEntries[index] = { ...newEntries[index], [field]: value };
+      onChange(newEntries);
+    };
+
+    return (
+      <div className="space-y-3 bg-stone-50 p-4 rounded-xl border border-stone-200 mt-4">
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-sm font-semibold text-stone-700">{label}</label>
+          <IOSButton variant="secondary" onClick={addEntry} className="h-8 py-0 text-xs">
+            + Add Entry
+          </IOSButton>
+        </div>
+        {entries.length === 0 ? (
+          <p className="text-xs text-stone-400 italic">No entries added.</p>
+        ) : (
+          <div className="space-y-2">
+            {entries.map((entry, idx) => (
+              <div key={idx} className="flex gap-2 items-center">
+                <Input
+                  placeholder="Description"
+                  value={entry.description}
+                  onChange={(e) => updateEntry(idx, 'description', e.target.value)}
+                  className="flex-1 h-9 text-sm"
+                />
+                <Input
+                  type="number"
+                  placeholder="Amount"
+                  value={entry.amount}
+                  onChange={(e) => updateEntry(idx, 'amount', Number(e.target.value))}
+                  className="w-32 h-9 text-sm font-mono"
+                />
+                <button onClick={() => removeEntry(idx)} className="p-1 hover:bg-stone-200 rounded-full">
+                  <X className="w-4 h-4 text-stone-400" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const handleInputChange = (field: string, value: string) => {
@@ -115,99 +192,119 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-stone-200">
+          <button
+            onClick={() => setActiveTab('expenses')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'expenses' ? 'text-[#007AFF] border-b-2 border-[#007AFF]' : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            Fixed & Recurring Expenses
+          </button>
+          <button
+            onClick={() => setActiveTab('statements')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'statements' ? 'text-[#007AFF] border-b-2 border-[#007AFF]' : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            Financial Statements
+          </button>
+        </div>
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Salaries & Wages</label>
-              <Input
-                type="number"
-                value={adjustments.salaries}
-                onChange={(e) => handleInputChange('salaries', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Rent</label>
-              <Input
-                type="number"
-                value={adjustments.rent}
-                onChange={(e) => handleInputChange('rent', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Electricity</label>
-              <Input
-                type="number"
-                value={adjustments.electricity}
-                onChange={(e) => handleInputChange('electricity', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Water</label>
-              <Input
-                type="number"
-                value={adjustments.water}
-                onChange={(e) => handleInputChange('water', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">NSSF Contributions</label>
-              <Input
-                type="number"
-                value={adjustments.nssf}
-                onChange={(e) => handleInputChange('nssf', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">SHIF/NHIF</label>
-              <Input
-                type="number"
-                value={adjustments.shif}
-                onChange={(e) => handleInputChange('shif', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Corporate Tax</label>
-              <Input
-                type="number"
-                value={adjustments.tax}
-                onChange={(e) => handleInputChange('tax', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Catering Levy</label>
-              <Input
-                type="number"
-                value={adjustments.levy}
-                onChange={(e) => handleInputChange('levy', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">Licenses & Permits</label>
-              <Input
-                type="number"
-                value={adjustments.licenses}
-                onChange={(e) => handleInputChange('licenses', e.target.value)}
-                className="font-mono"
-              />
-            </div>
-          </div>
+          {activeTab === 'expenses' ? (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { key: 'salaries', label: 'Salaries & Wages' },
+                  { key: 'rent', label: 'Rent' },
+                  { key: 'electricity', label: 'Electricity' },
+                  { key: 'water', label: 'Water' },
+                  { key: 'nssf', label: 'NSSF Contributions' },
+                  { key: 'shif', label: 'SHIF/NHIF' },
+                  { key: 'tax', label: 'Corporate Tax' },
+                  { key: 'levy', label: 'Catering Levy' },
+                  { key: 'licenses', label: 'Licenses & Permits' }
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="block text-xs font-medium text-stone-500 uppercase tracking-wider mb-1">{label}</label>
+                    <Input
+                      type="number"
+                      value={(adjustments as any)[key]}
+                      onChange={(e) => handleInputChange(key, e.target.value)}
+                      className="font-mono"
+                    />
+                  </div>
+                ))}
+              </div>
 
-          <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 flex justify-between items-center">
-            <div className="flex items-center gap-2 text-stone-600">
-              <Calculator className="w-4 h-4" />
-              <span className="font-semibold">Total Monthly Adjustments</span>
+              <EntryList 
+                label="Detailed Subscriptions" 
+                entries={subscriptions.entries}
+                onChange={(entries) => setSubscriptions({ 
+                  ...subscriptions, 
+                  entries,
+                  total: entries.reduce((sum, e) => sum + Number(e.amount), 0)
+                })}
+              />
+
+              <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 flex justify-between items-center mt-6">
+                <div className="flex items-center gap-2 text-stone-600">
+                  <Calculator className="w-4 h-4" />
+                  <span className="font-semibold">Total Monthly Adjustments</span>
+                </div>
+                <span className="text-xl font-bold text-[#007AFF]">
+                  KES {(totalMonthlyExpenses + Number(subscriptions.total)).toLocaleString()}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-8">
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider">Cash Flow Statement Entries</h3>
+                <EntryList 
+                  label="Cash Flow Entries" 
+                  entries={statements.cash_flow.entries}
+                  onChange={(entries) => setStatements({
+                    ...statements,
+                    cash_flow: { ...statements.cash_flow, entries }
+                  })}
+                />
+                <textarea
+                  placeholder="Cash flow notes..."
+                  value={statements.cash_flow.notes}
+                  onChange={(e) => setStatements({
+                    ...statements,
+                    cash_flow: { ...statements.cash_flow, notes: e.target.value }
+                  })}
+                  className="w-full h-20 p-3 rounded-xl border border-stone-200 text-sm focus:ring-1 focus:ring-[#007AFF] outline-none"
+                />
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider">Balance Sheet Entries</h3>
+                <EntryList 
+                  label="Balance Sheet Entries" 
+                  entries={statements.balance_sheet.entries}
+                  onChange={(entries) => setStatements({
+                    ...statements,
+                    balance_sheet: { ...statements.balance_sheet, entries }
+                  })}
+                />
+                <textarea
+                  placeholder="Balance sheet notes..."
+                  value={statements.balance_sheet.notes}
+                  onChange={(e) => setStatements({
+                    ...statements,
+                    balance_sheet: { ...statements.balance_sheet, notes: e.target.value }
+                  })}
+                  className="w-full h-20 p-3 rounded-xl border border-stone-200 text-sm focus:ring-1 focus:ring-[#007AFF] outline-none"
+                />
+              </div>
             </div>
-            <span className="text-xl font-bold text-[#007AFF]">KES {totalMonthlyExpenses.toLocaleString()}</span>
-          </div>
+          )}
         </div>
 
         {/* Footer */}

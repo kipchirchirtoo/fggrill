@@ -246,7 +246,13 @@ export const generatePayrollSummaryPDF = (data: PayrollSummaryData): Promise<Buf
         let currentY = tableTop + 20;
 
         // Records
-        data.records.forEach((r, i) => {
+        const sortedRecords = [...data.records].sort((a, b) => {
+            const idA = String(a.employee_code || '');
+            const idB = String(b.employee_code || '');
+            return idA.localeCompare(idB);
+        });
+
+        sortedRecords.forEach((r, i) => {
             if (i % 2 === 1) doc.rect(30, currentY, 780, 18).fill('#f9fafb');
             
             doc.fillColor(PRIMARY).font('Helvetica').fontSize(8);

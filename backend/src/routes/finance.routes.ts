@@ -29,7 +29,8 @@ import {
   getDailyRecordByDate,
   saveDailyRecord,
   getMonthlyAdjustments,
-  saveMonthlyAdjustment
+  saveMonthlyAdjustment,
+  exportMonthlyStatement
 } from '../controllers/financial-workspace.controller';
 import { DirectorController } from '../controllers/director.controller';
 import { DirectorEnhancedController } from '../controllers/director-enhanced.controller';
@@ -153,6 +154,11 @@ router.get('/workspace/monthly',
 router.post('/workspace/monthly',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   saveMonthlyAdjustment
+);
+
+router.get('/workspace/export',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.DIRECTOR]),
+  exportMonthlyStatement
 );
 
 // ============== ADVANCED FINANCIAL TOOLS ==============

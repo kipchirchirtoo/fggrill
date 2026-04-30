@@ -1402,7 +1402,17 @@ export async function generateBrandedPayrollSummaryV2(
   let sumBasic = 0, sumAdditions = 0, sumGross = 0, sumNssf = 0, sumShif = 0;
   let sumLoans = 0, sumAdvances = 0, sumUnpaid = 0, sumOther = 0, sumTotalDed = 0, sumNet = 0;
 
-  records.forEach((r, i) => {
+  const sortedRecords = [...records].sort((a, b) => {
+    const branchA = String(a.branch_id || '');
+    const branchB = String(b.branch_id || '');
+    if (branchA !== branchB) return branchA.localeCompare(branchB);
+    
+    const idA = String(a.employee_code || a.id || '');
+    const idB = String(b.employee_code || b.id || '');
+    return idA.localeCompare(idB);
+  });
+
+  sortedRecords.forEach((r, i) => {
     if (y > 790) { // Page break — A3 landscape is 842pt, leave room for footer
       doc.addPage();
       y = drawHeader(doc, title + ' (cont.)', `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()}`);

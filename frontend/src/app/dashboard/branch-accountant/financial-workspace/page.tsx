@@ -166,7 +166,15 @@ export default function FinancialWorkspacePage() {
               <IOSButton
                 variant="primary"
                 leftIcon={<Download />}
-                onClick={() => toast.info('Export functionality coming soon')}
+                onClick={() => {
+                  if (!currentBranchId) return;
+                  const url = financeAPI.workspace.exportMonthlyStatement({
+                    branch_id: currentBranchId,
+                    fiscal_year: currentDate.getFullYear(),
+                    fiscal_month: currentDate.getMonth() + 1
+                  });
+                  window.open(`${process.env.NEXT_PUBLIC_API_URL || 'https://api.fggrill.com'}${url}`, '_blank');
+                }}
               >
                 Export Month
               </IOSButton>

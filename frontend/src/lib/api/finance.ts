@@ -165,7 +165,9 @@ export const financeAPI = {
     getDailyRecordByDate: (date: string, params?: any) => fetchAPI<any>(`/finance/workspace/daily/${date}${buildQuery(params)}`),
     saveDailyRecord: (data: any) => fetchAPI<any>('/finance/workspace/daily', { method: 'POST', body: JSON.stringify(data) }),
     getMonthlyAdjustments: (params?: any) => fetchAPI<any[]>(`/finance/workspace/monthly${buildQuery(params)}`),
-    saveMonthlyAdjustment: (data: any) => fetchAPI<any>('/finance/workspace/monthly', { method: 'POST', body: JSON.stringify(data) })
+    saveMonthlyAdjustment: (data: any) => fetchAPI<any>('/finance/workspace/monthly', { method: 'POST', body: JSON.stringify(data) }),
+    exportMonthlyStatement: (params: { branch_id: number; fiscal_year: number; fiscal_month: number }) => 
+      `/api/finance/workspace/export${buildQuery(params)}`
   },
 
   director: {
