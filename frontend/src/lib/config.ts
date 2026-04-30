@@ -3,10 +3,23 @@
  */
 
 const normalizeUrl = (url: string | undefined, defaultUrl: string): string => {
-    if (!url || typeof url !== 'string') return defaultUrl;
+    if (!url || typeof url !== 'string') {
+        if (typeof window !== 'undefined') {
+            console.warn(`API URL not provided, using default: ${defaultUrl}`);
+        }
+        return defaultUrl;
+    }
 
     // Remove any trailing slashes and trim whitespace
     let normalized = url.trim().replace(/\/$/, '');
+
+    // If empty after trimming, use default
+    if (!normalized) {
+        if (typeof window !== 'undefined') {
+            console.warn(`Empty API URL provided, using default: ${defaultUrl}`);
+        }
+        return defaultUrl;
+    }
 
     // If it's just a protocol-relative URL (starts with //), add https:
     if (normalized.startsWith('//')) {
@@ -28,6 +41,11 @@ const normalizeUrl = (url: string | undefined, defaultUrl: string): string => {
         return defaultUrl;
     }
 
+    // Log the normalized URL in development for debugging
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+        console.log(`API URL normalized: ${url} → ${normalized}`);
+    }
+
     return normalized;
 };
 
@@ -46,6 +64,20 @@ export const PYTHON_API_URL = normalizeUrl(process.env.NEXT_PUBLIC_PYTHON_SERVIC
 export const PYTHON_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const ROOM_SERVICE_URL = PYTHON_API_URL; // Alias for consistency
 export const REPORTS_SERVICE_URL = normalizeUrl(process.env.NEXT_PUBLIC_REPORTS_SERVICE_URL, DEFAULT_REPORTS_URL);
+
+// Runtime validation - ensure URLs are absolute
+if (typeof window !== 'undefined') {
+    const validateUrl = (url: string, name: string) => {
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            console.error(`❌ ${name} is not an absolute URL: ${url}`);
+            console.error('This will cause fetch requests to fail. Check your environment variables.');
+        }
+    };
+    
+    validateUrl(API_URL, 'API_URL');
+    validateUrl(PYTHON_API_URL, 'PYTHON_API_URL');
+    validateUrl(REPORTS_SERVICE_URL, 'REPORTS_SERVICE_URL');
+}
 
 
 

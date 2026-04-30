@@ -114,13 +114,13 @@ export class DiscrepancyController {
   static async respondToFlag(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { response } = req.body;
+      const { accountant_response } = req.body; // Changed from 'response' to 'accountant_response'
       const userId = (req as any).user.id;
 
       const { data, error } = await supabase
         .from('discrepancy_flags')
         .update({
-          accountant_response: response,
+          accountant_response,
           accountant_id: userId,
           status: 'UNDER_REVIEW',
           updated_at: new Date()

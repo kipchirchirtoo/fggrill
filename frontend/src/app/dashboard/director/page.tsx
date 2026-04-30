@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { format, subDays } from 'date-fns';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/config';
 
 const COLORS = ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#5856D6'];
 
@@ -41,7 +42,7 @@ export default function DirectorDashboardEnhanced() {
   useEffect(() => {
     const fetchBranches = async () => {
       try {
-        const response = await fetch('/api/finance/branches', {
+        const response = await fetch(`${API_URL}/api/finance/branches`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }

@@ -1,21 +1,44 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth, UserRole } from '@/lib/auth-context';
-import { useBranch } from '@/lib/branch-context';
-import { ProtectedRoute } from '@/components/auth/protected-route';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/minimal/card";
-import { IOSBadge } from '@/components/ui/ios-badge';
-import { IOSButton } from '@/components/ui/ios-button';
-import { staffAPI } from '@/lib/api';
+import { useState, useEffect, useCallback } from "react";
+import { useAuth, UserRole } from "@/lib/auth-context";
+import { useBranch } from "@/lib/branch-context";
+import { ProtectedRoute } from "@/components/auth/protected-route";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
-  RefreshCw, Calendar, Users, Plus, Search, CheckCircle2, XCircle, Clock,
-  Eye, FileText, AlertCircle, Download, Filter, History
-} from 'lucide-react';
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
-import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+  Card,
+  CardHeader,
+  CardContent,
+  CardTitle,
+} from "@/components/ui/minimal/card";
+import { IOSBadge } from "@/components/ui/ios-badge";
+import { IOSButton } from "@/components/ui/ios-button";
+import { staffAPI } from "@/lib/api";
+import {
+  RefreshCw,
+  Calendar,
+  Users,
+  Plus,
+  Search,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Eye,
+  FileText,
+  AlertCircle,
+  Download,
+  Filter,
+  History,
+} from "lucide-react";
+import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { API_URL } from "@/lib/config";
 
 interface LeaveRequest {
   id: string;
@@ -23,7 +46,7 @@ interface LeaveRequest {
   leave_type: string;
   start_date: string;
   end_date: string;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status: "pending" | "approved" | "rejected" | "cancelled";
   reason?: string;
   notes?: string;
   approved_by?: string;
@@ -46,12 +69,28 @@ interface LeaveRequest {
 }
 
 const LEAVE_TYPES = [
-  { value: 'annual', label: 'Annual Leave', color: 'bg-blue-100 text-blue-700' },
-  { value: 'sick', label: 'Sick Leave', color: 'bg-red-100 text-red-700' },
-  { value: 'maternity', label: 'Maternity Leave', color: 'bg-pink-100 text-pink-700' },
-  { value: 'paternity', label: 'Paternity Leave', color: 'bg-purple-100 text-purple-700' },
-  { value: 'unpaid', label: 'Unpaid Leave', color: 'bg-gray-100 text-gray-700' },
-  { value: 'other', label: 'Other', color: 'bg-amber-100 text-amber-700' },
+  {
+    value: "annual",
+    label: "Annual Leave",
+    color: "bg-blue-100 text-blue-700",
+  },
+  { value: "sick", label: "Sick Leave", color: "bg-red-100 text-red-700" },
+  {
+    value: "maternity",
+    label: "Maternity Leave",
+    color: "bg-pink-100 text-pink-700",
+  },
+  {
+    value: "paternity",
+    label: "Paternity Leave",
+    color: "bg-purple-100 text-purple-700",
+  },
+  {
+    value: "unpaid",
+    label: "Unpaid Leave",
+    color: "bg-gray-100 text-gray-700",
+  },
+  { value: "other", label: "Other", color: "bg-amber-100 text-amber-700" },
 ];
 
 export default function LeaveManagementPage() {
@@ -60,32 +99,34 @@ export default function LeaveManagementPage() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<"active" | "history">("active");
   const [dateFilter, setDateFilter] = useState({
-    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-    end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+    start: format(startOfMonth(new Date()), "yyyy-MM-dd"),
+    end: format(endOfMonth(new Date()), "yyyy-MM-dd"),
   });
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showReportDutyModal, setShowReportDutyModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(
+    null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const [leaveForm, setLeaveForm] = useState({
-    staff_id: '',
-    leave_type: 'annual',
-    start_date: '',
-    end_date: '',
-    reason: ''
+    staff_id: "",
+    leave_type: "annual",
+    start_date: "",
+    end_date: "",
+    reason: "",
   });
 
   const [reportDutyForm, setReportDutyForm] = useState({
-    actual_return_date: '',
-    report_notes: ''
+    actual_return_date: "",
+    report_notes: "",
   });
 
   const currentBranchId = activeBranchId || user?.branch_id;
@@ -96,7 +137,7 @@ export default function LeaveManagementPage() {
     try {
       const [leaveRes, staffRes] = await Promise.all([
         staffAPI.getLeaveRequests({ branch_id: currentBranchId }),
-        staffAPI.getStaff(currentBranchId)
+        staffAPI.getStaff(currentBranchId),
       ]);
 
       if (leaveRes.success) {
@@ -107,8 +148,8 @@ export default function LeaveManagementPage() {
         setStaffList(staffRes.data || []);
       }
     } catch (error) {
-      console.error('Error fetching leave data:', error);
-      toast.error('Failed to load leave requests');
+      console.error("Error fetching leave data:", error);
+      toast.error("Failed to load leave requests");
     } finally {
       setIsLoading(false);
     }
@@ -118,44 +159,56 @@ export default function LeaveManagementPage() {
     fetchData();
   }, [fetchData]);
 
-  const filteredRequests = leaveRequests.filter(req => {
-    const matchesSearch = searchQuery === '' || 
-      `${req.staff?.first_name} ${req.staff?.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const filteredRequests = leaveRequests.filter((req) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      `${req.staff?.first_name} ${req.staff?.last_name}`
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()) ||
       req.staff?.id_number?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
-    
+
+    const matchesStatus = statusFilter === "all" || req.status === statusFilter;
+
     // Tab filtering
     const today = new Date();
     const endDate = new Date(req.end_date);
-    const isActive = activeTab === 'active' ? endDate >= today : endDate < today;
-    
+    const isActive =
+      activeTab === "active" ? endDate >= today : endDate < today;
+
     // Date range filtering
     const requestDate = new Date(req.created_at);
-    const matchesDateRange = !showDateFilter || (
-      requestDate >= new Date(dateFilter.start) && 
-      requestDate <= new Date(dateFilter.end)
-    );
-    
+    const matchesDateRange =
+      !showDateFilter ||
+      (requestDate >= new Date(dateFilter.start) &&
+        requestDate <= new Date(dateFilter.end));
+
     return matchesSearch && matchesStatus && isActive && matchesDateRange;
   });
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'approved': return 'success';
-      case 'rejected': return 'danger';
-      case 'pending': return 'warning';
-      case 'cancelled': return 'secondary';
-      default: return 'info';
+      case "approved":
+        return "success";
+      case "rejected":
+        return "danger";
+      case "pending":
+        return "warning";
+      case "cancelled":
+        return "secondary";
+      default:
+        return "info";
     }
   };
 
   const getLeaveTypeLabel = (type: string) => {
-    return LEAVE_TYPES.find(t => t.value === type)?.label || type;
+    return LEAVE_TYPES.find((t) => t.value === type)?.label || type;
   };
 
   const getLeaveTypeColor = (type: string) => {
-    return LEAVE_TYPES.find(t => t.value === type)?.color || 'bg-gray-100 text-gray-700';
+    return (
+      LEAVE_TYPES.find((t) => t.value === type)?.color ||
+      "bg-gray-100 text-gray-700"
+    );
   };
 
   const calculateDays = (start: string, end: string) => {
@@ -168,38 +221,38 @@ export default function LeaveManagementPage() {
 
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!leaveForm.staff_id || !leaveForm.start_date || !leaveForm.end_date) {
-      toast.error('Please fill in all required fields');
+      toast.error("Please fill in all required fields");
       return;
     }
 
     if (new Date(leaveForm.end_date) < new Date(leaveForm.start_date)) {
-      toast.error('End date must be after start date');
+      toast.error("End date must be after start date");
       return;
     }
 
     setIsSubmitting(true);
     try {
       const response = await staffAPI.submitLeaveRequest(leaveForm);
-      
+
       if (response.success) {
-        toast.success('Leave request submitted successfully');
+        toast.success("Leave request submitted successfully");
         setShowRequestModal(false);
         setLeaveForm({
-          staff_id: '',
-          leave_type: 'annual',
-          start_date: '',
-          end_date: '',
-          reason: ''
+          staff_id: "",
+          leave_type: "annual",
+          start_date: "",
+          end_date: "",
+          reason: "",
         });
         fetchData();
       } else {
-        toast.error(response.message || 'Failed to submit leave request');
+        toast.error(response.message || "Failed to submit leave request");
       }
     } catch (error) {
-      console.error('Error submitting leave request:', error);
-      toast.error('Failed to submit leave request');
+      console.error("Error submitting leave request:", error);
+      toast.error("Failed to submit leave request");
     } finally {
       setIsSubmitting(false);
     }
@@ -209,15 +262,15 @@ export default function LeaveManagementPage() {
     try {
       const response = await staffAPI.approveLeaveRequest(id);
       if (response.success) {
-        toast.success('Leave request approved');
+        toast.success("Leave request approved");
         fetchData();
         setShowDetailsModal(false);
       } else {
-        toast.error('Failed to approve leave request');
+        toast.error("Failed to approve leave request");
       }
     } catch (error) {
-      console.error('Error approving leave:', error);
-      toast.error('Failed to approve leave request');
+      console.error("Error approving leave:", error);
+      toast.error("Failed to approve leave request");
     }
   };
 
@@ -225,41 +278,44 @@ export default function LeaveManagementPage() {
     try {
       const response = await staffAPI.rejectLeaveRequest(id);
       if (response.success) {
-        toast.success('Leave request rejected');
+        toast.success("Leave request rejected");
         fetchData();
         setShowDetailsModal(false);
       } else {
-        toast.error('Failed to reject leave request');
+        toast.error("Failed to reject leave request");
       }
     } catch (error) {
-      console.error('Error rejecting leave:', error);
-      toast.error('Failed to reject leave request');
+      console.error("Error rejecting leave:", error);
+      toast.error("Failed to reject leave request");
     }
   };
 
   const handleReportToDuty = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedRequest) return;
 
     setIsSubmitting(true);
     try {
-      const response = await staffAPI.reportToDuty(selectedRequest.id, reportDutyForm);
-      
+      const response = await staffAPI.reportToDuty(
+        selectedRequest.id,
+        reportDutyForm,
+      );
+
       if (response.success) {
-        toast.success('Employee reported to duty successfully');
+        toast.success("Employee reported to duty successfully");
         setShowReportDutyModal(false);
         setReportDutyForm({
-          actual_return_date: '',
-          report_notes: ''
+          actual_return_date: "",
+          report_notes: "",
         });
         fetchData();
       } else {
-        toast.error(response.message || 'Failed to report to duty');
+        toast.error(response.message || "Failed to report to duty");
       }
     } catch (error) {
-      console.error('Error reporting to duty:', error);
-      toast.error('Failed to report to duty');
+      console.error("Error reporting to duty:", error);
+      toast.error("Failed to report to duty");
     } finally {
       setIsSubmitting(false);
     }
@@ -267,55 +323,57 @@ export default function LeaveManagementPage() {
 
   const stats = {
     total: leaveRequests.length,
-    pending: leaveRequests.filter(r => r.status === 'pending').length,
-    approved: leaveRequests.filter(r => r.status === 'approved').length,
-    rejected: leaveRequests.filter(r => r.status === 'rejected').length,
+    pending: leaveRequests.filter((r) => r.status === "pending").length,
+    approved: leaveRequests.filter((r) => r.status === "approved").length,
+    rejected: leaveRequests.filter((r) => r.status === "rejected").length,
   };
 
   const handleExportPDF = async () => {
     setIsExporting(true);
     try {
-      toast.info('Generating branded PDF report...');
-      
-      const token = localStorage.getItem('token');
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      
+      toast.info("Generating branded PDF report...");
+
+      const token = localStorage.getItem("token");
+
       const filters: any = {
         branch_id: activeBranch?.id,
-        branch_name: activeBranch?.name || 'Branch Operations',
+        branch_name: activeBranch?.name || "Branch Operations",
         filter_type: activeTab,
       };
-      
+
       if (showDateFilter && dateFilter.start && dateFilter.end) {
         filters.start_date = dateFilter.start;
         filters.end_date = dateFilter.end;
       }
-      
-      const response = await fetch(`${API_URL}/api/reports/export?format=pdf&reportType=leave_management`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+
+      const response = await fetch(
+        `${API_URL}/api/reports/export?format=pdf&reportType=leave_management`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ filters }),
         },
-        body: JSON.stringify({ filters }),
-      });
-      
+      );
+
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`);
       }
-      
+
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.download = `FG_LeaveReport_${activeBranch?.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.download = `FG_LeaveReport_${activeBranch?.name.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
       link.click();
       URL.revokeObjectURL(url);
-      
-      toast.success('PDF report generated successfully');
+
+      toast.success("PDF report generated successfully");
     } catch (error) {
-      console.error('Error exporting PDF:', error);
-      toast.error('Failed to generate PDF report');
+      console.error("Error exporting PDF:", error);
+      toast.error("Failed to generate PDF report");
     } finally {
       setIsExporting(false);
     }
@@ -325,21 +383,31 @@ export default function LeaveManagementPage() {
     const end = new Date();
     const start = subDays(end, days);
     setDateFilter({
-      start: format(start, 'yyyy-MM-dd'),
-      end: format(end, 'yyyy-MM-dd')
+      start: format(start, "yyyy-MM-dd"),
+      end: format(end, "yyyy-MM-dd"),
     });
     setShowDateFilter(true);
   };
 
   return (
-    <ProtectedRoute allowedRoles={[UserRole.BRANCH_MANAGER, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute
+      allowedRoles={[
+        UserRole.BRANCH_MANAGER,
+        UserRole.GENERAL_MANAGER,
+        UserRole.SUPER_ADMIN,
+      ]}
+    >
       <DashboardLayout>
         <div className="max-w-7xl mx-auto space-y-8 pb-10">
           {/* Header Section */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div>
-              <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">Leave Management</h1>
-              <p className="text-sm text-stone-500 mt-1">Manage staff leave requests for {activeBranch?.name}</p>
+              <h1 className="text-2xl font-semibold text-stone-900 tracking-tight">
+                Leave Management
+              </h1>
+              <p className="text-sm text-stone-500 mt-1">
+                Manage staff leave requests for {activeBranch?.name}
+              </p>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -347,7 +415,9 @@ export default function LeaveManagementPage() {
                 className="h-10 w-10 flex items-center justify-center border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
                 title="Refresh data"
               >
-                <RefreshCw className={`h-4 w-4 text-stone-600 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`h-4 w-4 text-stone-600 ${isLoading ? "animate-spin" : ""}`}
+                />
               </button>
               <IOSButton
                 onClick={handleExportPDF}
@@ -356,7 +426,7 @@ export default function LeaveManagementPage() {
                 disabled={isExporting || filteredRequests.length === 0}
               >
                 <Download className="h-4 w-4" />
-                {isExporting ? 'Exporting...' : 'Export PDF'}
+                {isExporting ? "Exporting..." : "Export PDF"}
               </IOSButton>
               <IOSButton
                 onClick={() => setShowRequestModal(true)}
@@ -371,11 +441,11 @@ export default function LeaveManagementPage() {
           {/* Tabs */}
           <div className="flex items-center gap-2 border-b border-stone-200">
             <button
-              onClick={() => setActiveTab('active')}
+              onClick={() => setActiveTab("active")}
               className={`px-6 py-3 text-sm font-medium transition-colors relative ${
-                activeTab === 'active'
-                  ? 'text-amber-700 border-b-2 border-amber-600'
-                  : 'text-stone-500 hover:text-stone-700'
+                activeTab === "active"
+                  ? "text-amber-700 border-b-2 border-amber-600"
+                  : "text-stone-500 hover:text-stone-700"
               }`}
             >
               <div className="flex items-center gap-2">
@@ -384,11 +454,11 @@ export default function LeaveManagementPage() {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('history')}
+              onClick={() => setActiveTab("history")}
               className={`px-6 py-3 text-sm font-medium transition-colors relative ${
-                activeTab === 'history'
-                  ? 'text-amber-700 border-b-2 border-amber-600'
-                  : 'text-stone-500 hover:text-stone-700'
+                activeTab === "history"
+                  ? "text-amber-700 border-b-2 border-amber-600"
+                  : "text-stone-500 hover:text-stone-700"
               }`}
             >
               <div className="flex items-center gap-2">
@@ -401,17 +471,44 @@ export default function LeaveManagementPage() {
           {/* Stats Overview */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
-              { label: 'Total Requests', value: stats.total, icon: FileText, color: 'text-stone-600' },
-              { label: 'Pending', value: stats.pending, icon: Clock, color: 'text-amber-600' },
-              { label: 'Approved', value: stats.approved, icon: CheckCircle2, color: 'text-green-600' },
-              { label: 'Rejected', value: stats.rejected, icon: XCircle, color: 'text-red-600' },
+              {
+                label: "Total Requests",
+                value: stats.total,
+                icon: FileText,
+                color: "text-stone-600",
+              },
+              {
+                label: "Pending",
+                value: stats.pending,
+                icon: Clock,
+                color: "text-amber-600",
+              },
+              {
+                label: "Approved",
+                value: stats.approved,
+                icon: CheckCircle2,
+                color: "text-green-600",
+              },
+              {
+                label: "Rejected",
+                value: stats.rejected,
+                icon: XCircle,
+                color: "text-red-600",
+              },
             ].map((stat, i) => (
-              <div key={i} className="bg-white border border-stone-100 rounded-xl p-5 shadow-sm">
+              <div
+                key={i}
+                className="bg-white border border-stone-100 rounded-xl p-5 shadow-sm"
+              >
                 <div className="flex items-center gap-2.5 mb-2">
                   <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                  <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider">{stat.label}</span>
+                  <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider">
+                    {stat.label}
+                  </span>
                 </div>
-                <div className="text-2xl font-bold text-stone-900">{stat.value}</div>
+                <div className="text-2xl font-bold text-stone-900">
+                  {stat.value}
+                </div>
               </div>
             ))}
           </div>
@@ -446,8 +543,8 @@ export default function LeaveManagementPage() {
                     onClick={() => setShowDateFilter(!showDateFilter)}
                     className={`h-10 px-4 flex items-center gap-2 text-sm border rounded-lg transition-colors ${
                       showDateFilter
-                        ? 'bg-amber-50 border-amber-200 text-amber-700'
-                        : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                        ? "bg-amber-50 border-amber-200 text-amber-700"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
                     }`}
                   >
                     <Filter className="h-4 w-4" />
@@ -459,7 +556,9 @@ export default function LeaveManagementPage() {
                 {showDateFilter && (
                   <div className="p-4 bg-stone-50 border border-stone-200 rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-stone-700">Filter by Date Range</span>
+                      <span className="text-sm font-medium text-stone-700">
+                        Filter by Date Range
+                      </span>
                       <button
                         onClick={() => setShowDateFilter(false)}
                         className="text-xs text-stone-500 hover:text-stone-700"
@@ -469,20 +568,34 @@ export default function LeaveManagementPage() {
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <div>
-                        <label className="text-xs text-stone-500 mb-1 block">Start Date</label>
+                        <label className="text-xs text-stone-500 mb-1 block">
+                          Start Date
+                        </label>
                         <input
                           type="date"
                           value={dateFilter.start}
-                          onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
+                          onChange={(e) =>
+                            setDateFilter({
+                              ...dateFilter,
+                              start: e.target.value,
+                            })
+                          }
                           className="w-full h-9 px-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-stone-500 mb-1 block">End Date</label>
+                        <label className="text-xs text-stone-500 mb-1 block">
+                          End Date
+                        </label>
                         <input
                           type="date"
                           value={dateFilter.end}
-                          onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
+                          onChange={(e) =>
+                            setDateFilter({
+                              ...dateFilter,
+                              end: e.target.value,
+                            })
+                          }
                           className="w-full h-9 px-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
                         />
                       </div>
@@ -501,8 +614,11 @@ export default function LeaveManagementPage() {
                       <button
                         onClick={() => {
                           setDateFilter({
-                            start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-                            end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+                            start: format(
+                              startOfMonth(new Date()),
+                              "yyyy-MM-dd",
+                            ),
+                            end: format(endOfMonth(new Date()), "yyyy-MM-dd"),
                           });
                         }}
                         className="h-9 px-3 text-xs bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
@@ -519,78 +635,140 @@ export default function LeaveManagementPage() {
           {/* Leave Requests Table */}
           <Card className="border-stone-100 shadow-sm overflow-hidden">
             <CardHeader className="border-b border-stone-50 bg-white py-5 px-6">
-              <CardTitle className="text-lg font-medium text-stone-900">Leave Requests</CardTitle>
+              <CardTitle className="text-lg font-medium text-stone-900">
+                Leave Requests
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-stone-50/50 border-b border-stone-100">
-                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Employee</th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Leave Type</th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Duration</th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Days</th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">Requested</th>
-                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider text-right">Actions</th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        Employee
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        Leave Type
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        Duration
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        Days
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        Requested
+                      </th>
+                      <th className="px-6 py-4 text-[11px] font-bold text-stone-400 uppercase tracking-wider text-right">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-50">
                     {isLoading ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-16 text-center text-stone-400">
+                        <td
+                          colSpan={7}
+                          className="px-6 py-16 text-center text-stone-400"
+                        >
                           <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-3 opacity-20" />
-                          <span className="text-sm">Loading leave requests...</span>
+                          <span className="text-sm">
+                            Loading leave requests...
+                          </span>
                         </td>
                       </tr>
                     ) : filteredRequests.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-16 text-center text-stone-400">
-                          <span className="text-sm">No leave requests found.</span>
+                        <td
+                          colSpan={7}
+                          className="px-6 py-16 text-center text-stone-400"
+                        >
+                          <span className="text-sm">
+                            No leave requests found.
+                          </span>
                         </td>
                       </tr>
                     ) : (
                       filteredRequests.map((request) => (
-                        <tr key={request.id} className="hover:bg-stone-50/30 transition-colors">
+                        <tr
+                          key={request.id}
+                          className="hover:bg-stone-50/30 transition-colors"
+                        >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 font-semibold text-xs">
-                                {request.staff?.first_name?.[0]}{request.staff?.last_name?.[0]}
+                                {request.staff?.first_name?.[0]}
+                                {request.staff?.last_name?.[0]}
                               </div>
                               <div>
                                 <div className="text-sm font-medium text-stone-900">
-                                  {request.staff?.first_name} {request.staff?.last_name}
+                                  {request.staff?.first_name}{" "}
+                                  {request.staff?.last_name}
                                 </div>
-                                <div className="text-[11px] text-stone-400">{request.staff?.id_number || '-'}</div>
+                                <div className="text-[11px] text-stone-400">
+                                  {request.staff?.id_number || "-"}
+                                </div>
                               </div>
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getLeaveTypeColor(request.leave_type)}`}>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getLeaveTypeColor(request.leave_type)}`}
+                            >
                               {getLeaveTypeLabel(request.leave_type)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-stone-600">
-                            <div>{format(new Date(request.start_date), 'MMM dd, yyyy')}</div>
-                            <div className="text-[11px] text-stone-400">to {format(new Date(request.end_date), 'MMM dd, yyyy')}</div>
-                          </td>
-                          <td className="px-6 py-4 text-sm font-medium text-stone-900">
-                            {calculateDays(request.start_date, request.end_date)} days
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <IOSBadge color={getStatusColor(request.status)} variant="light" size="sm">
-                                {request.status.toUpperCase()}
-                              </IOSBadge>
-                              {request.status === 'approved' && request.reported_to_duty && (
-                                <IOSBadge color="info" variant="light" size="sm">
-                                  RETURNED
-                                </IOSBadge>
+                            <div>
+                              {format(
+                                new Date(request.start_date),
+                                "MMM dd, yyyy",
+                              )}
+                            </div>
+                            <div className="text-[11px] text-stone-400">
+                              to{" "}
+                              {format(
+                                new Date(request.end_date),
+                                "MMM dd, yyyy",
                               )}
                             </div>
                           </td>
+                          <td className="px-6 py-4 text-sm font-medium text-stone-900">
+                            {calculateDays(
+                              request.start_date,
+                              request.end_date,
+                            )}{" "}
+                            days
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <IOSBadge
+                                color={getStatusColor(request.status)}
+                                variant="light"
+                                size="sm"
+                              >
+                                {request.status.toUpperCase()}
+                              </IOSBadge>
+                              {request.status === "approved" &&
+                                request.reported_to_duty && (
+                                  <IOSBadge
+                                    color="info"
+                                    variant="light"
+                                    size="sm"
+                                  >
+                                    RETURNED
+                                  </IOSBadge>
+                                )}
+                            </div>
+                          </td>
                           <td className="px-6 py-4 text-sm text-stone-600">
-                            {format(new Date(request.created_at), 'MMM dd, yyyy')}
+                            {format(
+                              new Date(request.created_at),
+                              "MMM dd, yyyy",
+                            )}
                           </td>
                           <td className="px-6 py-4 text-right">
                             <button
@@ -624,27 +802,36 @@ export default function LeaveManagementPage() {
 
               <form onSubmit={handleSubmitRequest} className="space-y-6 py-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-stone-700">Employee *</label>
+                  <label className="text-sm font-medium text-stone-700">
+                    Employee *
+                  </label>
                   <select
                     value={leaveForm.staff_id}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, staff_id: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, staff_id: e.target.value })
+                    }
                     className="w-full h-10 px-3 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
                     required
                   >
                     <option value="">Select employee...</option>
                     {staffList.map((staff) => (
                       <option key={staff.id} value={staff.id}>
-                        {staff.first_name} {staff.last_name} - {staff.id_number || staff.id.substring(0, 8)}
+                        {staff.first_name} {staff.last_name} -{" "}
+                        {staff.id_number || staff.id.substring(0, 8)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-stone-700">Leave Type *</label>
+                  <label className="text-sm font-medium text-stone-700">
+                    Leave Type *
+                  </label>
                   <select
                     value={leaveForm.leave_type}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, leave_type: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, leave_type: e.target.value })
+                    }
                     className="w-full h-10 px-3 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
                     required
                   >
@@ -658,21 +845,32 @@ export default function LeaveManagementPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-stone-700">Start Date *</label>
+                    <label className="text-sm font-medium text-stone-700">
+                      Start Date *
+                    </label>
                     <input
                       type="date"
                       value={leaveForm.start_date}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
+                      onChange={(e) =>
+                        setLeaveForm({
+                          ...leaveForm,
+                          start_date: e.target.value,
+                        })
+                      }
                       className="w-full h-10 px-3 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-stone-700">End Date *</label>
+                    <label className="text-sm font-medium text-stone-700">
+                      End Date *
+                    </label>
                     <input
                       type="date"
                       value={leaveForm.end_date}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                      onChange={(e) =>
+                        setLeaveForm({ ...leaveForm, end_date: e.target.value })
+                      }
                       className="w-full h-10 px-3 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
                       required
                     />
@@ -684,17 +882,26 @@ export default function LeaveManagementPage() {
                     <div className="flex items-center gap-2 text-blue-700">
                       <AlertCircle className="h-4 w-4" />
                       <span className="text-sm font-medium">
-                        Duration: {calculateDays(leaveForm.start_date, leaveForm.end_date)} days
+                        Duration:{" "}
+                        {calculateDays(
+                          leaveForm.start_date,
+                          leaveForm.end_date,
+                        )}{" "}
+                        days
                       </span>
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-stone-700">Reason</label>
+                  <label className="text-sm font-medium text-stone-700">
+                    Reason
+                  </label>
                   <textarea
                     value={leaveForm.reason}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                    onChange={(e) =>
+                      setLeaveForm({ ...leaveForm, reason: e.target.value })
+                    }
                     rows={4}
                     className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none resize-none"
                     placeholder="Optional: Provide reason for leave..."
@@ -716,7 +923,7 @@ export default function LeaveManagementPage() {
                     className="flex-1"
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Submitting...' : 'Submit Request'}
+                    {isSubmitting ? "Submitting..." : "Submit Request"}
                   </IOSButton>
                 </div>
               </form>
@@ -737,18 +944,26 @@ export default function LeaveManagementPage() {
                 <div className="space-y-6 py-4">
                   <div className="flex items-center gap-5 p-4 bg-stone-50 rounded-2xl border border-stone-100">
                     <div className="w-16 h-16 rounded-full bg-stone-200 flex items-center justify-center text-stone-700 font-bold text-xl shadow-sm">
-                      {selectedRequest.staff?.first_name?.[0]}{selectedRequest.staff?.last_name?.[0]}
+                      {selectedRequest.staff?.first_name?.[0]}
+                      {selectedRequest.staff?.last_name?.[0]}
                     </div>
                     <div className="flex-1">
                       <h4 className="text-xl font-bold text-stone-900 tracking-tight">
-                        {selectedRequest.staff?.first_name} {selectedRequest.staff?.last_name}
+                        {selectedRequest.staff?.first_name}{" "}
+                        {selectedRequest.staff?.last_name}
                       </h4>
-                      <p className="text-sm text-stone-500 font-medium">{selectedRequest.staff?.department || '-'}</p>
+                      <p className="text-sm text-stone-500 font-medium">
+                        {selectedRequest.staff?.department || "-"}
+                      </p>
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-2 py-0.5 rounded">
-                          ID: {selectedRequest.staff?.id_number || '-'}
+                          ID: {selectedRequest.staff?.id_number || "-"}
                         </span>
-                        <IOSBadge color={getStatusColor(selectedRequest.status)} variant="light" size="sm">
+                        <IOSBadge
+                          color={getStatusColor(selectedRequest.status)}
+                          variant="light"
+                          size="sm"
+                        >
                           {selectedRequest.status.toUpperCase()}
                         </IOSBadge>
                       </div>
@@ -759,7 +974,9 @@ export default function LeaveManagementPage() {
                     <div className="p-4 bg-white border border-stone-200 rounded-xl shadow-sm">
                       <div className="flex items-center gap-2 text-stone-400 mb-2">
                         <Calendar className="h-3.5 w-3.5" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Leave Type</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider">
+                          Leave Type
+                        </span>
                       </div>
                       <div className="text-lg font-semibold text-stone-900">
                         {getLeaveTypeLabel(selectedRequest.leave_type)}
@@ -768,29 +985,47 @@ export default function LeaveManagementPage() {
                     <div className="p-4 bg-white border border-stone-200 rounded-xl shadow-sm">
                       <div className="flex items-center gap-2 text-stone-400 mb-2">
                         <Clock className="h-3.5 w-3.5" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Duration</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider">
+                          Duration
+                        </span>
                       </div>
                       <div className="text-lg font-semibold text-stone-900">
-                        {calculateDays(selectedRequest.start_date, selectedRequest.end_date)} days
+                        {calculateDays(
+                          selectedRequest.start_date,
+                          selectedRequest.end_date,
+                        )}{" "}
+                        days
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider px-1">Period</label>
+                    <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider px-1">
+                      Period
+                    </label>
                     <div className="p-4 bg-stone-50 border border-stone-100 rounded-xl">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-xs text-stone-500 mb-1">Start Date</div>
+                          <div className="text-xs text-stone-500 mb-1">
+                            Start Date
+                          </div>
                           <div className="text-sm font-semibold text-stone-900">
-                            {format(new Date(selectedRequest.start_date), 'MMMM dd, yyyy')}
+                            {format(
+                              new Date(selectedRequest.start_date),
+                              "MMMM dd, yyyy",
+                            )}
                           </div>
                         </div>
                         <div className="text-stone-300">→</div>
                         <div>
-                          <div className="text-xs text-stone-500 mb-1">End Date</div>
+                          <div className="text-xs text-stone-500 mb-1">
+                            End Date
+                          </div>
                           <div className="text-sm font-semibold text-stone-900">
-                            {format(new Date(selectedRequest.end_date), 'MMMM dd, yyyy')}
+                            {format(
+                              new Date(selectedRequest.end_date),
+                              "MMMM dd, yyyy",
+                            )}
                           </div>
                         </div>
                       </div>
@@ -799,7 +1034,9 @@ export default function LeaveManagementPage() {
 
                   {selectedRequest.reason && (
                     <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider px-1">Reason</label>
+                      <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider px-1">
+                        Reason
+                      </label>
                       <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl text-stone-700 text-sm leading-relaxed">
                         {selectedRequest.reason}
                       </div>
@@ -808,14 +1045,16 @@ export default function LeaveManagementPage() {
 
                   {selectedRequest.notes && (
                     <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider px-1">Admin Notes</label>
+                      <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider px-1">
+                        Admin Notes
+                      </label>
                       <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-xl text-stone-700 text-sm leading-relaxed">
                         {selectedRequest.notes}
                       </div>
                     </div>
                   )}
 
-                  {selectedRequest.status === 'pending' && (
+                  {selectedRequest.status === "pending" && (
                     <div className="flex gap-3 pt-6 border-t border-stone-100">
                       <IOSButton
                         variant="secondary"
@@ -835,52 +1074,65 @@ export default function LeaveManagementPage() {
                     </div>
                   )}
 
-                  {selectedRequest.status === 'approved' && !selectedRequest.reported_to_duty && (
-                    <div className="pt-6 border-t border-stone-100">
-                      <IOSButton
-                        onClick={() => {
-                          setShowDetailsModal(false);
-                          setShowReportDutyModal(true);
-                          setReportDutyForm({
-                            actual_return_date: new Date().toISOString().split('T')[0],
-                            report_notes: ''
-                          });
-                        }}
-                        className="w-full bg-green-600 hover:bg-green-700"
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Report to Duty
-                      </IOSButton>
-                    </div>
-                  )}
-
-                  {selectedRequest.status === 'approved' && selectedRequest.reported_to_duty && (
-                    <div className="space-y-4 pt-6 border-t border-stone-100">
-                      <div className="p-4 bg-green-50 border border-green-100 rounded-xl">
-                        <div className="flex items-center gap-2 text-green-700 mb-2">
-                          <CheckCircle2 className="h-4 w-4" />
-                          <span className="text-sm font-semibold">Employee Returned to Duty</span>
-                        </div>
-                        <div className="text-xs text-green-600">
-                          Returned on: {selectedRequest.actual_return_date ? format(new Date(selectedRequest.actual_return_date), 'MMMM dd, yyyy') : 'N/A'}
-                        </div>
-                        {selectedRequest.report_notes && (
-                          <div className="mt-2 text-xs text-green-700">
-                            Notes: {selectedRequest.report_notes}
-                          </div>
-                        )}
+                  {selectedRequest.status === "approved" &&
+                    !selectedRequest.reported_to_duty && (
+                      <div className="pt-6 border-t border-stone-100">
+                        <IOSButton
+                          onClick={() => {
+                            setShowDetailsModal(false);
+                            setShowReportDutyModal(true);
+                            setReportDutyForm({
+                              actual_return_date: new Date()
+                                .toISOString()
+                                .split("T")[0],
+                              report_notes: "",
+                            });
+                          }}
+                          className="w-full bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Report to Duty
+                        </IOSButton>
                       </div>
-                      <IOSButton
-                        variant="secondary"
-                        onClick={() => setShowDetailsModal(false)}
-                        className="w-full"
-                      >
-                        Close
-                      </IOSButton>
-                    </div>
-                  )}
+                    )}
 
-                  {(selectedRequest.status === 'rejected' || selectedRequest.status === 'cancelled') && (
+                  {selectedRequest.status === "approved" &&
+                    selectedRequest.reported_to_duty && (
+                      <div className="space-y-4 pt-6 border-t border-stone-100">
+                        <div className="p-4 bg-green-50 border border-green-100 rounded-xl">
+                          <div className="flex items-center gap-2 text-green-700 mb-2">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span className="text-sm font-semibold">
+                              Employee Returned to Duty
+                            </span>
+                          </div>
+                          <div className="text-xs text-green-600">
+                            Returned on:{" "}
+                            {selectedRequest.actual_return_date
+                              ? format(
+                                  new Date(selectedRequest.actual_return_date),
+                                  "MMMM dd, yyyy",
+                                )
+                              : "N/A"}
+                          </div>
+                          {selectedRequest.report_notes && (
+                            <div className="mt-2 text-xs text-green-700">
+                              Notes: {selectedRequest.report_notes}
+                            </div>
+                          )}
+                        </div>
+                        <IOSButton
+                          variant="secondary"
+                          onClick={() => setShowDetailsModal(false)}
+                          className="w-full"
+                        >
+                          Close
+                        </IOSButton>
+                      </div>
+                    )}
+
+                  {(selectedRequest.status === "rejected" ||
+                    selectedRequest.status === "cancelled") && (
                     <div className="pt-6 border-t border-stone-100">
                       <IOSButton
                         variant="secondary"
@@ -897,7 +1149,10 @@ export default function LeaveManagementPage() {
           </Dialog>
 
           {/* Report to Duty Modal */}
-          <Dialog open={showReportDutyModal} onOpenChange={setShowReportDutyModal}>
+          <Dialog
+            open={showReportDutyModal}
+            onOpenChange={setShowReportDutyModal}
+          >
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-xl">
@@ -910,18 +1165,24 @@ export default function LeaveManagementPage() {
                 <form onSubmit={handleReportToDuty} className="space-y-6 py-4">
                   <div className="flex items-center gap-5 p-4 bg-stone-50 rounded-2xl border border-stone-100">
                     <div className="w-16 h-16 rounded-full bg-stone-200 flex items-center justify-center text-stone-700 font-bold text-xl shadow-sm">
-                      {selectedRequest.staff?.first_name?.[0]}{selectedRequest.staff?.last_name?.[0]}
+                      {selectedRequest.staff?.first_name?.[0]}
+                      {selectedRequest.staff?.last_name?.[0]}
                     </div>
                     <div className="flex-1">
                       <h4 className="text-xl font-bold text-stone-900 tracking-tight">
-                        {selectedRequest.staff?.first_name} {selectedRequest.staff?.last_name}
+                        {selectedRequest.staff?.first_name}{" "}
+                        {selectedRequest.staff?.last_name}
                       </h4>
-                      <p className="text-sm text-stone-500 font-medium">{selectedRequest.staff?.department || '-'}</p>
+                      <p className="text-sm text-stone-500 font-medium">
+                        {selectedRequest.staff?.department || "-"}
+                      </p>
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-2 py-0.5 rounded">
-                          ID: {selectedRequest.staff?.id_number || '-'}
+                          ID: {selectedRequest.staff?.id_number || "-"}
                         </span>
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getLeaveTypeColor(selectedRequest.leave_type)}`}>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getLeaveTypeColor(selectedRequest.leave_type)}`}
+                        >
                           {getLeaveTypeLabel(selectedRequest.leave_type)}
                         </span>
                       </div>
@@ -931,32 +1192,65 @@ export default function LeaveManagementPage() {
                   <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
                     <div className="flex items-center gap-2 text-blue-700 mb-2">
                       <AlertCircle className="h-4 w-4" />
-                      <span className="text-sm font-semibold">Leave Period</span>
+                      <span className="text-sm font-semibold">
+                        Leave Period
+                      </span>
                     </div>
                     <div className="text-sm text-blue-600">
-                      {format(new Date(selectedRequest.start_date), 'MMM dd, yyyy')} → {format(new Date(selectedRequest.end_date), 'MMM dd, yyyy')}
-                      <span className="ml-2">({calculateDays(selectedRequest.start_date, selectedRequest.end_date)} days)</span>
+                      {format(
+                        new Date(selectedRequest.start_date),
+                        "MMM dd, yyyy",
+                      )}{" "}
+                      →{" "}
+                      {format(
+                        new Date(selectedRequest.end_date),
+                        "MMM dd, yyyy",
+                      )}
+                      <span className="ml-2">
+                        (
+                        {calculateDays(
+                          selectedRequest.start_date,
+                          selectedRequest.end_date,
+                        )}{" "}
+                        days)
+                      </span>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-stone-700">Actual Return Date *</label>
+                    <label className="text-sm font-medium text-stone-700">
+                      Actual Return Date *
+                    </label>
                     <input
                       type="date"
                       value={reportDutyForm.actual_return_date}
-                      onChange={(e) => setReportDutyForm({ ...reportDutyForm, actual_return_date: e.target.value })}
+                      onChange={(e) =>
+                        setReportDutyForm({
+                          ...reportDutyForm,
+                          actual_return_date: e.target.value,
+                        })
+                      }
                       min={selectedRequest.start_date}
                       className="w-full h-10 px-3 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none"
                       required
                     />
-                    <p className="text-xs text-stone-500">The date the employee actually returned to work</p>
+                    <p className="text-xs text-stone-500">
+                      The date the employee actually returned to work
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-stone-700">Notes (Optional)</label>
+                    <label className="text-sm font-medium text-stone-700">
+                      Notes (Optional)
+                    </label>
                     <textarea
                       value={reportDutyForm.report_notes}
-                      onChange={(e) => setReportDutyForm({ ...reportDutyForm, report_notes: e.target.value })}
+                      onChange={(e) =>
+                        setReportDutyForm({
+                          ...reportDutyForm,
+                          report_notes: e.target.value,
+                        })
+                      }
                       rows={4}
                       className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-1 focus:ring-stone-400 outline-none resize-none"
                       placeholder="Optional: Add any notes about the return (e.g., returned early, extended leave, etc.)"
@@ -978,7 +1272,9 @@ export default function LeaveManagementPage() {
                       className="flex-1 bg-green-600 hover:bg-green-700"
                       disabled={isSubmitting}
                     >
-                      {isSubmitting ? 'Confirming...' : 'Confirm Return to Duty'}
+                      {isSubmitting
+                        ? "Confirming..."
+                        : "Confirm Return to Duty"}
                     </IOSButton>
                   </div>
                 </form>

@@ -90,6 +90,7 @@ import foodControlRoutes from './foodControl.routes';
 import shiftPnLRoutes from './shiftPnL.routes';
 import branchFoodControlConfigRoutes from './branchFoodControlConfig.routes';
 import securityRoutes from './security.routes';
+import communicationsRoutes from './communications.routes';
 
 const router = express.Router();
 
@@ -157,7 +158,7 @@ router.use('/forecasting', mlForecastingRoutes);
 router.use('/vendors', vendorPerformanceRoutes);
 router.use('/facilities', facilitiesRoutes);
 router.use('/admin', adminRoutes);
-router.use('/communications', communicationRoutes);
+router.use('/communications', communicationsRoutes);
 router.use('/channel-manager', channelManagerRoutes);
 router.use('/employee-portal', employeePortalRoutes);
 router.use('/guest-portal', guestPortalRoutes);

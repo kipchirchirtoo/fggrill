@@ -17,7 +17,7 @@ import {
   UserCheck, Utensils, Wine, Receipt, CreditCard, PieChart, FileText,
   BookOpen, ChefHat, ShoppingCart, Wallet, Scale, AlertCircle, UtensilsCrossed, Trash2, Clock, Shield, Menu, X,
   Apple, Beer, Pencil, Database, User, ArrowDownLeft, ArrowUpRight, RefreshCw, ArrowRight, Calculator, Search,
-  SlidersHorizontal, LayoutDashboard, Plus, Brain, Target
+  SlidersHorizontal, LayoutDashboard, Plus, Brain, Target, MessageCircle
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -171,10 +171,10 @@ export function ConsolidatedNav() {
       </NavGroup>
 
       <NavItem
-        href="/dashboard/branch-operations/communications"
-        icon={LifeBuoy}
+        href="/dashboard/communications"
+        icon={MessageCircle}
         label="Communications"
-        active={pathname === '/dashboard/branch-operations/communications'}
+        active={pathname === '/dashboard/communications'}
       />
     </>
   );
@@ -258,6 +258,13 @@ export function ConsolidatedNav() {
         icon={ShieldCheck}
         label="Quality & Compliance"
         active={pathname === '/dashboard/facilities/quality-compliance'}
+      />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
       />
     </>
   );
@@ -343,6 +350,13 @@ export function ConsolidatedNav() {
         label="Employee Docs"
         active={pathname === '/dashboard/admin/docs'}
       />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -404,6 +418,13 @@ export function ConsolidatedNav() {
         label="Cashier Station"
         active={pathname === '/dashboard/cashier'}
       />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -432,6 +453,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/kitchen'}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -459,6 +487,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/pos-kitchen' && pathname.includes('tab=recent')}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -486,6 +521,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/kitchen' && pathname.includes('tab=wastage')}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -543,6 +585,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-store/requests'}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -621,6 +670,13 @@ export function ConsolidatedNav() {
           active={pathname.includes('/dashboard/central-store/vehicles')}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -718,6 +774,13 @@ export function ConsolidatedNav() {
           active={pathname.includes('/dashboard/auditor/audit-reports')}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -816,6 +879,20 @@ export function ConsolidatedNav() {
         icon={Shield}
         label="Staff Audit Trail"
         active={pathname === '/dashboard/branch-accountant/staff/audit'}
+      />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
+
+      <NavItem
+        href="/dashboard/branch-accountant/discrepancies"
+        icon={AlertCircle}
+        label="Discrepancies"
+        active={pathname === '/dashboard/branch-accountant/discrepancies'}
       />
     </>
   );
@@ -928,6 +1005,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/central-store/reports'}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -995,6 +1079,13 @@ export function ConsolidatedNav() {
         icon={TrendingDown}
         label="Stock Out"
         active={pathname === '/dashboard/branch-store/stock-out'}
+      />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
       />
     </>
   );
@@ -1071,6 +1162,13 @@ export function ConsolidatedNav() {
         label="Reports"
         active={pathname === '/dashboard/housekeeping/reports'}
       />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -1103,6 +1201,13 @@ export function ConsolidatedNav() {
         icon={Calendar}
         label="Schedule"
         active={pathname === '/dashboard/maintenance/schedule'}
+      />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
       />
     </>
   );
@@ -1177,6 +1282,13 @@ export function ConsolidatedNav() {
         icon={CreditCard}
         label="Cashier Station"
         active={pathname === '/dashboard/cashier'}
+      />
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
       />
     </>
   );
@@ -1355,6 +1467,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/branch-manager/staff/performance'}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -1422,6 +1541,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/hr/adjustments'}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -1473,6 +1599,13 @@ export function ConsolidatedNav() {
           active={pathname === '/dashboard/kitchen-operations/wastage'}
         />
       </NavGroup>
+
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
     </>
   );
 
@@ -1522,6 +1655,13 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/director/tasks'}
       />
 
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
+      />
+
       <hr className="my-4 border-stone-100" />
       <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Audit & HR Oversight</p>
       {auditorNav}
@@ -1544,6 +1684,12 @@ export function ConsolidatedNav() {
         icon={CreditCard}
         label="Cashier Station"
         active={pathname === '/dashboard/cashier'}
+      />
+      <NavItem
+        href="/dashboard/communications"
+        icon={MessageCircle}
+        label="Communications"
+        active={pathname === '/dashboard/communications'}
       />
     </>
   );
@@ -1662,12 +1808,20 @@ export function ConsolidatedNav() {
     }
     if (user.role === UserRole.KITCHEN) {
       return (
-        <NavItem
-          href="/dashboard/kitchen"
-          icon={ChefHat}
-          label="KDS / Active Orders"
-          active={pathname === '/dashboard/kitchen'}
-        />
+        <>
+          <NavItem
+            href="/dashboard/kitchen"
+            icon={ChefHat}
+            label="KDS / Active Orders"
+            active={pathname === '/dashboard/kitchen'}
+          />
+          <NavItem
+            href="/dashboard/communications"
+            icon={MessageCircle}
+            label="Communications"
+            active={pathname === '/dashboard/communications'}
+          />
+        </>
       );
     }
     if (user.role === UserRole.KITCHEN_OPERATIONS) {
@@ -1704,12 +1858,20 @@ export function ConsolidatedNav() {
     }
     if (user.role === UserRole.CASHIER) {
       return (
-        <NavItem
-          href="/dashboard/cashier"
-          icon={CreditCard}
-          label="Cashier Station"
-          active={pathname === '/dashboard/cashier'}
-        />
+        <>
+          <NavItem
+            href="/dashboard/cashier"
+            icon={CreditCard}
+            label="Cashier Station"
+            active={pathname === '/dashboard/cashier'}
+          />
+          <NavItem
+            href="/dashboard/communications"
+            icon={MessageCircle}
+            label="Communications"
+            active={pathname === '/dashboard/communications'}
+          />
+        </>
       );
     }
     if (user.role === UserRole.HR_MANAGER) {
