@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+import PDFDocument from 'pdfkit';
 
 const toNumber = (value: any): number => {
     const num = Number(value);
@@ -640,79 +641,161 @@ export const exportMonthlyStatement = async (
             totalUnbanked += toNumber(record.unbanked_cash);
         });
 
-        const rows: any[][] = [];
-        rows.push(['Monthly Financial Statement']);
-        rows.push(['Branch', branchData?.name || `Branch ${branch_id}`]);
-        rows.push(['Period', `${fiscal_year}-${String(fiscal_month).padStart(2, '0')}`]);
-        rows.push([]);
-        rows.push(['Daily Records']);
-        rows.push(['Date', 'Status', 'Revenue', 'COGS', 'Expenses', 'Net Profit', 'Cash', 'MPESA', 'Swipe', 'Expected Cash', 'Banked', 'Unbanked']);
+        const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape', bufferPages: true });
+        const filename = `Financial_Workspace_${branch_id}_${fiscal_year}_${String(fiscal_month).padStart(2, '0')}.pdf`;
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+        
+        doc.pipe(res);
 
-        records.forEach((record: any) => {
-            const payment = normalizePaymentData(record.payment_data || {});
-            const banking = normalizeBankingData(record.banking_data || {}, record.record_date);
-            rows.push([
-                record.record_date,
-                record.status,
-                toNumber(record.total_revenue).toFixed(2),
-                toNumber(record.total_cogs).toFixed(2),
-                toNumber(record.total_expenses).toFixed(2),
-                toNumber(record.net_profit).toFixed(2),
-                toNumber(payment.cash).toFixed(2),
-                toNumber(payment.mpesa).toFixed(2),
-                toNumber(payment.swipe).toFixed(2),
-                toNumber(record.expected_cash).toFixed(2),
-                toNumber(banking.banked).toFixed(2),
-                toNumber(record.unbanked_cash).toFixed(2)
-            ]);
-        });
+        // Header
+        doc.fontSize(22).font('Helvetica-Bold').text('Famous Gate Hotels', { align: 'center' });
+        doc.fontSize(14).font('Helvetica').text('Monthly Financial Workspace Report', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(10).text(`Branch: ${branchData?.name || 'Branch ' + branch_id}`, { align: 'center' });
+        doc.text(`Period: ${monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`, { align: 'center' });
+        doc.moveDown(2);
 
-        rows.push([]);
-        rows.push(['Revenue Stream Totals']);
-        rows.push(['Stream', 'Amount']);
-        Object.entries(revenueTotals).forEach(([key, value]) => {
-            rows.push([key, toNumber(value).toFixed(2)]);
-        });
+        // 1. Executive Summary
+        doc.fontSize(14).font('Helvetica-Bold').text('Executive Summary', { underline: true });
+        doc.moveDown(0.5);
+        doc.fontSize(10).font('Helvetica');
+        
+        const startX = 40;
+        let currentY = doc.y;
+        
+        doc.text(`Total Revenue: KES ${totalRevenue.toLocaleString()}`, startX, currentY);
+        doc.text(`Total COGS: KES ${totalCogs.toLocaleString()}`, startX, currentY + 15);
+        doc.text(`Total Expenses: KES ${totalExpenses.toLocaleString()}`, startX, currentY + 30);
+        doc.text(`Net Profit: KES ${totalProfit.toLocaleString()}`, startX, currentY + 45);
 
-        rows.push([]);
-        rows.push(['Payment Method Totals']);
-        rows.push(['Method', 'Amount']);
-        Object.entries(paymentTotals).forEach(([key, value]) => {
-            rows.push([key, toNumber(value).toFixed(2)]);
-        });
+        doc.text(`Expected Cash to Bank: KES ${totalExpectedCash.toLocaleString()}`, startX + 250, currentY);
+        doc.text(`Banked Cash: KES ${totalBanked.toLocaleString()}`, startX + 250, currentY + 15);
+        doc.text(`Unbanked Cash: KES ${totalUnbanked.toLocaleString()}`, startX + 250, currentY + 30);
+        doc.moveDown(4);
 
-        rows.push([]);
-        rows.push(['Monthly Summary']);
-        rows.push(['Total Revenue', totalRevenue.toFixed(2)]);
-        rows.push(['Total COGS', totalCogs.toFixed(2)]);
-        rows.push(['Total Expenses', totalExpenses.toFixed(2)]);
-        rows.push(['Total Net Profit', totalProfit.toFixed(2)]);
-        rows.push(['Expected Cash to Bank', totalExpectedCash.toFixed(2)]);
-        rows.push(['Banked Cash', totalBanked.toFixed(2)]);
-        rows.push(['Unbanked Cash', totalUnbanked.toFixed(2)]);
-
+        // 2. Fixed/Monthly Adjustments
         if (monthlyAdjustment) {
-            rows.push([]);
-            rows.push(['Monthly Fixed/Additional Expenses']);
-            rows.push(['Electricity', toNumber(monthlyAdjustment.electricity).toFixed(2)]);
-            rows.push(['Salaries', toNumber(monthlyAdjustment.salaries).toFixed(2)]);
-            rows.push(['Water', toNumber(monthlyAdjustment.water).toFixed(2)]);
-            rows.push(['Rent', toNumber(monthlyAdjustment.rent).toFixed(2)]);
-            rows.push(['NSSF', toNumber(monthlyAdjustment.nssf).toFixed(2)]);
-            rows.push(['SHIF', toNumber(monthlyAdjustment.shif).toFixed(2)]);
-            rows.push(['Tax', toNumber(monthlyAdjustment.tax).toFixed(2)]);
-            rows.push(['Levy', toNumber(monthlyAdjustment.levy).toFixed(2)]);
-            rows.push(['Licenses', toNumber(monthlyAdjustment.licenses).toFixed(2)]);
-            rows.push(['Total Monthly Expenses', toNumber(monthlyAdjustment.total_monthly_expenses).toFixed(2)]);
-            rows.push(['Monthly Profit', toNumber(monthlyAdjustment.monthly_profit).toFixed(2)]);
+            doc.fontSize(14).font('Helvetica-Bold').text('Monthly Adjustments & Fixed Expenses', startX, doc.y, { underline: true });
+            doc.moveDown(0.5);
+            doc.fontSize(10).font('Helvetica');
+            currentY = doc.y;
+            
+            doc.text(`Electricity: KES ${toNumber(monthlyAdjustment.electricity).toLocaleString()}`, startX, currentY);
+            doc.text(`Water: KES ${toNumber(monthlyAdjustment.water).toLocaleString()}`, startX, currentY + 15);
+            doc.text(`Salaries: KES ${toNumber(monthlyAdjustment.salaries).toLocaleString()}`, startX, currentY + 30);
+            doc.text(`Rent: KES ${toNumber(monthlyAdjustment.rent).toLocaleString()}`, startX, currentY + 45);
+            
+            doc.text(`NSSF: KES ${toNumber(monthlyAdjustment.nssf).toLocaleString()}`, startX + 250, currentY);
+            doc.text(`SHIF: KES ${toNumber(monthlyAdjustment.shif).toLocaleString()}`, startX + 250, currentY + 15);
+            doc.text(`Tax: KES ${toNumber(monthlyAdjustment.tax).toLocaleString()}`, startX + 250, currentY + 30);
+            doc.text(`Levy & Licenses: KES ${(toNumber(monthlyAdjustment.levy) + toNumber(monthlyAdjustment.licenses)).toLocaleString()}`, startX + 250, currentY + 45);
+            
+            doc.font('Helvetica-Bold');
+            doc.text(`Total Monthly Expenses: KES ${toNumber(monthlyAdjustment.total_monthly_expenses).toLocaleString()}`, startX, currentY + 65);
+            doc.text(`Final Monthly Profit: KES ${toNumber(monthlyAdjustment.monthly_profit).toLocaleString()}`, startX + 250, currentY + 65);
+            doc.font('Helvetica');
+            doc.moveDown(2);
         }
 
-        const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
-        const filename = `financial_statement_branch_${branch_id}_${fiscal_year}_${String(fiscal_month).padStart(2, '0')}.csv`;
+        // Add a new page for the daily table if not enough space
+        if (doc.y > 400) {
+            doc.addPage();
+        } else {
+            doc.moveDown(2);
+        }
 
-        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-        res.status(200).send(csv);
+        // 3. Daily Records Table
+        doc.fontSize(14).font('Helvetica-Bold').text('Daily Records Breakdown', startX, doc.y, { underline: true });
+        doc.moveDown(1);
+
+        const tableTop = doc.y;
+        const columns = [
+            { header: 'Date', x: 40, w: 60 },
+            { header: 'Status', x: 100, w: 70 },
+            { header: 'Revenue', x: 170, w: 70 },
+            { header: 'COGS', x: 240, w: 60 },
+            { header: 'Expenses', x: 300, w: 60 },
+            { header: 'Net Profit', x: 360, w: 70 },
+            { header: 'Cash', x: 430, w: 60 },
+            { header: 'MPESA', x: 490, w: 60 },
+            { header: 'Banked', x: 550, w: 70 },
+            { header: 'Unbanked', x: 620, w: 70 }
+        ];
+
+        // Draw Table Header
+        doc.rect(40, tableTop, 760, 20).fill('#f1f5f9');
+        doc.fillColor('#334155').fontSize(9).font('Helvetica-Bold');
+        
+        columns.forEach(col => {
+            doc.text(col.header, col.x, tableTop + 5, { width: col.w, align: 'left' });
+        });
+
+        let currentTableY = tableTop + 25;
+        doc.font('Helvetica').fontSize(8);
+
+        records.forEach((record: any, i: number) => {
+            if (currentTableY > 520) {
+                doc.addPage();
+                currentTableY = 40;
+                
+                doc.rect(40, currentTableY, 760, 20).fill('#f1f5f9');
+                doc.fillColor('#334155').fontSize(9).font('Helvetica-Bold');
+                columns.forEach(col => {
+                    doc.text(col.header, col.x, currentTableY + 5, { width: col.w, align: 'left' });
+                });
+                currentTableY += 25;
+                doc.font('Helvetica').fontSize(8);
+            }
+
+            if (i % 2 === 1) {
+                doc.rect(40, currentTableY - 5, 760, 20).fill('#f8fafc');
+            }
+            doc.fillColor('#0f172a');
+
+            const payment = normalizePaymentData(record.payment_data || {});
+            const banking = normalizeBankingData(record.banking_data || {}, record.record_date);
+            const dateStr = record.record_date.split('T')[0];
+
+            doc.text(dateStr, columns[0].x, currentTableY);
+            doc.text(record.status || 'DRAFT', columns[1].x, currentTableY);
+            doc.text(toNumber(record.total_revenue).toLocaleString(), columns[2].x, currentTableY);
+            doc.text(toNumber(record.total_cogs).toLocaleString(), columns[3].x, currentTableY);
+            doc.text(toNumber(record.total_expenses).toLocaleString(), columns[4].x, currentTableY);
+            
+            const netProfit = toNumber(record.net_profit);
+            if (netProfit < 0) doc.fillColor('#e11d48');
+            doc.text(netProfit.toLocaleString(), columns[5].x, currentTableY);
+            doc.fillColor('#0f172a');
+
+            doc.text(toNumber(payment.cash).toLocaleString(), columns[6].x, currentTableY);
+            doc.text(toNumber(payment.mpesa).toLocaleString(), columns[7].x, currentTableY);
+            
+            doc.text(toNumber(banking.banked).toLocaleString(), columns[8].x, currentTableY);
+            
+            const unbanked = toNumber(record.unbanked_cash);
+            if (unbanked > 0) doc.fillColor('#e11d48');
+            doc.text(unbanked.toLocaleString(), columns[9].x, currentTableY);
+            doc.fillColor('#0f172a');
+
+            currentTableY += 20;
+        });
+
+        // Footer
+        const pages = doc.bufferedPageRange();
+        for (let i = pages.start; i < pages.start + pages.count; i++) {
+            doc.switchToPage(i);
+            doc.fontSize(8).fillColor('#64748b');
+            doc.text(
+                `Generated by FamousGate Financial System | Page ${i + 1} of ${pages.count} | ${new Date().toLocaleString('en-US')}`,
+                40,
+                doc.page.height - 40,
+                { align: 'center', width: doc.page.width - 80 }
+            );
+        }
+
+        doc.end();
     } catch (error) {
         logger.error('Error exporting monthly statement:', error);
         next(error);

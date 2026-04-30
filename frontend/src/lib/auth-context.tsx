@@ -361,5 +361,15 @@ export function hasRole(user: User | null, roles: UserRole[]): boolean {
   const userRole = (user.role as string).toLowerCase().trim();
   const normalizedRoles = roles.map(r => (r as string).toLowerCase().trim());
 
+  // Global override: Super Admins and Directors have universal view access
+  if (userRole === 'super_admin' || userRole === 'director') {
+    return true;
+  }
+
+  // General Managers have broad access to operational dashboards
+  if (userRole === 'general_manager' && !normalizedRoles.includes('super_admin') && !normalizedRoles.includes('director')) {
+    return true;
+  }
+
   return normalizedRoles.includes(userRole);
 }

@@ -1,6 +1,30 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
 import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
+
+// ── Branding constants (mirrors native-pdf-reports.service.ts) ────────────────
+const DIR_PRIMARY    = '#1e293b';
+const DIR_SECONDARY  = '#64748b';
+const DIR_HEADER_BG  = '#1e293b';
+const DIR_ROW_BG     = '#f1f5f9';
+const DIR_BORDER     = '#e2e8f0';
+const DIR_GOLD       = '#c8a84b';
+const DIR_SUCCESS    = '#15803d';
+const DIR_DANGER     = '#dc2626';
+
+const COMPANY_NAME    = 'FamousGate Hotels';
+const COMPANY_ADDRESS = 'Bomet, Kenya  |  famousgateshotelsbmt@gmail.com  |  0706 782 828';
+
+function getDirectorLogoPath() {
+  return path.join(process.cwd(), '../frontend/public/fglogo.png');
+}
+
+function dirFmt(n: number | null | undefined): string {
+  return `KES ${(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const toNumber = (value: any): number => {
   const parsed = Number(value);
@@ -830,14 +854,14 @@ export class DirectorEnhancedController {
   }
 
   /**
-   * Export comprehensive PDF report
+   * Export comprehensive branded PDF report — matches Payroll Summary UI
    */
   static async exportPDFReport(req: Request, res: Response) {
     try {
       const { startDate, endDate, reportType, branchId } = req.query;
 
       let data: any = {};
-      
+
       if (reportType === 'financial' || reportType === 'comprehensive') {
         data.financial = await DirectorEnhancedController.getFinancialMetrics(startDate as string, endDate as string, branchId as string);
       }
@@ -848,60 +872,198 @@ export class DirectorEnhancedController {
         data.staff = await DirectorEnhancedController.getStaffMetrics(branchId as string);
       }
 
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
-      
+      // ── Document Setup ──────────────────────────────────────────────────────
+      const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true });
+      const PAGE_W = 595; // A4 portrait width in pts
+      const MARGIN = 40;
+      const CONTENT_W = PAGE_W - MARGIN * 2;
+      const dateStr = new Date().toISOString().split('T')[0];
+
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=Director_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-      
+      res.setHeader('Content-Disposition', `attachment; filename="Director_Executive_Report_${dateStr}.pdf"`);
       doc.pipe(res);
 
-      doc.fontSize(20).font('Helvetica-Bold').text('Famous Gate Hotels', { align: 'center' });
-      doc.fontSize(14).font('Helvetica').text('Director Executive Report', { align: 'center' });
-      doc.moveDown();
-      doc.fontSize(10).text(`Period: ${startDate || 'All Time'} to ${endDate || 'Present'}`, { align: 'center' });
-      doc.moveDown(2);
+      // ── Branded Header ──────────────────────────────────────────────────────
+      const drawHeader = () => {
+        const logoPath = getDirectorLogoPath();
+        if (fs.existsSync(logoPath)) {
+          doc.image(logoPath, MARGIN, 25, { height: 50 });
+        } else {
+          // Fallback circle monogram
+          doc.circle(MARGIN + 25, 50, 25).fill(DIR_PRIMARY);
+          doc.fillColor('white').fontSize(12).font('Helvetica-Bold').text('FG', MARGIN + 12, 43);
+        }
 
+        // Company name & address (right of logo)
+        doc.fillColor(DIR_PRIMARY).fontSize(16).font('Helvetica-Bold')
+          .text(COMPANY_NAME, MARGIN + 65, 26, { width: CONTENT_W - 65 });
+        doc.fillColor(DIR_SECONDARY).fontSize(8).font('Helvetica')
+          .text(COMPANY_ADDRESS, MARGIN + 65, 46, { width: CONTENT_W - 65 });
+
+        // Report title block (right-aligned)
+        doc.fillColor(DIR_PRIMARY).fontSize(11).font('Helvetica-Bold')
+          .text('DIRECTOR EXECUTIVE REPORT', MARGIN, 26, { width: CONTENT_W, align: 'right' });
+        const periodLabel = `${startDate || 'All Time'} – ${endDate || 'Present'}`;
+        doc.fillColor(DIR_SECONDARY).fontSize(8).font('Helvetica')
+          .text(`Period: ${periodLabel}`, MARGIN, 42, { width: CONTENT_W, align: 'right' });
+        doc.fillColor(DIR_SECONDARY).fontSize(8)
+          .text(`Generated: ${new Date().toLocaleString('en-US')}`, MARGIN, 54, { width: CONTENT_W, align: 'right' });
+
+        // Divider
+        doc.strokeColor(DIR_BORDER).lineWidth(1)
+          .moveTo(MARGIN, 82).lineTo(PAGE_W - MARGIN, 82).stroke();
+        // Gold accent bar
+        doc.rect(MARGIN, 83, CONTENT_W, 3).fill(DIR_GOLD);
+
+        return 100; // y after header
+      };
+
+      // ── Section Heading ─────────────────────────────────────────────────────
+      const drawSectionHeading = (title: string, y: number): number => {
+        doc.rect(MARGIN, y, CONTENT_W, 22).fill(DIR_HEADER_BG);
+        doc.fillColor('white').fontSize(10).font('Helvetica-Bold')
+          .text(title.toUpperCase(), MARGIN + 8, y + 6, { width: CONTENT_W - 16 });
+        return y + 22;
+      };
+
+      // ── Metric Row ──────────────────────────────────────────────────────────
+      const drawMetricRow = (
+        label: string, value: string, y: number, index: number, highlight?: 'success' | 'danger'
+      ): number => {
+        if (index % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, 20).fill(DIR_ROW_BG);
+        doc.strokeColor(DIR_BORDER).lineWidth(0.3)
+          .moveTo(MARGIN, y + 20).lineTo(PAGE_W - MARGIN, y + 20).stroke();
+        doc.fillColor(DIR_SECONDARY).fontSize(9).font('Helvetica')
+          .text(label, MARGIN + 8, y + 5, { width: CONTENT_W * 0.55 });
+        const valueColor = highlight === 'success' ? DIR_SUCCESS : highlight === 'danger' ? DIR_DANGER : DIR_PRIMARY;
+        doc.fillColor(valueColor).fontSize(9).font('Helvetica-Bold')
+          .text(value, MARGIN + 8, y + 5, { width: CONTENT_W - 16, align: 'right' });
+        return y + 20;
+      };
+
+      // ── Summary KPI Cards (2×N grid) ────────────────────────────────────────
+      const drawKpiCards = (items: { label: string; value: string; sub?: string; accent?: string }[], startY: number): number => {
+        const cardW = (CONTENT_W - 10) / 2;
+        const cardH = 52;
+        let cx = MARGIN;
+        let cy = startY;
+        items.forEach((item, i) => {
+          const accent = item.accent || DIR_GOLD;
+          doc.rect(cx, cy, cardW, cardH).fillAndStroke('#ffffff', DIR_BORDER);
+          doc.rect(cx, cy, 4, cardH).fill(accent);
+          doc.fillColor(DIR_SECONDARY).fontSize(8).font('Helvetica')
+            .text(item.label.toUpperCase(), cx + 12, cy + 8, { width: cardW - 20 });
+          doc.fillColor(DIR_PRIMARY).fontSize(14).font('Helvetica-Bold')
+            .text(item.value, cx + 12, cy + 20, { width: cardW - 20 });
+          if (item.sub) {
+            doc.fillColor(DIR_SECONDARY).fontSize(7.5).font('Helvetica')
+              .text(item.sub, cx + 12, cy + 38, { width: cardW - 20 });
+          }
+          if (i % 2 === 0) {
+            cx += cardW + 10;
+          } else {
+            cx = MARGIN;
+            cy += cardH + 8;
+          }
+        });
+        if (items.length % 2 !== 0) cy += cardH + 8;
+        return cy + 8;
+      };
+
+      // ── Footer ───────────────────────────────────────────────────────────────
+      const drawFooter = () => {
+        const range = doc.bufferedPageRange();
+        for (let i = range.start; i < range.start + range.count; i++) {
+          doc.switchToPage(i);
+          doc.strokeColor(DIR_BORDER).lineWidth(0.5)
+            .moveTo(MARGIN, doc.page.height - 42).lineTo(PAGE_W - MARGIN, doc.page.height - 42).stroke();
+          doc.fillColor(DIR_SECONDARY).fontSize(7.5).font('Helvetica')
+            .text(
+              `${COMPANY_NAME}  ·  Director Executive Report  ·  Confidential`,
+              MARGIN, doc.page.height - 32, { width: CONTENT_W * 0.65 }
+            );
+          doc.fillColor(DIR_SECONDARY).fontSize(7.5)
+            .text(`Page ${i + 1} of ${range.count}`, MARGIN, doc.page.height - 32, { width: CONTENT_W, align: 'right' });
+        }
+      };
+
+      // ── Build Page ───────────────────────────────────────────────────────────
+      let y = drawHeader();
+
+      // Financial section
       if (data.financial) {
-        doc.fontSize(14).font('Helvetica-Bold').text('Financial Overview');
-        doc.moveDown(0.5);
-        doc.fontSize(10).font('Helvetica');
-        doc.text(`Total Revenue: KES ${toNumber(data.financial.totalRevenue).toLocaleString()}`);
-        doc.text(`Total Expenses: KES ${toNumber(data.financial.totalExpenses).toLocaleString()}`);
-        doc.text(`Total COGS: KES ${toNumber(data.financial.totalCogs).toLocaleString()}`);
-        doc.text(`Net Profit: KES ${toNumber(data.financial.netProfit).toLocaleString()}`);
-        doc.text(`Profit Margin: ${toNumber(data.financial.profitMargin).toFixed(2)}%`);
-        doc.moveDown(2);
+        y = drawSectionHeading('Financial Overview', y);
+        y += 10;
+
+        const netProfit = toNumber(data.financial.netProfit);
+        const kpis = [
+          { label: 'Total Revenue', value: dirFmt(data.financial.totalRevenue), accent: DIR_SUCCESS },
+          { label: 'Net Profit', value: dirFmt(netProfit), accent: netProfit >= 0 ? DIR_SUCCESS : DIR_DANGER },
+          { label: 'Total COGS', value: dirFmt(data.financial.totalCogs), accent: DIR_GOLD },
+          { label: 'Total Expenses', value: dirFmt(data.financial.totalExpenses), accent: DIR_GOLD },
+        ];
+        y = drawKpiCards(kpis, y);
+
+        const metrics = [
+          { label: 'Profit Margin', value: `${toNumber(data.financial.profitMargin).toFixed(2)}%` },
+          { label: 'Total Banked', value: dirFmt(data.financial.totalBanked) },
+          { label: 'Unbanked Cash', value: dirFmt(data.financial.totalUnbanked) },
+          { label: 'Pending Discrepancies', value: String(data.financial.pendingDiscrepancies || 0) },
+        ];
+        metrics.forEach((m, i) => { y = drawMetricRow(m.label, m.value, y, i); });
+        y += 18;
       }
 
+      // Occupancy section
       if (data.occupancy) {
-        doc.fontSize(14).font('Helvetica-Bold').text('Occupancy Overview');
-        doc.moveDown(0.5);
-        doc.fontSize(10).font('Helvetica');
-        doc.text(`Total Rooms: ${data.occupancy.totalRooms}`);
-        doc.text(`Occupied: ${data.occupancy.occupiedRooms}`);
-        doc.text(`Occupancy Rate: ${toNumber(data.occupancy.occupancyRate).toFixed(2)}%`);
-        doc.moveDown(2);
+        if (y > 640) { doc.addPage(); y = drawHeader(); }
+        y = drawSectionHeading('Occupancy Overview', y);
+        y += 10;
+
+        const occ = toNumber(data.occupancy.occupancyRate);
+        const occKpis = [
+          { label: 'Occupancy Rate', value: `${occ.toFixed(1)}%`, accent: occ >= 70 ? DIR_SUCCESS : DIR_GOLD },
+          { label: 'Occupied Rooms', value: `${data.occupancy.occupiedRooms} / ${data.occupancy.totalRooms}`, accent: DIR_PRIMARY },
+        ];
+        y = drawKpiCards(occKpis, y);
+
+        const occMetrics = [
+          { label: 'Total Rooms', value: String(data.occupancy.totalRooms) },
+          { label: 'Available Rooms', value: String(toNumber(data.occupancy.totalRooms) - toNumber(data.occupancy.occupiedRooms)) },
+          { label: 'Revenue Per Room', value: dirFmt(data.occupancy.revenuePerRoom) },
+        ];
+        occMetrics.forEach((m, i) => { y = drawMetricRow(m.label, m.value, y, i); });
+        y += 18;
       }
 
+      // Staff section
       if (data.staff) {
-        doc.fontSize(14).font('Helvetica-Bold').text('Staff Overview');
-        doc.moveDown(0.5);
-        doc.fontSize(10).font('Helvetica');
-        doc.text(`Total Staff: ${data.staff.totalStaff}`);
-        doc.text(`Active Staff: ${data.staff.activeStaff}`);
-        doc.text(`Attendance Rate: ${toNumber(data.staff.attendanceRate).toFixed(2)}%`);
+        if (y > 640) { doc.addPage(); y = drawHeader(); }
+        y = drawSectionHeading('Staff Overview', y);
+        y += 10;
+
+        const attRate = toNumber(data.staff.attendanceRate);
+        const staffKpis = [
+          { label: 'Active Staff', value: String(data.staff.activeStaff), accent: DIR_SUCCESS },
+          { label: 'Attendance Rate', value: `${attRate.toFixed(1)}%`, accent: attRate >= 80 ? DIR_SUCCESS : DIR_DANGER },
+        ];
+        y = drawKpiCards(staffKpis, y);
+
+        const staffMetrics = [
+          { label: 'Total Staff', value: String(data.staff.totalStaff) },
+          { label: 'Inactive Staff', value: String(toNumber(data.staff.totalStaff) - toNumber(data.staff.activeStaff)) },
+        ];
+        staffMetrics.forEach((m, i) => { y = drawMetricRow(m.label, m.value, y, i); });
       }
 
-      doc.moveDown(3);
-      doc.fontSize(8).text(`Generated on ${new Date().toLocaleString()}`, { align: 'center' });
-      doc.text('Famous Gate Hotels - Confidential', { align: 'center' });
-
+      drawFooter();
       doc.end();
+
     } catch (error: any) {
       console.error('PDF Export Error:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: error.message 
+      return res.status(500).json({
+        success: false,
+        message: error.message
       });
     }
   }
