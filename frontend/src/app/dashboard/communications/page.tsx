@@ -62,6 +62,12 @@ export default function CommunicationsPage() {
   const [activeTab, setActiveTab] = useState<"messages" | "calls">("messages");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [callType, setCallType] = useState<"voice" | "video">("voice");
+  const [isInCall, setIsInCall] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [channelMarkedDone, setChannelMarkedDone] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -330,6 +336,50 @@ export default function CommunicationsPage() {
     }
   };
 
+  const handleStartCall = (type: "voice" | "video") => {
+    if (!selectedChannel) {
+      toast.error("Please select a channel first");
+      return;
+    }
+    setCallType(type);
+    setShowCallModal(true);
+  };
+
+  const handleJoinCall = () => {
+    setIsInCall(true);
+    setShowCallModal(false);
+    toast.success(`${callType === "voice" ? "Voice" : "Video"} call started`);
+    
+    // Simulate call duration
+    setTimeout(() => {
+      if (isInCall) {
+        toast.info("Call ended");
+        setIsInCall(false);
+      }
+    }, 30000); // Auto-end after 30 seconds for demo
+  };
+
+  const handleEndCall = () => {
+    setIsInCall(false);
+    toast.info("Call ended");
+  };
+
+  const handleMarkAsDone = () => {
+    if (!selectedChannel) return;
+    
+    const newMarkedDone = new Set(channelMarkedDone);
+    if (newMarkedDone.has(selectedChannel.id)) {
+      newMarkedDone.delete(selectedChannel.id);
+      toast.success("Channel unmarked as done");
+    } else {
+      newMarkedDone.add(selectedChannel.id);
+      toast.success("Channel marked as done");
+    }
+    setChannelMarkedDone(newMarkedDone);
+  };
+
+  const isChannelDone = selectedChannel ? channelMarkedDone.has(selectedChannel.id) : false;
+
   const filteredChannels = channels.filter((channel) =>
     channel.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -508,22 +558,47 @@ export default function CommunicationsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="w-10 h-10 bg-emerald-500 hover:bg-emerald-600 rounded-xl flex items-center justify-center text-white transition-all">
+                  <button 
+                    onClick={() => handleStartCall("voice")}
+                    disabled={isInCall}
+                    className="w-10 h-10 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-300 rounded-xl flex items-center justify-center text-white transition-all"
+                    title="Start voice call"
+                  >
                     <Phone className="w-5 h-5" />
                   </button>
-                  <button className="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center text-gray-600 transition-all">
+                  <button 
+                    onClick={() => handleStartCall("video")}
+                    disabled={isInCall}
+                    className="w-10 h-10 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-300 rounded-xl flex items-center justify-center text-gray-600 transition-all"
+                    title="Start video call"
+                  >
                     <Video className="w-5 h-5" />
                   </button>
                   <button
-                    onClick={() => setShowChannelInfo(!showChannelInfo)}
+                    onClick={() => setShowMembersModal(true)}
+                    className="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center text-gray-600 transition-all"
+                    title="View members"
+                  >
+                    <Users className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowSettingsModal(true)}
+                    className="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center text-gray-600 transition-all"
+                    title="Channel settings"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleMarkAsDone}
                     className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
-                      showChannelInfo
+                      isChannelDone
                         ? "bg-emerald-500 text-white"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
+                    title={isChannelDone ? "Mark as not done" : "Mark as done"}
                   >
                     <Check className="w-4 h-4" />
-                    Mark as done
+                    {isChannelDone ? "Done" : "Mark as done"}
                   </button>
                 </div>
               </div>
@@ -768,6 +843,47 @@ export default function CommunicationsPage() {
           <ChannelInfoModal
             channel={selectedChannel}
             onClose={() => setShowChannelInfo(false)}
+          />
+        )}
+
+        {/* Call Modal */}
+        {showCallModal && (
+          <CallModal
+            callType={callType}
+            channel={selectedChannel}
+            onClose={() => setShowCallModal(false)}
+            onJoin={handleJoinCall}
+          />
+        )}
+
+        {/* Active Call Overlay */}
+        {isInCall && (
+          <ActiveCallOverlay
+            callType={callType}
+            channel={selectedChannel}
+            onEnd={handleEndCall}
+          />
+        )}
+
+        {/* Members Modal */}
+        {showMembersModal && selectedChannel && (
+          <MembersModal
+            channel={selectedChannel}
+            onClose={() => setShowMembersModal(false)}
+          />
+        )}
+
+        {/* Settings Modal */}
+        {showSettingsModal && selectedChannel && (
+          <SettingsModal
+            channel={selectedChannel}
+            onClose={() => setShowSettingsModal(false)}
+            onUpdate={() => {
+              fetchChannels();
+              if (selectedChannel) {
+                fetchMessages(selectedChannel.id);
+              }
+            }}
           />
         )}
       </DashboardLayout>
@@ -1189,6 +1305,326 @@ function ChannelInfoModal({ channel, onClose }: any) {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Call Modal Component
+function CallModal({ callType, channel, onClose, onJoin }: any) {
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+        <div className="text-center">
+          <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
+            callType === "voice" ? "bg-emerald-100" : "bg-blue-100"
+          }`}>
+            {callType === "voice" ? (
+              <Phone className="w-10 h-10 text-emerald-600" />
+            ) : (
+              <Video className="w-10 h-10 text-blue-600" />
+            )}
+          </div>
+          <h3 className="text-2xl font-bold text-stone-900 mb-2">
+            Start {callType === "voice" ? "Voice" : "Video"} Call
+          </h3>
+          <p className="text-stone-600 mb-6">
+            Start a {callType} call in <span className="font-semibold">{channel?.name}</span>
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-3 border-2 border-stone-200 rounded-xl font-bold text-stone-700 hover:bg-stone-50 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onJoin}
+              className={`flex-1 px-4 py-3 rounded-xl font-bold text-white transition-all ${
+                callType === "voice" 
+                  ? "bg-emerald-500 hover:bg-emerald-600" 
+                  : "bg-blue-500 hover:bg-blue-600"
+              }`}
+            >
+              Start Call
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Active Call Overlay Component
+function ActiveCallOverlay({ callType, channel, onEnd }: any) {
+  const [callDuration, setCallDuration] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gradient-to-br from-emerald-900 to-teal-900 z-50 flex flex-col items-center justify-center p-6">
+      <div className="text-center text-white mb-8">
+        <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+          {callType === "voice" ? (
+            <Phone className="w-16 h-16" />
+          ) : (
+            <Video className="w-16 h-16" />
+          )}
+        </div>
+        <h2 className="text-3xl font-bold mb-2">{channel?.name}</h2>
+        <p className="text-emerald-200 text-lg">{callType === "voice" ? "Voice Call" : "Video Call"}</p>
+        <p className="text-2xl font-mono mt-4">{formatDuration(callDuration)}</p>
+      </div>
+
+      <div className="flex gap-4">
+        <button
+          onClick={() => setIsMuted(!isMuted)}
+          className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
+            isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+          }`}
+          title={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted ? (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+            </svg>
+          ) : (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          )}
+        </button>
+
+        {callType === "video" && (
+          <button
+            onClick={() => setIsVideoOff(!isVideoOff)}
+            className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
+              isVideoOff ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
+            }`}
+            title={isVideoOff ? "Turn on video" : "Turn off video"}
+          >
+            <Video className="w-6 h-6" />
+          </button>
+        )}
+
+        <button
+          onClick={onEnd}
+          className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all"
+          title="End call"
+        >
+          <Phone className="w-6 h-6 rotate-135" />
+        </button>
+      </div>
+
+      <p className="text-white/60 text-sm mt-8">
+        {isMuted && "Microphone muted • "}
+        {isVideoOff && "Video off • "}
+        Call in progress
+      </p>
+    </div>
+  );
+}
+
+// Members Modal Component
+function MembersModal({ channel, onClose }: any) {
+  const [members, setMembers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [channel]);
+
+  const fetchMembers = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_URL}/api/communications/channels/${channel.id}/members`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const result = await response.json();
+      if (result.success) {
+        setMembers(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching members:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+        <div className="p-6 border-b border-stone-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-2xl font-bold text-stone-900">Channel Members</h3>
+            <p className="text-stone-600 text-sm">{channel.name}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-stone-100 rounded-lg transition-all"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {isLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-emerald-500" />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {members.map((member) => (
+                <div
+                  key={member.id}
+                  className="flex items-center gap-4 p-4 hover:bg-stone-50 rounded-xl transition-all"
+                >
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                    {member.user?.first_name?.[0]}
+                    {member.user?.last_name?.[0]}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-stone-900">
+                      {member.user?.first_name} {member.user?.last_name}
+                    </p>
+                    <p className="text-sm text-stone-500 capitalize">
+                      {member.user?.role?.replace(/_/g, " ")}
+                    </p>
+                  </div>
+                  {member.role === "admin" && (
+                    <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-semibold">
+                      Admin
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Settings Modal Component
+function SettingsModal({ channel, onClose, onUpdate }: any) {
+  const [notifications, setNotifications] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
+  const handleSave = () => {
+    toast.success("Settings saved");
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div className="p-6 border-b border-stone-200 flex items-center justify-between">
+          <h3 className="text-2xl font-bold text-stone-900">Channel Settings</h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-stone-100 rounded-lg transition-all"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <h4 className="font-semibold text-stone-900 mb-4">Notifications</h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-stone-900">Push Notifications</p>
+                  <p className="text-sm text-stone-500">Receive notifications for new messages</p>
+                </div>
+                <button
+                  onClick={() => setNotifications(!notifications)}
+                  className={`w-12 h-6 rounded-full transition-all ${
+                    notifications ? "bg-emerald-500" : "bg-gray-300"
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
+                      notifications ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-stone-900">Sound</p>
+                  <p className="text-sm text-stone-500">Play sound for new messages</p>
+                </div>
+                <button
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className={`w-12 h-6 rounded-full transition-all ${
+                    soundEnabled ? "bg-emerald-500" : "bg-gray-300"
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
+                      soundEnabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-stone-900 mb-2">Channel Info</h4>
+            <div className="bg-stone-50 rounded-xl p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-600">Channel Name:</span>
+                <span className="font-semibold text-stone-900">{channel.name}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-600">Type:</span>
+                <span className="font-semibold text-stone-900 capitalize">{channel.channel_type}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-600">Created:</span>
+                <span className="font-semibold text-stone-900">
+                  {format(new Date(channel.created_at), "MMM d, yyyy")}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-stone-200 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-3 border-2 border-stone-200 rounded-xl font-bold text-stone-700 hover:bg-stone-50 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all"
+          >
+            Save Changes
+          </button>
         </div>
       </div>
     </div>
