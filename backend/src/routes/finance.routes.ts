@@ -34,6 +34,7 @@ import {
 } from '../controllers/financial-workspace.controller';
 import { DirectorController } from '../controllers/director.controller';
 import { DirectorEnhancedController } from '../controllers/director-enhanced.controller';
+import { DirectorTasksController } from '../controllers/director-tasks.controller';
 import { DiscrepancyController } from '../controllers/discrepancies.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -434,6 +435,33 @@ router.get('/director/banking',
 router.get('/director/visuals',
   authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
   DirectorController.getVisualData
+);
+
+// Director Drill-Down (transaction-level data)
+router.get('/director/drill-down',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  DirectorEnhancedController.getDrillDownData
+);
+
+// Director Review Tasks
+const TASK_ROLES = [
+  UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER,
+  UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT,
+  UserRole.HR_MANAGER, UserRole.BRANCH_MANAGER
+];
+router.get('/director/tasks/staff',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER]),
+  DirectorTasksController.getBranchStaff
+);
+router.get('/director/tasks', authorize(TASK_ROLES), DirectorTasksController.getTasks);
+router.post('/director/tasks',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR]),
+  DirectorTasksController.createTask
+);
+router.patch('/director/tasks/:id/respond', authorize(TASK_ROLES), DirectorTasksController.respondToTask);
+router.patch('/director/tasks/:id/close',
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR]),
+  DirectorTasksController.closeTask
 );
 
 // DISCREPANCY & FLAG ROUTES

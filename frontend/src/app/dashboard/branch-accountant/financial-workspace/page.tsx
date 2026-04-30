@@ -128,6 +128,9 @@ export default function FinancialWorkspacePage() {
         subtitle="Daily financial tracking and reconciliation"
       >
         <div className="space-y-6">
+          {/* Director Review Tasks Widget */}
+          <DirectorTasksWidget role="branch_accountant" />
+
           {/* Header Controls */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
             <div className="flex items-center gap-4">
@@ -284,5 +287,105 @@ export default function FinancialWorkspacePage() {
         )}
       </BranchAwareDashboardLayout>
     </ProtectedRoute>
+  );
+}
+
+// ── Director Review Tasks Widget ──────────────────────────────────────────────
+function DirectorTasksWidget({ role }: { role: string }) {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [responding, setResponding] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    fetch(`${apiBase}/api/finance/director/tasks?status=PENDING&assigned_to_role=${role}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(r => r.json()).then(r => { if (r.success) setTasks(r.data || []); });
+  }, [role]);
+
+  if (tasks.length === 0) return null;
+
+  const submitResponse = async (id: string) => {
+    if (!responseText.trim()) return;
+    setSubmitting(true);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`${apiBase}/api/finance/director/tasks/${id}/respond`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response_notes: responseText })
+      });
+      const r = await res.json();
+      if (r.success) {
+        setTasks(prev => prev.filter(t => t.id !== id));
+        setResponding(null);
+        setResponseText('');
+      }
+    } finally { setSubmitting(false); }
+  };
+
+  const PRIO: Record<string, string> = {
+    CRITICAL: 'border-rose-500 bg-rose-50',
+    HIGH: 'border-orange-400 bg-orange-50',
+    MEDIUM: 'border-amber-400 bg-amber-50',
+    LOW: 'border-blue-400 bg-blue-50'
+  };
+
+  return (
+    <div className="bg-white border-2 border-rose-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 py-3 bg-rose-600 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-white">
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-2h2v2zm0-4H9V7h2v2z"/></svg>
+          <span className="font-bold text-sm">Director Review Tasks</span>
+          <span className="bg-white text-rose-600 text-xs font-black px-2 py-0.5 rounded-full">{tasks.length}</span>
+        </div>
+        <span className="text-rose-200 text-xs">Requires your attention</span>
+      </div>
+      <div className="divide-y divide-stone-100">
+        {tasks.map(task => (
+          <div key={task.id} className={`p-4 border-l-4 ${PRIO[task.priority] || 'border-stone-200 bg-white'}`}>
+            <div className="flex justify-between items-start gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-black uppercase text-stone-400">{task.priority}</span>
+                  {task.branches?.name && <span className="text-[10px] text-stone-400">· {task.branches.name}</span>}
+                  {task.related_record_date && <span className="text-[10px] text-stone-400">· {task.related_record_date}</span>}
+                </div>
+                <p className="font-bold text-stone-900 text-sm">{task.title}</p>
+                <p className="text-xs text-stone-600 mt-0.5">{task.description}</p>
+                {task.due_date && <p className="text-xs text-rose-600 font-semibold mt-1">Due: {task.due_date}</p>}
+              </div>
+              <button
+                onClick={() => setResponding(responding === task.id ? null : task.id)}
+                className="px-3 py-1.5 bg-stone-900 text-white rounded-lg text-xs font-bold hover:bg-stone-700 transition-colors whitespace-nowrap"
+              >
+                Respond
+              </button>
+            </div>
+            {responding === task.id && (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={responseText}
+                  onChange={e => setResponseText(e.target.value)}
+                  placeholder="Type your response to the Director..."
+                  rows={3}
+                  className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-stone-400 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button onClick={() => submitResponse(task.id)} disabled={submitting || !responseText.trim()} className="flex-1 bg-emerald-600 text-white rounded-lg py-2 text-xs font-bold disabled:opacity-50">
+                    {submitting ? 'Sending...' : 'Submit Response'}
+                  </button>
+                  <button onClick={() => { setResponding(null); setResponseText(''); }} className="px-4 border border-stone-200 rounded-lg text-xs font-bold text-stone-600 hover:bg-stone-50">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

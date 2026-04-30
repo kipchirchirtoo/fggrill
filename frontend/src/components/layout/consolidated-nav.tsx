@@ -1515,6 +1515,13 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/director/drill-down'}
       />
 
+      <NavItem
+        href="/dashboard/director/tasks"
+        icon={ClipboardList}
+        label="Review Tasks"
+        active={pathname === '/dashboard/director/tasks'}
+      />
+
       <hr className="my-4 border-stone-100" />
       <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-3 mb-2">Audit & HR Oversight</p>
       {auditorNav}

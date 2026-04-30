@@ -527,7 +527,7 @@ export default function DirectorDashboardEnhanced() {
               <Activity className="w-5 h-5 text-[#007AFF]" />
               Quick Actions
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <QuickActionButton 
                 label="Payment Details"
                 icon={<DollarSign className="w-5 h-5" />}
@@ -548,6 +548,11 @@ export default function DirectorDashboardEnhanced() {
                 label="Deep Drill-Down"
                 icon={<Eye className="w-5 h-5" />}
                 href="/dashboard/director/drill-down"
+              />
+              <QuickActionButton 
+                label="Review Tasks"
+                icon={<FileText className="w-5 h-5" />}
+                href="/dashboard/director/tasks"
               />
             </div>
           </div>

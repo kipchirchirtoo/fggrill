@@ -1067,4 +1067,139 @@ export class DirectorEnhancedController {
       });
     }
   }
+
+  /**
+   * Transaction-level drill-down data for a specific branch, date, and stream
+   * @route GET /api/finance/director/drill-down
+   */
+  static async getDrillDownData(req: Request, res: Response) {
+    try {
+      const { branch_id, date, stream } = req.query as Record<string, string>;
+
+      if (!branch_id || !date || !stream) {
+        return res.status(400).json({ success: false, message: 'branch_id, date, and stream are required' });
+      }
+
+      // Fetch the daily record for that branch/date
+      const { data: record, error } = await supabase
+        .from('daily_financial_records')
+        .select('*, branches(name)')
+        .eq('branch_id', branch_id)
+        .eq('record_date', date)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const branchName = (record?.branches as any)?.name || `Branch ${branch_id}`;
+
+      if (!record) {
+        return res.status(200).json({
+          success: true,
+          data: { rows: [], summary: {}, branchName, date, stream, hasRecord: false }
+        });
+      }
+
+      const streamLower = (stream as string).toLowerCase();
+      let rows: any[] = [];
+      let summary: any = {};
+
+      if (streamLower.includes('revenue')) {
+        const rev = normalizeRevenueData(record.revenue_data || {});
+        const labels: Record<string, string> = {
+          restaurant: 'Restaurant', bar: 'Bar', executive_bar: 'Executive Bar',
+          sports_bar: 'Sports Bar', pool_table: 'Pool Table', spa_sauna: 'Spa & Sauna',
+          carwash: 'Carwash', conferences: 'Conferences', outside_catering: 'Outside Catering',
+          rooms: 'Rooms', paid_bills: 'Paid Bills', non_consumables: 'Non-Consumables',
+          swimming_pool: 'Swimming Pool', other: 'Other'
+        };
+        rows = Object.entries(rev).map(([key, value]) => ({
+          stream: labels[key] || key,
+          amount: toNumber(value),
+          percentage: toNumber(record.total_revenue) > 0
+            ? ((toNumber(value) / toNumber(record.total_revenue)) * 100).toFixed(1) + '%'
+            : '0%'
+        })).filter(r => r.amount > 0);
+        summary = { total: toNumber(record.total_revenue), label: 'Total Revenue' };
+
+      } else if (streamLower.includes('payment')) {
+        const pay = normalizePaymentData(record.payment_data || {});
+        rows = [
+          { method: 'Cash', amount: pay.cash },
+          { method: 'MPESA', amount: pay.mpesa },
+          { method: 'Swipe / Card', amount: pay.swipe },
+          { method: 'Other', amount: pay.other },
+        ].filter(r => r.amount > 0);
+        summary = { total: pay.cash + pay.mpesa + pay.swipe + pay.other, label: 'Total Payments' };
+
+      } else if (streamLower.includes('expense') || streamLower.includes('cost')) {
+        const exp = record.expenses_data || {};
+        const cogs = record.cogs_data || {};
+        const allEntries = { ...exp, ...cogs };
+        rows = Object.entries(allEntries).map(([key, value]) => ({
+          category: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          amount: toNumber(value)
+        })).filter(r => r.amount > 0);
+        // Also show petty cash and cost lines from record
+        if (rows.length === 0) {
+          rows = [
+            { category: 'Total Expenses', amount: toNumber(record.total_expenses) },
+            { category: 'Total COGS', amount: toNumber(record.total_cogs) }
+          ];
+        }
+        summary = { total: toNumber(record.total_expenses) + toNumber(record.total_cogs), label: 'Total Costs' };
+
+      } else if (streamLower.includes('audit') || streamLower.includes('flag')) {
+        const { data: flags } = await supabase
+          .from('discrepancy_flags')
+          .select('*')
+          .eq('branch_id', branch_id)
+          .eq('record_date', date);
+        rows = (flags || []).map((f: any) => ({
+          id: f.id,
+          flag_type: (f.flag_type || '').replace(/_/g, ' '),
+          severity: f.severity,
+          status: f.status,
+          description: f.description,
+          created_at: f.created_at
+        }));
+        summary = { total: rows.length, label: 'Total Flags' };
+
+      } else if (streamLower.includes('bank')) {
+        const entries = normalizeBankingEntries(record.banking_data || {});
+        rows = entries.map((e: any) => ({
+          amount: e.amount,
+          account: e.account || '—',
+          reference: e.reference || '—',
+          time: e.time || '—',
+          method: e.method || 'cash'
+        }));
+        const totalBanked = entries.reduce((s: number, e: any) => s + toNumber(e.amount), 0);
+        summary = {
+          totalBanked,
+          unbanked: toNumber(record.unbanked_cash),
+          expected: toNumber(record.expected_cash),
+          label: 'Banking Summary'
+        };
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          rows,
+          summary,
+          branchName,
+          date,
+          stream,
+          hasRecord: true,
+          recordStatus: record.status,
+          totalRevenue: toNumber(record.total_revenue),
+          totalExpenses: toNumber(record.total_expenses),
+          netProfit: toNumber(record.net_profit)
+        }
+      });
+    } catch (error: any) {
+      console.error('Drill-down Error:', error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
 }
