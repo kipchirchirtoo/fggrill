@@ -44,6 +44,7 @@ import {
   subscribeToReactions,
   subscribeToChannels 
 } from "@/lib/supabase-client";
+import { getWebRTCClient } from "@/lib/webrtc-client";
 
 export default function CommunicationsPage() {
   const [channels, setChannels] = useState<any[]>([]);
@@ -68,6 +69,28 @@ export default function CommunicationsPage() {
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [channelMarkedDone, setChannelMarkedDone] = useState<Set<string>>(new Set());
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserDropdown]);
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -75,6 +98,7 @@ export default function CommunicationsPage() {
       setCurrentUser(JSON.parse(userStr));
     }
     fetchChannels();
+    fetchAvailableUsers();
   }, []);
 
   useEffect(() => {
@@ -135,6 +159,26 @@ export default function CommunicationsPage() {
       console.error("Fetch Channels Error:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchAvailableUsers = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/api/users`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        // Filter users who have login credentials (email exists)
+        const usersWithLogin = result.data.filter((user: any) => user.email);
+        setAvailableUsers(usersWithLogin);
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
     }
   };
 
@@ -345,22 +389,39 @@ export default function CommunicationsPage() {
     setShowCallModal(true);
   };
 
-  const handleJoinCall = () => {
-    setIsInCall(true);
-    setShowCallModal(false);
-    toast.success(`${callType === "voice" ? "Voice" : "Video"} call started`);
-    
-    // Simulate call duration
-    setTimeout(() => {
-      if (isInCall) {
-        toast.info("Call ended");
-        setIsInCall(false);
+  const handleJoinCall = async () => {
+    try {
+      const webrtc = getWebRTCClient();
+      const stream = await webrtc.startCall(callType);
+      
+      setLocalStream(stream);
+      setIsInCall(true);
+      setShowCallModal(false);
+      
+      // Attach stream to video element if video call
+      if (callType === "video" && localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
       }
-    }, 30000); // Auto-end after 30 seconds for demo
+      
+      toast.success(`${callType === "voice" ? "Voice" : "Video"} call started`);
+    } catch (error: any) {
+      console.error("Call error:", error);
+      toast.error(error.message || "Failed to start call");
+      setShowCallModal(false);
+    }
   };
 
   const handleEndCall = () => {
+    const webrtc = getWebRTCClient();
+    webrtc.endCall();
+    
     setIsInCall(false);
+    setLocalStream(null);
+    
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    
     toast.info("Call ended");
   };
 
@@ -408,26 +469,51 @@ export default function CommunicationsPage() {
               </button>
               
               <button
-                onClick={() => setActiveTab("calls")}
-                className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                  activeTab === "calls"
-                    ? "bg-gray-900 text-white shadow-lg"
-                    : "text-gray-400 hover:bg-gray-100"
-                }`}
-                title="Calls"
-              >
-                <Phone className="w-5 h-5" />
-              </button>
-              
-              <button
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-all"
-                title="Users"
+                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                className="relative w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-all"
+                title="Users with Login"
               >
                 <Users className="w-5 h-5" />
+                {showUserDropdown && (
+                  <div 
+                    ref={userDropdownRef}
+                    className="absolute left-full ml-2 top-0 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-96 overflow-y-auto"
+                  >
+                    <div className="p-3 border-b border-gray-200">
+                      <h4 className="font-semibold text-sm text-gray-900">Users with Login</h4>
+                      <p className="text-xs text-gray-500">{availableUsers.length} users</p>
+                    </div>
+                    <div className="p-2">
+                      {availableUsers.length === 0 ? (
+                        <div className="text-center py-4 text-sm text-gray-500">
+                          Loading users...
+                        </div>
+                      ) : (
+                        availableUsers.map((user) => (
+                          <div
+                            key={user.id}
+                            className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-all"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
+                              {user.first_name?.[0]}{user.last_name?.[0]}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {user.first_name} {user.last_name}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </button>
             </div>
 
             <button
+              onClick={() => setShowSettingsModal(true)}
               className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-all"
               title="Settings"
             >
@@ -453,29 +539,15 @@ export default function CommunicationsPage() {
                 )}
               </div>
 
-              <div className="flex gap-2 mb-4">
-                <button className="flex-1 bg-gray-900 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-2">
-                  <Phone className="w-4 h-4" />
-                  Calls
-                </button>
-                <button className="flex-1 bg-gray-100 text-gray-600 rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-gray-200">
-                  <MessageCircle className="w-4 h-4" />
-                  Messages
-                </button>
-              </div>
-
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Enter name, number or company..."
-                  className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-emerald-500 focus:bg-white transition-all"
+                  placeholder="Search channels..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-emerald-500 focus:bg-white transition-all"
                 />
-                <button className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <Filter className="w-4 h-4" />
-                </button>
               </div>
             </div>
 
@@ -862,6 +934,8 @@ export default function CommunicationsPage() {
             callType={callType}
             channel={selectedChannel}
             onEnd={handleEndCall}
+            localVideoRef={localVideoRef}
+            localStream={localStream}
           />
         )}
 
@@ -1357,7 +1431,7 @@ function CallModal({ callType, channel, onClose, onJoin }: any) {
 }
 
 // Active Call Overlay Component
-function ActiveCallOverlay({ callType, channel, onEnd }: any) {
+function ActiveCallOverlay({ callType, channel, onEnd, localVideoRef, localStream }: any) {
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -1375,24 +1449,60 @@ function ActiveCallOverlay({ callType, channel, onEnd }: any) {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const handleToggleMute = () => {
+    const webrtc = getWebRTCClient();
+    const muted = webrtc.toggleMute();
+    setIsMuted(muted);
+    toast.info(muted ? "Microphone muted" : "Microphone unmuted");
+  };
+
+  const handleToggleVideo = () => {
+    if (callType !== "video") return;
+    const webrtc = getWebRTCClient();
+    const videoOff = webrtc.toggleVideo();
+    setIsVideoOff(videoOff);
+    toast.info(videoOff ? "Video turned off" : "Video turned on");
+  };
+
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-emerald-900 to-teal-900 z-50 flex flex-col items-center justify-center p-6">
-      <div className="text-center text-white mb-8">
-        <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-          {callType === "voice" ? (
-            <Phone className="w-16 h-16" />
-          ) : (
-            <Video className="w-16 h-16" />
+      {/* Video Display for Video Calls */}
+      {callType === "video" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+          {isVideoOff && (
+            <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+              <div className="text-center text-white">
+                <Video className="w-24 h-24 mx-auto mb-4 opacity-50" />
+                <p className="text-xl">Camera is off</p>
+              </div>
+            </div>
           )}
         </div>
+      )}
+
+      {/* Call Info Overlay */}
+      <div className="relative z-10 text-center text-white mb-8">
+        {callType === "voice" && (
+          <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            <Phone className="w-16 h-16" />
+          </div>
+        )}
         <h2 className="text-3xl font-bold mb-2">{channel?.name}</h2>
         <p className="text-emerald-200 text-lg">{callType === "voice" ? "Voice Call" : "Video Call"}</p>
         <p className="text-2xl font-mono mt-4">{formatDuration(callDuration)}</p>
       </div>
 
-      <div className="flex gap-4">
+      {/* Call Controls */}
+      <div className="relative z-10 flex gap-4">
         <button
-          onClick={() => setIsMuted(!isMuted)}
+          onClick={handleToggleMute}
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
             isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
           }`}
@@ -1412,7 +1522,7 @@ function ActiveCallOverlay({ callType, channel, onEnd }: any) {
 
         {callType === "video" && (
           <button
-            onClick={() => setIsVideoOff(!isVideoOff)}
+            onClick={handleToggleVideo}
             className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
               isVideoOff ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
             }`}
@@ -1431,7 +1541,7 @@ function ActiveCallOverlay({ callType, channel, onEnd }: any) {
         </button>
       </div>
 
-      <p className="text-white/60 text-sm mt-8">
+      <p className="relative z-10 text-white/60 text-sm mt-8">
         {isMuted && "Microphone muted • "}
         {isVideoOff && "Video off • "}
         Call in progress
