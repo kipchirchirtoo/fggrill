@@ -3,7 +3,13 @@
  * Single source of truth for all HTTP calls.
  */
 
-import { API_URL, PYTHON_API_URL, REPORTS_SERVICE_URL, PYTHON_SERVICE_URL } from '../config';
+import {
+  API_URL,
+  PYTHON_API_URL,
+  REPORTS_SERVICE_URL,
+  PYTHON_SERVICE_URL,
+} from "../config";
+import { formatApiError, notifyApiError } from "../error-utils";
 
 // ─── Backend URL Constants ────────────────────────────────────────────────────
 export { API_URL, PYTHON_API_URL, REPORTS_SERVICE_URL, PYTHON_SERVICE_URL };
@@ -11,9 +17,10 @@ export { API_URL, PYTHON_API_URL, REPORTS_SERVICE_URL, PYTHON_SERVICE_URL };
 // ─── Auth Headers ────────────────────────────────────────────────────────────
 
 export const getHeaders = (skipContentType = false): Record<string, string> => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
   return {
-    ...(skipContentType ? {} : { 'Content-Type': 'application/json' }),
+    ...(skipContentType ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 };
@@ -32,30 +39,31 @@ type QueryValue = string | number | boolean | undefined | null | string[];
  * Skips undefined/null/empty values automatically.
  */
 export function buildQuery(params?: Record<string, QueryValue>): string {
-  if (!params) return '';
+  if (!params) return "";
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== '') {
+    if (v !== undefined && v !== null && v !== "") {
       if (Array.isArray(v)) {
-        v.forEach(val => q.append(k, String(val)));
+        v.forEach((val) => q.append(k, String(val)));
       } else {
         q.append(k, String(v));
       }
     }
   }
   const s = q.toString();
-  return s ? `?${s}` : '';
+  return s ? `?${s}` : "";
 }
 
 // ─── Fetch Options ───────────────────────────────────────────────────────────
 
-import { ApiResponse } from './types';
+import { ApiResponse } from "./types";
 
 // ─── Fetch Options ───────────────────────────────────────────────────────────
 
 export interface FetchOptions extends RequestInit {
   showToast?: boolean;
-  responseType?: 'json' | 'blob';
+  silentErrors?: boolean;
+  responseType?: "json" | "blob";
 }
 
 // ─── Core Fetch ──────────────────────────────────────────────────────────────
@@ -69,16 +77,33 @@ export async function fetchAPI<T>(
   options?: FetchOptions,
   baseUrl: string = API_URL,
 ): Promise<ApiResponse<T>> {
-  const isPython = baseUrl === PYTHON_API_URL || baseUrl === REPORTS_SERVICE_URL || baseUrl === PYTHON_SERVICE_URL;
-  const showToast = options?.showToast ?? false;
+  const isPython =
+    baseUrl === PYTHON_API_URL ||
+    baseUrl === REPORTS_SERVICE_URL ||
+    baseUrl === PYTHON_SERVICE_URL;
+  const method = (options?.method || "GET").toUpperCase();
+  const shouldToast =
+    options?.showToast ?? (!options?.silentErrors && method !== "GET");
 
   // ── Offline guard ──────────────────────────────────────────────────────────
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
-    if (token === 'offline-bridge-token') {
-      const isAuth = endpoint.includes('/auth/login') || endpoint.includes('/auth/pos-login');
-      if (isPython) return { success: false, data: null as any, message: 'Offline mode – Python API unavailable' };
-      if (!isAuth) return { success: true, data: null as any, message: 'Offline mode – no API call made' };
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("token");
+    if (token === "offline-bridge-token") {
+      const isAuth =
+        endpoint.includes("/auth/login") ||
+        endpoint.includes("/auth/pos-login");
+      if (isPython)
+        return {
+          success: false,
+          data: null as any,
+          message: "Offline mode – Python API unavailable",
+        };
+      if (!isAuth)
+        return {
+          success: true,
+          data: null as any,
+          message: "Offline mode – no API call made",
+        };
     }
   }
 
@@ -88,14 +113,14 @@ export async function fetchAPI<T>(
   while (retries <= MAX_RETRIES) {
     try {
       if (retries > 0) {
-        await new Promise(r => setTimeout(r, backoff(retries - 1)));
+        await new Promise((r) => setTimeout(r, backoff(retries - 1)));
       }
 
       // ── Header Injection (BRANCH + AUTH) ──────────────────────────────────
       const branchHeaders: Record<string, string> = {};
-      if (typeof window !== 'undefined') {
-        const bid = localStorage.getItem('activeBranchId');
-        if (bid) branchHeaders['x-branch-id'] = bid;
+      if (typeof window !== "undefined") {
+        const bid = localStorage.getItem("activeBranchId");
+        if (bid) branchHeaders["x-branch-id"] = bid;
       }
 
       // Skip Content-Type header for FormData (browser will set it with boundary)
@@ -107,21 +132,28 @@ export async function fetchAPI<T>(
         ...branchHeaders,
         ...((options?.headers as Record<string, string>) || {}),
       };
-      
+
       // Remove Content-Type if FormData (let browser set it)
-      if (isFormData && mergedHeaders['Content-Type']) {
-        delete mergedHeaders['Content-Type'];
+      if (isFormData && mergedHeaders["Content-Type"]) {
+        delete mergedHeaders["Content-Type"];
       }
 
       // ── Electron C# proxy (Node API only) ─────────────────────────────────
-      if (!isPython && typeof window !== 'undefined' && (window as any).electronAPI?.invoke) {
+      if (
+        !isPython &&
+        typeof window !== "undefined" &&
+        (window as any).electronAPI?.invoke
+      ) {
         try {
-          const result = await (window as any).electronAPI.invoke('http:proxy', {
-            url: `${baseUrl}/api${endpoint}`,
-            method: options?.method ?? 'GET',
-            headers: mergedHeaders,
-            body: options?.body,
-          });
+          const result = await (window as any).electronAPI.invoke(
+            "http:proxy",
+            {
+              url: `${baseUrl}/api${endpoint}`,
+              method: options?.method ?? "GET",
+              headers: mergedHeaders,
+              body: options?.body,
+            },
+          );
           return result as ApiResponse<T>;
         } catch {
           // Fall through to direct fetch
@@ -131,82 +163,144 @@ export async function fetchAPI<T>(
       // ── Direct fetch ───────────────────────────────────────────────────────
       const response = await fetch(`${baseUrl}/api${endpoint}`, {
         ...options,
-        cache: isPython ? undefined : 'no-store',
+        cache: isPython ? undefined : "no-store",
         headers: {
           ...mergedHeaders,
-          ...(isPython ? {} : { 'Cache-Control': 'no-cache', Pragma: 'no-cache' }),
+          ...(isPython
+            ? {}
+            : { "Cache-Control": "no-cache", Pragma: "no-cache" }),
         },
       });
 
       // ── Token Expiry Redirect ─────────────────────────────────────────────
       // Skip for /auth/me — that endpoint is handled gracefully by checkAuth()
       // in auth-context.tsx which uses the cached user on failure.
-      const isSessionCheck = endpoint === '/auth/me' || endpoint === '/auth/session';
-      if (response.status === 401 && !isPython && typeof window !== 'undefined' && !isSessionCheck) {
-        const isLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
+      const isSessionCheck =
+        endpoint === "/auth/me" || endpoint === "/auth/session";
+      if (
+        response.status === 401 &&
+        !isPython &&
+        typeof window !== "undefined" &&
+        !isSessionCheck
+      ) {
+        const isLoginPage =
+          window.location.pathname === "/login" ||
+          window.location.pathname === "/";
         if (!isLoginPage) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          if (window.location.pathname.includes('/dashboard') || window.location.pathname.includes('/admin')) {
-            window.location.href = '/login?expired=true';
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          if (
+            window.location.pathname.includes("/dashboard") ||
+            window.location.pathname.includes("/admin")
+          ) {
+            window.location.href = "/login?expired=true";
           }
         }
       }
 
       // ── 403 Forbidden — Graceful Access Denied ─────────────────────────────
-      if (response.status === 403 && typeof window !== 'undefined') {
-        console.warn(`[RBAC] 403 Forbidden: ${endpoint} — current user lacks permission`);
-        import('sonner').then(({ toast }) => toast.error('Access denied — you don\'t have permission for this action'));
+      if (response.status === 403 && typeof window !== "undefined") {
+        console.warn(
+          `[RBAC] 403 Forbidden: ${endpoint} — current user lacks permission`,
+        );
+        const message = "You do not have permission to perform this action";
+        notifyApiError(
+          { message },
+          { status: 403, endpoint, silent: options?.silentErrors },
+        );
         return {
           success: false,
           data: null as any,
-          message: 'Access denied',
+          message,
+          error: message,
+          status: 403,
         };
       }
 
-      // Handle Response Type
-      if (options?.responseType === 'blob') {
+      // Handle successful binary downloads before JSON parsing.
+      if (options?.responseType === "blob" && response.ok) {
         const blob = await response.blob();
-        return { success: true, data: blob as any } as ApiResponse<T>;
+        return {
+          success: true,
+          data: blob as any,
+          status: response.status,
+        } as ApiResponse<T>;
       }
 
-      const result = await response.json();
+      let result: any = null;
+      const contentType = response.headers.get("content-type") || "";
+
+      if (response.status !== 204) {
+        if (contentType.includes("application/json")) {
+          result = await response.json();
+        } else {
+          const text = await response.text();
+          result = text ? { message: text } : null;
+        }
+      }
 
       if (!response.ok) {
-        throw new Error(result.message || result.error || result.detail || `HTTP ${response.status}`);
+        const message = formatApiError(
+          result,
+          response.status,
+          response.statusText,
+        );
+        notifyApiError(result, {
+          status: response.status,
+          statusText: response.statusText,
+          endpoint,
+          silent: options?.silentErrors || !shouldToast,
+        });
+        return {
+          success: false,
+          message,
+          error: message,
+          status: response.status,
+          details: result?.errors ?? result?.data ?? result?.details,
+          data: null as any,
+        };
       }
 
       // Normalize response shape if necessary
       return {
-        success: result.success ?? true,
-        data: result.data !== undefined ? result.data : result,
-        message: result.message,
-        count: result.count,
-        pages: result.pages,
+        success: result?.success ?? true,
+        data: result?.data !== undefined ? result.data : result,
+        message: result?.message,
+        error: result?.error,
+        status: response.status,
+        count: result?.count,
+        pages: result?.pages,
 
-        stats: result.stats,
-        summary: result.summary
+        stats: result?.stats,
+        summary: result?.summary,
       } as ApiResponse<T>;
-
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Unknown error');
+      lastError = error instanceof Error ? error : new Error("Unknown error");
       const msg = lastError.message;
 
       // Retry logic
-      const isRetryable = msg.includes('fetch') || msg.includes('NetworkError') || msg.includes('500');
-      if (!isRetryable || msg.includes('Unauthorized')) break;
+      const isRetryable =
+        msg.includes("fetch") ||
+        msg.includes("NetworkError") ||
+        msg.includes("500");
+      if (!isRetryable || msg.includes("Unauthorized")) break;
       retries++;
     }
   }
 
   // ── Centralized Toast Error ────────────────────────────────────────────────
-  if (showToast && lastError && typeof window !== 'undefined') {
-    import('sonner').then(({ toast }) => toast.error(lastError!.message));
+  if (shouldToast && lastError && typeof window !== "undefined") {
+    notifyApiError(lastError, { endpoint, silent: options?.silentErrors });
   }
+
+  const message = lastError
+    ? formatApiError(lastError)
+    : "Request failed: The request could not be completed. Please try again.";
 
   return {
     success: false,
-    message: lastError?.message ?? 'Request failed',
+    message,
+    error: message,
     data: null as any,
   };
 }
@@ -218,7 +312,7 @@ export const fetchPythonAPI = <T>(endpoint: string, options?: FetchOptions) =>
 
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
@@ -230,29 +324,29 @@ export function downloadBlob(blob: Blob, filename: string): void {
 export function printBlob(blob: Blob): void {
   // Create a blob URL
   const url = window.URL.createObjectURL(blob);
-  
+
   // Create an iframe to load the PDF
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
+  const iframe = document.createElement("iframe");
+  iframe.style.display = "none";
   iframe.src = url;
-  
+
   document.body.appendChild(iframe);
-  
+
   // Wait for the PDF to load, then trigger print
   iframe.onload = () => {
     try {
       // Try to print the iframe content
       iframe.contentWindow?.print();
-      
+
       // Clean up after printing (or if user cancels)
       setTimeout(() => {
         document.body.removeChild(iframe);
         window.URL.revokeObjectURL(url);
       }, 1000);
     } catch (error) {
-      console.error('Print failed:', error);
+      console.error("Print failed:", error);
       // Fallback: open in new window and print
-      const printWindow = window.open(url, '_blank');
+      const printWindow = window.open(url, "_blank");
       if (printWindow) {
         printWindow.onload = () => {
           printWindow.print();
@@ -274,18 +368,30 @@ export function printBlob(blob: Blob): void {
  * Example: apiClient.get<User[]>('/users')
  */
 export const apiClient = {
-  get: <T>(endpoint: string, options?: FetchOptions) => 
-    fetchAPI<T>(endpoint, { ...options, method: 'GET' }),
-  
-  post: <T>(endpoint: string, body?: any, options?: FetchOptions) => 
-    fetchAPI<T>(endpoint, { ...options, method: 'POST', body: (body instanceof FormData) ? body : JSON.stringify(body) }),
-  
-  put: <T>(endpoint: string, body?: any, options?: FetchOptions) => 
-    fetchAPI<T>(endpoint, { ...options, method: 'PUT', body: (body instanceof FormData) ? body : JSON.stringify(body) }),
-  
-  patch: <T>(endpoint: string, body?: any, options?: FetchOptions) => 
-    fetchAPI<T>(endpoint, { ...options, method: 'PATCH', body: (body instanceof FormData) ? body : JSON.stringify(body) }),
-  
-  delete: <T>(endpoint: string, options?: FetchOptions) => 
-    fetchAPI<T>(endpoint, { ...options, method: 'DELETE' }),
+  get: <T>(endpoint: string, options?: FetchOptions) =>
+    fetchAPI<T>(endpoint, { ...options, method: "GET" }),
+
+  post: <T>(endpoint: string, body?: any, options?: FetchOptions) =>
+    fetchAPI<T>(endpoint, {
+      ...options,
+      method: "POST",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
+
+  put: <T>(endpoint: string, body?: any, options?: FetchOptions) =>
+    fetchAPI<T>(endpoint, {
+      ...options,
+      method: "PUT",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
+
+  patch: <T>(endpoint: string, body?: any, options?: FetchOptions) =>
+    fetchAPI<T>(endpoint, {
+      ...options,
+      method: "PATCH",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
+
+  delete: <T>(endpoint: string, options?: FetchOptions) =>
+    fetchAPI<T>(endpoint, { ...options, method: "DELETE" }),
 };

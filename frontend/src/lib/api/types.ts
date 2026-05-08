@@ -8,6 +8,8 @@ export interface ApiResponse<T> {
   data: T;
   message?: string;
   error?: string;
+  status?: number;
+  details?: unknown;
   count?: number; // For paginated results
   pages?: number;
   stats?: any;
@@ -41,7 +43,7 @@ export interface User {
   is_active: boolean;
   photo_url?: string;
   permissions?: string[];
-  
+
   // UI Compatibility Aliases
   first_name?: string;
   last_name?: string;
@@ -89,7 +91,7 @@ export interface Department {
   name: string;
   branch_id?: number;
   staff_count?: number;
-  status?: 'active' | 'inactive';
+  status?: "active" | "inactive";
 }
 
 export interface Role {
@@ -132,7 +134,7 @@ export interface AttendanceRecord {
   date: string;
   clock_in?: string;
   clock_out?: string;
-  status: 'present' | 'absent' | 'late' | 'half-day' | 'holiday' | 'leave';
+  status: "present" | "absent" | "late" | "half-day" | "holiday" | "leave";
   is_approved: boolean;
   approved_by?: string;
 }
@@ -153,7 +155,7 @@ export interface LeaveRequest {
   start_date: string;
   end_date: string;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status: "pending" | "approved" | "rejected" | "cancelled";
   approved_by?: string;
   // Report to Duty fields
   reported_to_duty?: boolean;
@@ -172,7 +174,7 @@ export interface PayrollRecord {
   gross_pay: number;
   net_pay: number;
   deductions: number;
-  status: 'draft' | 'approved' | 'paid';
+  status: "draft" | "approved" | "paid";
   branch_id: number;
 }
 
@@ -185,7 +187,7 @@ export interface Driver {
   email: string;
   phone: string;
   license_number: string;
-  status: 'active' | 'inactive';
+  status: "active" | "inactive";
 }
 
 export interface Trip {
@@ -194,7 +196,7 @@ export interface Trip {
   vehicle_id: string;
   start_location: string;
   end_location: string;
-  status: 'scheduled' | 'on-going' | 'completed' | 'cancelled';
+  status: "scheduled" | "on-going" | "completed" | "cancelled";
   distance?: number;
 }
 
@@ -234,8 +236,16 @@ export interface StockRequest {
   request_number: string;
   request_type?: any;
   requesting_branch_id: number;
-  status: 'PENDING' | 'APPROVED' | 'PARTIALLY_APPROVED' | 'REJECTED' | 'FULFILLED' | 'CANCELLED' | 'IN_TRANSIT' | 'DELIVERED';
-  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  status:
+    | "PENDING"
+    | "APPROVED"
+    | "PARTIALLY_APPROVED"
+    | "REJECTED"
+    | "FULFILLED"
+    | "CANCELLED"
+    | "IN_TRANSIT"
+    | "DELIVERED";
+  priority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
   items_count?: number;
   reason?: string;
   notes?: string;
@@ -265,7 +275,7 @@ export interface StockRequest {
 export interface StockAudit {
   id: string;
   branch_id: number;
-  status: 'draft' | 'submitted' | 'approved' | 'rejected';
+  status: "draft" | "submitted" | "approved" | "rejected";
   created_at: string;
   items: StockAuditItem[];
 }
@@ -300,9 +310,9 @@ export interface Invoice {
   vat_amount?: number; // Alias
   total_amount: number;
   balance?: number;
-  status: 'draft' | 'sent' | 'paid' | 'unpaid' | 'partially_paid' | 'voided';
+  status: "draft" | "sent" | "paid" | "unpaid" | "partially_paid" | "voided";
   branch_id: number;
-  type: 'CONFERENCE' | 'HOTEL' | 'RESTAURANT' | 'GUEST' | 'GENERAL';
+  type: "CONFERENCE" | "HOTEL" | "RESTAURANT" | "GUEST" | "GENERAL";
   reference_number?: string;
   supplier_name?: string;
 }
@@ -320,25 +330,25 @@ export interface Customer {
 export interface Transaction {
   id: string;
   date: string;
-  type: 'income' | 'expense';
+  type: "income" | "expense";
   amount: number;
   category: string;
   payment_method: string;
   description?: string;
   reference?: string;
-  status: 'completed' | 'pending' | 'voided';
+  status: "completed" | "pending" | "voided";
   branch_id: number;
 }
 
 export interface PaymentVerification {
   id: string;
-  source: 'banking' | 'pos' | 'payment' | 'manual';
+  source: "banking" | "pos" | "payment" | "manual";
   transaction_id?: string;
   description?: string;
   amount: number | string;
   payment_method: string;
   reference_number?: string;
-  status: 'pending' | 'accountant_verified' | 'auditor_verified' | 'flagged';
+  status: "pending" | "accountant_verified" | "auditor_verified" | "flagged";
   recorded_by?: string;
   recorded_at: string;
   created_at?: string;
@@ -351,7 +361,7 @@ export interface PaymentVerification {
   auditor_verified_by?: string;
   auditor_verified_at?: string;
   auditor_notes?: string;
-  auditor_status?: 'pending' | 'approved' | 'flagged';
+  auditor_status?: "pending" | "approved" | "flagged";
   branch_id: number;
   customer_name?: string;
   recorded_by_user?: {
@@ -403,7 +413,7 @@ export interface Room {
   id: string;
   room_number: any;
   type_id: string;
-  status: 'available' | 'occupied' | 'dirty' | 'maintenance' | 'out-of-service';
+  status: "available" | "occupied" | "dirty" | "maintenance" | "out-of-service";
   branch_id: number;
   price_per_night: number;
   price?: number; // Alias
@@ -425,7 +435,7 @@ export interface Booking {
   check_out_date: string;
   check_in?: string; // Alias
   check_out?: string; // Alias
-  status: 'pending' | 'confirmed' | 'checked-in' | 'checked-out' | 'cancelled';
+  status: "pending" | "confirmed" | "checked-in" | "checked-out" | "cancelled";
   total_amount: number;
   total?: number; // Alias
   paid_amount: number;
@@ -459,7 +469,7 @@ export interface KitchenWastage {
   estimated_value?: number;
   photo_url?: string;
   shift?: string;
-  status: 'pending_review' | 'reviewed' | 'approved' | 'rejected';
+  status: "pending_review" | "reviewed" | "approved" | "rejected";
   reported_by?: string;
   reviewed_by?: string;
   reviewed_at?: string;
@@ -478,7 +488,7 @@ export interface KitchenUsage {
   usage_type: string;
   shift?: string;
   chef_on_duty?: string;
-  status: 'pending_review' | 'reviewed' | 'approved' | 'rejected';
+  status: "pending_review" | "reviewed" | "approved" | "rejected";
   notes?: string;
   reviewed_by?: string;
   reviewed_at?: string;
@@ -495,7 +505,7 @@ export interface ReportTemplate {
   name: string;
   type: string;
   description?: string;
-  frequency: 'daily' | 'weekly' | 'monthly' | 'on-demand';
+  frequency: "daily" | "weekly" | "monthly" | "on-demand";
 }
 
 export interface AuditLog {
@@ -513,8 +523,8 @@ export interface AuditLog {
 
 export interface SystemNotification {
   id: number;
-  type: 'booking' | 'payment' | 'inventory' | 'maintenance' | 'hr' | 'system';
-  priority: 'low' | 'normal' | 'high' | 'critical';
+  type: "booking" | "payment" | "inventory" | "maintenance" | "hr" | "system";
+  priority: "low" | "normal" | "high" | "critical";
   title: string;
   message: string;
   recipient_id?: string;
@@ -541,7 +551,7 @@ export interface Shift {
   id: string;
   sales_point_id: number;
   user_id: string;
-  status: 'OPEN' | 'CLOSED' | 'FLAGGED' | 'APPROVED';
+  status: "OPEN" | "CLOSED" | "FLAGGED" | "APPROVED";
   opening_cash_float: number;
   opening_petty_cash: number;
   closing_cash_counted?: number;
@@ -563,7 +573,7 @@ export interface KyogongTransaction {
   transaction_number: string;
   customer_name?: string;
   customer_phone?: string;
-  payment_method: 'CASH' | 'MPESA' | 'CARD' | 'BILL';
+  payment_method: "CASH" | "MPESA" | "CARD" | "BILL";
   total_amount: number;
   cash_amount: number;
   mpesa_amount: number;
@@ -582,7 +592,7 @@ export interface DynamicService {
   id: number;
   service_type: string;
   name: string;
-  pricing_model: 'fixed' | 'hourly';
+  pricing_model: "fixed" | "hourly";
   base_price: number;
   price_per_hour?: number;
   is_active: boolean;
@@ -592,7 +602,7 @@ export interface PettyCashEntry {
   id: string;
   shift_id: string;
   amount: number;
-  transaction_type: 'CASH_IN' | 'CASH_OUT';
+  transaction_type: "CASH_IN" | "CASH_OUT";
   purpose_category: string;
   purpose_description: string;
   paid_to_name?: string;
