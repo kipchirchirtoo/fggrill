@@ -44,6 +44,26 @@ export class DiscrepancyController {
   static async getFlags(req: Request, res: Response) {
     try {
       const { status, branch_id, severity } = req.query;
+      const currentUser = (req as any).user;
+      const currentRole = String(currentUser?.role || '').toLowerCase();
+      const isBranchScopedRole = currentRole === 'branch_accountant' || currentRole === 'accountant';
+      const userBranchId = currentUser?.branch_id || currentUser?.branchId;
+
+      if (isBranchScopedRole && !userBranchId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Branch information is required to view discrepancy flags',
+          data: []
+        });
+      }
+
+      if (isBranchScopedRole && branch_id && String(branch_id) !== String(userBranchId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only view discrepancy flags for your assigned branch',
+          data: []
+        });
+      }
 
       let query = supabase
         .from('discrepancy_flags')
@@ -51,7 +71,11 @@ export class DiscrepancyController {
         .order('created_at', { ascending: false });
 
       if (status) query = query.eq('status', status);
-      if (branch_id) query = query.eq('branch_id', branch_id);
+      if (isBranchScopedRole) {
+        query = query.eq('branch_id', userBranchId);
+      } else if (branch_id) {
+        query = query.eq('branch_id', branch_id);
+      }
       if (severity) query = query.eq('severity', severity);
 
       const { data, error } = await query;
@@ -115,9 +139,20 @@ export class DiscrepancyController {
     try {
       const { id } = req.params;
       const { accountant_response } = req.body; // Changed from 'response' to 'accountant_response'
-      const userId = (req as any).user.id;
+      const currentUser = (req as any).user;
+      const userId = currentUser.id;
+      const currentRole = String(currentUser?.role || '').toLowerCase();
+      const isBranchScopedRole = currentRole === 'branch_accountant' || currentRole === 'accountant';
+      const userBranchId = currentUser?.branch_id || currentUser?.branchId;
 
-      const { data, error } = await supabase
+      if (isBranchScopedRole && !userBranchId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Branch information is required to respond to discrepancy flags'
+        });
+      }
+
+      let updateQuery = supabase
         .from('discrepancy_flags')
         .update({
           accountant_response,
@@ -125,7 +160,13 @@ export class DiscrepancyController {
           status: 'UNDER_REVIEW',
           updated_at: new Date()
         })
-        .eq('id', id)
+        .eq('id', id);
+
+      if (isBranchScopedRole) {
+        updateQuery = updateQuery.eq('branch_id', userBranchId);
+      }
+
+      const { data, error } = await updateQuery
         .select()
         .single();
 

@@ -29,10 +29,14 @@ interface NavItemProps {
 }
 
 function NavItem({ href, icon: Icon, label, active, onClick }: NavItemProps) {
+  const opensInNewTab = href === '/dashboard/communications';
+
   return (
     <Link
       href={href}
       onClick={onClick}
+      target={opensInNewTab ? '_blank' : undefined}
+      rel={opensInNewTab ? 'noopener noreferrer' : undefined}
       className={cn(
         "flex items-center gap-3 py-2 px-3 rounded-lg text-[13px] font-medium transition-colors min-w-0",
         active

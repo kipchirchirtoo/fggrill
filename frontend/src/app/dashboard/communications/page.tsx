@@ -1,96 +1,120 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { UserRole } from "@/lib/user-roles";
 import {
-  MessageCircle,
-  Send,
-  Plus,
-  Users,
-  Search,
-  MoreVertical,
-  Smile,
-  Paperclip,
-  X,
-  Check,
-  CheckCheck,
-  Edit2,
-  Trash2,
-  Reply,
+  FileText,
   Hash,
-  Loader2,
-  Settings,
-  Bell,
-  BellOff,
-  Phone,
-  Video,
   Info,
-  ChevronDown,
-  Filter,
-  Archive,
-  Star,
-  Clock,
-  Tag,
-  ExternalLink,
+  Loader2,
+  MessageCircle,
+  Paperclip,
+  Plus,
+  Reply,
+  Search,
+  Send,
+  Trash2,
+  Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 import { API_URL } from "@/lib/config";
-import { 
-  uploadFile, 
-  subscribeToMessages, 
+import {
+  subscribeToMessages,
   subscribeToReactions,
-  subscribeToChannels 
+  uploadFile,
 } from "@/lib/supabase-client";
-import { getWebRTCClient } from "@/lib/webrtc-client";
+
+type Channel = {
+  id: string;
+  name: string;
+  description?: string | null;
+  channel_type?: string | null;
+  unread_count?: number;
+  created_at?: string;
+  created_by_user?: {
+    first_name?: string;
+    last_name?: string;
+  };
+  members?: Array<{ count: number }>;
+  last_message?: Array<{
+    message: string;
+    created_at: string;
+    users?: {
+      first_name?: string;
+      last_name?: string;
+    };
+  }>;
+};
+
+type Message = {
+  id: string;
+  channel_id: string;
+  user_id: string;
+  message: string;
+  message_type?: "text" | "image" | "file";
+  file_url?: string;
+  file_name?: string;
+  file_size?: number;
+  created_at: string;
+  is_edited?: boolean;
+  user?: {
+    id?: string;
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+  };
+  reply_to_message?: {
+    id: string;
+    message: string;
+    users?: {
+      first_name?: string;
+      last_name?: string;
+    };
+  };
+};
+
+type Member = {
+  id: string;
+  role?: string;
+  user?: {
+    id?: string;
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    email?: string;
+  };
+};
+
+const getInitials = (first?: string, last?: string, fallback = "CH") => {
+  const initials = `${first?.[0] || ""}${last?.[0] || ""}`.trim();
+  return initials || fallback.substring(0, 2).toUpperCase();
+};
+
+const getChannelInitials = (name?: string) =>
+  (name || "CH")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .substring(0, 2)
+    .toUpperCase() || "CH";
 
 export default function CommunicationsPage() {
-  const [channels, setChannels] = useState<any[]>([]);
-  const [selectedChannel, setSelectedChannel] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
-  const [showCreateChannel, setShowCreateChannel] = useState(false);
-  const [showChannelInfo, setShowChannelInfo] = useState(true); // Show by default like the image
-  const [replyTo, setReplyTo] = useState<any>(null);
-  const [editingMessage, setEditingMessage] = useState<any>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"messages" | "calls">("messages");
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showCallModal, setShowCallModal] = useState(false);
-  const [callType, setCallType] = useState<"voice" | "video">("voice");
-  const [isInCall, setIsInCall] = useState(false);
-  const [showMembersModal, setShowMembersModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [channelMarkedDone, setChannelMarkedDone] = useState<Set<string>>(new Set());
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const userDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close user dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
-        setShowUserDropdown(false);
-      }
-    };
-
-    if (showUserDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showUserDropdown]);
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -98,111 +122,126 @@ export default function CommunicationsPage() {
       setCurrentUser(JSON.parse(userStr));
     }
     fetchChannels();
-    fetchAvailableUsers();
   }, []);
 
   useEffect(() => {
-    if (selectedChannel) {
-      fetchMessages(selectedChannel.id);
-      markAsRead(selectedChannel.id);
-      
-      // Subscribe to real-time messages
-      const messageSubscription = subscribeToMessages(
-        selectedChannel.id,
-        (payload) => {
-          console.log('New message received:', payload);
-          if (payload.new) {
-            setMessages((prev) => [...prev, payload.new]);
-            scrollToBottom();
-          }
+    if (!selectedChannel) return;
+
+    fetchMessages(selectedChannel.id);
+    fetchMembers(selectedChannel.id);
+    markAsRead(selectedChannel.id);
+
+    const messageSubscription = subscribeToMessages(
+      selectedChannel.id,
+      (payload) => {
+        if (payload.new) {
+          setMessages((prev) => {
+            if (prev.some((message) => message.id === payload.new.id))
+              return prev;
+            return [...prev, payload.new as Message];
+          });
         }
-      );
+      },
+    );
 
-      // Subscribe to real-time reactions
-      const reactionSubscription = subscribeToReactions((payload) => {
-        console.log('Reaction update:', payload);
-        fetchMessages(selectedChannel.id, true);
-      });
+    const reactionSubscription = subscribeToReactions(() => {
+      fetchMessages(selectedChannel.id, true);
+    });
 
-      return () => {
-        messageSubscription.unsubscribe();
-        reactionSubscription.unsubscribe();
-      };
-    }
-  }, [selectedChannel]);
+    return () => {
+      messageSubscription.unsubscribe();
+      reactionSubscription.unsubscribe();
+    };
+  }, [selectedChannel?.id]);
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const filteredChannels = useMemo(
+    () =>
+      channels.filter((channel) =>
+        `${channel.name} ${channel.description || ""}`
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()),
+      ),
+    [channels, searchQuery],
+  );
+
+  const isAdmin =
+    currentUser?.role === "super_admin" || currentUser?.role === "director";
 
   const fetchChannels = async () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_URL}/api/communications/channels`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       const result = await response.json();
+
       if (result.success) {
-        setChannels(result.data || []);
-        if (!selectedChannel && result.data?.length > 0) {
-          setSelectedChannel(result.data[0]);
-        }
+        const fetchedChannels = result.data || [];
+        setChannels(fetchedChannels);
+        setSelectedChannel((current) => current || fetchedChannels[0] || null);
       }
     } catch (error) {
       console.error("Fetch Channels Error:", error);
+      toast.error("Could not load communication channels");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fetchAvailableUsers = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      // Use the staff endpoint which is accessible
-      const response = await fetch(`${API_URL}/api/staff`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        // Filter users who have login credentials (email exists)
-        const usersWithLogin = result.data.filter((user: any) => user.email);
-        setAvailableUsers(usersWithLogin);
-      }
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    }
-  };
-
   const fetchMessages = async (channelId: string, silent = false) => {
+    setIsMessagesLoading(!silent);
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
         `${API_URL}/api/communications/channels/${channelId}/messages?limit=100`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
-
       const result = await response.json();
+
       if (result.success) {
         setMessages(result.data || []);
       }
     } catch (error) {
       if (!silent) {
         console.error("Fetch Messages Error:", error);
+        toast.error("Could not load messages");
       }
+    } finally {
+      setIsMessagesLoading(false);
+    }
+  };
+
+  const fetchMembers = async (channelId: string) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${API_URL}/api/communications/channels/${channelId}/members`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        setMembers(result.data || []);
+      }
+    } catch (error) {
+      console.error("Fetch Members Error:", error);
+    }
+  };
+
+  const markAsRead = async (channelId: string) => {
+    try {
+      const token = localStorage.getItem("token");
+      await fetch(`${API_URL}/api/communications/channels/${channelId}/read`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      fetchChannels();
+    } catch (error) {
+      console.error("Mark as Read Error:", error);
     }
   };
 
@@ -221,19 +260,18 @@ export default function CommunicationsPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            message: newMessage,
+            message: newMessage.trim(),
             reply_to: replyTo?.id,
           }),
-        }
+        },
       );
-
       const result = await response.json();
+
       if (result.success) {
         setNewMessage("");
         setReplyTo(null);
-        // Real-time will handle adding the message
       } else {
-        toast.error("Failed to send message");
+        toast.error(result.message || "Failed to send message");
       }
     } catch (error) {
       toast.error("Failed to send message");
@@ -242,11 +280,12 @@ export default function CommunicationsPage() {
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = event.target.files?.[0];
     if (!file || !selectedChannel || !currentUser) return;
 
-    // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
       toast.error("File size must be less than 10MB");
       return;
@@ -254,10 +293,7 @@ export default function CommunicationsPage() {
 
     setIsUploading(true);
     try {
-      // Upload to Supabase Storage
       const uploadResult = await uploadFile(file, currentUser.id);
-
-      // Send message with file attachment
       const token = localStorage.getItem("token");
       const response = await fetch(
         `${API_URL}/api/communications/channels/${selectedChannel.id}/messages`,
@@ -269,51 +305,36 @@ export default function CommunicationsPage() {
           },
           body: JSON.stringify({
             message: `Shared a file: ${uploadResult.name}`,
-            message_type: uploadResult.type.startsWith("image/") ? "image" : "file",
+            message_type: uploadResult.type.startsWith("image/")
+              ? "image"
+              : "file",
             file_url: uploadResult.url,
             file_name: uploadResult.name,
             file_size: uploadResult.size,
             file_mime_type: uploadResult.type,
             reply_to: replyTo?.id,
           }),
-        }
+        },
       );
-
       const result = await response.json();
+
       if (result.success) {
         setReplyTo(null);
-        toast.success("File uploaded successfully");
+        toast.success("File shared");
       } else {
-        toast.error("Failed to send file");
+        toast.error(result.message || "Failed to share file");
       }
     } catch (error: any) {
       console.error("Upload error:", error);
       toast.error(error.message || "Failed to upload file");
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
-  const markAsRead = async (channelId: string) => {
-    try {
-      const token = localStorage.getItem("token");
-      await fetch(`${API_URL}/api/communications/channels/${channelId}/read`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      fetchChannels(); // Refresh to update unread counts
-    } catch (error) {
-      console.error("Mark as Read Error:", error);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
   const deleteMessage = async (messageId: string) => {
-    if (!confirm("Delete this message?")) return;
+    if (!selectedChannel || !confirm("Delete this message?")) return;
 
     try {
       const token = localStorage.getItem("token");
@@ -321,18 +342,16 @@ export default function CommunicationsPage() {
         `${API_URL}/api/communications/messages/${messageId}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+          headers: { Authorization: `Bearer ${token}` },
+        },
       );
-
       const result = await response.json();
+
       if (result.success) {
         toast.success("Message deleted");
-        fetchMessages(selectedChannel.id);
+        fetchMessages(selectedChannel.id, true);
       } else {
-        toast.error(result.error || "Failed to delete message");
+        toast.error(result.message || "Failed to delete message");
       }
     } catch (error: any) {
       console.error("Delete error:", error);
@@ -340,576 +359,378 @@ export default function CommunicationsPage() {
     }
   };
 
-  const reactToMessage = async (messageId: string, emoji: string) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${API_URL}/api/communications/messages/${messageId}/react`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ emoji }),
-        }
-      );
-      
-      const result = await response.json();
-      if (result.success) {
-        fetchMessages(selectedChannel.id, true);
-      } else {
-        console.error("React error:", result.error);
-        toast.error("Failed to add reaction");
-      }
-    } catch (error: any) {
-      console.error("React Error:", error);
-      toast.error(error.message || "Failed to add reaction");
-    }
-  };
-
-  const isAdmin = currentUser?.role === "super_admin" || currentUser?.role === "director";
-
-  const formatMessageTime = (date: string) => {
+  const formatChannelTime = (date?: string) => {
+    if (!date) return "";
     const messageDate = new Date(date);
-    if (isToday(messageDate)) {
-      return format(messageDate, "h:mm a");
-    } else if (isYesterday(messageDate)) {
-      return "Yesterday";
-    } else {
-      return format(messageDate, "MMM d");
-    }
+    if (isToday(messageDate)) return format(messageDate, "h:mm a");
+    if (isYesterday(messageDate)) return "Yesterday";
+    return format(messageDate, "MMM d");
   };
-
-  const handleStartCall = (type: "voice" | "video") => {
-    if (!selectedChannel) {
-      toast.error("Please select a channel first");
-      return;
-    }
-    setCallType(type);
-    setShowCallModal(true);
-  };
-
-  const handleJoinCall = async () => {
-    try {
-      const webrtc = getWebRTCClient();
-      const stream = await webrtc.startCall(callType);
-      
-      setLocalStream(stream);
-      setIsInCall(true);
-      setShowCallModal(false);
-      
-      // Attach stream to video element if video call
-      if (callType === "video" && localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-      
-      toast.success(`${callType === "voice" ? "Voice" : "Video"} call started`);
-    } catch (error: any) {
-      console.error("Call error:", error);
-      
-      // Provide helpful error messages
-      let errorMessage = "Failed to start call";
-      if (error.message.includes("permission denied") || error.message.includes("Permission denied")) {
-        errorMessage = "Camera/microphone access denied. Please allow permissions in your browser settings.";
-      } else if (error.message.includes("not found")) {
-        errorMessage = "No camera or microphone found. Please connect a device.";
-      }
-      
-      toast.error(errorMessage, { duration: 5000 });
-      setShowCallModal(false);
-    }
-  };
-
-  const handleEndCall = () => {
-    const webrtc = getWebRTCClient();
-    webrtc.endCall();
-    
-    setIsInCall(false);
-    setLocalStream(null);
-    
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-    
-    toast.info("Call ended");
-  };
-
-  const handleMarkAsDone = () => {
-    if (!selectedChannel) return;
-    
-    const newMarkedDone = new Set(channelMarkedDone);
-    if (newMarkedDone.has(selectedChannel.id)) {
-      newMarkedDone.delete(selectedChannel.id);
-      toast.success("Channel unmarked as done");
-    } else {
-      newMarkedDone.add(selectedChannel.id);
-      toast.success("Channel marked as done");
-    }
-    setChannelMarkedDone(newMarkedDone);
-  };
-
-  const isChannelDone = selectedChannel ? channelMarkedDone.has(selectedChannel.id) : false;
-
-  const filteredChannels = channels.filter((channel) =>
-    channel.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <ProtectedRoute allowedRoles={Object.values(UserRole)}>
-      <DashboardLayout>
-        <div className="h-[calc(100vh-4rem)] flex bg-[#f8f9fa]">
-          {/* Left Sidebar - Compact like Aircall */}
-          <div className="w-20 bg-white border-r border-gray-200 flex flex-col items-center py-6 space-y-6">
-            <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg">
-              <MessageCircle className="w-6 h-6 text-white" />
-            </div>
-            
-            <div className="flex-1 flex flex-col items-center space-y-4">
-              <button
-                onClick={() => setActiveTab("messages")}
-                className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                  activeTab === "messages"
-                    ? "bg-gray-900 text-white shadow-lg"
-                    : "text-gray-400 hover:bg-gray-100"
-                }`}
-                title="Messages"
-              >
-                <MessageCircle className="w-5 h-5" />
-              </button>
-              
-              <button
-                onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="relative w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-all"
-                title="Users with Login"
-              >
-                <Users className="w-5 h-5" />
-                {showUserDropdown && (
-                  <div 
-                    ref={userDropdownRef}
-                    className="absolute left-full ml-2 top-0 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-96 overflow-y-auto"
-                  >
-                    <div className="p-3 border-b border-gray-200">
-                      <h4 className="font-semibold text-sm text-gray-900">Users with Login</h4>
-                      <p className="text-xs text-gray-500">{availableUsers.length} users</p>
-                    </div>
-                    <div className="p-2">
-                      {availableUsers.length === 0 ? (
-                        <div className="text-center py-4 text-sm text-gray-500">
-                          Loading users...
-                        </div>
-                      ) : (
-                        availableUsers.map((user) => (
-                          <div
-                            key={user.id}
-                            className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-all"
-                          >
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
-                              {user.first_name?.[0]}{user.last_name?.[0]}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 truncate">
-                                {user.first_name} {user.last_name}
-                              </p>
-                              <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-all"
-              title="Settings"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Channels List - Like Aircall Inbox */}
-          <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-bold text-gray-900">Inbox</h2>
-                  <ChevronDown className="w-5 h-5 text-gray-400" />
+      <main className="h-screen w-screen overflow-hidden bg-slate-100 text-slate-950">
+        <div className="grid h-full grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px]">
+          <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-white">
+            <div className="border-b border-slate-200 p-5">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+                    Communications
+                  </p>
+                  <h1 className="mt-1 text-2xl font-bold text-slate-950">
+                    Team inbox
+                  </h1>
                 </div>
                 {isAdmin && (
                   <button
+                    type="button"
                     onClick={() => setShowCreateChannel(true)}
-                    className="w-10 h-10 bg-emerald-500 hover:bg-emerald-600 rounded-xl flex items-center justify-center text-white transition-all shadow-lg"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700"
+                    title="Create channel"
                   >
-                    <Plus className="w-5 h-5" />
+                    <Plus className="h-5 w-5" />
                   </button>
                 )}
               </div>
 
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search channels..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-emerald-500 focus:bg-white transition-all"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search conversations"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
                 />
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {isLoading ? (
-                <div className="flex items-center justify-center h-32">
-                  <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+                <div className="flex h-40 items-center justify-center text-emerald-600">
+                  <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
               ) : filteredChannels.length === 0 ? (
-                <div className="p-8 text-center">
-                  <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 text-sm">No channels found</p>
+                <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center">
+                  <MessageCircle className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-700">
+                    No conversations found
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Try another search term.
+                  </p>
                 </div>
               ) : (
-                filteredChannels.map((channel) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => setSelectedChannel(channel)}
-                    className={`w-full p-4 text-left hover:bg-gray-50 transition-all border-l-4 ${
-                      selectedChannel?.id === channel.id
-                        ? "border-l-emerald-500 bg-emerald-50"
-                        : "border-l-transparent"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="relative">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                          {channel.name.substring(0, 2).toUpperCase()}
-                        </div>
-                        {channel.unread_count > 0 && (
-                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                            {channel.unread_count}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-gray-900 truncate text-sm">
-                            {channel.name}
-                          </h3>
-                          <span className="text-xs text-gray-400">
-                            {channel.last_message?.[0] &&
-                              formatMessageTime(channel.last_message[0].created_at)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-emerald-600 font-medium">
-                            {channel.channel_type}
-                          </span>
-                          {channel.last_message?.[0] && (
-                            <p className="text-xs text-gray-500 truncate flex-1">
-                              {channel.last_message[0].message}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Chat Area - Modern Design */}
-          {selectedChannel ? (
-            <div className="flex-1 flex flex-col bg-white">
-              {/* Chat Header - Like Aircall */}
-              <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                    {selectedChannel.name.substring(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">
-                      {selectedChannel.name}
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                      {selectedChannel.description || "Business communications"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => handleStartCall("voice")}
-                    disabled={isInCall}
-                    className="w-10 h-10 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-300 rounded-xl flex items-center justify-center text-white transition-all"
-                    title="Start voice call"
-                  >
-                    <Phone className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => handleStartCall("video")}
-                    disabled={isInCall}
-                    className="w-10 h-10 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-300 rounded-xl flex items-center justify-center text-gray-600 transition-all"
-                    title="Start video call"
-                  >
-                    <Video className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setShowMembersModal(true)}
-                    className="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center text-gray-600 transition-all"
-                    title="View members"
-                  >
-                    <Users className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setShowSettingsModal(true)}
-                    className="w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center text-gray-600 transition-all"
-                    title="Channel settings"
-                  >
-                    <Settings className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={handleMarkAsDone}
-                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
-                      isChannelDone
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                    title={isChannelDone ? "Mark as not done" : "Mark as done"}
-                  >
-                    <Check className="w-4 h-4" />
-                    {isChannelDone ? "Done" : "Mark as done"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Messages Area */}
-              <div className="flex-1 flex">
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
-                  {messages.map((message, index) => {
-                    const showDate =
-                      index === 0 ||
-                      !isToday(new Date(messages[index - 1].created_at)) ||
-                      !isToday(new Date(message.created_at));
+                <div className="space-y-2">
+                  {filteredChannels.map((channel) => {
+                    const lastMessage = channel.last_message?.[0];
+                    const active = selectedChannel?.id === channel.id;
 
                     return (
-                      <React.Fragment key={message.id}>
-                        {showDate && (
-                          <div className="flex items-center justify-center my-4">
-                            <div className="bg-white px-4 py-1 rounded-full text-xs text-gray-500 font-medium shadow-sm">
-                              {isToday(new Date(message.created_at))
-                                ? "Today"
-                                : isYesterday(new Date(message.created_at))
-                                  ? "Yesterday"
-                                  : format(new Date(message.created_at), "MMMM d, yyyy")}
+                      <button
+                        key={channel.id}
+                        type="button"
+                        onClick={() => setSelectedChannel(channel)}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                          active
+                            ? "border-emerald-200 bg-emerald-50 shadow-sm"
+                            : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex gap-3">
+                          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm font-bold text-white">
+                            {getChannelInitials(channel.name)}
+                            {!!channel.unread_count &&
+                              channel.unread_count > 0 && (
+                                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                                  {channel.unread_count}
+                                </span>
+                              )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-sm font-bold text-slate-950">
+                                {channel.name}
+                              </p>
+                              <span className="shrink-0 text-[11px] font-medium text-slate-400">
+                                {formatChannelTime(lastMessage?.created_at)}
+                              </span>
+                            </div>
+                            <p className="mt-1 truncate text-xs text-slate-500">
+                              {lastMessage?.message ||
+                                channel.description ||
+                                "No messages yet"}
+                            </p>
+                            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold capitalize text-slate-600">
+                              <Hash className="h-3 w-3" />
+                              {channel.channel_type || "general"}
                             </div>
                           </div>
-                        )}
-                        <MessageBubbleModern
-                          message={message}
-                          currentUser={currentUser}
-                          onReply={setReplyTo}
-                          onDelete={deleteMessage}
-                          onReact={reactToMessage}
-                        />
-                      </React.Fragment>
+                        </div>
+                      </button>
                     );
                   })}
-                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+          </aside>
+
+          <section className="flex min-h-0 min-w-0 flex-col bg-white">
+            {selectedChannel ? (
+              <>
+                <header className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 px-6">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-base font-bold text-white">
+                      {getChannelInitials(selectedChannel.name)}
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="truncate text-lg font-bold text-slate-950">
+                        {selectedChannel.name}
+                      </h2>
+                      <p className="truncate text-sm text-slate-500">
+                        {selectedChannel.description ||
+                          "Team communication channel"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:flex">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    Active
+                  </div>
+                </header>
+
+                <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-6 py-5">
+                  {isMessagesLoading ? (
+                    <div className="flex h-full items-center justify-center text-emerald-600">
+                      <Loader2 className="h-7 w-7 animate-spin" />
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="flex h-full items-center justify-center">
+                      <div className="max-w-sm text-center">
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-white shadow-sm">
+                          <MessageCircle className="h-8 w-8 text-emerald-600" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-950">
+                          Start the conversation
+                        </h3>
+                        <p className="mt-2 text-sm text-slate-500">
+                          Send the first update for this channel.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {messages.map((message, index) => {
+                        const previousMessage = messages[index - 1];
+                        const showDate =
+                          index === 0 ||
+                          format(
+                            new Date(previousMessage.created_at),
+                            "yyyy-MM-dd",
+                          ) !==
+                            format(new Date(message.created_at), "yyyy-MM-dd");
+
+                        return (
+                          <React.Fragment key={message.id}>
+                            {showDate && (
+                              <DateDivider date={message.created_at} />
+                            )}
+                            <MessageBubble
+                              message={message}
+                              currentUser={currentUser}
+                              onReply={setReplyTo}
+                              onDelete={deleteMessage}
+                            />
+                          </React.Fragment>
+                        );
+                      })}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  )}
                 </div>
 
-                {/* Right Panel - Channel Insights (Like Aircall) */}
-                {showChannelInfo && (
-                  <div className="w-96 bg-gray-900 text-white p-6 overflow-y-auto">
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">
-                        Channel Insights
-                      </h3>
+                {replyTo && (
+                  <div className="border-t border-emerald-100 bg-emerald-50 px-6 py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                          Replying to {replyTo.user?.first_name || "message"}
+                        </p>
+                        <p className="mt-1 truncate text-sm text-emerald-900">
+                          {replyTo.message}
+                        </p>
+                      </div>
                       <button
-                        onClick={() => setShowChannelInfo(false)}
-                        className="text-gray-400 hover:text-white"
+                        type="button"
+                        onClick={() => setReplyTo(null)}
+                        className="rounded-lg p-1.5 text-emerald-700 transition hover:bg-emerald-100"
+                        title="Cancel reply"
                       >
-                        <X className="w-5 h-5" />
+                        <X className="h-4 w-4" />
                       </button>
-                    </div>
-
-                    <div className="space-y-4 mb-6">
-                      <div className="flex items-center gap-2 text-emerald-400">
-                        <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
-                        <span className="text-sm font-semibold">CRM Insights</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">Channel Name</span>
-                          <span className="text-sm font-semibold">
-                            {selectedChannel.name}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">Type</span>
-                          <span className="text-sm font-semibold capitalize">
-                            {selectedChannel.channel_type}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">Members</span>
-                          <span className="text-sm font-semibold">
-                            {selectedChannel.members?.[0]?.count || 0}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">Status</span>
-                          <span className="text-sm font-semibold text-emerald-400">
-                            Active
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-800 pt-6">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">
-                        Summary
-                      </h4>
-                      <p className="text-sm text-gray-300 leading-relaxed mb-4">
-                        {selectedChannel.description ||
-                          "Business communications channel for team collaboration and updates."}
-                      </p>
-                      <div className="text-xs text-gray-500">
-                        Powered by Aircall AI ✨
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-800 pt-6 mt-6">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">
-                        Tags & Notes
-                      </h4>
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-xs font-semibold">
-                          Customer Service
-                        </span>
-                        <span className="px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-xs font-semibold">
-                          High Priority
-                        </span>
-                        <span className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-xs font-semibold">
-                          Ongoing
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-400">
-                        <Users className="w-4 h-4" />
-                        <span>
-                          Created by{" "}
-                          {selectedChannel.created_by_user?.first_name || "Admin"}
-                        </span>
-                      </div>
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Reply Preview */}
-              {replyTo && (
-                <div className="bg-blue-50 border-t border-blue-200 px-6 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Reply className="w-4 h-4 text-blue-600" />
-                    <div>
-                      <p className="text-xs text-blue-600 font-semibold">
-                        Replying to {replyTo.user?.first_name}
-                      </p>
-                      <p className="text-xs text-blue-800 truncate max-w-md">
-                        {replyTo.message}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setReplyTo(null)}
-                    className="p-1 hover:bg-blue-100 rounded transition-all"
-                  >
-                    <X className="w-4 h-4 text-blue-600" />
-                  </button>
-                </div>
-              )}
-
-              {/* Message Input - Modern */}
-              <div className="bg-white border-t border-gray-200 p-4">
-                <div className="flex items-end gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="p-2.5 hover:bg-gray-100 rounded-xl transition-all text-gray-600 disabled:opacity-50"
-                    title="Attach file"
-                  >
-                    {isUploading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Paperclip className="w-5 h-5" />
-                    )}
-                  </button>
-                  <div className="flex-1 relative">
+                <footer className="shrink-0 border-t border-slate-200 bg-white p-4">
+                  <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 disabled:opacity-50"
+                      title="Attach file"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Paperclip className="h-5 w-5" />
+                      )}
+                    </button>
                     <textarea
                       value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
+                      onChange={(event) => setNewMessage(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
                           sendMessage();
                         }
                       }}
-                      placeholder="Type a message..."
+                      placeholder="Write a message..."
                       disabled={isUploading}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-emerald-500 focus:bg-white resize-none transition-all disabled:opacity-50"
                       rows={1}
-                      style={{
-                        minHeight: "48px",
-                        maxHeight: "120px",
-                      }}
+                      className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-1 py-3 text-sm outline-none disabled:opacity-50"
                     />
+                    <button
+                      type="button"
+                      onClick={sendMessage}
+                      disabled={!newMessage.trim() || isSending || isUploading}
+                      className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isSending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      Send
+                    </button>
                   </div>
-                  <button className="p-2.5 hover:bg-gray-100 rounded-xl transition-all text-gray-600">
-                    <Smile className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={sendMessage}
-                    disabled={!newMessage.trim() || isSending || isUploading}
-                    className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-lg shadow-emerald-500/30"
-                  >
-                    {isSending ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                </footer>
+              </>
+            ) : (
+              <div className="flex h-full items-center justify-center bg-slate-50">
+                <div className="max-w-sm text-center">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-white shadow-sm">
+                    <MessageCircle className="h-8 w-8 text-emerald-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-950">
+                    Select a conversation
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Choose a channel from the inbox to view and send messages.
+                  </p>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <aside className="hidden min-h-0 flex-col border-l border-slate-200 bg-white xl:flex">
+            <div className="border-b border-slate-200 p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                  <Info className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-950">Channel details</h3>
+                  <p className="text-xs text-slate-500">
+                    Context and participants
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {selectedChannel ? (
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    About
+                  </p>
+                  <h4 className="mt-2 font-bold text-slate-950">
+                    {selectedChannel.name}
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {selectedChannel.description ||
+                      "No description provided for this channel."}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold capitalize text-slate-700">
+                      <Hash className="h-3 w-3" />
+                      {selectedChannel.channel_type || "general"}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      <Users className="h-3 w-3" />
+                      {members.length ||
+                        selectedChannel.members?.[0]?.count ||
+                        0}{" "}
+                      members
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Members
+                  </p>
+                  <div className="space-y-2">
+                    {members.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                        No members loaded.
+                      </div>
                     ) : (
-                      <Send className="w-5 h-5" />
+                      members.map((member) => (
+                        <div
+                          key={member.id}
+                          className="flex items-center gap-3 rounded-2xl p-2 transition hover:bg-slate-50"
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                            {getInitials(
+                              member.user?.first_name,
+                              member.user?.last_name,
+                              "US",
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-950">
+                              {member.user?.first_name} {member.user?.last_name}
+                            </p>
+                            <p className="truncate text-xs capitalize text-slate-500">
+                              {member.user?.role?.replace(/_/g, " ") ||
+                                member.role ||
+                                "member"}
+                            </p>
+                          </div>
+                        </div>
+                      ))
                     )}
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center bg-gray-50">
-              <div className="text-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl">
-                  <MessageCircle className="w-10 h-10 text-white" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  Select a channel
-                </h3>
-                <p className="text-gray-500">
-                  Choose a channel from the list to start messaging
-                </p>
+            ) : (
+              <div className="p-5 text-sm text-slate-500">
+                Select a channel to view details.
               </div>
-            </div>
-          )}
+            )}
+          </aside>
         </div>
 
-        {/* Create Channel Modal */}
         {showCreateChannel && (
           <CreateChannelModal
             onClose={() => setShowCreateChannel(false)}
@@ -919,267 +740,154 @@ export default function CommunicationsPage() {
             }}
           />
         )}
-
-        {/* Channel Info Modal */}
-        {showChannelInfo && selectedChannel && (
-          <ChannelInfoModal
-            channel={selectedChannel}
-            onClose={() => setShowChannelInfo(false)}
-          />
-        )}
-
-        {/* Call Modal */}
-        {showCallModal && (
-          <CallModal
-            callType={callType}
-            channel={selectedChannel}
-            onClose={() => setShowCallModal(false)}
-            onJoin={handleJoinCall}
-          />
-        )}
-
-        {/* Active Call Overlay */}
-        {isInCall && (
-          <ActiveCallOverlay
-            callType={callType}
-            channel={selectedChannel}
-            onEnd={handleEndCall}
-            localVideoRef={localVideoRef}
-            localStream={localStream}
-          />
-        )}
-
-        {/* Members Modal */}
-        {showMembersModal && selectedChannel && (
-          <MembersModal
-            channel={selectedChannel}
-            onClose={() => setShowMembersModal(false)}
-          />
-        )}
-
-        {/* Settings Modal */}
-        {showSettingsModal && selectedChannel && (
-          <SettingsModal
-            channel={selectedChannel}
-            onClose={() => setShowSettingsModal(false)}
-            onUpdate={() => {
-              fetchChannels();
-              if (selectedChannel) {
-                fetchMessages(selectedChannel.id);
-              }
-            }}
-          />
-        )}
-      </DashboardLayout>
+      </main>
     </ProtectedRoute>
   );
 }
 
-function MessageBubbleModern({ message, currentUser, onReply, onDelete, onReact }: any) {
-  const [showActions, setShowActions] = useState(false);
-  const isOwn = message.user_id === currentUser?.id;
-
-  const handleReact = (emoji: string) => {
-    console.log('React button clicked:', message.id, emoji);
-    if (onReact) {
-      onReact(message.id, emoji);
-    } else {
-      console.error('onReact handler is not defined');
-    }
-  };
-
-  const handleReply = () => {
-    console.log('Reply button clicked:', message);
-    if (onReply) {
-      onReply(message);
-    } else {
-      console.error('onReply handler is not defined');
-    }
-  };
-
-  const handleDelete = () => {
-    console.log('Delete button clicked:', message.id);
-    if (onDelete) {
-      onDelete(message.id);
-    } else {
-      console.error('onDelete handler is not defined');
-    }
-  };
+function DateDivider({ date }: { date: string }) {
+  const messageDate = new Date(date);
+  const label = isToday(messageDate)
+    ? "Today"
+    : isYesterday(messageDate)
+      ? "Yesterday"
+      : format(messageDate, "MMMM d, yyyy");
 
   return (
-    <div
-      className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}
-      onMouseEnter={() => {
-        console.log('Mouse entered message bubble');
-        setShowActions(true);
-      }}
-      onMouseLeave={() => {
-        console.log('Mouse left message bubble');
-        setShowActions(false);
-      }}
-    >
+    <div className="flex items-center justify-center py-2">
+      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function MessageBubble({
+  message,
+  currentUser,
+  onReply,
+  onDelete,
+}: {
+  message: Message;
+  currentUser: any;
+  onReply: (message: Message) => void;
+  onDelete: (messageId: string) => void;
+}) {
+  const isOwn = message.user_id === currentUser?.id;
+
+  return (
+    <div className={`flex gap-3 ${isOwn ? "justify-end" : "justify-start"}`}>
       {!isOwn && (
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-          {message.user?.first_name?.[0]}
-          {message.user?.last_name?.[0]}
+        <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+          {getInitials(message.user?.first_name, message.user?.last_name, "US")}
         </div>
       )}
 
-      <div className={`flex-1 max-w-2xl ${isOwn ? "items-end" : ""}`}>
+      <div
+        className={`group max-w-[72%] ${isOwn ? "items-end" : "items-start"}`}
+      >
         {!isOwn && (
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-semibold text-gray-900">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-800">
               {message.user?.first_name} {message.user?.last_name}
             </span>
-            <span className="text-xs text-gray-400">
+            <span className="text-[11px] text-slate-400">
               {format(new Date(message.created_at), "h:mm a")}
             </span>
-            {message.is_edited && (
-              <span className="text-xs text-gray-400 italic">(edited)</span>
-            )}
           </div>
         )}
 
         {message.reply_to_message && (
-          <div className="bg-gray-100 border-l-4 border-gray-300 rounded-lg p-2 mb-2 text-xs max-w-md">
-            <span className="font-semibold text-gray-600">
-              {message.reply_to_message.users?.first_name}:
+          <div className="mb-2 rounded-xl border-l-4 border-emerald-300 bg-white px-3 py-2 text-xs text-slate-600 shadow-sm">
+            <span className="font-bold">
+              {message.reply_to_message.users?.first_name || "Reply"}:{" "}
             </span>
-            <span className="text-gray-500 ml-1">
-              {message.reply_to_message.message}
-            </span>
+            {message.reply_to_message.message}
           </div>
         )}
 
-        <div className="relative group">
-          <div
-            className={`${
-              isOwn
-                ? "bg-emerald-500 text-white"
-                : "bg-white text-gray-900 border border-gray-200 shadow-sm"
-            } rounded-2xl px-4 py-3 inline-block relative`}
-          >
-            {/* File attachment preview */}
-            {message.file_url && (
-              <div className="mb-2">
-                {message.message_type === "image" ? (
-                  <a
-                    href={message.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <img
-                      src={message.file_url}
-                      alt={message.file_name}
-                      className="max-w-sm rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                      style={{ maxHeight: "300px" }}
-                    />
-                  </a>
-                ) : (
-                  <a
-                    href={message.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex items-center gap-3 p-3 rounded-lg ${
-                      isOwn ? "bg-emerald-600" : "bg-gray-100"
-                    } hover:opacity-90 transition-opacity`}
-                  >
-                    <Paperclip className="w-5 h-5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">
-                        {message.file_name}
-                      </p>
-                      {message.file_size && (
-                        <p className={`text-xs ${isOwn ? "text-emerald-100" : "text-gray-500"}`}>
-                          {(message.file_size / 1024).toFixed(1)} KB
-                        </p>
-                      )}
-                    </div>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                )}
-              </div>
-            )}
-            
-            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-              {message.message}
-            </p>
-            {isOwn && (
-              <div className="flex items-center justify-end gap-1 mt-1">
-                <span className="text-xs text-emerald-100">
-                  {format(new Date(message.created_at), "h:mm a")}
-                </span>
-                <CheckCheck className="w-3 h-3 text-emerald-100" />
-              </div>
-            )}
-          </div>
-
-          {showActions && (
-            <div
-              className={`absolute top-0 ${isOwn ? "left-0 -translate-x-full" : "right-0 translate-x-full"} flex gap-1 bg-white border border-gray-200 rounded-xl shadow-xl p-1.5 ml-2 mr-2 z-10`}
-            >
-              <button
-                onClick={() => handleReact("👍")}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
-                title="Like"
-              >
-                👍
-              </button>
-              <button
-                onClick={() => handleReact("❤️")}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
-                title="Love"
-              >
-                ❤️
-              </button>
-              <button
-                onClick={() => handleReact("😊")}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
-                title="Smile"
-              >
-                😊
-              </button>
-              <div className="w-px bg-gray-200 mx-1"></div>
-              <button
-                onClick={handleReply}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-all"
-                title="Reply"
-              >
-                <Reply className="w-4 h-4 text-gray-600" />
-              </button>
-              {isOwn && (
-                <button
-                  onClick={handleDelete}
-                  className="p-1.5 hover:bg-rose-100 rounded-lg transition-all"
-                  title="Delete"
+        <div
+          className={`rounded-2xl px-4 py-3 shadow-sm ${
+            isOwn
+              ? "rounded-br-md bg-emerald-600 text-white"
+              : "rounded-bl-md border border-slate-200 bg-white text-slate-900"
+          }`}
+        >
+          {message.file_url && (
+            <div className="mb-3">
+              {message.message_type === "image" ? (
+                <a
+                  href={message.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
                 >
-                  <Trash2 className="w-4 h-4 text-rose-600" />
-                </button>
+                  <img
+                    src={message.file_url}
+                    alt={message.file_name || "Attachment"}
+                    className="max-h-72 rounded-xl object-cover"
+                  />
+                </a>
+              ) : (
+                <a
+                  href={message.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-3 rounded-xl p-3 transition hover:opacity-90 ${
+                    isOwn ? "bg-emerald-700" : "bg-slate-100"
+                  }`}
+                >
+                  <FileText className="h-5 w-5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">
+                      {message.file_name || "Attachment"}
+                    </p>
+                    {!!message.file_size && (
+                      <p
+                        className={`text-xs ${isOwn ? "text-emerald-100" : "text-slate-500"}`}
+                      >
+                        {(message.file_size / 1024).toFixed(1)} KB
+                      </p>
+                    )}
+                  </div>
+                </a>
               )}
             </div>
           )}
+
+          <p className="whitespace-pre-wrap break-words text-sm leading-6">
+            {message.message}
+          </p>
+          <div
+            className={`mt-1 text-right text-[11px] ${isOwn ? "text-emerald-100" : "text-slate-400"}`}
+          >
+            {format(new Date(message.created_at), "h:mm a")}
+            {message.is_edited ? " · edited" : ""}
+          </div>
         </div>
 
-        {message.reactions && message.reactions.length > 0 && (
-          <div className="flex gap-1 mt-2">
-            {Object.entries(
-              message.reactions.reduce((acc: any, r: any) => {
-                acc[r.emoji] = (acc[r.emoji] || 0) + 1;
-                return acc;
-              }, {})
-            ).map(([emoji, count]: any) => (
-              <button
-                key={emoji}
-                onClick={() => handleReact(emoji)}
-                className="bg-white hover:bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1 text-xs flex items-center gap-1.5 shadow-sm transition-all"
-              >
-                <span>{emoji}</span>
-                <span className="text-gray-600 font-semibold">{count}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <div
+          className={`mt-1 flex gap-1 opacity-0 transition group-hover:opacity-100 ${isOwn ? "justify-end" : "justify-start"}`}
+        >
+          <button
+            type="button"
+            onClick={() => onReply(message)}
+            className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-500 shadow-sm transition hover:text-emerald-700"
+          >
+            <Reply className="h-3 w-3" />
+            Reply
+          </button>
+          {isOwn && (
+            <button
+              type="button"
+              onClick={() => onDelete(message.id)}
+              className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-xs font-semibold text-rose-500 shadow-sm transition hover:text-rose-700"
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1193,8 +901,8 @@ function CreateChannelModal({ onClose, onSuccess }: any) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsSubmitting(true);
 
     try {
@@ -1207,10 +915,10 @@ function CreateChannelModal({ onClose, onSuccess }: any) {
         },
         body: JSON.stringify(formData),
       });
-
       const result = await response.json();
+
       if (result.success) {
-        toast.success("Channel created successfully");
+        toast.success("Channel created");
         onSuccess();
       } else {
         toast.error(result.message || "Failed to create channel");
@@ -1223,60 +931,65 @@ function CreateChannelModal({ onClose, onSuccess }: any) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-stone-900">Create Channel</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-950">Create channel</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Add a focused space for team updates.
+            </p>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-stone-100 rounded-lg"
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
-            <X className="w-5 h-5 text-stone-400" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-stone-700 mb-2">
-              Channel Name
+            <label className="mb-2 block text-sm font-bold text-slate-700">
+              Channel name
             </label>
             <input
               type="text"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
+              onChange={(event) =>
+                setFormData({ ...formData, name: event.target.value })
               }
-              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF]"
-              placeholder="e.g., General Announcements"
+              className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              placeholder="e.g. Operations"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-stone-700 mb-2">
+            <label className="mb-2 block text-sm font-bold text-slate-700">
               Description
             </label>
             <textarea
               value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
+              onChange={(event) =>
+                setFormData({ ...formData, description: event.target.value })
               }
-              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF] resize-none"
-              rows={3}
-              placeholder="What is this channel for?"
+              className="min-h-24 w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              placeholder="What should this channel be used for?"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-stone-700 mb-2">
-              Channel Type
+            <label className="mb-2 block text-sm font-bold text-slate-700">
+              Type
             </label>
             <select
               value={formData.channel_type}
-              onChange={(e) =>
-                setFormData({ ...formData, channel_type: e.target.value })
+              onChange={(event) =>
+                setFormData({ ...formData, channel_type: event.target.value })
               }
-              className="w-full px-4 py-2 border-2 border-stone-200 rounded-xl outline-none focus:border-[#007AFF]"
+              className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
             >
               <option value="general">General</option>
               <option value="department">Department</option>
@@ -1285,482 +998,24 @@ function CreateChannelModal({ onClose, onSuccess }: any) {
             </select>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border-2 border-stone-200 rounded-xl font-bold text-stone-700 hover:bg-stone-50"
               disabled={isSubmitting}
+              className="h-11 flex-1 rounded-xl border border-slate-200 font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-[#007AFF] text-white rounded-xl font-bold hover:bg-[#0056b3] disabled:opacity-50"
               disabled={isSubmitting}
+              className="h-11 flex-1 rounded-xl bg-emerald-600 font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
             >
-              {isSubmitting ? "Creating..." : "Create Channel"}
+              {isSubmitting ? "Creating..." : "Create"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-}
-
-function ChannelInfoModal({ channel, onClose }: any) {
-  const [members, setMembers] = useState<any[]>([]);
-
-  useEffect(() => {
-    fetchMembers();
-  }, []);
-
-  const fetchMembers = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${API_URL}/api/communications/channels/${channel.id}/members`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const result = await response.json();
-      if (result.success) {
-        setMembers(result.data || []);
-      }
-    } catch (error) {
-      console.error("Fetch Members Error:", error);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 max-h-[80vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-stone-900">Channel Info</h3>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-stone-100 rounded-lg"
-          >
-            <X className="w-5 h-5 text-stone-400" />
-          </button>
-        </div>
-
-        <div className="space-y-6">
-          <div>
-            <h4 className="text-lg font-bold text-stone-900 mb-2">
-              {channel.name}
-            </h4>
-            <p className="text-sm text-stone-600">{channel.description}</p>
-          </div>
-
-          <div>
-            <h4 className="text-sm font-bold text-stone-700 mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Members ({members.length})
-            </h4>
-            <div className="space-y-2">
-              {members.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center gap-3 p-2 hover:bg-stone-50 rounded-lg"
-                >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
-                    {member.user?.first_name?.[0]}
-                    {member.user?.last_name?.[0]}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-stone-900">
-                      {member.user?.first_name} {member.user?.last_name}
-                    </p>
-                    <p className="text-xs text-stone-500 capitalize">
-                      {member.user?.role?.replace(/_/g, " ")}
-                    </p>
-                  </div>
-                  {member.role === "admin" && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold">
-                      Admin
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Call Modal Component
-function CallModal({ callType, channel, onClose, onJoin }: any) {
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-        <div className="text-center">
-          <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
-            callType === "voice" ? "bg-emerald-100" : "bg-blue-100"
-          }`}>
-            {callType === "voice" ? (
-              <Phone className="w-10 h-10 text-emerald-600" />
-            ) : (
-              <Video className="w-10 h-10 text-blue-600" />
-            )}
-          </div>
-          <h3 className="text-2xl font-bold text-stone-900 mb-2">
-            Start {callType === "voice" ? "Voice" : "Video"} Call
-          </h3>
-          <p className="text-stone-600 mb-4">
-            Start a {callType} call in <span className="font-semibold">{channel?.name}</span>
-          </p>
-          
-          {/* Permission Notice */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-left">
-            <div className="flex gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-amber-800">
-                <p className="font-semibold mb-1">Permission Required</p>
-                <p className="text-xs">
-                  Your browser will ask for {callType === "video" ? "camera and microphone" : "microphone"} access. 
-                  Please click "Allow" to start the call.
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-3 border-2 border-stone-200 rounded-xl font-bold text-stone-700 hover:bg-stone-50 transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onJoin}
-              className={`flex-1 px-4 py-3 rounded-xl font-bold text-white transition-all ${
-                callType === "voice" 
-                  ? "bg-emerald-500 hover:bg-emerald-600" 
-                  : "bg-blue-500 hover:bg-blue-600"
-              }`}
-            >
-              Start Call
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Active Call Overlay Component
-function ActiveCallOverlay({ callType, channel, onEnd, localVideoRef, localStream }: any) {
-  const [callDuration, setCallDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const handleToggleMute = () => {
-    const webrtc = getWebRTCClient();
-    const muted = webrtc.toggleMute();
-    setIsMuted(muted);
-    toast.info(muted ? "Microphone muted" : "Microphone unmuted");
-  };
-
-  const handleToggleVideo = () => {
-    if (callType !== "video") return;
-    const webrtc = getWebRTCClient();
-    const videoOff = webrtc.toggleVideo();
-    setIsVideoOff(videoOff);
-    toast.info(videoOff ? "Video turned off" : "Video turned on");
-  };
-
-  return (
-    <div className="fixed inset-0 bg-gradient-to-br from-emerald-900 to-teal-900 z-50 flex flex-col items-center justify-center p-6">
-      {/* Video Display for Video Calls */}
-      {callType === "video" && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-          {isVideoOff && (
-            <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
-              <div className="text-center text-white">
-                <Video className="w-24 h-24 mx-auto mb-4 opacity-50" />
-                <p className="text-xl">Camera is off</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Call Info Overlay */}
-      <div className="relative z-10 text-center text-white mb-8">
-        {callType === "voice" && (
-          <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-            <Phone className="w-16 h-16" />
-          </div>
-        )}
-        <h2 className="text-3xl font-bold mb-2">{channel?.name}</h2>
-        <p className="text-emerald-200 text-lg">{callType === "voice" ? "Voice Call" : "Video Call"}</p>
-        <p className="text-2xl font-mono mt-4">{formatDuration(callDuration)}</p>
-      </div>
-
-      {/* Call Controls */}
-      <div className="relative z-10 flex gap-4">
-        <button
-          onClick={handleToggleMute}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-            isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-          }`}
-          title={isMuted ? "Unmute" : "Mute"}
-        >
-          {isMuted ? (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-            </svg>
-          ) : (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-          )}
-        </button>
-
-        {callType === "video" && (
-          <button
-            onClick={handleToggleVideo}
-            className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-              isVideoOff ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-            }`}
-            title={isVideoOff ? "Turn on video" : "Turn off video"}
-          >
-            <Video className="w-6 h-6" />
-          </button>
-        )}
-
-        <button
-          onClick={onEnd}
-          className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all"
-          title="End call"
-        >
-          <Phone className="w-6 h-6 rotate-135" />
-        </button>
-      </div>
-
-      <p className="relative z-10 text-white/60 text-sm mt-8">
-        {isMuted && "Microphone muted • "}
-        {isVideoOff && "Video off • "}
-        Call in progress
-      </p>
-    </div>
-  );
-}
-
-// Members Modal Component
-function MembersModal({ channel, onClose }: any) {
-  const [members, setMembers] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    fetchMembers();
-  }, [channel]);
-
-  const fetchMembers = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${API_URL}/api/communications/channels/${channel.id}/members`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      const result = await response.json();
-      if (result.success) {
-        setMembers(result.data);
-      }
-    } catch (error) {
-      console.error("Error fetching members:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-        <div className="p-6 border-b border-stone-200 flex items-center justify-between">
-          <div>
-            <h3 className="text-2xl font-bold text-stone-900">Channel Members</h3>
-            <p className="text-stone-600 text-sm">{channel.name}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-stone-100 rounded-lg transition-all"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {isLoading ? (
-            <div className="text-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto text-emerald-500" />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {members.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center gap-4 p-4 hover:bg-stone-50 rounded-xl transition-all"
-                >
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                    {member.user?.first_name?.[0]}
-                    {member.user?.last_name?.[0]}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-stone-900">
-                      {member.user?.first_name} {member.user?.last_name}
-                    </p>
-                    <p className="text-sm text-stone-500 capitalize">
-                      {member.user?.role?.replace(/_/g, " ")}
-                    </p>
-                  </div>
-                  {member.role === "admin" && (
-                    <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-semibold">
-                      Admin
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Settings Modal Component
-function SettingsModal({ channel, onClose, onUpdate }: any) {
-  const [notifications, setNotifications] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-
-  const handleSave = () => {
-    toast.success("Settings saved");
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-        <div className="p-6 border-b border-stone-200 flex items-center justify-between">
-          <h3 className="text-2xl font-bold text-stone-900">Channel Settings</h3>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-stone-100 rounded-lg transition-all"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          <div>
-            <h4 className="font-semibold text-stone-900 mb-4">Notifications</h4>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-stone-900">Push Notifications</p>
-                  <p className="text-sm text-stone-500">Receive notifications for new messages</p>
-                </div>
-                <button
-                  onClick={() => setNotifications(!notifications)}
-                  className={`w-12 h-6 rounded-full transition-all ${
-                    notifications ? "bg-emerald-500" : "bg-gray-300"
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                      notifications ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-stone-900">Sound</p>
-                  <p className="text-sm text-stone-500">Play sound for new messages</p>
-                </div>
-                <button
-                  onClick={() => setSoundEnabled(!soundEnabled)}
-                  className={`w-12 h-6 rounded-full transition-all ${
-                    soundEnabled ? "bg-emerald-500" : "bg-gray-300"
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                      soundEnabled ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-stone-900 mb-2">Channel Info</h4>
-            <div className="bg-stone-50 rounded-xl p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-stone-600">Channel Name:</span>
-                <span className="font-semibold text-stone-900">{channel.name}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-stone-600">Type:</span>
-                <span className="font-semibold text-stone-900 capitalize">{channel.channel_type}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-stone-600">Created:</span>
-                <span className="font-semibold text-stone-900">
-                  {format(new Date(channel.created_at), "MMM d, yyyy")}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 border-t border-stone-200 flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-3 border-2 border-stone-200 rounded-xl font-bold text-stone-700 hover:bg-stone-50 transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex-1 px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all"
-          >
-            Save Changes
-          </button>
-        </div>
       </div>
     </div>
   );

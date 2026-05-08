@@ -471,7 +471,7 @@ router.get('/discrepancies/export',
 );
 
 router.get('/discrepancies',
-  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER, UserRole.AUDITOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   DiscrepancyController.getFlags
 );
 
