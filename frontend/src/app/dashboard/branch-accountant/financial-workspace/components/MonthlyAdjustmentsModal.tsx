@@ -81,7 +81,9 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
     }
   }, [isOpen, branchId, year, month]);
 
-  const totalMonthlyExpenses = Object.values(adjustments).reduce((a, b) => Number(a) + Number(b), 0);
+  const totalFixedExpenses = Object.values(adjustments).reduce((a, b) => Number(a) + Number(b), 0);
+  const totalSubscriptions = subscriptions.entries.reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalMonthlyAdjustments = totalFixedExpenses + totalSubscriptions;
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -97,7 +99,7 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
         },
         cash_flow_data: statements.cash_flow,
         balance_sheet_data: statements.balance_sheet,
-        total_monthly_expenses: totalMonthlyExpenses
+        total_monthly_expenses: totalMonthlyAdjustments
       });
       toast.success('Monthly adjustments saved successfully');
       onClose(true);
@@ -256,7 +258,7 @@ export function MonthlyAdjustmentsModal({ isOpen, onClose, year, month, branchId
                   <span className="font-semibold">Total Monthly Adjustments</span>
                 </div>
                 <span className="text-xl font-bold text-[#007AFF]">
-                  KES {(totalMonthlyExpenses + Number(subscriptions.total)).toLocaleString()}
+                  KES {totalMonthlyAdjustments.toLocaleString()}
                 </span>
               </div>
             </>

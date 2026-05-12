@@ -6,7 +6,8 @@ export default function Document() {
     <Html lang="en">
       <Head>
         <meta charSet="utf-8" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+        <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#d4af37" />
         <meta name="mobile-web-app-capable" content="yes" />
@@ -15,7 +16,10 @@ export default function Document() {
         <meta name="apple-mobile-web-app-title" content="FamousGate Hotels" />
 
         {/* SEO Meta Tags */}
-        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta
+          name="robots"
+          content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+        />
         <meta name="googlebot" content="index, follow" />
         <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 

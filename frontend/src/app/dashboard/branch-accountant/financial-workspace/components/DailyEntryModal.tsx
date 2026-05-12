@@ -19,7 +19,78 @@ interface DailyEntryModalProps {
   existingRecord?: any;
 }
 
+// Helper component for entry lists - defined outside to prevent focus loss on re-render
+const EntryList = ({ 
+  entries, 
+  onChange, 
+  label, 
+  isReadOnly 
+}: { 
+  entries: any[], 
+  onChange: (entries: any[]) => void, 
+  label: string,
+  isReadOnly: boolean 
+}) => {
+  const addEntry = () => onChange([...entries, { description: '', amount: 0 }]);
+  const removeEntry = (index: number) => onChange(entries.filter((_, i) => i !== index));
+  const updateEntry = (index: number, field: string, value: any) => {
+    const newEntries = [...entries];
+    newEntries[index] = { ...newEntries[index], [field]: value };
+    onChange(newEntries);
+  };
+
+  return (
+    <div className="space-y-3 bg-stone-50 p-4 rounded-xl border border-stone-200">
+      <div className="flex justify-between items-center mb-2">
+        <label className="text-sm font-semibold text-stone-700">{label}</label>
+        {!isReadOnly && (
+          <IOSButton variant="secondary" onClick={addEntry} className="h-8 py-0 text-xs">
+            + Add Entry
+          </IOSButton>
+        )}
+      </div>
+      {entries.length === 0 ? (
+        <p className="text-xs text-stone-400 italic">No entries added.</p>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry, idx) => (
+            <div key={idx} className="flex gap-2 items-center">
+              <Input
+                placeholder="Description"
+                value={entry.description}
+                onChange={(e) => updateEntry(idx, 'description', e.target.value)}
+                disabled={isReadOnly}
+                className="flex-1 h-9 text-sm"
+              />
+              <Input
+                type="number"
+                placeholder="Amount"
+                value={entry.amount}
+                onChange={(e) => updateEntry(idx, 'amount', Number(e.target.value))}
+                disabled={isReadOnly}
+                className="w-32 h-9 text-sm font-mono"
+              />
+              {!isReadOnly && (
+                <button onClick={() => removeEntry(idx)} className="p-1 hover:bg-stone-200 rounded-full">
+                  <X className="w-4 h-4 text-stone-400" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="pt-2 border-t border-stone-200 flex justify-between items-center">
+        <span className="text-xs font-medium text-stone-500 uppercase">Total {label}</span>
+        <span className="text-sm font-bold text-stone-900">
+          KES {entries.reduce((sum, e) => sum + Number(e.amount), 0).toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+};
+
 export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecord }: DailyEntryModalProps) {
+
   const [activeTab, setActiveTab] = useState<'revenue' | 'payments' | 'banking' | 'cogs' | 'expenses'>('revenue');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -35,7 +106,6 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
     conferences: 0,
     outside_catering: 0,
     rooms: 0,
-    paid_bills: 0,
     non_consumables: 0,
     swimming_pool: 0,
     other: 0
@@ -71,10 +141,6 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
     wastage_entries: [] as Array<{ description: string, amount: number }>,
     shorts_total: 0,
     shorts_entries: [] as Array<{ description: string, amount: number }>,
-    credit_bills_total: 0,
-    credit_bill_entries: [] as Array<{ description: string, amount: number }>,
-    subscriptions_total: 0,
-    subscriptions_entries: [] as Array<{ description: string, amount: number }>,
     other_expenses_total: 0,
     other_entries: [] as Array<{ description: string, amount: number }>
   });
@@ -96,7 +162,6 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
         conferences: existingRecord.revenue_data?.conferences || existingRecord.revenue_data?.conf || 0,
         outside_catering: existingRecord.revenue_data?.outside_catering || existingRecord.revenue_data?.catering || 0,
         rooms: existingRecord.revenue_data?.rooms || 0,
-        paid_bills: existingRecord.revenue_data?.paid_bills || existingRecord.revenue_data?.bills || 0,
         non_consumables: existingRecord.revenue_data?.non_consumables || 0,
         swimming_pool: existingRecord.revenue_data?.swimming_pool || 0,
         other: existingRecord.revenue_data?.other || 0
@@ -130,10 +195,6 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
         wastage_entries: existingRecord.expense_data?.wastage_entries || [],
         shorts_total: existingRecord.expense_data?.shorts_total || existingRecord.expense_data?.shorts || 0,
         shorts_entries: existingRecord.expense_data?.shorts_entries || [],
-        credit_bills_total: existingRecord.expense_data?.credit_bills_total || existingRecord.expense_data?.credit || 0,
-        credit_bill_entries: existingRecord.expense_data?.credit_bill_entries || [],
-        subscriptions_total: existingRecord.expense_data?.subscriptions_total || 0,
-        subscriptions_entries: existingRecord.expense_data?.subscriptions_entries || [],
         other_expenses_total: existingRecord.expense_data?.other_expenses_total || existingRecord.expense_data?.other || 0,
         other_entries: existingRecord.expense_data?.other_entries || []
       });
@@ -160,8 +221,6 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
     Number(expenses.direct_suppliers_total) + 
     Number(expenses.wastage_total) + 
     Number(expenses.shorts_total) + 
-    Number(expenses.credit_bills_total) + 
-    Number(expenses.subscriptions_total) + 
     Number(expenses.other_expenses_total);
   
   const netProfit = totalRevenue - (totalCogs + totalExpenses);
@@ -207,75 +266,7 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
     }
   };
 
-  // Helper component for entry lists
-  const EntryList = ({ 
-    entries, 
-    onChange, 
-    label, 
-    isReadOnly 
-  }: { 
-    entries: any[], 
-    onChange: (entries: any[]) => void, 
-    label: string,
-    isReadOnly: boolean 
-  }) => {
-    const addEntry = () => onChange([...entries, { description: '', amount: 0 }]);
-    const removeEntry = (index: number) => onChange(entries.filter((_, i) => i !== index));
-    const updateEntry = (index: number, field: string, value: any) => {
-      const newEntries = [...entries];
-      newEntries[index] = { ...newEntries[index], [field]: value };
-      onChange(newEntries);
-    };
 
-    return (
-      <div className="space-y-3 bg-stone-50 p-4 rounded-xl border border-stone-200">
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-sm font-semibold text-stone-700">{label}</label>
-          {!isReadOnly && (
-            <IOSButton variant="secondary" onClick={addEntry} className="h-8 py-0 text-xs">
-              + Add Entry
-            </IOSButton>
-          )}
-        </div>
-        {entries.length === 0 ? (
-          <p className="text-xs text-stone-400 italic">No entries added.</p>
-        ) : (
-          <div className="space-y-2">
-            {entries.map((entry, idx) => (
-              <div key={idx} className="flex gap-2 items-center">
-                <Input
-                  placeholder="Description"
-                  value={entry.description}
-                  onChange={(e) => updateEntry(idx, 'description', e.target.value)}
-                  disabled={isReadOnly}
-                  className="flex-1 h-9 text-sm"
-                />
-                <Input
-                  type="number"
-                  placeholder="Amount"
-                  value={entry.amount}
-                  onChange={(e) => updateEntry(idx, 'amount', Number(e.target.value))}
-                  disabled={isReadOnly}
-                  className="w-32 h-9 text-sm font-mono"
-                />
-                {!isReadOnly && (
-                  <button onClick={() => removeEntry(idx)} className="p-1 hover:bg-stone-200 rounded-full">
-                    <X className="w-4 h-4 text-stone-400" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="pt-2 border-t border-stone-200 flex justify-between items-center">
-          <span className="text-xs font-medium text-stone-500 uppercase">Total {label}</span>
-          <span className="text-sm font-bold text-stone-900">
-            KES {entries.reduce((sum, e) => sum + Number(e.amount), 0).toLocaleString()}
-          </span>
-        </div>
-      </div>
-    );
-  };
 
   if (!isOpen) return null;
 
@@ -353,7 +344,6 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
                     { key: 'conferences', label: 'Conferences' },
                     { key: 'outside_catering', label: 'Outside Catering' },
                     { key: 'rooms', label: 'Rooms' },
-                    { key: 'paid_bills', label: 'Paid Bills' },
                     { key: 'non_consumables', label: 'Non-Consumables' },
                     { key: 'swimming_pool', label: 'Swimming Pool' },
                     { key: 'other', label: 'Other Revenue' }
@@ -652,28 +642,6 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
                     ...expenses, 
                     shorts_entries: entries,
                     shorts_total: entries.reduce((sum, e) => sum + Number(e.amount), 0)
-                  })}
-                  isReadOnly={isReadOnly}
-                />
-
-                <EntryList 
-                  label="Credit Bills" 
-                  entries={expenses.credit_bill_entries}
-                  onChange={(entries) => setExpenses({ 
-                    ...expenses, 
-                    credit_bill_entries: entries,
-                    credit_bills_total: entries.reduce((sum, e) => sum + Number(e.amount), 0)
-                  })}
-                  isReadOnly={isReadOnly}
-                />
-
-                <EntryList 
-                  label="Subscriptions" 
-                  entries={expenses.subscriptions_entries}
-                  onChange={(entries) => setExpenses({ 
-                    ...expenses, 
-                    subscriptions_entries: entries,
-                    subscriptions_total: entries.reduce((sum, e) => sum + Number(e.amount), 0)
                   })}
                   isReadOnly={isReadOnly}
                 />
