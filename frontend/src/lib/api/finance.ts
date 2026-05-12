@@ -166,8 +166,25 @@ export const financeAPI = {
     saveDailyRecord: (data: any) => fetchAPI<any>('/finance/workspace/daily', { method: 'POST', body: JSON.stringify(data) }),
     getMonthlyAdjustments: (params?: any) => fetchAPI<any[]>(`/finance/workspace/monthly${buildQuery(params)}`),
     saveMonthlyAdjustment: (data: any) => fetchAPI<any>('/finance/workspace/monthly', { method: 'POST', body: JSON.stringify(data) }),
-    exportMonthlyStatement: (params: { branch_id: number; fiscal_year: number; fiscal_month: number }) => 
-      `/api/finance/workspace/export${buildQuery(params)}`
+    exportMonthlyStatement: async (params: { branch_id: number; fiscal_year: number; fiscal_month: number }): Promise<boolean> => {
+      const result = await fetchAPI<Blob>(`/finance/workspace/export${buildQuery(params)}`, { responseType: 'blob' });
+      if (result.success && result.data && typeof window !== 'undefined') {
+        const blob = result.data;
+        if (blob.size === 0) throw new Error('Received empty PDF from server');
+        const monthStr = String(params.fiscal_month).padStart(2, '0');
+        const filename = `Financial_Statement_${params.fiscal_year}_${monthStr}.pdf`;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+        return true;
+      }
+      throw new Error('Failed to export monthly statement');
+    }
   },
 
   director: {

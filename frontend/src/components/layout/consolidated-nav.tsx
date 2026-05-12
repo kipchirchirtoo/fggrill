@@ -337,10 +337,10 @@ export function ConsolidatedNav() {
         active={pathname === '/dashboard/cashier'}
       />
       <NavItem
-        href="/dashboard/branch-accounting/bookings"
+        href="/dashboard/branch-accounting/bookings-invoices"
         icon={Calendar}
-        label="Bookings"
-        active={pathname.includes('/dashboard/branch-accounting/bookings')}
+        label="Bookings & Invoices"
+        active={pathname.includes('/dashboard/branch-accounting/bookings-invoices')}
       />
       <NavItem
         href="/dashboard/admin/staff"
@@ -410,10 +410,10 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
-        href="/dashboard/branch-accounting/bookings"
+        href="/dashboard/branch-accounting/bookings-invoices"
         icon={Calendar}
-        label="Bookings"
-        active={pathname.includes('/dashboard/branch-accounting/bookings')}
+        label="Bookings & Invoices"
+        active={pathname.includes('/dashboard/branch-accounting/bookings-invoices')}
       />
 
       <NavItem
@@ -865,17 +865,10 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
-        href="/dashboard/branch-accounting/bookings"
+        href="/dashboard/branch-accounting/bookings-invoices"
         icon={Calendar}
-        label="Bookings"
-        active={pathname.includes('/dashboard/branch-accounting/bookings')}
-      />
-
-      <NavItem
-        href="/dashboard/branch-accounting/invoices"
-        icon={FileText}
-        label="Guest Invoices"
-        active={pathname.includes('/dashboard/branch-accounting/invoices')}
+        label="Bookings & Invoices"
+        active={pathname.includes('/dashboard/branch-accounting/bookings-invoices')}
       />
 
       <NavItem

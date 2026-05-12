@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { financeAPI, api } from '@/lib/api';
+import { financeAPI, api, cashierAPI } from '@/lib/api';
 import {
     CreditCard, Wallet, Calendar, User, Search,
     Plus, Filter, Download, ChevronRight, CheckCircle,
-    XCircle, Clock, AlertTriangle, FileText
+    XCircle, Clock, AlertTriangle, FileText, RefreshCw,
+    DollarSign, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BillDetailsModal } from './BillDetailsModal';
@@ -33,6 +34,14 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
     const [advances, setAdvances] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isMigrating, setIsMigrating] = useState(false);
+
+    // Customer Unpaid Bills state
+    const [unpaidBills, setUnpaidBills] = useState<any[]>([]);
+    const [waiterOrders, setWaiterOrders] = useState<any[]>([]);
+    const [unpaidLoading, setUnpaidLoading] = useState(false);
+    const [unpaidSearch, setUnpaidSearch] = useState('');
+    const [payingBillId, setPayingBillId] = useState<string | null>(null);
+    const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
 
     // Bill Details Modal State
     const [selectedBill, setSelectedBill] = useState<any>(null);
@@ -97,24 +106,99 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
         }
     };
 
+    const loadUnpaidBills = async () => {
+        if (!branchId) return;
+        setUnpaidLoading(true);
+        try {
+            const [billsRes, ordersRes] = await Promise.all([
+                cashierAPI.getUnpaidBills({ branch_id: branchId }),
+                cashierAPI.getUnpaidWaiterOrders({ branch_id: branchId })
+            ]);
+
+            if (billsRes?.success && Array.isArray(billsRes.data)) {
+                setUnpaidBills((billsRes.data as any[]).filter(
+                    (b: any) => !b.is_kyogong && !b.is_hotel && !b.is_invoice && b.source_type !== 'KYOGONG'
+                ));
+            } else {
+                setUnpaidBills([]);
+            }
+
+            if (ordersRes?.success && Array.isArray(ordersRes.data)) {
+                setWaiterOrders(ordersRes.data);
+            } else {
+                setWaiterOrders([]);
+            }
+        } catch (err) {
+            console.error('Failed to load unpaid bills/orders', err);
+            setUnpaidBills([]);
+            setWaiterOrders([]);
+        } finally {
+            setUnpaidLoading(false);
+        }
+    };
+
+    const handleMarkPaid = async (bill: any) => {
+        const balance = Number(bill.balance_amount ?? bill.total_amount ?? 0);
+        if (balance <= 0) {
+            toast.info('This bill is already fully paid.');
+            return;
+        }
+        if (!confirm(`Mark KES ${balance.toLocaleString()} from "${bill.customer_name || 'Customer'}" as paid?`)) return;
+        setPayingBillId(bill.id);
+        try {
+            const res = await cashierAPI.recordBillPayment(bill.id, {
+                payment_amount: balance,
+                payment_method: 'cash'
+            });
+            if (res?.success) {
+                toast.success('Bill marked as paid and removed from list.');
+                setUnpaidBills(prev => prev.filter(b => b.id !== bill.id));
+            } else {
+                toast.error(res?.message || 'Failed to mark bill as paid');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to mark bill as paid');
+        } finally {
+            setPayingBillId(null);
+        }
+    };
+
+    const handleMarkOrderPaid = async (order: any) => {
+        if (!confirm(`Mark order ${order.order_number} (KES ${order.total_amount.toLocaleString()}) as paid?`)) return;
+        setPayingOrderId(order.id);
+        try {
+            const res = await cashierAPI.markWaiterOrderPaid(order.source as 'restaurant' | 'bar', order.id);
+            if (res?.success) {
+                toast.success(`Order ${order.order_number} marked as paid.`);
+                setWaiterOrders(prev => prev.filter(o => o.id !== order.id));
+            } else {
+                toast.error(res?.message || 'Failed to mark order as paid');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Failed to mark order as paid');
+        } finally {
+            setPayingOrderId(null);
+        }
+    };
+
     const handleTriggerMigration = async () => {
-        if (!confirm('Are you sure you want to trigger a manual migration of pending bills older than 8 hours? This will convert pending orders to credit bills and notify waiters.')) {
+        if (!confirm('Trigger migration of pending orders older than 8 hours to staff credit bills? Waiters will be notified.')) {
             return;
         }
 
         setIsMigrating(true);
         try {
-            // Safety check for simplePayroll API
             const payrollApi = api.staff?.simplePayroll;
             if (!payrollApi || typeof payrollApi.triggerPendingBillsMigration !== 'function') {
                 toast.error('Migration feature is currently unavailable');
                 return;
             }
 
-            const res = await payrollApi.triggerPendingBillsMigration();
+            const res = await payrollApi.triggerPendingBillsMigration(branchId ?? undefined);
             if (res.success) {
-                toast.success('Migration completed successfully');
+                toast.success('Migration completed — staff credit bills updated.');
                 loadData();
+                loadUnpaidBills();
             } else {
                 toast.error(res.message || 'Migration failed');
             }
@@ -191,7 +275,11 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
     };
 
     useEffect(() => {
-        loadData();
+        if (activeTab === 'customer_credit') {
+            loadUnpaidBills();
+        } else {
+            loadData();
+        }
     }, [activeTab, branchId]);
 
     return (
@@ -210,14 +298,14 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
                     <button className="px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors flex items-center shadow-sm" onClick={loadData}>
                         <Clock className="h-4 w-4 mr-2" /> Refresh
                     </button>
-                    {!isAuditor && activeTab === 'staff_credit' && (
+                    {!isAuditor && (activeTab === 'staff_credit' || activeTab === 'customer_credit') && (
                         <button
                             className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors flex items-center shadow-sm disabled:opacity-50"
                             onClick={handleTriggerMigration}
                             disabled={isMigrating}
                         >
                             <Clock className={`h-4 w-4 mr-2 ${isMigrating ? 'animate-spin' : ''}`} />
-                            {isMigrating ? 'Migrating...' : 'Trigger Migration'}
+                            {isMigrating ? 'Migrating...' : 'Trigger Migration (8h)'}
                         </button>
                     )}
                     {/* Global Action Button based on tab - Only show for Branch Accountant or if Auditor needs to create */}
@@ -249,16 +337,237 @@ export function CreditBillsContent({ branchId, isAuditor = false }: CreditBillsC
             {/* Content Area */}
             <div className="bg-white rounded-xl border border-stone-200 shadow-sm min-h-[400px]">
                 {activeTab === 'customer_credit' && (
-                    <div className="p-8 text-center">
-                        <FileText className="h-12 w-12 mx-auto text-stone-300 mb-4" />
-                        <h3 className="text-lg font-medium text-stone-900">Customer Credit Management</h3>
-                        <p className="text-stone-500 mb-6">Manage unpaid bills for walk-in and corporate customers.</p>
-                        <button
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
-                            onClick={() => router.push(isAuditor ? `/dashboard/auditor/branch-audit/credit-bills/customer` : '/dashboard/branch-accounting/credit-bills/customer')}
-                        >
-                            {isAuditor ? 'Audit Customer Credits' : 'Go to Customer Credit Module'}
-                        </button>
+                    <div>
+                        {/* Header bar */}
+                        <div className="p-4 border-b border-stone-200 bg-stone-50 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                            <div className="relative flex-1 max-w-sm">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search customer name or bill #..."
+                                    className="w-full pl-9 pr-4 py-2 rounded-lg border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={unpaidSearch}
+                                    onChange={e => setUnpaidSearch(e.target.value)}
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-stone-500">
+                                <AlertCircle className="h-4 w-4 text-amber-500" />
+                                <span>{unpaidBills.length} outstanding bill{unpaidBills.length !== 1 ? 's' : ''}</span>
+                                <button onClick={loadUnpaidBills} className="ml-2 p-1.5 hover:bg-stone-200 rounded transition-colors" title="Refresh">
+                                    <RefreshCw className={`h-4 w-4 ${unpaidLoading ? 'animate-spin' : ''}`} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs text-stone-500 uppercase bg-stone-50/50">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">Date</th>
+                                        <th className="px-4 py-3 font-medium">Bill #</th>
+                                        <th className="px-4 py-3 font-medium">Customer</th>
+                                        <th className="px-4 py-3 font-medium">Type</th>
+                                        <th className="px-4 py-3 font-medium text-right">Total</th>
+                                        <th className="px-4 py-3 font-medium text-right">Balance</th>
+                                        <th className="px-4 py-3 font-medium text-center">Status</th>
+                                        <th className="px-4 py-3 font-medium text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-stone-100">
+                                    {unpaidLoading && (
+                                        <tr>
+                                            <td colSpan={8} className="px-4 py-12 text-center text-stone-500">
+                                                <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+                                                Loading unpaid bills...
+                                            </td>
+                                        </tr>
+                                    )}
+
+                                    {!unpaidLoading && (() => {
+                                        const term = unpaidSearch.trim().toLowerCase();
+                                        const visible = unpaidBills.filter(b =>
+                                            !term ||
+                                            (b.customer_name || '').toLowerCase().includes(term) ||
+                                            (b.bill_number || '').toLowerCase().includes(term)
+                                        );
+
+                                        if (visible.length === 0) {
+                                            return (
+                                                <tr>
+                                                    <td colSpan={8} className="px-4 py-12 text-center">
+                                                        <CheckCircle className="h-10 w-10 mx-auto text-emerald-400 mb-3" />
+                                                        <p className="text-stone-900 font-medium">No outstanding customer bills</p>
+                                                        <p className="text-stone-500 text-xs mt-1">All customer bills have been settled or none recorded.</p>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
+
+                                        return visible.map((bill: any) => {
+                                            const balance = Number(bill.balance_amount ?? bill.total_amount ?? 0);
+                                            const dateStr = bill.bill_date
+                                                ? new Date(bill.bill_date).toLocaleDateString()
+                                                : '—';
+                                            const isPaying = payingBillId === bill.id;
+
+                                            return (
+                                                <tr key={bill.id} className="hover:bg-stone-50 transition-colors">
+                                                    <td className="px-4 py-3 text-stone-500 text-xs">{dateStr}</td>
+                                                    <td className="px-4 py-3 text-stone-700 font-mono text-xs">{bill.bill_number || bill.id?.slice(0, 8)}</td>
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-medium text-stone-900">{bill.customer_name || 'Unknown'}</p>
+                                                        {bill.customer_phone && (
+                                                            <p className="text-xs text-stone-400">{bill.customer_phone}</p>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-600 uppercase">
+                                                            {(bill.bill_type || bill.reference_type || 'manual').replace(/_/g, ' ')}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-medium text-stone-600">
+                                                        {Number(bill.total_amount || 0).toLocaleString()}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-semibold text-red-600">
+                                                        {balance.toLocaleString()}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                                            bill.status === 'paid'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : 'bg-red-100 text-red-700'
+                                                        }`}>
+                                                            {bill.status || 'unpaid'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {!isAuditor && bill.status !== 'paid' && (
+                                                            <button
+                                                                type="button"
+                                                                disabled={isPaying}
+                                                                onClick={() => handleMarkPaid(bill)}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50"
+                                                            >
+                                                                {isPaying
+                                                                    ? <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                                    : <DollarSign className="h-3 w-3" />}
+                                                                {isPaying ? 'Paying...' : 'Mark Paid'}
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        });
+                                    })()}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* ─── Pending Waiter Orders section ─── */}
+                        <div className="border-t-4 border-amber-200 mt-1">
+                            <div className="px-4 py-3 bg-amber-50 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                    <span className="text-sm font-semibold text-amber-800">
+                                        Pending Waiter Orders
+                                    </span>
+                                    <span className="text-xs text-amber-600 ml-1">
+                                        ({waiterOrders.length} open — customers not yet collected)
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-stone-500 uppercase bg-amber-50/40">
+                                        <tr>
+                                            <th className="px-4 py-3 font-medium">Time</th>
+                                            <th className="px-4 py-3 font-medium">Order #</th>
+                                            <th className="px-4 py-3 font-medium">Source</th>
+                                            <th className="px-4 py-3 font-medium">Location</th>
+                                            <th className="px-4 py-3 font-medium">Customer</th>
+                                            <th className="px-4 py-3 font-medium">Waiter</th>
+                                            <th className="px-4 py-3 font-medium text-right">Amount</th>
+                                            <th className="px-4 py-3 font-medium text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-100">
+                                        {unpaidLoading && (
+                                            <tr>
+                                                <td colSpan={8} className="px-4 py-8 text-center text-stone-400 text-xs">
+                                                    Loading orders...
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!unpaidLoading && waiterOrders.length === 0 && (
+                                            <tr>
+                                                <td colSpan={8} className="px-4 py-8 text-center">
+                                                    <p className="text-stone-500 text-xs">No pending orders — all collected.</p>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!unpaidLoading && waiterOrders.map((order: any) => {
+                                            const isPaying = payingOrderId === order.id;
+                                            const timeStr = order.created_at
+                                                ? new Date(order.created_at).toLocaleString()
+                                                : '—';
+                                            const waiterName = order.waiter
+                                                ? `${order.waiter.first_name || ''} ${order.waiter.last_name || ''}`.trim()
+                                                : '—';
+
+                                            return (
+                                                <tr key={order.id} className="hover:bg-amber-50/30 transition-colors">
+                                                    <td className="px-4 py-3 text-stone-400 text-xs">{timeStr}</td>
+                                                    <td className="px-4 py-3 font-mono text-xs text-stone-700">{order.order_number}</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                                            order.source === 'restaurant'
+                                                                ? 'bg-green-100 text-green-700'
+                                                                : 'bg-purple-100 text-purple-700'
+                                                        }`}>
+                                                            {order.source}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-stone-600 text-xs">{order.location}</td>
+                                                    <td className="px-4 py-3 font-medium text-stone-900 text-xs">{order.guest_name}</td>
+                                                    <td className="px-4 py-3 text-stone-500 text-xs">{waiterName}</td>
+                                                    <td className="px-4 py-3 text-right font-semibold text-amber-700">
+                                                        {order.total_amount.toLocaleString()}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {!isAuditor && (
+                                                            <button
+                                                                type="button"
+                                                                disabled={isPaying}
+                                                                onClick={() => handleMarkOrderPaid(order)}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50"
+                                                            >
+                                                                {isPaying
+                                                                    ? <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                                    : <DollarSign className="h-3 w-3" />}
+                                                                {isPaying ? 'Paying...' : 'Collect'}
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Footer: go to full customer credit module */}
+                        <div className="px-4 py-3 border-t border-stone-100 bg-stone-50 flex justify-end">
+                            <button
+                                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                                onClick={() => router.push(isAuditor ? '/dashboard/auditor/branch-audit/credit-bills/customer' : '/dashboard/branch-accounting/credit-bills/customer')}
+                            >
+                                <ChevronRight className="h-3 w-3" />
+                                Full Customer Credit Module
+                            </button>
+                        </div>
                     </div>
                 )}
 

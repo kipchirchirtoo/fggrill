@@ -23,7 +23,8 @@ import {
     Eye,
     DollarSign,
     Users,
-    Plus
+    Plus,
+    Building2
 } from 'lucide-react';
 import { api, conferenceAPI, accountingAPI, cateringAPI } from '@/lib/api';
 import { downloadInvoicePDF, printInvoicePDF } from '@/lib/invoice-pdf';
@@ -46,18 +47,21 @@ import {
     DialogFooter,
     DialogDescription,
 } from '@/components/ui/dialog';
+import { CreateInvoiceModal } from '@/components/dashboard/branch/CreateInvoiceModal';
+import { Invoice } from '@/lib/api/types';
 
-export default function BookingsManagementPage() {
+export default function BookingsInvoicesPage() {
     return (
         <ProtectedRoute allowedRoles={[UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.RECEPTIONIST]}>
             <DashboardLayout>
-                <BookingsManagementContent />
+                <BookingsInvoicesContent />
             </DashboardLayout>
         </ProtectedRoute>
     );
 }
 
-function BookingsManagementContent() {
+function BookingsInvoicesContent() {
+    const { user } = useAuth();
     const { activeBranchId } = useBranch();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('hotel');
@@ -68,6 +72,9 @@ function BookingsManagementContent() {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createType, setCreateType] = useState<'conference' | 'hotel' | 'restaurant' | 'guest' | 'general' | null>(null);
+    const [isExporting, setIsExporting] = useState<string | null>(null);
 
     useEffect(() => {
         fetchData();
@@ -95,21 +102,83 @@ function BookingsManagementContent() {
                     setConferenceBookings(response.data);
                 }
             } else if (activeTab === 'catering') {
-                const response = await cateringAPI.getBookings();
-                if (response.success) {
-                    setCateringBookings(response.data);
+                const userRole = user?.role?.toLowerCase() || '';
+                const canAccessCatering = ['receptionist', 'branch_manager', 'super_admin'].includes(userRole);
+                if (canAccessCatering) {
+                    try {
+                        const response = await cateringAPI.getBookings();
+                        if (response.success) {
+                            setCateringBookings(response.data);
+                        }
+                    } catch (e) {
+                        console.warn('Catering API access denied or failed:', e);
+                    }
                 }
             } else if (activeTab === 'invoices') {
-                const response = await api.accounting.getInvoices();
-                if (response.success) {
-                    setInvoices(response.data);
-                }
+                await fetchInvoices();
             }
         } catch (error) {
-            console.error('Error fetching bookings:', error);
-            toast.error('Failed to load bookings');
+            console.error('Error fetching data:', error);
+            toast.error('Failed to load data');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchInvoices = async () => {
+        try {
+            const response = await api.accounting.getInvoices();
+            const conferenceResponse = await api.conference.getBookings({ 
+                branch_id: activeBranchId,
+                status: 'confirmed' 
+            });
+            
+            let allInvoices: any[] = [];
+            
+            if (response.success) {
+                const mappedData = response.data.map((inv: any) => ({
+                    ...inv,
+                    subtotal: inv.subtotal || inv.total_amount || 0,
+                    vat_amount: inv.vat_amount || 0
+                }));
+                allInvoices = [...allInvoices, ...mappedData];
+            }
+            
+            if (conferenceResponse.success) {
+                const conferenceInvoices = conferenceResponse.data.map((booking: any) => ({
+                    id: booking.id,
+                    invoice_number: booking.invoice_number || `CNF-${booking.id.slice(0, 8)}`,
+                    customer_name: booking.company_name || booking.customer_name,
+                    customer_email: booking.customer_email,
+                    customer: {
+                        id: booking.id,
+                        customer_name: booking.company_name || booking.customer_name,
+                        email: booking.customer_email,
+                        phone: booking.customer_phone
+                    },
+                    invoice_date: booking.created_at || booking.start_date,
+                    due_date: booking.end_date || booking.start_date,
+                    total_amount: booking.total_amount,
+                    subtotal: booking.total_amount,
+                    vat_amount: 0,
+                    status: booking.payment_status === 'paid' ? 'paid' : 
+                            booking.payment_status === 'partial' ? 'partial' : 'unpaid',
+                    type: 'CONFERENCE' as const,
+                    items: [],
+                    notes: `Conference: ${booking.start_date} to ${booking.end_date}`,
+                    branch_id: booking.branch_id
+                }));
+                allInvoices = [...allInvoices, ...conferenceInvoices];
+            }
+            
+            if (activeBranchId) {
+                allInvoices = allInvoices.filter(inv => inv.branch_id === activeBranchId);
+            }
+            
+            setInvoices(allInvoices);
+        } catch (error) {
+            console.error('Error fetching invoices:', error);
+            toast.error('Failed to load invoices');
         }
     };
 
@@ -117,7 +186,6 @@ function BookingsManagementContent() {
         try {
             let response;
             if (activeTab === 'hotel') {
-                // Assuming there's a confirm endpoint or update status
                 response = await api.bookings.updateBooking(id, { status: 'confirmed' });
             } else if (activeTab === 'catering') {
                 response = await cateringAPI.updateBooking(id, { booking_status: 'confirmed' });
@@ -145,7 +213,7 @@ function BookingsManagementContent() {
             } else if (activeTab === 'catering') {
                 response = await cateringAPI.cancelBooking(id);
             } else {
-                response = await api.restaurant.cancelRestaurantReservation(id, 'Cancelled by Branch Accountant');
+                response = await api.restaurant.cancelRestaurantReservation(id);
             }
 
             if (response.success) {
@@ -157,6 +225,45 @@ function BookingsManagementContent() {
         } catch (error) {
             console.error('Error cancelling booking:', error);
             toast.error('Action failed');
+        }
+    };
+
+    const handleCreate = (type: 'conference' | 'hotel' | 'restaurant' | 'guest' | 'general') => {
+        setCreateType(type);
+        setShowCreateModal(true);
+    };
+
+    const handleCreateSuccess = () => {
+        fetchInvoices();
+        toast.success("Invoice created and sent to Auditor");
+        setShowCreateModal(false);
+    };
+
+    const handleDownload = async (inv: Invoice) => {
+        setIsExporting(inv.id);
+        const toastId = toast.loading(`Generating PDF for ${inv.invoice_number}...`);
+        try {
+            await downloadInvoicePDF(inv);
+            toast.success("Invoice downloaded", { id: toastId });
+        } catch (error: any) {
+            console.error('Download failed:', error);
+            toast.error(error.message || "Failed to download invoice", { id: toastId });
+        } finally {
+            setIsExporting(null);
+        }
+    };
+
+    const handlePrint = async (inv: Invoice) => {
+        setIsExporting(inv.id);
+        const toastId = toast.loading(`Preparing print for ${inv.invoice_number}...`);
+        try {
+            await printInvoicePDF(inv);
+            toast.success("Print dialog opened", { id: toastId });
+        } catch (error: any) {
+            console.error('Print failed:', error);
+            toast.error(error.message || "Failed to print invoice", { id: toastId });
+        } finally {
+            setIsExporting(null);
         }
     };
 
@@ -205,8 +312,8 @@ function BookingsManagementContent() {
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Booking Management</h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">Manage and confirm hotel and restaurant reservations.</p>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Bookings & Invoices</h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">Manage reservations and billing in one place.</p>
                 </div>
             </div>
 
@@ -215,7 +322,7 @@ function BookingsManagementContent() {
                     <TabsList className="bg-slate-100 dark:bg-slate-800 p-1">
                         <TabsTrigger value="hotel" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                             <Hotel className="w-4 h-4 mr-2" />
-                            Hotel Bookings
+                            Hotel
                         </TabsTrigger>
                         <TabsTrigger value="restaurant" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                             <Utensils className="w-4 h-4 mr-2" />
@@ -236,10 +343,26 @@ function BookingsManagementContent() {
                     </TabsList>
 
                     <div className="flex items-center gap-2 w-full md:w-auto">
+                        {activeTab === 'invoices' && (
+                            <div className="flex flex-wrap gap-2 mr-2">
+                                <Button size="sm" onClick={() => handleCreate('conference')} className="bg-blue-600 hover:bg-blue-700">
+                                    <Building2 className="w-4 h-4 mr-1" /> Conference
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleCreate('hotel')}>
+                                    <Hotel className="w-4 h-4 mr-1" /> Hotel
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleCreate('restaurant')}>
+                                    <Utensils className="w-4 h-4 mr-1" /> Restaurant
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => handleCreate('guest')}>
+                                    <User className="w-4 h-4 mr-1" /> Other
+                                </Button>
+                            </div>
+                        )}
                         <div className="relative flex-1 md:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input
-                                placeholder="Search guest or room..."
+                                placeholder="Search..."
                                 className="pl-9 bg-white dark:bg-slate-950"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -255,6 +378,7 @@ function BookingsManagementContent() {
                         loading={loading}
                         onConfirm={handleConfirm}
                         onCancel={handleCancel}
+                        onInvoiceGenerated={fetchData}
                     />
                 </TabsContent>
 
@@ -295,9 +419,19 @@ function BookingsManagementContent() {
                     <InvoiceList
                         records={filteredInvoices}
                         loading={loading}
+                        onDownload={handleDownload}
+                        onPrint={handlePrint}
+                        isExporting={isExporting}
                     />
                 </TabsContent>
             </Tabs>
+
+            <CreateInvoiceModal
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+                type={createType}
+                onSuccess={handleCreateSuccess}
+            />
         </div>
     );
 }
@@ -325,7 +459,6 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
         setIsInvoicing(true);
         try {
             const invoiceData = {
-                // Don't send customer_id - let backend create ad-hoc customer from name/email
                 customer_name: record.customer_name || record.guest_name,
                 customer_email: record.customer_email || record.guest_email || record.email,
                 invoice_date: new Date().toISOString().split('T')[0],
@@ -471,7 +604,7 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                     onClick={() => handleViewDetails(record)}
                                     className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
                                 >
-                                    <Eye className="w-4 h-4 mr-1" /> View Details
+                                    <Eye className="w-4 h-4 mr-1" /> View
                                 </Button>
                                 {(record.status === 'pending' || record.booking_status === 'pending') && (
                                     <Button
@@ -498,7 +631,6 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                 ))}
             </div>
 
-            {/* Booking Details Modal */}
             <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader className="flex-shrink-0">
@@ -512,7 +644,6 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
 
                     {selectedBooking && (
                         <div className="space-y-6 py-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100 dark:scrollbar-thumb-slate-600 dark:scrollbar-track-slate-800">
-                            {/* Guest Information */}
                             <div className="space-y-3">
                                 <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                                     <User className="w-5 h-5 text-indigo-600" />
@@ -537,241 +668,30 @@ function BookingList({ type, records, loading, onConfirm, onCancel, onInvoiceGen
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Booking Details */}
-                            <div className="space-y-3">
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                    {type === 'hotel' ? <Hotel className="w-5 h-5 text-indigo-600" /> : <Utensils className="w-5 h-5 text-indigo-600" />}
-                                    {type === 'hotel' ? 'Booking Details' : 'Reservation Details'}
-                                </h3>
-                                <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
-                                    {type === 'hotel' ? (
-                                        <>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Booking Number</p>
-                                                <p className="text-sm font-medium">{selectedBooking.booking_number || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Room Number</p>
-                                                <p className="text-sm">{selectedBooking.room_number || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Check-in</p>
-                                                <p className="text-sm">{selectedBooking.check_in ? format(new Date(selectedBooking.check_in), 'MMM dd, yyyy') : 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Check-out</p>
-                                                <p className="text-sm">{selectedBooking.check_out ? format(new Date(selectedBooking.check_out), 'MMM dd, yyyy') : 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Number of Guests</p>
-                                                <p className="text-sm">{selectedBooking.number_of_guests || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Room Type</p>
-                                                <p className="text-sm">{selectedBooking.room_type || 'N/A'}</p>
-                                            </div>
-                                        </>
-                                    ) : type === 'catering' ? (
-                                        <>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Booking Number</p>
-                                                <p className="text-sm font-medium">{selectedBooking.booking_number || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Event Type</p>
-                                                <p className="text-sm">{selectedBooking.event_type || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Event Date</p>
-                                                <p className="text-sm">{selectedBooking.event_date ? format(new Date(selectedBooking.event_date), 'MMM dd, yyyy') : 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Event Time</p>
-                                                <p className="text-sm">{selectedBooking.event_time || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Number of Guests</p>
-                                                <p className="text-sm">{selectedBooking.num_guests || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Venue</p>
-                                                <p className="text-sm">{selectedBooking.venue_address || 'N/A'}</p>
-                                            </div>
-                                            {selectedBooking.menu_details && (
-                                                <div className="col-span-2">
-                                                    <p className="text-xs text-slate-500 uppercase font-semibold">Menu Details</p>
-                                                    <p className="text-sm">{typeof selectedBooking.menu_details === 'string' ? selectedBooking.menu_details : JSON.stringify(selectedBooking.menu_details)}</p>
-                                                </div>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Reservation Number</p>
-                                                <p className="text-sm font-medium">{selectedBooking.reservation_number || selectedBooking.booking_number || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Party Size</p>
-                                                <p className="text-sm">{selectedBooking.party_size || selectedBooking.number_of_guests || selectedBooking.num_guests || 'N/A'} guests</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Date</p>
-                                                <p className="text-sm">{selectedBooking.reservation_date || selectedBooking.event_date || selectedBooking.start_date ? format(new Date(selectedBooking.reservation_date || selectedBooking.event_date || selectedBooking.start_date), 'MMM dd, yyyy') : 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Time</p>
-                                                <p className="text-sm">{selectedBooking.reservation_time || selectedBooking.event_time || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Table</p>
-                                                <p className="text-sm">{selectedBooking.table_number || 'Not assigned'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Section Preference</p>
-                                                <p className="text-sm">{selectedBooking.section_preference || 'None'}</p>
-                                            </div>
-                                        </>
-                                    )}
-                                    <div className="col-span-2">
-                                        <p className="text-xs text-slate-500 uppercase font-semibold">Status</p>
-                                        <Badge variant="secondary" className={getStatusStyles(selectedBooking.status || selectedBooking.booking_status)}>
-                                            {selectedBooking.status || selectedBooking.booking_status || 'Unknown'}
-                                        </Badge>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Payment Information */}
-                            {(selectedBooking.total_amount || selectedBooking.deposit_amount) && (
-                                <div className="space-y-3">
-                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                        <DollarSign className="w-5 h-5 text-indigo-600" />
-                                        Payment Information
-                                    </h3>
-                                    <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
-                                        {selectedBooking.total_amount && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Total Amount</p>
-                                                <p className="text-sm font-medium">KES {selectedBooking.total_amount.toLocaleString()}</p>
-                                            </div>
-                                        )}
-                                        {selectedBooking.amount_paid !== undefined && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Amount Paid</p>
-                                                <p className="text-sm">KES {(selectedBooking.amount_paid || 0).toLocaleString()}</p>
-                                            </div>
-                                        )}
-                                        {selectedBooking.deposit_amount && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Deposit</p>
-                                                <p className="text-sm">KES {selectedBooking.deposit_amount.toLocaleString()}</p>
-                                            </div>
-                                        )}
-                                        {selectedBooking.payment_status && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Payment Status</p>
-                                                <Badge variant="secondary" className={
-                                                    selectedBooking.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                                    selectedBooking.payment_status === 'partial' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                                    'bg-rose-50 text-rose-700 border-rose-100'
-                                                }>
-                                                    {selectedBooking.payment_status}
-                                                </Badge>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Special Requests */}
-                            {(selectedBooking.special_requests || selectedBooking.special_occasion || selectedBooking.dietary_restrictions) && (
-                                <div className="space-y-3">
-                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Additional Information</h3>
-                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg space-y-3">
-                                        {selectedBooking.special_occasion && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Special Occasion</p>
-                                                <p className="text-sm">{selectedBooking.special_occasion}</p>
-                                            </div>
-                                        )}
-                                        {selectedBooking.dietary_restrictions && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Dietary Restrictions</p>
-                                                <p className="text-sm">{Array.isArray(selectedBooking.dietary_restrictions) ? selectedBooking.dietary_restrictions.join(', ') : selectedBooking.dietary_restrictions}</p>
-                                            </div>
-                                        )}
-                                        {selectedBooking.special_requests && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase font-semibold">Special Requests</p>
-                                                <p className="text-sm">{selectedBooking.special_requests}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Timestamps */}
-                            <div className="space-y-3">
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                    <Clock className="w-5 h-5 text-indigo-600" />
-                                    Timestamps
-                                </h3>
-                                <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg text-xs">
-                                    <div>
-                                        <p className="text-slate-500 uppercase font-semibold">Created</p>
-                                        <p>{selectedBooking.created_at ? format(new Date(selectedBooking.created_at), 'MMM dd, yyyy HH:mm') : 'N/A'}</p>
-                                    </div>
-                                    {selectedBooking.confirmed_at && (
-                                        <div>
-                                            <p className="text-slate-500 uppercase font-semibold">Confirmed</p>
-                                            <p>{format(new Date(selectedBooking.confirmed_at), 'MMM dd, yyyy HH:mm')}</p>
-                                        </div>
-                                    )}
-                                    {selectedBooking.cancelled_at && (
-                                        <div>
-                                            <p className="text-slate-500 uppercase font-semibold">Cancelled</p>
-                                            <p>{format(new Date(selectedBooking.cancelled_at), 'MMM dd, yyyy HH:mm')}</p>
-                                        </div>
-                                    )}
-                                    {selectedBooking.cancellation_reason && (
-                                        <div className="col-span-2">
-                                            <p className="text-slate-500 uppercase font-semibold">Cancellation Reason</p>
-                                            <p>{selectedBooking.cancellation_reason}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
                         </div>
                     )}
-
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowDetailsModal(false)}>
-                            Close
-                        </Button>
-                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
     );
 }
 
-function getStatusStyles(status: string) {
-    if (!status) return 'bg-slate-50 text-slate-700 border-slate-100';
-    
-    switch (status.toLowerCase()) {
-        case 'confirmed':
-            return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-        case 'pending':
-            return 'bg-amber-50 text-amber-700 border-amber-100';
-        case 'cancelled':
-            return 'bg-rose-50 text-rose-700 border-rose-100';
-        default:
-            return 'bg-slate-50 text-slate-700 border-slate-100';
-    }
-}
+function InvoiceList({ records, loading, onDownload, onPrint, isExporting }: {
+    records: Invoice[],
+    loading: boolean,
+    onDownload: (inv: Invoice) => void,
+    onPrint: (inv: Invoice) => void,
+    isExporting: string | null
+}) {
+    const getStatusColor = (status: string) => {
+        switch (status.toLowerCase()) {
+            case 'paid': return 'text-green-600 bg-green-50 border-green-200';
+            case 'unpaid': return 'text-red-600 bg-red-50 border-red-200';
+            case 'draft': return 'text-gray-600 bg-gray-50 border-gray-200';
+            default: return 'text-blue-600 bg-blue-50 border-blue-200';
+        }
+    };
 
-function InvoiceList({ records, loading }: { records: any[], loading: boolean }) {
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
     if (records.length === 0) return (
         <Card className="border-dashed">
@@ -785,82 +705,75 @@ function InvoiceList({ records, loading }: { records: any[], loading: boolean })
         </Card>
     );
 
-    const getStatusColor = (status: string) => {
-        switch (status?.toLowerCase()) {
-            case 'paid': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-            case 'unpaid': return 'bg-rose-50 text-rose-700 border-rose-100';
-            case 'draft': return 'bg-slate-50 text-slate-700 border-slate-100';
-            default: return 'bg-blue-50 text-blue-700 border-blue-100';
-        }
-    };
-
     return (
-        <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-            <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                        <th className="px-6 py-4 font-semibold">Invoice #</th>
-                        <th className="px-6 py-4 font-semibold">Customer</th>
-                        <th className="px-6 py-4 font-semibold">Date</th>
-                        <th className="px-6 py-4 font-semibold text-right">Amount</th>
-                        <th className="px-6 py-4 font-semibold text-center">Status</th>
-                        <th className="px-6 py-4 font-semibold text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {records.map((inv) => (
-                        <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                            <td className="px-6 py-4 font-medium text-indigo-600 dark:text-indigo-400">{inv.invoice_number}</td>
-                            <td className="px-6 py-4">
-                                <div className="font-medium text-slate-900 dark:text-slate-100">{inv.customer?.customer_name || 'N/A'}</div>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <div className="text-xs text-slate-500">{inv.customer?.email}</div>
-                                    {inv.hotel_booking_id && (
-                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-blue-50 text-blue-700 border-blue-200">
-                                            Hotel
-                                        </Badge>
-                                    )}
-                                    {inv.restaurant_reservation_id && (
-                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-orange-50 text-orange-700 border-orange-200">
-                                            Restaurant
-                                        </Badge>
-                                    )}
-                                    {inv.type === 'CONFERENCE' && (
-                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-purple-50 text-purple-700 border-purple-200">
-                                            Conference
-                                        </Badge>
-                                    )}
-                                </div>
-                            </td>
-                            <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{inv.invoice_date ? format(new Date(inv.invoice_date), 'MMM dd, yyyy') : 'N/A'}</td>
-                            <td className="px-6 py-4 text-right font-medium text-slate-900 dark:text-slate-100">KES {(inv.total_amount || 0).toLocaleString()}</td>
-                            <td className="px-6 py-4 text-center">
-                                <Badge variant="secondary" className={getStatusColor(inv.status)}>
-                                    {inv.status}
-                                </Badge>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                                <div className="flex justify-center gap-2">
-                                    <button
-                                        onClick={() => downloadInvoicePDF(inv)}
-                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
-                                        title="Download PDF"
-                                    >
-                                        <Download className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => printInvoicePDF(inv)}
-                                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
-                                        title="Print"
-                                    >
-                                        <Printer className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </td>
+        <Card>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
+                        <tr>
+                            <th className="px-6 py-3">Invoice #</th>
+                            <th className="px-6 py-3">Customer</th>
+                            <th className="px-6 py-3">Date</th>
+                            <th className="px-6 py-3 text-right">Amount</th>
+                            <th className="px-6 py-3 text-center">Status</th>
+                            <th className="px-6 py-3 text-center">Actions</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {records.map((inv) => (
+                            <tr key={inv.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-4 font-medium text-blue-600">{inv.invoice_number}</td>
+                                <td className="px-6 py-4">
+                                    <div className="font-medium">{inv.customer?.customer_name || 'N/A'}</div>
+                                    <div className="text-xs text-slate-500">{inv.customer?.email}</div>
+                                </td>
+                                <td className="px-6 py-4 text-slate-500">{new Date(inv.invoice_date).toLocaleDateString()}</td>
+                                <td className="px-6 py-4 text-right font-medium">KES {inv.total_amount.toLocaleString()}</td>
+                                <td className="px-6 py-4 text-center">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getStatusColor(inv.status)}`}>
+                                        {inv.status}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                    <div className="flex justify-center gap-2">
+                                        <button
+                                            onClick={() => onDownload(inv)}
+                                            disabled={isExporting !== null}
+                                            className={`p-1.5 rounded-md transition-colors ${isExporting === inv.id ? 'text-blue-400 bg-blue-50' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'}`}
+                                            title="Download PDF"
+                                        >
+                                            <Download className={`h-4 w-4 ${isExporting === inv.id ? 'animate-pulse' : ''}`} />
+                                        </button>
+                                        <button
+                                            onClick={() => onPrint(inv)}
+                                            disabled={isExporting !== null}
+                                            className={`p-1.5 rounded-md transition-colors ${isExporting === inv.id ? 'text-amber-400 bg-amber-50' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
+                                            title="Print"
+                                        >
+                                            <Printer className={`h-4 w-4 ${isExporting === inv.id ? 'animate-pulse' : ''}`} />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
     );
+}
+
+function getStatusStyles(status: string) {
+    switch (status?.toLowerCase()) {
+        case 'confirmed':
+            return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+        case 'pending':
+            return 'bg-amber-100 text-amber-700 border-amber-200';
+        case 'cancelled':
+            return 'bg-rose-100 text-rose-700 border-rose-200';
+        case 'completed':
+            return 'bg-blue-100 text-blue-700 border-blue-200';
+        default:
+            return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
 }

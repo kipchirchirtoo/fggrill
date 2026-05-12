@@ -2116,12 +2116,14 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
         const new_paid_amount = (bill.paid_amount || 0) + payment_amount;
         const new_balance = bill.total_amount - new_paid_amount;
 
-        // Update bill
+        // Update bill — mark as paid when balance reaches zero
+        const isFullyPaid = new_balance <= 0;
         const { data: updatedBill, error: updateError } = await supabase
             .from('unpaid_bills')
             .update({
                 paid_amount: new_paid_amount,
-                balance_amount: new_balance
+                balance_amount: Math.max(0, new_balance),
+                ...(isFullyPaid ? { status: 'paid', paid_at: new Date().toISOString() } : {})
             })
             .eq('id', id)
             .select()
@@ -3781,6 +3783,141 @@ export const getPOSReconciliation = async (req: Request, res: Response, next: Ne
                 gross_total: Object.values(totals).reduce((sum, t) => sum + t.total, 0)
             }
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get all pending/unpaid restaurant and bar orders (waiter orders not yet collected)
+ * GET /api/cashier/unpaid-orders
+ */
+export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const userRole = (req.user as any)?.role?.toLowerCase() || '';
+        const isGlobal = isGlobalRole(userRole);
+        const queryBranchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
+        const effectiveBranchId = isGlobal ? queryBranchId : ((req.user as any)?.branch_id || null);
+
+        // Fetch pending restaurant orders
+        let restaurantQuery = supabase
+            .from('restaurant_orders')
+            .select(`
+                id, order_number, status, payment_status,
+                table_number, room_number, guest_name,
+                total_amount, created_at, branch_id,
+                waiter:staff_profiles!waiter_id(id, first_name, last_name)
+            `)
+            .neq('payment_status', 'paid')
+            .neq('status', 'cancelled')
+            .order('created_at', { ascending: false });
+
+        if (effectiveBranchId) restaurantQuery = restaurantQuery.eq('branch_id', effectiveBranchId);
+
+        const { data: restaurantOrders, error: rErr } = await restaurantQuery;
+        if (rErr && rErr.code !== '42703') throw rErr;
+
+        // Fetch pending bar orders
+        let barQuery = supabase
+            .from('bar_orders')
+            .select(`
+                id, order_number, status, payment_status,
+                seat_number, room_number, guest_name,
+                total, created_at, branch_id,
+                waiter:staff_profiles!created_by(id, first_name, last_name)
+            `)
+            .eq('payment_status', 'pending')
+            .neq('status', 'cancelled')
+            .order('created_at', { ascending: false });
+
+        if (effectiveBranchId) barQuery = barQuery.eq('branch_id', effectiveBranchId);
+
+        const { data: barOrders, error: bErr } = await barQuery;
+        if (bErr && bErr.code !== '42703') throw bErr;
+
+        // Normalise into a common shape
+        const mapped = [
+            ...(restaurantOrders || []).map((o: any) => ({
+                id: o.id,
+                source: 'restaurant',
+                order_number: o.order_number,
+                location: o.table_number ? `Table ${o.table_number}` : o.room_number ? `Room ${o.room_number}` : '—',
+                guest_name: o.guest_name || 'Walk-in',
+                total_amount: Number(o.total_amount || 0),
+                payment_status: o.payment_status,
+                status: o.status,
+                created_at: o.created_at,
+                branch_id: o.branch_id,
+                waiter: Array.isArray(o.waiter) ? o.waiter[0] : o.waiter
+            })),
+            ...(barOrders || []).map((o: any) => ({
+                id: o.id,
+                source: 'bar',
+                order_number: o.order_number,
+                location: o.seat_number ? `Seat ${o.seat_number}` : o.room_number ? `Room ${o.room_number}` : '—',
+                guest_name: o.guest_name || 'Bar Customer',
+                total_amount: Number(o.total || 0),
+                payment_status: o.payment_status,
+                status: o.status,
+                created_at: o.created_at,
+                branch_id: o.branch_id,
+                waiter: Array.isArray(o.waiter) ? o.waiter[0] : o.waiter
+            }))
+        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        res.json({ success: true, data: mapped });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Mark a restaurant or bar order as fully paid
+ * PATCH /api/cashier/unpaid-orders/:source/:id/pay
+ */
+export const markWaiterOrderPaid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { source, id } = req.params;
+        const { payment_method = 'cash' } = req.body;
+
+        const table = source === 'restaurant' ? 'restaurant_orders' : 'bar_orders';
+        const amountField = source === 'restaurant' ? 'total_amount' : 'total';
+
+        const { data: order, error: fetchErr } = await supabase
+            .from(table)
+            .select(`id, ${amountField}, branch_id, order_number`)
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !order) throw new AppError('Order not found', 404);
+
+        const { error: updateErr } = await supabase
+            .from(table)
+            .update({ payment_status: 'paid', payment_method, status: 'completed' })
+            .eq('id', id);
+
+        if (updateErr) throw updateErr;
+
+        // Record cashier transaction for audit trail
+        try {
+            const { data: txNumber } = await supabase.rpc('generate_cashier_transaction_number');
+            await supabase.from('cashier_transactions').insert({
+                transaction_number: txNumber || `CT${Date.now()}`,
+                branch_id: order.branch_id,
+                cashier_id: req.user?.id,
+                transaction_type: 'payment',
+                revenue_type: source === 'restaurant' ? 'restaurant' : 'bar',
+                reference_type: table,
+                reference_id: order.id,
+                payment_method,
+                amount: Number((order as any)[amountField] || 0),
+                customer_name: order.order_number
+            });
+        } catch (txErr) {
+            logger.warn('Could not record cashier transaction for order payment:', txErr);
+        }
+
+        res.json({ success: true, message: 'Order marked as paid' });
     } catch (error) {
         next(error);
     }

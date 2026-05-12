@@ -551,9 +551,9 @@ export async function approveStockRequest(
           }
         );
 
-        // Also notify requesting branch
-        await notificationService.notifyBranch(
-          requestDetails.requesting_branch_id,
+        // Also notify branch storekeepers in the requesting branch (not branch accountants)
+        await notificationService.notifyRole(
+          'BRANCH_STOREKEEPER',
           `Stock Request ${newStatus}`,
           `Your stock request ${requestDetails.request_number} has been ${newStatus.toLowerCase()} by the Auditor.`,
           {
@@ -561,7 +561,8 @@ export async function approveStockRequest(
             category: 'stock',
             priority: 'high',
             actionUrl: '/dashboard/branch-store/request-history',
-            metadata: { request_id: requestId, status: newStatus }
+            metadata: { request_id: requestId, status: newStatus },
+            branchId: requestDetails.requesting_branch_id
           }
         );
       }

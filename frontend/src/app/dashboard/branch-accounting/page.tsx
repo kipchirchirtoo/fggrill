@@ -19,7 +19,7 @@ export default function BranchAccountingDashboard() {
         { title: 'Credit & Paid Bills', icon: CreditCard, href: '/dashboard/branch-accounting/credit-bills', desc: 'Manage staff and customer bills' },
         { title: 'Payments', icon: CreditCard, href: '/dashboard/branch-accounting/payments', desc: 'Record and verify payments', shortcut: 'Alt+P' },
         { title: 'Purchases', icon: ShoppingCart, href: '/dashboard/branch-accounting/purchases', desc: 'Manage branch purchases and POs' },
-        { title: 'Invoices', icon: FileText, href: '/dashboard/branch-accounting/invoices', desc: 'Create and view invoices' },
+        { title: 'Bookings & Invoices', icon: FileText, href: '/dashboard/branch-accounting/bookings-invoices', desc: 'Manage bookings and invoices' },
     ];
 
     return (

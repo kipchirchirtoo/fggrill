@@ -339,7 +339,7 @@ export const getCreditBillPayments = async (req: Request, res: Response, next: N
 };
 
 // @desc    Manually trigger pending bills migration
-// @route   POST /api/credit-bills/migrate-pending
+// @route   POST /api/payroll/credit-bills/migrate-pending
 // @access  Private (Branch Accountant, Manager)
 export const triggerPendingBillsMigration = async (
     req: Request,
@@ -347,7 +347,13 @@ export const triggerPendingBillsMigration = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        await migratePendingBills();
+        const branchId = req.body?.branch_id
+            ? Number(req.body.branch_id)
+            : (req as any).user?.branch_id
+                ? Number((req as any).user.branch_id)
+                : undefined;
+
+        await migratePendingBills(branchId);
 
         res.status(200).json({
             success: true,

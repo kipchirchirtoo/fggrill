@@ -54,6 +54,7 @@ export default function FinancialWorkspacePage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMonthlyModalOpen, setIsMonthlyModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const currentBranchId = activeBranchId || user?.branch_id;
 
@@ -214,18 +215,26 @@ export default function FinancialWorkspacePage() {
               </IOSButton>
               <IOSButton
                 variant="primary"
-                leftIcon={<Download />}
-                onClick={() => {
-                  if (!currentBranchId) return;
-                  const url = financeAPI.workspace.exportMonthlyStatement({
-                    branch_id: currentBranchId,
-                    fiscal_year: currentDate.getFullYear(),
-                    fiscal_month: currentDate.getMonth() + 1,
-                  });
-                  window.open(`${API_URL}${url}`, "_blank");
+                leftIcon={<Download className={isExporting ? "animate-bounce" : ""} />}
+                onClick={async () => {
+                  if (!currentBranchId || isExporting) return;
+                  setIsExporting(true);
+                  try {
+                    await financeAPI.workspace.exportMonthlyStatement({
+                      branch_id: currentBranchId,
+                      fiscal_year: currentDate.getFullYear(),
+                      fiscal_month: currentDate.getMonth() + 1,
+                    });
+                    toast.success("Financial statement downloaded successfully");
+                  } catch (error: any) {
+                    toast.error(error.message || "Failed to export statement");
+                  } finally {
+                    setIsExporting(false);
+                  }
                 }}
+                disabled={isExporting}
               >
-                Export Month
+                {isExporting ? "Exporting..." : "Export Month"}
               </IOSButton>
             </div>
           </div>

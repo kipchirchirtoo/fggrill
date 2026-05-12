@@ -26,7 +26,9 @@ import {
     auditLogbook,
     createPOSTransaction,
     initiatePOSTransactionPayment,
-    getPOSReconciliation
+    getPOSReconciliation,
+    getUnpaidWaiterOrders,
+    markWaiterOrderPaid
 } from '../controllers/cashier.controller';
 import {
     getShiftLogs,
@@ -105,6 +107,13 @@ router.route('/pos/transactions')
 
 router.post('/pos/transactions/:id/pay', initiatePOSTransactionPayment);
 router.get('/pos/reconciliation', getPOSReconciliation);
+
+// ============================================
+// UNPAID WAITER ORDERS ROUTES
+// ============================================
+
+router.get('/unpaid-orders', getUnpaidWaiterOrders);
+router.patch('/unpaid-orders/:source/:id/pay', markWaiterOrderPaid);
 
 // ============================================
 // UNPAID BILLS ROUTES

@@ -132,7 +132,7 @@ export const simplePayrollAPI = {
   rejectAdvance: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/advances/${id}/reject`, { method: 'POST' }),
   approveLoan: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/loans/${id}/approve`, { method: 'POST' }),
   rejectLoan: (id: string | number) => fetchAPI<ApiResponse<void>>(`/payroll/loans/${id}/reject`, { method: 'POST' }),
-  triggerPendingBillsMigration: () => fetchAPI<ApiResponse<void>>('/payroll/trigger-migration', { method: 'POST' }),
+  triggerPendingBillsMigration: (branch_id?: number) => fetchAPI<ApiResponse<void>>('/payroll/credit-bills/migrate-pending', { method: 'POST', body: JSON.stringify({ branch_id }) }),
 };
 
 export const staffAPI = {

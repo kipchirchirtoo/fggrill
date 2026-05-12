@@ -24,6 +24,11 @@ export const cashierAPI = {
   processPayment: (data: any) => fetchAPI<any>('/cashier/pay', { method: 'POST', body: JSON.stringify(data) }),
   verifyPayment:  (paymentId: string) => fetchAPI<any>(`/cashier/verify-payment/${paymentId}`, { method: 'POST' }),
   
+  // Unpaid Waiter Orders (restaurant + bar pending orders)
+  getUnpaidWaiterOrders: (params?: any) => fetchAPI<any>(`/cashier/unpaid-orders${buildQuery(params)}`),
+  markWaiterOrderPaid: (source: 'restaurant' | 'bar', id: string, payment_method?: string) =>
+    fetchAPI<any>(`/cashier/unpaid-orders/${source}/${id}/pay`, { method: 'PATCH', body: JSON.stringify({ payment_method: payment_method || 'cash' }) }),
+
   // Unpaid Bills
   getUnpaidBills: (params?: any) => fetchAPI<any>(`/cashier/unpaid-bills${buildQuery(params)}`),
   createUnpaidBill: (data: any) => fetchAPI<any>('/cashier/unpaid-bills', { method: 'POST', body: JSON.stringify(data) }),

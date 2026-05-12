@@ -228,10 +228,19 @@ export default function ReceptionDashboard(): JSX.Element {
         setConferenceBookings(confBookingsRes.value.data || []);
       }
 
-      // Fetch Catering Data
-      const cateringRes = await cateringAPI.getBookings({ branch_id: branchId as any, status: 'confirmed' });
-      if (cateringRes.success) {
-        setCateringBookings(cateringRes.data || []);
+      // Fetch Catering Data only for authorized roles
+      const userRole = user?.role?.toLowerCase() || '';
+      const canAccessCatering = ['receptionist', 'branch_manager', 'super_admin'].includes(userRole);
+      if (canAccessCatering) {
+        try {
+          const cateringRes = await cateringAPI.getBookings({ branch_id: branchId as any, status: 'confirmed' });
+          if (cateringRes.success) {
+            setCateringBookings(cateringRes.data || []);
+          }
+        } catch (e) {
+          // Silently ignore auth errors to prevent infinite retry loops
+          console.warn('Catering API access denied or failed:', e);
+        }
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);

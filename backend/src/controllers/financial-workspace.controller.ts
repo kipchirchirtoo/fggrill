@@ -641,158 +641,268 @@ export const exportMonthlyStatement = async (
             totalUnbanked += toNumber(record.unbanked_cash);
         });
 
-        const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape', bufferPages: true });
-        const filename = `Financial_Workspace_${branch_id}_${fiscal_year}_${String(fiscal_month).padStart(2, '0')}.pdf`;
-        
+        // ─── Document Setup ──────────────────────────────────────────────────────
+        const doc = new PDFDocument({ margin: 50, size: 'A4', layout: 'portrait', bufferPages: true });
+        const filename = `Financial_Statement_${fiscal_year}_${String(fiscal_month).padStart(2, '0')}.pdf`;
+
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-        
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         doc.pipe(res);
 
-        // Header
-        doc.fontSize(22).font('Helvetica-Bold').text('Famous Gate Hotels', { align: 'center' });
-        doc.fontSize(14).font('Helvetica').text('Monthly Financial Workspace Report', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(10).text(`Branch: ${branchData?.name || 'Branch ' + branch_id}`, { align: 'center' });
-        doc.text(`Period: ${monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`, { align: 'center' });
-        doc.moveDown(2);
+        const PW = doc.page.width;    // 595
+        const PH = doc.page.height;   // 842
+        const PM = 50;                // margin
+        const colGap = 16;
+        const colW = (PW - PM * 2 - colGap) / 2;
+        const leftX  = PM;
+        const rightX = PM + colW + colGap;
+        const branchName = branchData?.name || `Branch ${branch_id}`;
+        const monthYear = monthStart.toLocaleDateString('en-KE', { month: 'long', year: 'numeric' });
 
-        // 1. Executive Summary
-        doc.fontSize(14).font('Helvetica-Bold').text('Executive Summary', { underline: true });
-        doc.moveDown(0.5);
-        doc.fontSize(10).font('Helvetica');
-        
-        const startX = 40;
-        let currentY = doc.y;
-        
-        doc.text(`Total Revenue: KES ${totalRevenue.toLocaleString()}`, startX, currentY);
-        doc.text(`Total COGS: KES ${totalCogs.toLocaleString()}`, startX, currentY + 15);
-        doc.text(`Total Expenses: KES ${totalExpenses.toLocaleString()}`, startX, currentY + 30);
-        doc.text(`Net Profit: KES ${totalProfit.toLocaleString()}`, startX, currentY + 45);
+        // ─── Helper Functions ─────────────────────────────────────────────────
+        const fmt = (n: number) => n.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-        doc.text(`Expected Cash to Bank: KES ${totalExpectedCash.toLocaleString()}`, startX + 250, currentY);
-        doc.text(`Banked Cash: KES ${totalBanked.toLocaleString()}`, startX + 250, currentY + 15);
-        doc.text(`Unbanked Cash: KES ${totalUnbanked.toLocaleString()}`, startX + 250, currentY + 30);
-        doc.moveDown(4);
+        const drawColHeader = (title: string, x: number, w: number, yPos: number): number => {
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#0f172a')
+               .text(title, x, yPos, { width: w });
+            doc.moveTo(x, yPos + 13).lineTo(x + w, yPos + 13).lineWidth(1.5).stroke('#0f172a');
+            return yPos + 20;
+        };
 
-        // 2. Fixed/Monthly Adjustments
-        if (monthlyAdjustment) {
-            doc.fontSize(14).font('Helvetica-Bold').text('Monthly Adjustments & Fixed Expenses', startX, doc.y, { underline: true });
-            doc.moveDown(0.5);
-            doc.fontSize(10).font('Helvetica');
-            currentY = doc.y;
-            
-            doc.text(`Electricity: KES ${toNumber(monthlyAdjustment.electricity).toLocaleString()}`, startX, currentY);
-            doc.text(`Water: KES ${toNumber(monthlyAdjustment.water).toLocaleString()}`, startX, currentY + 15);
-            doc.text(`Salaries: KES ${toNumber(monthlyAdjustment.salaries).toLocaleString()}`, startX, currentY + 30);
-            doc.text(`Rent: KES ${toNumber(monthlyAdjustment.rent).toLocaleString()}`, startX, currentY + 45);
-            
-            doc.text(`NSSF: KES ${toNumber(monthlyAdjustment.nssf).toLocaleString()}`, startX + 250, currentY);
-            doc.text(`SHIF: KES ${toNumber(monthlyAdjustment.shif).toLocaleString()}`, startX + 250, currentY + 15);
-            doc.text(`Tax: KES ${toNumber(monthlyAdjustment.tax).toLocaleString()}`, startX + 250, currentY + 30);
-            doc.text(`Levy & Licenses: KES ${(toNumber(monthlyAdjustment.levy) + toNumber(monthlyAdjustment.licenses)).toLocaleString()}`, startX + 250, currentY + 45);
-            
-            doc.font('Helvetica-Bold');
-            doc.text(`Total Monthly Expenses: KES ${toNumber(monthlyAdjustment.total_monthly_expenses).toLocaleString()}`, startX, currentY + 65);
-            doc.text(`Final Monthly Profit: KES ${toNumber(monthlyAdjustment.monthly_profit).toLocaleString()}`, startX + 250, currentY + 65);
-            doc.font('Helvetica');
-            doc.moveDown(2);
-        }
+        const drawSubHeader = (title: string, x: number, w: number, yPos: number): number => {
+            doc.font('Helvetica').fontSize(9).fillColor('#374151')
+               .text(title, x, yPos, { width: w });
+            return yPos + 15;
+        };
 
-        // Add a new page for the daily table if not enough space
-        if (doc.y > 400) {
-            doc.addPage();
-        } else {
-            doc.moveDown(2);
-        }
+        const drawRow = (label: string, amount: number, x: number, w: number, yPos: number, indent = 10): number => {
+            doc.font('Helvetica').fontSize(9).fillColor('#1e293b')
+               .text(label, x + indent, yPos, { width: w - indent - 80 });
+            doc.text(fmt(amount), x + w - 80, yPos, { width: 80, align: 'right' });
+            return yPos + 14;
+        };
 
-        // 3. Daily Records Table
-        doc.fontSize(14).font('Helvetica-Bold').text('Daily Records Breakdown', startX, doc.y, { underline: true });
-        doc.moveDown(1);
+        const drawTotalRow = (label: string, amount: number, x: number, w: number, yPos: number, doubleUnderline = false): number => {
+            doc.moveTo(x, yPos - 2).lineTo(x + w, yPos - 2).lineWidth(0.5).stroke('#94a3b8');
+            doc.font('Helvetica-Bold').fontSize(9).fillColor('#0f172a')
+               .text(label, x, yPos + 3, { width: w - 80 });
+            doc.text(fmt(amount), x + w - 80, yPos + 3, { width: 80, align: 'right' });
+            if (doubleUnderline) {
+                doc.moveTo(x + w - 80, yPos + 16).lineTo(x + w, yPos + 16).lineWidth(0.5).stroke('#0f172a');
+                doc.moveTo(x + w - 80, yPos + 19).lineTo(x + w, yPos + 19).lineWidth(0.5).stroke('#0f172a');
+            }
+            return yPos + 24;
+        };
 
-        const tableTop = doc.y;
-        const columns = [
-            { header: 'Date', x: 40, w: 60 },
-            { header: 'Status', x: 100, w: 70 },
-            { header: 'Revenue', x: 170, w: 70 },
-            { header: 'COGS', x: 240, w: 60 },
-            { header: 'Expenses', x: 300, w: 60 },
-            { header: 'Net Profit', x: 360, w: 70 },
-            { header: 'Cash', x: 430, w: 60 },
-            { header: 'MPESA', x: 490, w: 60 },
-            { header: 'Banked', x: 550, w: 70 },
-            { header: 'Unbanked', x: 620, w: 70 }
+        // ─── Blue Header Bar ──────────────────────────────────────────────────
+        doc.rect(0, 0, PW, 88).fill('#1d4ed8');
+        doc.fillColor('#ffffff')
+           .font('Helvetica-Bold').fontSize(18)
+           .text('FAMOUS GATE HOTELS', 0, 14, { align: 'center', width: PW });
+        doc.font('Helvetica').fontSize(11)
+           .text('MONTHLY FINANCIAL STATEMENT', 0, 38, { align: 'center', width: PW });
+        doc.fontSize(9)
+           .text(`${branchName}    ·    ${monthYear}`, 0, 60, { align: 'center', width: PW });
+        doc.fillColor('#bfdbfe').fontSize(7)
+           .text(`Generated: ${new Date().toLocaleString('en-KE')}`, PM, 74, { width: PW - PM * 2, align: 'right' });
+
+        let y = 108;
+
+        // ─── Column Headers ───────────────────────────────────────────────────
+        let leftY  = drawColHeader('INCOME', leftX, colW, y);
+        let rightY = drawColHeader('EXPENDITURE', rightX, colW, y);
+
+        // ─── LEFT COLUMN: INCOME ──────────────────────────────────────────────
+        leftY = drawSubHeader('Revenue Streams', leftX, colW, leftY);
+
+        const revItems: Array<[string, number]> = [
+            ['Restaurant',             revenueTotals.restaurant       || 0],
+            ['Bar',                    revenueTotals.bar              || 0],
+            ['Executive Bar',          revenueTotals.executive_bar    || 0],
+            ['Sports Bar',             revenueTotals.sports_bar       || 0],
+            ['Accommodation (Rooms)',  revenueTotals.rooms            || 0],
+            ['Pool Table',             revenueTotals.pool_table       || 0],
+            ['Spa & Sauna',            revenueTotals.spa_sauna        || 0],
+            ['Swimming Pool',          revenueTotals.swimming_pool    || 0],
+            ['Car Wash',               revenueTotals.carwash          || 0],
+            ['Conferences',            revenueTotals.conferences      || 0],
+            ['Outside Catering',       revenueTotals.outside_catering || 0],
+            ['Paid Bills',             revenueTotals.paid_bills       || 0],
+            ['Non-Consumables',        revenueTotals.non_consumables  || 0],
+            ['Other Income',           revenueTotals.other            || 0],
         ];
-
-        // Draw Table Header
-        doc.rect(40, tableTop, 760, 20).fill('#f1f5f9');
-        doc.fillColor('#334155').fontSize(9).font('Helvetica-Bold');
-        
-        columns.forEach(col => {
-            doc.text(col.header, col.x, tableTop + 5, { width: col.w, align: 'left' });
+        revItems.filter(([, v]) => v > 0).forEach(([label, val]) => {
+            leftY = drawRow(label, val, leftX, colW, leftY);
         });
+        leftY = drawTotalRow('Total Revenue', totalRevenue, leftX, colW, leftY, true);
+        leftY += 10;
 
-        let currentTableY = tableTop + 25;
+        leftY = drawSubHeader('Payment Methods', leftX, colW, leftY);
+        leftY = drawRow('Cash Received', paymentTotals.cash  || 0, leftX, colW, leftY);
+        leftY = drawRow('M-Pesa',        paymentTotals.mpesa || 0, leftX, colW, leftY);
+        leftY = drawRow('Card / Swipe',  paymentTotals.swipe || 0, leftX, colW, leftY);
+        if ((paymentTotals.other || 0) > 0) leftY = drawRow('Other', paymentTotals.other, leftX, colW, leftY);
+        leftY += 10;
+
+        leftY = drawSubHeader('Banking Position', leftX, colW, leftY);
+        leftY = drawRow('Expected Cash to Bank', totalExpectedCash, leftX, colW, leftY);
+        leftY = drawRow('Banked Cash',           totalBanked,        leftX, colW, leftY);
+        const unbankedTextColor = totalUnbanked > 0 ? '#dc2626' : '#1e293b';
+        doc.font('Helvetica').fontSize(9).fillColor(unbankedTextColor)
+           .text('Unbanked Cash', leftX + 10, leftY, { width: colW - 10 - 80 });
+        doc.text(fmt(totalUnbanked), leftX + colW - 80, leftY, { width: 80, align: 'right' });
+        leftY += 14;
+        doc.fillColor('#1e293b');
+
+        // ─── RIGHT COLUMN: EXPENDITURE ────────────────────────────────────────
+        rightY = drawSubHeader('Cost of Goods Sold (COGS)', rightX, colW, rightY);
+        rightY = drawRow('Total COGS', totalCogs, rightX, colW, rightY);
+        rightY = drawTotalRow('Gross Profit', totalRevenue - totalCogs, rightX, colW, rightY);
+        rightY += 10;
+
+        let totalFixedExpenses = 0;
+        if (monthlyAdjustment) {
+            rightY = drawSubHeader('Fixed Monthly Expenses', rightX, colW, rightY);
+            const fixedItems: Array<[string, number]> = [
+                ['Salaries',    toNumber(monthlyAdjustment.salaries)],
+                ['Electricity', toNumber(monthlyAdjustment.electricity)],
+                ['Water',       toNumber(monthlyAdjustment.water)],
+                ['Rent',        toNumber(monthlyAdjustment.rent)],
+                ['NSSF',        toNumber(monthlyAdjustment.nssf)],
+                ['SHIF',        toNumber(monthlyAdjustment.shif)],
+                ['Tax',         toNumber(monthlyAdjustment.tax)],
+                ['Levy',        toNumber(monthlyAdjustment.levy)],
+                ['Licenses',    toNumber(monthlyAdjustment.licenses)],
+            ];
+            fixedItems.filter(([, v]) => v > 0).forEach(([label, val]) => {
+                rightY = drawRow(label, val, rightX, colW, rightY);
+            });
+            const subEntries: any[] = monthlyAdjustment.subscriptions?.entries || [];
+            subEntries.filter((s: any) => s.description && toNumber(s.amount) > 0).forEach((s: any) => {
+                rightY = drawRow(s.description, toNumber(s.amount), rightX, colW, rightY);
+            });
+            totalFixedExpenses = toNumber(monthlyAdjustment.total_monthly_expenses);
+            rightY = drawTotalRow('Total Fixed Expenses', totalFixedExpenses, rightX, colW, rightY);
+            rightY += 10;
+        }
+
+        rightY = drawSubHeader('Operating Expenses', rightX, colW, rightY);
+        rightY = drawRow('Daily Operating Expenses', totalExpenses, rightX, colW, rightY);
+        const totalExpenditure = totalCogs + totalFixedExpenses + totalExpenses;
+        rightY = drawTotalRow('Total Expenditure', totalExpenditure, rightX, colW, rightY, true);
+
+        // ─── Vertical Divider ─────────────────────────────────────────────────
+        const dividerX = leftX + colW + colGap / 2;
+        const dividerBottom = Math.max(leftY, rightY) + 10;
+        doc.moveTo(dividerX, 108).lineTo(dividerX, dividerBottom).lineWidth(0.5).stroke('#cbd5e1');
+
+        // ─── Net Profit / Loss Banner ─────────────────────────────────────────
+        const summaryY = dividerBottom + 8;
+        const netProfit = monthlyAdjustment ? toNumber(monthlyAdjustment.monthly_profit) : totalProfit;
+        const isPositive = netProfit >= 0;
+        doc.rect(PM, summaryY, PW - PM * 2, 38).fill(isPositive ? '#dcfce7' : '#fee2e2');
+        doc.font('Helvetica-Bold').fontSize(13)
+           .fillColor(isPositive ? '#15803d' : '#dc2626')
+           .text(`NET ${isPositive ? 'PROFIT' : 'LOSS'} FOR ${monthYear.toUpperCase()}`, PM + 12, summaryY + 6, { width: (PW - PM * 2) * 0.55 });
+        doc.text(`KES ${fmt(Math.abs(netProfit))}`, PM, summaryY + 6, { width: PW - PM * 2 - 12, align: 'right' });
+
+        // ─── Page 2: Daily Records Table ──────────────────────────────────────
+        doc.addPage();
+
+        doc.font('Helvetica-Bold').fontSize(12).fillColor('#0f172a')
+           .text('DAILY RECORDS BREAKDOWN', PM, PM);
+        doc.font('Helvetica').fontSize(8).fillColor('#64748b')
+           .text(`${branchName}  ·  ${monthYear}  ·  ${records.length} record(s)`, PM, PM + 18);
+
+        const tblTop = PM + 38;
+        const tblCols = [
+            { header: 'Date',       x: PM,       w: 58 },
+            { header: 'Status',     x: PM + 58,  w: 60 },
+            { header: 'Revenue',    x: PM + 118, w: 68 },
+            { header: 'COGS',       x: PM + 186, w: 58 },
+            { header: 'Expenses',   x: PM + 244, w: 60 },
+            { header: 'Net Profit', x: PM + 304, w: 68 },
+            { header: 'Cash',       x: PM + 372, w: 52 },
+            { header: 'M-Pesa',     x: PM + 424, w: 52 },
+            { header: 'Banked',     x: PM + 476, w: 52 },
+            { header: 'Unbanked',   x: PM + 528, w: 57 },
+        ];
+        const tblW = PM + 528 + 57 - PM;
+
+        const drawTableHeader = (topY: number) => {
+            doc.rect(PM, topY, tblW, 18).fill('#1d4ed8');
+            doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+            tblCols.forEach(col => {
+                doc.text(col.header, col.x + 2, topY + 5, { width: col.w - 2 });
+            });
+        };
+
+        drawTableHeader(tblTop);
+        let tY = tblTop + 22;
+
         doc.font('Helvetica').fontSize(8);
-
         records.forEach((record: any, i: number) => {
-            if (currentTableY > 520) {
+            if (tY > PH - 60) {
                 doc.addPage();
-                currentTableY = 40;
-                
-                doc.rect(40, currentTableY, 760, 20).fill('#f1f5f9');
-                doc.fillColor('#334155').fontSize(9).font('Helvetica-Bold');
-                columns.forEach(col => {
-                    doc.text(col.header, col.x, currentTableY + 5, { width: col.w, align: 'left' });
-                });
-                currentTableY += 25;
+                drawTableHeader(PM);
+                tY = PM + 22;
                 doc.font('Helvetica').fontSize(8);
             }
 
-            if (i % 2 === 1) {
-                doc.rect(40, currentTableY - 5, 760, 20).fill('#f8fafc');
+            if (i % 2 === 0) {
+                doc.rect(PM, tY - 3, tblW, 16).fill('#f8fafc');
             }
             doc.fillColor('#0f172a');
 
             const payment = normalizePaymentData(record.payment_data || {});
             const banking = normalizeBankingData(record.banking_data || {}, record.record_date);
             const dateStr = record.record_date.split('T')[0];
+            const rowNP = toNumber(record.net_profit);
+            const rowUB = toNumber(record.unbanked_cash);
 
-            doc.text(dateStr, columns[0].x, currentTableY);
-            doc.text(record.status || 'DRAFT', columns[1].x, currentTableY);
-            doc.text(toNumber(record.total_revenue).toLocaleString(), columns[2].x, currentTableY);
-            doc.text(toNumber(record.total_cogs).toLocaleString(), columns[3].x, currentTableY);
-            doc.text(toNumber(record.total_expenses).toLocaleString(), columns[4].x, currentTableY);
-            
-            const netProfit = toNumber(record.net_profit);
-            if (netProfit < 0) doc.fillColor('#e11d48');
-            doc.text(netProfit.toLocaleString(), columns[5].x, currentTableY);
+            doc.text(dateStr,                                         tblCols[0].x + 2, tY, { width: tblCols[0].w - 2 });
+            doc.text(record.status || 'DRAFT',                        tblCols[1].x + 2, tY, { width: tblCols[1].w - 2 });
+            doc.text(fmt(toNumber(record.total_revenue)),              tblCols[2].x, tY, { width: tblCols[2].w, align: 'right' });
+            doc.text(fmt(toNumber(record.total_cogs)),                 tblCols[3].x, tY, { width: tblCols[3].w, align: 'right' });
+            doc.text(fmt(toNumber(record.total_expenses)),             tblCols[4].x, tY, { width: tblCols[4].w, align: 'right' });
+            if (rowNP < 0) doc.fillColor('#dc2626');
+            doc.text(fmt(rowNP),                                      tblCols[5].x, tY, { width: tblCols[5].w, align: 'right' });
             doc.fillColor('#0f172a');
-
-            doc.text(toNumber(payment.cash).toLocaleString(), columns[6].x, currentTableY);
-            doc.text(toNumber(payment.mpesa).toLocaleString(), columns[7].x, currentTableY);
-            
-            doc.text(toNumber(banking.banked).toLocaleString(), columns[8].x, currentTableY);
-            
-            const unbanked = toNumber(record.unbanked_cash);
-            if (unbanked > 0) doc.fillColor('#e11d48');
-            doc.text(unbanked.toLocaleString(), columns[9].x, currentTableY);
+            doc.text(fmt(toNumber(payment.cash)),                     tblCols[6].x, tY, { width: tblCols[6].w, align: 'right' });
+            doc.text(fmt(toNumber(payment.mpesa)),                    tblCols[7].x, tY, { width: tblCols[7].w, align: 'right' });
+            doc.text(fmt(toNumber(banking.banked)),                   tblCols[8].x, tY, { width: tblCols[8].w, align: 'right' });
+            if (rowUB > 0) doc.fillColor('#dc2626');
+            doc.text(fmt(rowUB),                                      tblCols[9].x, tY, { width: tblCols[9].w, align: 'right' });
             doc.fillColor('#0f172a');
-
-            currentTableY += 20;
+            tY += 16;
         });
 
-        // Footer
-        const pages = doc.bufferedPageRange();
-        for (let i = pages.start; i < pages.start + pages.count; i++) {
+        // Totals row
+        doc.moveTo(PM, tY).lineTo(PM + tblW, tY).lineWidth(0.5).stroke('#334155');
+        tY += 4;
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#0f172a');
+        doc.text('MONTHLY TOTALS',             tblCols[0].x + 2, tY, { width: 110 });
+        doc.text(fmt(totalRevenue),            tblCols[2].x, tY, { width: tblCols[2].w, align: 'right' });
+        doc.text(fmt(totalCogs),               tblCols[3].x, tY, { width: tblCols[3].w, align: 'right' });
+        doc.text(fmt(totalExpenses),           tblCols[4].x, tY, { width: tblCols[4].w, align: 'right' });
+        if (totalProfit < 0) doc.fillColor('#dc2626');
+        doc.text(fmt(totalProfit),             tblCols[5].x, tY, { width: tblCols[5].w, align: 'right' });
+        doc.fillColor('#0f172a');
+        doc.text(fmt(paymentTotals.cash  || 0), tblCols[6].x, tY, { width: tblCols[6].w, align: 'right' });
+        doc.text(fmt(paymentTotals.mpesa || 0), tblCols[7].x, tY, { width: tblCols[7].w, align: 'right' });
+        doc.text(fmt(totalBanked),             tblCols[8].x, tY, { width: tblCols[8].w, align: 'right' });
+        doc.text(fmt(totalUnbanked),           tblCols[9].x, tY, { width: tblCols[9].w, align: 'right' });
+
+        // ─── Footer on All Pages ──────────────────────────────────────────────
+        const pageRange = doc.bufferedPageRange();
+        for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
             doc.switchToPage(i);
-            doc.fontSize(8).fillColor('#64748b');
-            doc.text(
-                `Generated by FamousGate Financial System | Page ${i + 1} of ${pages.count} | ${new Date().toLocaleString('en-US')}`,
-                40,
-                doc.page.height - 40,
-                { align: 'center', width: doc.page.width - 80 }
-            );
+            doc.moveTo(PM, PH - 38).lineTo(PW - PM, PH - 38).lineWidth(0.5).stroke('#e2e8f0');
+            doc.fontSize(7).fillColor('#94a3b8').font('Helvetica')
+               .text(
+                   `Famous Gate Hotels · Financial Management System · Page ${i + 1} of ${pageRange.count} · ${new Date().toLocaleString('en-KE')}`,
+                   PM, PH - 30, { align: 'center', width: PW - PM * 2 }
+               );
         }
 
         doc.end();
