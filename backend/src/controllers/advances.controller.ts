@@ -109,7 +109,16 @@ export const approveAdvance = async (req: Request, res: Response, next: NextFunc
             updateData.accountant_confirmed_at = new Date().toISOString();
         }
 
-        console.log('[approveAdvance] updateData:', updateData);
+        console.log('[approveAdvance] updateData:', JSON.stringify(updateData));
+
+        // First verify the user exists in users table
+        const { data: userCheck, error: userCheckError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', userId)
+            .single();
+
+        console.log('[approveAdvance] userCheck:', userCheck ? 'EXISTS' : 'NOT FOUND', 'userCheckError:', userCheckError);
 
         const { data, error } = await supabase
             .from('staff_advances')
@@ -119,7 +128,8 @@ export const approveAdvance = async (req: Request, res: Response, next: NextFunc
             .single();
 
         if (error) {
-            console.error('[approveAdvance] Supabase error:', error);
+            console.error('[approveAdvance] Supabase error:', JSON.stringify(error));
+            console.error('[approveAdvance] Error details:', error.message, error.code, error.hint);
             throw error;
         }
 
