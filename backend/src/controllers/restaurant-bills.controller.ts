@@ -89,11 +89,10 @@ export const getBillDetails = async (
             *,
             menu_item:restaurant_menu_items(id, name, price)
           ),
-          waiter:staff_profiles!created_by(
+          waiter:users!created_by(
             id,
             first_name,
-            last_name,
-            user:users!user_id(id, first_name, last_name)
+            last_name
           )
         ),
         payments:restaurant_bill_payments(

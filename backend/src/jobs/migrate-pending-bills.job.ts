@@ -180,14 +180,14 @@ async function recordVoidBills() {
             .select(`
                 id,
                 order_number,
-                waiter_id,
+                created_by,
                 table_number,
                 room_number,
                 total_amount,
                 cancelled_at,
                 cancelled_by,
                 cancellation_reason,
-                waiter:staff_profiles!waiter_id(first_name, last_name)
+                waiter:users!created_by(first_name, last_name)
             `)
             .eq('status', 'cancelled')
             .not('cancelled_at', 'is', null);
@@ -212,7 +212,7 @@ async function recordVoidBills() {
                     return {
                         order_id: order.id,
                         order_number: order.order_number,
-                        waiter_id: order.waiter_id,
+                        waiter_id: order.created_by,
                         waiter_name: waiter ? `${waiter.first_name} ${waiter.last_name}`.trim() : null,
                         table_number: order.table_number,
                         room_number: order.room_number,

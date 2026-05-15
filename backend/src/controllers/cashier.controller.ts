@@ -3806,7 +3806,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 id, order_number, status, payment_status,
                 table_number, room_number, guest_name,
                 total_amount, created_at, branch_id,
-                waiter:staff_profiles!waiter_id(id, first_name, last_name)
+                waiter:users!created_by(id, first_name, last_name)
             `)
             .neq('payment_status', 'paid')
             .neq('status', 'cancelled')
@@ -3824,7 +3824,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 id, order_number, status, payment_status,
                 seat_number, room_number, guest_name,
                 total, created_at, branch_id,
-                waiter:staff_profiles!created_by(id, first_name, last_name)
+                waiter:users!created_by(id, first_name, last_name)
             `)
             .eq('payment_status', 'pending')
             .neq('status', 'cancelled')

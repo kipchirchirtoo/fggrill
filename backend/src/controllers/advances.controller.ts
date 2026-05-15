@@ -92,19 +92,24 @@ export const approveAdvance = async (req: Request, res: Response, next: NextFunc
         const userId = req.user?.id;
         const userRole = req.user?.role;
 
+        console.log('[approveAdvance] id:', id, 'userId:', userId, 'userRole:', userRole);
+
         // Determine if this is an auditor approval
         const isAuditor = userRole === 'auditor';
 
         const updateData: any = {
-            status: isAuditor ? 'auditor_confirmed' : 'approved',
+            status: isAuditor ? 'auditor_confirmed' : 'accountant_confirmed',
         };
 
         if (isAuditor) {
             updateData.auditor_id = userId;
             updateData.auditor_confirmed_at = new Date().toISOString();
         } else {
-            updateData.approved_by = userId;
+            updateData.accountant_id = userId;
+            updateData.accountant_confirmed_at = new Date().toISOString();
         }
+
+        console.log('[approveAdvance] updateData:', updateData);
 
         const { data, error } = await supabase
             .from('staff_advances')
@@ -113,7 +118,10 @@ export const approveAdvance = async (req: Request, res: Response, next: NextFunc
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('[approveAdvance] Supabase error:', error);
+            throw error;
+        }
 
         // Send notification to branch accountant when auditor approves
         if (isAuditor && data) {
