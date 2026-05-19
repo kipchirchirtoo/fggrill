@@ -1018,9 +1018,9 @@ export default function HREmployeesPage() {
                     </DialogContent>
                 </Dialog>}
 
-                {/* Add/Edit Modal — redesigned */}
-                <Dialog open={addModalOpen || editModalOpen} onOpenChange={(open) => {
-                    if (!open) { setAddModalOpen(false); setEditModalOpen(false); resetForm(); }
+                {/* Add Modal — onboarding wizard */}
+                <Dialog open={addModalOpen} onOpenChange={(open) => {
+                    if (!open) { setAddModalOpen(false); resetForm(); }
                 }}>
                     <DialogContent className="max-w-[580px] w-full p-0 border-none rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
 
@@ -1274,6 +1274,119 @@ export default function HREmployeesPage() {
                             )}
                         </div>
 
+                    </DialogContent>
+                </Dialog>
+
+                {/* Edit Staff Modal — matches /dashboard/admin/staff */}
+                <Dialog open={editModalOpen} onOpenChange={(open) => {
+                    if (!open) { setEditModalOpen(false); resetForm(); }
+                }}>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader><DialogTitle>Edit Staff Member</DialogTitle></DialogHeader>
+                        <div className="space-y-4 mt-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-sm font-medium">First Name <span className="text-red-500">*</span></label>
+                                    <Input
+                                        value={formData.first_name}
+                                        onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                                        className={formErrors.first_name ? 'border-red-500' : ''}
+                                    />
+                                    {formErrors.first_name && <p className="text-red-500 text-xs mt-1">Required</p>}
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium">Last Name <span className="text-red-500">*</span></label>
+                                    <Input
+                                        value={formData.last_name}
+                                        onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                                        className={formErrors.last_name ? 'border-red-500' : ''}
+                                    />
+                                    {formErrors.last_name && <p className="text-red-500 text-xs mt-1">Required</p>}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium">Email</label>
+                                <Input
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium">National ID <span className="text-red-500">*</span></label>
+                                <Input
+                                    value={formData.national_id}
+                                    onChange={(e) => setFormData({ ...formData, national_id: e.target.value })}
+                                    className={formErrors.national_id ? 'border-red-500' : ''}
+                                    placeholder="Enter National ID"
+                                />
+                                {formErrors.national_id && <p className="text-red-500 text-xs mt-1">Required</p>}
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium">Phone</label>
+                                <Input
+                                    value={formData.phone_number}
+                                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                                    placeholder="e.g. 0712 345 678"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium">Department <span className="text-red-500">*</span></label>
+                                <select
+                                    value={formData.department}
+                                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                                    className={`w-full p-2 border rounded-ios-lg ${formErrors.department ? 'border-red-500' : ''}`}
+                                >
+                                    <option value="">Select department</option>
+                                    {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                </select>
+                                {formErrors.department && <p className="text-red-500 text-xs mt-1">Required</p>}
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium">Role</label>
+                                <select
+                                    value={formData.position}
+                                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                                    className="w-full p-2 border rounded-ios-lg"
+                                >
+                                    <option value="">Select role</option>
+                                    {roles.map((r: any) => (
+                                        <option key={r.value} value={r.value}>{r.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium">Branch</label>
+                                <select
+                                    value={formData.branch_id}
+                                    onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
+                                    className="w-full p-2 border rounded-ios-lg"
+                                >
+                                    <option value="">Select branch</option>
+                                    {branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium">Status</label>
+                                <select
+                                    value={formData.status}
+                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
+                                    className="w-full p-2 border rounded-ios-lg"
+                                >
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="on-leave">On Leave</option>
+                                    <option value="suspended">Suspended</option>
+                                    <option value="terminated">Terminated</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <IOSButton variant="secondary" onClick={() => setEditModalOpen(false)} className="flex-1" disabled={isSubmitting}>Cancel</IOSButton>
+                                <IOSButton onClick={handleUpdateStaff} className="flex-1" disabled={isSubmitting}>
+                                    {isSubmitting ? 'Updating...' : 'Update Staff'}
+                                </IOSButton>
+                            </div>
+                        </div>
                     </DialogContent>
                 </Dialog>
 
