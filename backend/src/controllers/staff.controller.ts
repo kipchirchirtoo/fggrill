@@ -559,8 +559,11 @@ export const updateStaffMember = async (
       last_name,
       email,
       phone_number,
+      phone,
       role,
+      position,
       department,
+      branch_id,
       shift,
       basic_salary,
       start_date,
@@ -583,6 +586,9 @@ export const updateStaffMember = async (
       supervisor_id,
       archive_notes
     } = req.body;
+
+    const effectiveRole = role ?? position;
+    const effectivePhone = phone_number ?? phone;
 
     logger.debug('Update staff request:', { id: req.params.id, body: req.body });
     // console.log('DEBUG: Update staff request body:', JSON.stringify(req.body, null, 2));
@@ -806,10 +812,11 @@ export const updateStaffMember = async (
 
       if (first_name !== undefined) userUpdateData.first_name = first_name;
       if (last_name !== undefined) userUpdateData.last_name = last_name;
-      if (phone_number !== undefined) userUpdateData.phone_number = phone_number;
-      if (role !== undefined) userUpdateData.role = role;
+      if (effectivePhone !== undefined) userUpdateData.phone_number = effectivePhone;
+      if (effectiveRole !== undefined) userUpdateData.role = effectiveRole;
       if (department !== undefined) userUpdateData.department = department;
       if (email !== undefined) userUpdateData.email = email;
+      if (branch_id !== undefined) userUpdateData.branch_id = parseInt(branch_id);
 
       const { error: userError } = await supabase
         .from('users')
@@ -859,7 +866,8 @@ export const updateStaffMember = async (
     if (start_date) staffUpdateData.start_date = start_date;
     if (national_id !== undefined) staffUpdateData.national_id = national_id;
     if (department !== undefined) staffUpdateData.department = department;
-    if (role !== undefined) staffUpdateData.role = role;
+    if (effectiveRole !== undefined) staffUpdateData.role = effectiveRole;
+    if (branch_id !== undefined) staffUpdateData.branch_id = parseInt(branch_id);
     // Note: email and phone_number are in users table, not staff_profiles
     if (employee_id !== undefined) staffUpdateData.id_number = employee_id;
     if (kra_pin !== undefined) staffUpdateData.kra_pin = kra_pin;
@@ -882,7 +890,7 @@ export const updateStaffMember = async (
     if (first_name !== undefined) staffUpdateData.first_name = first_name;
     if (last_name !== undefined) staffUpdateData.last_name = last_name;
     if (email !== undefined) staffUpdateData.email = email;
-    if (phone_number !== undefined) staffUpdateData.phone = phone_number;
+    if (effectivePhone !== undefined) staffUpdateData.phone = effectivePhone;
 
     const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')
@@ -908,12 +916,12 @@ export const updateStaffMember = async (
         notes: 'Manual adjustment'
       });
     }
-    if (role !== undefined && staff.role !== role) {
+    if (effectiveRole !== undefined && staff.role !== effectiveRole) {
       historyEntries.push({
         staff_id: req.params.id,
         change_type: 'role_change',
         old_value: staff.role,
-        new_value: role,
+        new_value: effectiveRole,
         created_by: sanitizeUUID(req.user?.id)
       });
     }

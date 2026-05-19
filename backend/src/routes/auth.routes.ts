@@ -8,7 +8,8 @@ import {
   updateDetails,
   updatePassword,
   forgotPassword,
-  posLogin
+  posLogin,
+  switchContext
 } from '../controllers/auth.controller';
 import { protect } from '../middleware/auth';
 
@@ -23,5 +24,6 @@ router.get('/me', protect, getMe);
 router.put('/updatedetails', protect, updateDetails);
 router.put('/updatepassword', protect, updatePassword);
 router.post('/forgotpassword', forgotPassword);
+router.post('/switch-context', protect, switchContext);
 
 export default router;

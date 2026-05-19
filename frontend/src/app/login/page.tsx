@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
+import { ContextSelectorModal } from '@/components/auth/ContextSelectorModal';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -19,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, isAuthenticating } = useAuth();
+  const { login, isAuthenticating, pendingContextSelection } = useAuth();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -63,6 +64,21 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (pendingContextSelection) {
+    return (
+      <div className="relative min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden">
+        <div className="absolute inset-0 z-0">
+          <Image src="/IMG_8704.JPG" alt="Background" fill className="object-cover" priority sizes="100vw" />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />
+        </div>
+        <ContextSelectorModal
+          allRoles={pendingContextSelection.allRoles}
+          userName={`${pendingContextSelection.tempUser.firstName} ${pendingContextSelection.tempUser.lastName}`}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 overflow-hidden">

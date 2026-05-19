@@ -16,6 +16,14 @@ import { UserRole } from "@/lib/user-roles";
 // Re-export UserRole so existing imports from '@/lib/auth-context' still work
 export { UserRole } from "@/lib/user-roles";
 
+// A single role+branch assignment returned from user_branch_roles
+export interface UserRoleAssignment {
+  role: string;
+  branch_id: number | null;
+  is_primary: boolean;
+  branches?: { id: number; name: string; code: string } | null;
+}
+
 // User interface
 export interface User {
   id: string;
@@ -36,6 +44,7 @@ export interface User {
   profilePhoto?: string;
   idNumber?: string;
   phoneNumber?: string;
+  all_roles?: UserRoleAssignment[];
 }
 
 // Auth context interface
@@ -43,10 +52,12 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticating: boolean;
+  pendingContextSelection: { allRoles: UserRoleAssignment[]; tempUser: User; tempToken: string } | null;
   login: (email: string, password: string) => Promise<void>;
   posLogin: (pin: string, redirectTo?: string) => Promise<void>;
   logout: (redirectTo?: string) => void;
   checkAuth: () => Promise<void>;
+  selectContext: (role: string, branchId: number | null) => Promise<void>;
 }
 
 // Create context
@@ -58,6 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [pendingContextSelection, setPendingContextSelection] = useState<{
+    allRoles: UserRoleAssignment[];
+    tempUser: User;
+    tempToken: string;
+  } | null>(null);
   const router = useRouter();
 
   // Handle mounting to prevent hydration mismatch
@@ -119,7 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               lastName: apiUser.last_name || "",
               role: apiUser.role as UserRole,
               branch_id: apiUser.branch_id,
-              branch_name: apiUser.branch_name || "Unknown Branch",
+              branch_name:
+                apiUser.branch_name || (apiUser.branch_id ? "Branch" : "HQ"),
               is_central: apiUser.is_central,
               department: apiUser.department,
               permissions: apiUser.permissions,
@@ -128,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               profilePhoto: apiUser.profile_photo,
               idNumber: apiUser.id_number,
               phoneNumber: apiUser.phone_number,
+              all_roles: (apiUser as any).all_roles,
             };
             setUser(userData);
             localStorage.setItem("user", JSON.stringify(userData));
@@ -186,23 +204,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw new Error("No access token received");
           }
 
+          const rawUser = apiUser;
+          const allRoles: UserRoleAssignment[] = rawUser.all_roles || [];
+          const requiresContext = res.data.requires_context_selection;
+
           const userData: User = {
-            id: apiUser.id || "",
-            email: apiUser.email || "",
-            firstName: apiUser.first_name || "",
-            lastName: apiUser.last_name || "",
-            role: apiUser.role as UserRole,
-            branch_id: apiUser.branch_id,
+            id: rawUser.id || "",
+            email: rawUser.email || "",
+            firstName: rawUser.first_name || "",
+            lastName: rawUser.last_name || "",
+            role: rawUser.role as UserRole,
+            branch_id: rawUser.branch_id,
             branch_name:
-              apiUser.branch_name || (apiUser.branch_id ? "Branch" : "HQ"),
-            is_central: apiUser.is_central || false,
-            department: apiUser.department || "Staff",
-            employeeId: apiUser.employee_id,
-            startDate: apiUser.start_date,
-            profilePhoto: apiUser.profile_photo,
-            idNumber: apiUser.id_number,
-            phoneNumber: apiUser.phone_number,
+              rawUser.branch_name || (rawUser.branch_id ? "Branch" : "HQ"),
+            is_central: rawUser.is_central || false,
+            department: rawUser.department || "Staff",
+            employeeId: rawUser.employee_id,
+            startDate: rawUser.start_date,
+            profilePhoto: rawUser.profile_photo,
+            idNumber: rawUser.id_number,
+            phoneNumber: rawUser.phone_number,
+            all_roles: allRoles,
           };
+
+          // Multi-role: hold back from dashboard until user picks context
+          if (requiresContext && allRoles.length > 1) {
+            localStorage.setItem("token", token);
+            setPendingContextSelection({ allRoles, tempUser: userData, tempToken: token });
+            setIsAuthenticating(false);
+            return;
+          }
 
           localStorage.setItem("user", JSON.stringify(userData));
           localStorage.setItem("token", token);
@@ -310,6 +341,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [router],
   );
 
+  const selectContext = useCallback(
+    async (role: string, branchId: number | null): Promise<void> => {
+      if (!pendingContextSelection) return;
+      try {
+        const res = await api.auth.switchContext(role, branchId);
+        if (res.success && res.data) {
+          const newToken = res.data.session.access_token;
+          const { tempUser } = pendingContextSelection;
+
+          const updatedUser: User = {
+            ...tempUser,
+            role: role as UserRole,
+            branch_id: branchId,
+            branch_name: tempUser.all_roles?.find(
+              (r) => r.role === role && r.branch_id === branchId
+            )?.branches?.name || (branchId ? "Branch" : "HQ"),
+            is_central: !branchId,
+          };
+
+          localStorage.setItem("token", newToken);
+          localStorage.setItem("user", JSON.stringify(updatedUser));
+          if (branchId) localStorage.setItem("activeBranchId", String(branchId));
+
+          setUser(updatedUser);
+          setPendingContextSelection(null);
+          toast.success(`Entered as ${role.replace(/_/g, " ")}`);
+          redirectToDashboard(role as UserRole, !branchId);
+        } else {
+          toast.error(res.message || "Failed to select context");
+        }
+      } catch (err: any) {
+        toast.error(err.message || "Context selection failed");
+      }
+    },
+    [pendingContextSelection, router]
+  );
+
   const redirectToDashboard = (role: UserRole, isCentral?: boolean) => {
     const roleRedirects: Record<UserRole, string> = {
       [UserRole.SUPER_ADMIN]: "/dashboard/admin",
@@ -366,12 +434,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isLoading,
       isAuthenticating,
+      pendingContextSelection,
       login,
       posLogin,
       logout,
       checkAuth,
+      selectContext,
     }),
-    [user, isLoading, login, posLogin, logout, checkAuth],
+    [user, isLoading, isAuthenticating, pendingContextSelection, login, posLogin, logout, checkAuth, selectContext],
   );
 
   return (

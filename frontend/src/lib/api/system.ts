@@ -38,6 +38,11 @@ export const authAPI = {
 
   getMe: () => fetchAPI<User>('/auth/me'),
   updatePassword: (data: any) => fetchAPI<void>('/auth/updatepassword', { method: 'PUT', body: JSON.stringify(data) }),
+  switchContext: (role: string, branch_id: number | null) =>
+    fetchAPI<{ session: any; active_role: string; active_branch_id: number | null }>('/auth/switch-context', {
+      method: 'POST',
+      body: JSON.stringify({ role, branch_id })
+    }),
 };
 
 // =====================================

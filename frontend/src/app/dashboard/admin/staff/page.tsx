@@ -29,6 +29,7 @@ export default function AdminStaffPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [branches, setBranches] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
   const [departments] = useState([
     { id: 'housekeeping', name: 'Housekeeping' },
     { id: 'restaurant', name: 'Restaurant' },
@@ -52,7 +53,7 @@ export default function AdminStaffPage() {
     last_name: '',
     email: '',
     national_id: '',
-    position: '',
+    role: '',
     branch_id: '',
     department: '',
     phone: '',
@@ -68,13 +69,15 @@ export default function AdminStaffPage() {
   const fetchStaff = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [staffRes, branchesRes] = await Promise.all([
+      const [staffRes, branchesRes, rolesRes] = await Promise.all([
         staffAPI.getStaff(),
         systemAPI.getBranches(),
+        staffAPI.getRoles(),
       ]);
 
       if (staffRes.success) setStaff(staffRes.data || []);
       if (branchesRes.success) setBranches(branchesRes.data || []);
+      if (rolesRes.success) setRoles(rolesRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setIsLoading(false); }
   }, []);
@@ -105,7 +108,7 @@ export default function AdminStaffPage() {
       last_name: '',
       email: '',
       national_id: '',
-      position: '',
+      role: '',
       branch_id: '',
       department: '',
       phone: '',
@@ -151,10 +154,10 @@ export default function AdminStaffPage() {
       last_name: member.last_name,
       email: member.email || '',
       national_id: (member as any).national_id || '',
-      position: (member as any).position || member.role || '',
+      role: member.role || (member as any).position || '',
       branch_id: member.branch_id?.toString() || '',
       department: member.department || '',
-      phone: member.phone || '',
+      phone: (member as any).phone || (member as any).phone_number || '',
       status: member.status
     });
     setEditModalOpen(true);
@@ -512,12 +515,17 @@ export default function AdminStaffPage() {
                       {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Role / Position</label>
-                      <Input
-                        value={formData.position}
-                        onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                        placeholder="e.g. Head Chef, Manager, Admin"
-                      />
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Role</label>
+                      <select
+                        value={formData.role}
+                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select role</option>
+                        {roles.map((r: any) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-1 block">Branch</label>
@@ -556,10 +564,10 @@ export default function AdminStaffPage() {
                           <span className="text-gray-600">Department:</span>
                           <span className="font-medium text-gray-900">{departments.find(d => d.id === formData.department)?.name || formData.department}</span>
                         </div>
-                        {formData.position && (
+                        {formData.role && (
                           <div className="flex justify-between py-2 border-b">
-                            <span className="text-gray-600">Role / Position:</span>
-                            <span className="font-medium text-gray-900">{formData.position}</span>
+                            <span className="text-gray-600">Role:</span>
+                            <span className="font-medium text-gray-900">{roles.find(r => r.value === formData.role)?.label || formData.role}</span>
                           </div>
                         )}
                         {formData.branch_id && (
@@ -711,12 +719,17 @@ export default function AdminStaffPage() {
                 {formErrors.department && <p className="text-red-500 text-xs mt-1">{formErrors.department}</p>}
               </div>
               <div>
-                <label className="text-sm font-medium">Role / Position</label>
-                <Input
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  placeholder="e.g. Head Chef, Manager"
-                />
+                <label className="text-sm font-medium">Role</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  className="w-full p-2 border rounded-ios-lg"
+                >
+                  <option value="">Select role</option>
+                  {roles.map((r: any) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-sm font-medium">Branch</label>

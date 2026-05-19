@@ -271,20 +271,20 @@ export default function HREmployeesPage() {
         setFormErrors({});
     };
 
-    const validateForm = () => {
+    const validateForm = (isCreate = false) => {
         const errors: { [key: string]: string } = {};
         if (!formData.first_name) errors.first_name = 'First name is required';
         if (!formData.last_name) errors.last_name = 'Last name is required';
         if (!formData.national_id) errors.national_id = 'National ID is required';
         if (!formData.department) errors.department = 'Department is required';
-        if (!formData.basic_salary || formData.basic_salary <= 0) errors.basic_salary = 'Salary is mandatory';
+        if (isCreate && (!formData.basic_salary || formData.basic_salary <= 0)) errors.basic_salary = 'Salary is mandatory';
 
         setFormErrors(errors);
         return Object.keys(errors).length === 0;
     };
 
     const handleCreateStaff = async () => {
-        if (!validateForm()) return;
+        if (!validateForm(true)) return;
         setIsSubmitting(true);
         try {
             const payload = {
@@ -391,7 +391,7 @@ export default function HREmployeesPage() {
     };
 
     const handleUpdateStaff = async () => {
-        if (!validateForm()) return;
+        if (!validateForm(false)) return;
         setIsSubmitting(true);
         try {
             const payload = {
@@ -659,15 +659,8 @@ export default function HREmployeesPage() {
                     )}
                 </div>
 
-                {/* Add/Edit Modal */}
-                <Dialog open={addModalOpen || editModalOpen} onOpenChange={(open) => {
-                    if (!open) {
-                        setAddModalOpen(false);
-                        setEditModalOpen(false);
-                        resetForm();
-                    }
-                }}>
-                    <DialogContent className="max-w-[480px] p-0 overflow-hidden border-none rounded-ios-2xl bg-[#F2F2F7]">
+                {/* Add/Edit Modal — removed duplicate (was conflicting with redesigned dialog below) */}
+                {false && <Dialog open={false}><DialogContent className="hidden">
                         <div className="bg-[#F2F2F7] px-4 py-3 border-b flex items-center justify-between">
                             <button
                                 onClick={() => {
@@ -1023,7 +1016,7 @@ export default function HREmployeesPage() {
                             </div>
                         </div>
                     </DialogContent>
-                </Dialog>
+                </Dialog>}
 
                 {/* Add/Edit Modal — redesigned */}
                 <Dialog open={addModalOpen || editModalOpen} onOpenChange={(open) => {
@@ -1314,6 +1307,36 @@ export default function HREmployeesPage() {
                             <IOSButton
                                 variant="secondary"
                                 onClick={() => setConfirmArchiveOpen(false)}
+                                className="w-full h-11"
+                                disabled={isSubmitting}
+                            >
+                                Cancel
+                            </IOSButton>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Delete Confirmation */}
+                <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+                    <DialogContent className="max-w-[400px] bg-white p-6 rounded-ios-2xl border-none shadow-2xl">
+                        <div className="text-center">
+                            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Trash2 className="h-6 w-6 text-red-500" />
+                            </div>
+                            <DialogTitle className="text-lg font-bold text-stone-900">Force Delete Personnel</DialogTitle>
+                            <p className="text-stone-500 text-sm mt-2 font-medium">This will permanently remove the employee record and cannot be undone.</p>
+                        </div>
+                        <div className="flex flex-col gap-2 mt-6">
+                            <IOSButton
+                                onClick={handleConfirmDelete}
+                                className="w-full bg-red-600 hover:bg-red-700 text-white border-none h-11"
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? 'Deleting...' : 'Force Delete'}
+                            </IOSButton>
+                            <IOSButton
+                                variant="secondary"
+                                onClick={() => setConfirmDeleteOpen(false)}
                                 className="w-full h-11"
                                 disabled={isSubmitting}
                             >

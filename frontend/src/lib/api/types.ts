@@ -57,6 +57,7 @@ export interface User {
   profile_photo?: string;
   id_number?: string;
   phone_number?: string;
+  all_roles?: { role: string; branch_id: number | null; is_primary: boolean; branches?: { id: number; name: string; code: string } | null }[];
 }
 
 export interface AuthResponse {
@@ -65,6 +66,7 @@ export interface AuthResponse {
     access_token: string;
     refresh_token?: string;
   };
+  requires_context_selection?: boolean;
 }
 
 export interface Branch {

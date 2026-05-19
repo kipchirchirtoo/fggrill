@@ -21,19 +21,29 @@ const getJwtSecrets = (): string[] => {
   return candidateSecrets;
 };
 
-const issueLocalSession = (userId: string, email: string, role: string) => {
+// Roles that have universal access and skip the context selector
+const UNIVERSAL_ROLES = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor', 'hr_manager', 'director'];
+
+const issueLocalSession = (
+  userId: string,
+  email: string,
+  role: string,
+  activeRole?: string,
+  activeBranchId?: number | null
+) => {
   const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
 
-  const accessToken = jwt.sign(
-    {
-      sub: userId,
-      email,
-      role,
-      aud: 'authenticated'
-    },
-    jwtSecret,
-    { expiresIn: '24h' }
-  );
+  const payload: any = {
+    sub: userId,
+    email,
+    role,
+    aud: 'authenticated'
+  };
+
+  if (activeRole) payload.active_role = activeRole;
+  if (activeBranchId !== undefined && activeBranchId !== null) payload.active_branch_id = activeBranchId;
+
+  const accessToken = jwt.sign(payload, jwtSecret, { expiresIn: '24h' });
 
   const refreshToken = jwt.sign(
     { sub: userId, type: 'refresh' },
@@ -302,11 +312,28 @@ export const login = async (
       secretSource
     });
 
+    // Fetch all role+branch assignments for this user
+    let allRoles: any[] = [];
+    try {
+      const { data: roleRows } = await supabase
+        .from('user_branch_roles')
+        .select('role, branch_id, is_primary, branches(id, name, code)')
+        .eq('user_id', userId);
+      allRoles = roleRows || [];
+    } catch (roleErr) {
+      logger.warn('Could not fetch user_branch_roles, defaulting to primary role', roleErr);
+      allRoles = [{ role: userProfile.role, branch_id: userProfile.branch_id, is_primary: true }];
+    }
+
+    const isUniversal = UNIVERSAL_ROLES.includes(userProfile.role);
+    const requiresContextSelection = !isUniversal && allRoles.length > 1;
+
     res.status(200).json({
       success: true,
       data: {
-        user: userProfile,
-        session
+        user: { ...userProfile, all_roles: allRoles },
+        session,
+        requires_context_selection: requiresContextSelection
       }
     });
 
@@ -404,6 +431,84 @@ export const refreshToken = async (
     });
 
     logger.info(`Token refreshed for user: ${session.user.email}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Switch active role+branch context (multi-role users)
+// @route   POST /api/auth/switch-context
+// @access  Private
+export const switchContext = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { role, branch_id } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    if (!role) {
+      res.status(400).json({ success: false, message: 'role is required' });
+      return;
+    }
+
+    // Validate that this user actually has this role+branch assignment
+    const query = supabase
+      .from('user_branch_roles')
+      .select('id, role, branch_id')
+      .eq('user_id', userId)
+      .eq('role', role);
+
+    if (branch_id !== undefined && branch_id !== null) {
+      query.eq('branch_id', branch_id);
+    } else {
+      query.is('branch_id', null);
+    }
+
+    const { data: entry, error: entryError } = await query.maybeSingle();
+
+    if (entryError || !entry) {
+      logger.warn(`switchContext: user ${userId} attempted unauthorized context role=${role} branch=${branch_id}`);
+      res.status(403).json({ success: false, message: 'This role/branch combination is not assigned to you' });
+      return;
+    }
+
+    // Fetch user profile for email
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('id, email, role')
+      .eq('id', userId)
+      .single();
+
+    if (!userProfile) {
+      res.status(401).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    const { session } = issueLocalSession(
+      userId,
+      userProfile.email,
+      userProfile.role,   // primary role (unchanged in DB)
+      role,              // active_role in JWT
+      branch_id ?? null  // active_branch_id in JWT
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        session,
+        active_role: role,
+        active_branch_id: branch_id ?? null
+      }
+    });
+
+    logger.info(`User ${userProfile.email} switched context to role=${role} branch=${branch_id}`);
   } catch (error) {
     next(error);
   }

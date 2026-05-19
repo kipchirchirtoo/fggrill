@@ -96,15 +96,23 @@ export const protect = async (
           });
           // Fallback to Supabase auth in case they used a Supabase token
         } else {
+          // Base user from DB
+          const effectiveRole = decoded.active_role || user.role;
+          const effectiveBranchId = (decoded.active_branch_id !== undefined && decoded.active_branch_id !== null)
+            ? decoded.active_branch_id
+            : user.branch_id;
+
           req.user = {
             id: user.id,
             email: user.email,
-            role: user.role,
-            branch_id: user.branch_id,
-            branchId: user.branch_id,
+            role: effectiveRole,
+            branch_id: effectiveBranchId,
+            branchId: effectiveBranchId,
             first_name: user.first_name,
             last_name: user.last_name,
-            is_central: !user.branch_id
+            is_central: !effectiveBranchId,
+            primary_role: user.role,          // always the DB role, for audit
+            active_context: !!(decoded.active_role) // flag: user is in switched context
           };
           next();
           return;
