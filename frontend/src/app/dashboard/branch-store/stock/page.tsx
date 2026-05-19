@@ -6,7 +6,7 @@ import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
-import { storeAPI, auditorReportsAPI } from '@/lib/api';
+import { storeAPI, auditorReportsAPI, auditAPI } from '@/lib/api';
 import { Package, RefreshCw, Search, AlertTriangle, ShoppingCart, FileDown, TrendingDown, LayoutGrid, List, Plus, Settings2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -50,6 +50,10 @@ export default function BranchStockPage() {
   const [selectedStockItem, setSelectedStockItem] = useState<StockItem | null>(null);
   const [initialAdjustmentType, setInitialAdjustmentType] = useState<string>('MANUAL_ADJUSTMENT');
 
+  // Bulk selection for Stock Take List
+  const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
+  const [isBulkRegistering, setIsBulkRegistering] = useState(false);
+
   const fetchStock = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -85,7 +89,13 @@ export default function BranchStockPage() {
         search: searchQuery || undefined
       });
       if (response.success) {
-        setCatalog(response.data || []);
+        setCatalog((response.data || []).map((item: any) => ({
+          sku: item.sku,
+          item_name: item.item_name || '',
+          category: item.category || '',
+          unit_of_measure: item.unit_of_measure || '',
+          description: item.description
+        })));
       }
     } catch (error) {
       console.error('Error fetching catalog:', error);
@@ -146,10 +156,59 @@ export default function BranchStockPage() {
     setIsAdjustmentModalOpen(true);
   };
 
+  const unregisteredCatalogItems = catalog.filter(c => !items.find(i => i.sku === c.sku));
+  const allUnregisteredSelected =
+    unregisteredCatalogItems.length > 0 &&
+    unregisteredCatalogItems.every(c => selectedSkus.has(c.sku));
+
+  const toggleSelectAll = () => {
+    if (allUnregisteredSelected) {
+      setSelectedSkus(new Set());
+    } else {
+      setSelectedSkus(new Set(unregisteredCatalogItems.map(c => c.sku)));
+    }
+  };
+
+  const toggleSelectItem = (sku: string) => {
+    setSelectedSkus(prev => {
+      const next = new Set(prev);
+      if (next.has(sku)) next.delete(sku);
+      else next.add(sku);
+      return next;
+    });
+  };
+
+  const handleBulkRegister = async () => {
+    if (selectedSkus.size === 0) return;
+    setIsBulkRegistering(true);
+    let success = 0;
+    let failed = 0;
+    const toRegister = catalog.filter(c => selectedSkus.has(c.sku) && !items.find(i => i.sku === c.sku));
+    for (const cItem of toRegister) {
+      try {
+        await storeAPI.adjustBranchStock({
+          item_sku: cItem.sku,
+          quantity_change: 0,
+          adjustment_type: 'INITIAL_STOCK',
+          notes: 'Bulk registered from master catalog'
+        });
+        success++;
+      } catch {
+        failed++;
+      }
+    }
+    setIsBulkRegistering(false);
+    setSelectedSkus(new Set());
+    if (success > 0) toast.success(`${success} item${success > 1 ? 's' : ''} registered successfully`);
+    if (failed > 0) toast.error(`${failed} item${failed > 1 ? 's' : ''} failed to register`);
+    fetchStock();
+    fetchCatalog();
+  };
+
   const handleExport = async () => {
     try {
       toast.loading("Generating stock ledger...");
-      await auditorReportsAPI.exportComprehensiveStockAudit({
+      await auditAPI.exportStockLedger({
         branch_id: user?.branch_id || undefined
       });
       toast.dismiss();
@@ -282,6 +341,24 @@ export default function BranchStockPage() {
                 </IOSButton>
               </div>
             )}
+            {activeTab === 'catalog' && selectedSkus.size > 0 && (
+              <div className="pt-4 border-t border-stone-50 flex items-center justify-between">
+                <p className="text-sm font-semibold text-stone-700">{selectedSkus.size} item{selectedSkus.size > 1 ? 's' : ''} selected</p>
+                <div className="flex gap-2">
+                  <IOSButton size="sm" variant="secondary" onClick={() => setSelectedSkus(new Set())}>
+                    Clear Selection
+                  </IOSButton>
+                  <IOSButton
+                    size="sm"
+                    onClick={handleBulkRegister}
+                    disabled={isBulkRegistering}
+                    leftIcon={<Plus className="h-3.5 w-3.5" />}
+                  >
+                    {isBulkRegistering ? 'Registering...' : `Register Selected (${selectedSkus.size})`}
+                  </IOSButton>
+                </div>
+              </div>
+            )}
           </IOSCard>
 
           {/* Table / Grid Contents */}
@@ -359,7 +436,17 @@ export default function BranchStockPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-stone-50/50 border-b border-stone-100 text-left">
                     <tr>
-                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest px-6">Stock Take List</th>
+                      <th className="p-4 px-6 w-10">
+                        <input
+                          type="checkbox"
+                          checked={allUnregisteredSelected}
+                          onChange={toggleSelectAll}
+                          disabled={unregisteredCatalogItems.length === 0}
+                          title="Select all unregistered items"
+                          className="w-4 h-4 rounded border-stone-300 accent-stone-900 cursor-pointer disabled:opacity-40"
+                        />
+                      </th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Stock Take List</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Category</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Status</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest text-right px-6">Operation</th>
@@ -367,13 +454,26 @@ export default function BranchStockPage() {
                   </thead>
                   <tbody className="divide-y divide-stone-50">
                     {catalog.length === 0 ? (
-                      <tr><td colSpan={4} className="p-20 text-center text-stone-400">No catalog items found. Try a different search.</td></tr>
+                      <tr><td colSpan={5} className="p-20 text-center text-stone-400">No catalog items found. Try a different search.</td></tr>
                     ) : (
                       catalog.map((cItem) => {
                         const inBranch = items.find(i => i.sku === cItem.sku);
+                        const isSelected = selectedSkus.has(cItem.sku);
                         return (
-                          <tr key={cItem.sku} className="hover:bg-stone-50/50 transition-colors group">
+                          <tr key={cItem.sku} className={`hover:bg-stone-50/50 transition-colors group ${isSelected ? 'bg-stone-50' : ''}`}>
                             <td className="p-4 px-6">
+                              {!inBranch ? (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleSelectItem(cItem.sku)}
+                                  className="w-4 h-4 rounded border-stone-300 accent-stone-900 cursor-pointer"
+                                />
+                              ) : (
+                                <span className="w-4 h-4 block" />
+                              )}
+                            </td>
+                            <td className="p-4">
                               <p className="font-bold text-stone-900">{cItem.item_name}</p>
                               <p className="text-[10px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{cItem.sku}</p>
                             </td>
