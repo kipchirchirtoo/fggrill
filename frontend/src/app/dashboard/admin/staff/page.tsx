@@ -64,6 +64,7 @@ export default function AdminStaffPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [departmentFilter, setDepartmentFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
   const [wizardStep, setWizardStep] = useState(1);
 
   const fetchStaff = useCallback(async () => {
@@ -92,7 +93,11 @@ export default function AdminStaffPage() {
 
     const matchesDepartment = departmentFilter ? s.department === departmentFilter : true;
 
-    return matchesSearch && matchesDepartment;
+    const matchesBranch = branchFilter
+      ? String(s.branch_id) === String(branchFilter)
+      : true;
+
+    return matchesSearch && matchesDepartment && matchesBranch;
   });
 
   const stats = {
@@ -274,7 +279,7 @@ export default function AdminStaffPage() {
           </div>
 
           <div className="card-elevated p-4 border border-stone-100">
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-4 gap-4">
               <div className="md:col-span-2 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-gray-400" />
                 <Input
@@ -282,17 +287,30 @@ export default function AdminStaffPage() {
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
-                    setCurrentPage(1); // Reset to first page on search
+                    setCurrentPage(1);
                   }}
                   className="pl-9"
                 />
               </div>
               <div>
                 <select
+                  value={branchFilter}
+                  onChange={(e) => {
+                    setBranchFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full p-2 border rounded-ios-lg"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <select
                   value={departmentFilter}
                   onChange={(e) => {
                     setDepartmentFilter(e.target.value);
-                    setCurrentPage(1); // Reset to first page on filter change
+                    setCurrentPage(1);
                   }}
                   className="w-full p-2 border rounded-ios-lg"
                 >

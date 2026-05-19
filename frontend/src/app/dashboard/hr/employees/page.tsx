@@ -233,10 +233,10 @@ export default function HREmployeesPage() {
             s.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesDepartment = departmentFilter ? s.department === departmentFilter : true;
-        
-        // Exact branch match (handling numeric vs string comparison)
-        const matchesBranch = selectedBranchId 
-            ? String(s.branch_id) === String(selectedBranchId) 
+
+        // Strict branch match: when a branch is selected, staff with no branch_id are excluded
+        const matchesBranch = selectedBranchId
+            ? (s.branch_id != null && String(s.branch_id) === String(selectedBranchId))
             : true;
 
         return matchesSearch && matchesDepartment && matchesBranch;
