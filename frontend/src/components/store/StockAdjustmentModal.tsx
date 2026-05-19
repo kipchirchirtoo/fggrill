@@ -42,7 +42,7 @@ export function StockAdjustmentModal({ isOpen, onClose, item, initialType, onSuc
 
   const handleSubmit = async () => {
     if (!item) return;
-    if (isStorekeeper && quantity > 0) {
+    if (isStorekeeper && quantity > 0 && adjustmentType !== 'INITIAL_STOCK') {
       toast.error('Manual stock increases are not allowed for storekeepers. Please use the request flow.');
       return;
     }
@@ -111,11 +111,11 @@ export function StockAdjustmentModal({ isOpen, onClose, item, initialType, onSuc
                 className="bg-white border-stone-200 focus:ring-stone-500"
                 value={quantity}
                 onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-                disabled={isLoading || (isStorekeeper && adjustmentType === 'INITIAL_STOCK')}
+                disabled={isLoading}
               />
               <span className="text-stone-500 text-sm font-medium">{item.unit}</span>
             </div>
-            {isStorekeeper && quantity > 0 && (
+            {isStorekeeper && quantity > 0 && adjustmentType !== 'INITIAL_STOCK' && (
               <p className="text-[10px] text-red-500 mt-1 font-medium">Storekeepers cannot manually increase stock.</p>
             )}
             <p className="text-[10px] text-stone-400 mt-1">Use positive numbers to add, negative to deduct.</p>
@@ -166,7 +166,7 @@ export function StockAdjustmentModal({ isOpen, onClose, item, initialType, onSuc
           <IOSButton variant="secondary" onClick={onClose} disabled={isLoading}>Cancel</IOSButton>
           <IOSButton 
             onClick={handleSubmit} 
-            disabled={isLoading || (quantity === 0 && reorderLevel === item.reorder_level) || (isStorekeeper && quantity > 0)}
+            disabled={isLoading || (quantity === 0 && reorderLevel === item.reorder_level) || (isStorekeeper && quantity > 0 && adjustmentType !== 'INITIAL_STOCK')}
             className={quantity < 0 ? 'bg-red-600 hover:bg-red-700' : ''}
           >
             {isLoading ? 'Updating...' : 'Apply Adjustment'}

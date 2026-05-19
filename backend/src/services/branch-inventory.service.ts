@@ -42,16 +42,29 @@ export async function getBranchStock(branchId: number) {
   if (error) throw error;
   if (!stock || stock.length === 0) return [];
 
-  // Manual join with simple_items
   const skus = stock.map(s => s.item_sku);
+
+  // Manual join with simple_items
   const { data: items } = await supabase
     .from('simple_items')
     .select('sku, item_name, description, category, unit_of_measure, retail_price, cost_price')
     .in('sku', skus);
 
+  // Determine source: 'dispatch' if item was ever received via official dispatch/supplier receiving,
+  // 'catalog' if it was only registered manually from the master catalog (INITIAL_STOCK)
+  const { data: dispatchMovements } = await supabase
+    .from('branch_stock_movements')
+    .select('item_sku')
+    .eq('branch_id', branchId)
+    .in('movement_type', ['DISPATCH_RECEIVE', 'RECEIVE_FROM_SUPPLIER'])
+    .in('item_sku', skus);
+
+  const dispatchedSkus = new Set((dispatchMovements || []).map((m: any) => m.item_sku));
+
   return stock.map(s => ({
     ...s,
-    item: items?.find(i => i.sku === s.item_sku)
+    item: items?.find(i => i.sku === s.item_sku),
+    source: dispatchedSkus.has(s.item_sku) ? 'dispatch' : 'catalog'
   }));
 }
 

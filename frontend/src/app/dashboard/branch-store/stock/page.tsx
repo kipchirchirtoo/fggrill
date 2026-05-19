@@ -25,6 +25,7 @@ interface StockItem {
   reorder_level: number;
   unit: string;
   last_updated?: string;
+  source?: 'dispatch' | 'catalog';
 }
 
 interface CatalogItem {
@@ -63,7 +64,8 @@ export default function BranchStockPage() {
           min_quantity: record.reorder_level ?? 10,
           reorder_level: record.reorder_level ?? 10,
           unit: record.item?.unit_of_measure || 'units',
-          last_updated: record.updated_at
+          last_updated: record.updated_at,
+          source: record.source || 'catalog'
         }));
         setItems(mappedItems);
       }
@@ -101,12 +103,15 @@ export default function BranchStockPage() {
     }
   }, [activeTab, fetchStock, fetchCatalog]);
 
-  const filteredStock = items.filter((i) =>
+  const dispatchItems = items.filter(i => i.source === 'dispatch');
+  const catalogItems = items.filter(i => i.source === 'catalog');
+
+  const filteredStock = dispatchItems.filter((i) =>
     (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (i.sku || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const lowStockItems = items.filter(i => i.quantity <= i.reorder_level);
+  const lowStockItems = dispatchItems.filter(i => i.quantity <= i.reorder_level);
 
   const handleRequestStock = async (item: StockItem) => {
     try {
@@ -236,7 +241,7 @@ export default function BranchStockPage() {
               onClick={() => setActiveTab('catalog')}
               className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'catalog' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
             >
-              Master Catalog
+              Stock Take List
             </button>
           </div>
 
@@ -276,7 +281,7 @@ export default function BranchStockPage() {
                   onClick={() => setActiveTab('catalog')}
                   leftIcon={<Plus className="h-4 w-4" />}
                 >
-                  Add New Item from Catalog
+                  Register Items from Catalog
                 </IOSButton>
               </div>
             )}
@@ -357,7 +362,7 @@ export default function BranchStockPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-stone-50/50 border-b border-stone-100 text-left">
                     <tr>
-                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest px-6">Product Catalog</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest px-6">Stock Take List</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Category</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Status</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest text-right px-6">Operation</th>
@@ -380,12 +385,19 @@ export default function BranchStockPage() {
                             </td>
                             <td className="p-4">
                               {inBranch ? (
-                                <div className="flex items-center gap-1.5 text-stone-400 text-xs italic font-medium">
-                                  <LayoutGrid className="h-3 w-3" />
-                                  <span>Already in Branch ({inBranch.quantity})</span>
-                                </div>
+                                inBranch.source === 'dispatch' ? (
+                                  <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold">
+                                    <LayoutGrid className="h-3 w-3" />
+                                    <span>In Current Stock ({inBranch.quantity} {inBranch.unit})</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 text-blue-600 text-xs font-semibold">
+                                    <Package className="h-3 w-3" />
+                                    <span>Registered ({inBranch.quantity} {inBranch.unit})</span>
+                                  </div>
+                                )
                               ) : (
-                                <IOSBadge variant="light" color="secondary">Not in Inventory</IOSBadge>
+                                <IOSBadge variant="light" color="secondary">Not Registered</IOSBadge>
                               )}
                             </td>
                             <td className="p-4 px-6 text-right">
@@ -395,7 +407,7 @@ export default function BranchStockPage() {
                                 </IOSButton>
                               ) : (
                                 <IOSButton size="sm" onClick={() => handleAddToBranch(cItem)} leftIcon={<Plus className="h-3 w-3" />}>
-                                  Add to Stock
+                                  Register for Stock Take
                                 </IOSButton>
                               )}
                             </td>
