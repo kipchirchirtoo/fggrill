@@ -54,6 +54,10 @@ export default function BranchStockPage() {
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
   const [isBulkRegistering, setIsBulkRegistering] = useState(false);
 
+  // Inline quantity editing for registered items
+  const [editingQuantities, setEditingQuantities] = useState<Record<string, number>>({});
+  const [isSavingQuantities, setIsSavingQuantities] = useState(false);
+
   const fetchStock = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -201,8 +205,46 @@ export default function BranchStockPage() {
     setSelectedSkus(new Set());
     if (success > 0) toast.success(`${success} item${success > 1 ? 's' : ''} registered successfully`);
     if (failed > 0) toast.error(`${failed} item${failed > 1 ? 's' : ''} failed to register`);
+    await fetchStock();
+    await fetchCatalog();
+    // Pre-populate editing quantities for newly registered items
+    const newQuantities: Record<string, number> = {};
+    toRegister.forEach(cItem => {
+      const inBranch = items.find(i => i.sku === cItem.sku);
+      if (inBranch) {
+        newQuantities[cItem.sku] = inBranch.quantity;
+      }
+    });
+    setEditingQuantities(prev => ({ ...prev, ...newQuantities }));
+  };
+
+  const handleSaveQuantities = async () => {
+    if (Object.keys(editingQuantities).length === 0) return;
+    setIsSavingQuantities(true);
+    let success = 0;
+    let failed = 0;
+    for (const [sku, newQty] of Object.entries(editingQuantities)) {
+      const inBranch = items.find(i => i.sku === sku);
+      if (!inBranch) continue;
+      const qtyChange = newQty - inBranch.quantity;
+      if (qtyChange === 0) continue;
+      try {
+        await storeAPI.adjustBranchStock({
+          item_sku: sku,
+          quantity_change: qtyChange,
+          adjustment_type: 'MANUAL_ADJUSTMENT',
+          notes: 'Bulk quantity adjustment from Stock Take List'
+        });
+        success++;
+      } catch {
+        failed++;
+      }
+    }
+    setIsSavingQuantities(false);
+    setEditingQuantities({});
+    if (success > 0) toast.success(`${success} item${success > 1 ? 's' : ''} updated`);
+    if (failed > 0) toast.error(`${failed} item${failed > 1 ? 's' : ''} failed to update`);
     fetchStock();
-    fetchCatalog();
   };
 
   const handleExport = async () => {
@@ -359,6 +401,24 @@ export default function BranchStockPage() {
                 </div>
               </div>
             )}
+            {activeTab === 'catalog' && Object.keys(editingQuantities).length > 0 && (
+              <div className="pt-4 border-t border-stone-50 flex items-center justify-between">
+                <p className="text-sm font-semibold text-stone-700">{Object.keys(editingQuantities).length} item{Object.keys(editingQuantities).length > 1 ? 's' : ''} pending quantity update</p>
+                <div className="flex gap-2">
+                  <IOSButton size="sm" variant="secondary" onClick={() => setEditingQuantities({})}>
+                    Discard Changes
+                  </IOSButton>
+                  <IOSButton
+                    size="sm"
+                    onClick={handleSaveQuantities}
+                    disabled={isSavingQuantities}
+                    leftIcon={<RefreshCw className={isSavingQuantities ? 'animate-spin' : 'h-3.5 w-3.5'} />}
+                  >
+                    {isSavingQuantities ? 'Saving...' : 'Save Quantities'}
+                  </IOSButton>
+                </div>
+              </div>
+            )}
           </IOSCard>
 
           {/* Table / Grid Contents */}
@@ -449,12 +509,13 @@ export default function BranchStockPage() {
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Stock Take List</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Category</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Status</th>
+                      <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest">Quantity</th>
                       <th className="p-4 font-bold text-stone-400 uppercase text-[10px] tracking-widest text-right px-6">Operation</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-50">
                     {catalog.length === 0 ? (
-                      <tr><td colSpan={5} className="p-20 text-center text-stone-400">No catalog items found. Try a different search.</td></tr>
+                      <tr><td colSpan={6} className="p-20 text-center text-stone-400">No catalog items found. Try a different search.</td></tr>
                     ) : (
                       catalog.map((cItem) => {
                         const inBranch = items.find(i => i.sku === cItem.sku);
@@ -490,11 +551,29 @@ export default function BranchStockPage() {
                                 ) : (
                                   <div className="flex items-center gap-1.5 text-blue-600 text-xs font-semibold">
                                     <Package className="h-3 w-3" />
-                                    <span>Registered ({inBranch.quantity} {inBranch.unit})</span>
+                                    <span>Registered</span>
                                   </div>
                                 )
                               ) : (
                                 <IOSBadge variant="light" color="secondary">Not Registered</IOSBadge>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              {inBranch && inBranch.source === 'catalog' ? (
+                                <Input
+                                  type="number"
+                                  className="w-24 h-8 text-xs bg-stone-50 border-stone-200"
+                                  placeholder="Qty"
+                                  value={editingQuantities[cItem.sku] ?? inBranch.quantity}
+                                  onChange={(e) => setEditingQuantities(prev => ({
+                                    ...prev,
+                                    [cItem.sku]: parseFloat(e.target.value) || 0
+                                  }))}
+                                />
+                              ) : inBranch ? (
+                                <span className="text-stone-400 text-xs">{inBranch.quantity} {inBranch.unit}</span>
+                              ) : (
+                                <span className="text-stone-300 text-xs">—</span>
                               )}
                             </td>
                             <td className="p-4 px-6 text-right">
