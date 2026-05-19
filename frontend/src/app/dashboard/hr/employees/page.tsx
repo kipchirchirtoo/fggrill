@@ -314,8 +314,8 @@ export default function HREmployeesPage() {
             last_name: member.last_name,
             email: member.email,
             national_id: member.national_id || '',
-            department: member.department || '',
-            position: (member as any).position || member.role || '',
+            department: (member.department || '').toLowerCase().replace(/[\s-]/g, '_'),
+            position: ((member as any).position || member.role || '').toLowerCase(),
             branch_id: member.branch_id?.toString() || '',
             phone_number: member.phone || (member as any).phone_number || '',
             status: member.status,
@@ -1338,7 +1338,7 @@ export default function HREmployeesPage() {
                                     className={`w-full p-2 border rounded-ios-lg ${formErrors.department ? 'border-red-500' : ''}`}
                                 >
                                     <option value="">Select department</option>
-                                    {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                    {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                                 </select>
                                 {formErrors.department && <p className="text-red-500 text-xs mt-1">Required</p>}
                             </div>

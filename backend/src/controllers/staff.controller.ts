@@ -627,8 +627,10 @@ export const updateStaffMember = async (
       archive_notes
     } = req.body;
 
-    const effectiveRole = role ?? position;
+    const rawRole = role ?? position;
+    const effectiveRole = rawRole ? rawRole.toLowerCase() : rawRole;
     const effectivePhone = phone_number ?? phone;
+    const normalizedDepartment = department ? department.toLowerCase().replace(/[\s-]/g, '_') : department;
 
     logger.debug('Update staff request:', { id: req.params.id, body: req.body });
     // console.log('DEBUG: Update staff request body:', JSON.stringify(req.body, null, 2));
@@ -854,7 +856,7 @@ export const updateStaffMember = async (
       if (last_name !== undefined) userUpdateData.last_name = last_name;
       if (effectivePhone !== undefined) userUpdateData.phone_number = effectivePhone;
       if (effectiveRole !== undefined) userUpdateData.role = effectiveRole;
-      if (department !== undefined) userUpdateData.department = department;
+      if (normalizedDepartment !== undefined) userUpdateData.department = normalizedDepartment;
       if (email !== undefined) userUpdateData.email = email;
       if (branch_id !== undefined) userUpdateData.branch_id = parseInt(branch_id);
 
@@ -905,7 +907,7 @@ export const updateStaffMember = async (
     if (status !== undefined) staffUpdateData.status = status;
     if (start_date) staffUpdateData.start_date = start_date;
     if (national_id !== undefined) staffUpdateData.national_id = national_id;
-    if (department !== undefined) staffUpdateData.department = department;
+    if (normalizedDepartment !== undefined) staffUpdateData.department = normalizedDepartment;
     if (effectiveRole !== undefined) staffUpdateData.role = effectiveRole;
     if (branch_id !== undefined) staffUpdateData.branch_id = parseInt(branch_id);
     // Note: email and phone_number are in users table, not staff_profiles
@@ -965,12 +967,12 @@ export const updateStaffMember = async (
         created_by: sanitizeUUID(req.user?.id)
       });
     }
-    if (department !== undefined && staff.department !== department) {
+    if (normalizedDepartment !== undefined && staff.department !== normalizedDepartment) {
       historyEntries.push({
         staff_id: req.params.id,
         change_type: 'department_transfer',
         old_value: staff.department,
-        new_value: department,
+        new_value: normalizedDepartment,
         created_by: sanitizeUUID(req.user?.id)
       });
     }

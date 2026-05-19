@@ -159,9 +159,9 @@ export default function AdminStaffPage() {
       last_name: member.last_name,
       email: member.email || '',
       national_id: (member as any).national_id || '',
-      role: member.role || (member as any).position || '',
+      role: (member.role || (member as any).position || '').toLowerCase(),
       branch_id: member.branch_id?.toString() || '',
-      department: member.department || '',
+      department: (member.department || '').toLowerCase().replace(/[\s-]/g, '_'),
       phone: (member as any).phone || (member as any).phone_number || '',
       status: member.status
     });
