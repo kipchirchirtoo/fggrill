@@ -103,15 +103,12 @@ export default function BranchStockPage() {
     }
   }, [activeTab, fetchStock, fetchCatalog]);
 
-  const dispatchItems = items.filter(i => i.source === 'dispatch');
-  const catalogItems = items.filter(i => i.source === 'catalog');
-
-  const filteredStock = dispatchItems.filter((i) =>
+  const filteredStock = items.filter((i) =>
     (i.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (i.sku || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const lowStockItems = dispatchItems.filter(i => i.quantity <= i.reorder_level);
+  const lowStockItems = items.filter(i => i.quantity <= i.reorder_level);
 
   const handleRequestStock = async (item: StockItem) => {
     try {
