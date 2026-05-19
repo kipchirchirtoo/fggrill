@@ -93,21 +93,61 @@ export const getRoles = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Get roles from UserRole enum
+    // All roles matching the UserRole enum
     const roles = [
-      { value: 'super_admin', label: 'Super Admin', description: 'Full system access' },
-      { value: 'general_manager', label: 'General Manager', description: 'Multi-branch management' },
-      { value: 'branch_manager', label: 'Branch Manager', description: 'Single branch management' },
-      { value: 'receptionist', label: 'Receptionist', description: 'Front desk operations' },
-      { value: 'housekeeping', label: 'Housekeeping', description: 'Room cleaning and maintenance' },
-      { value: 'restaurant', label: 'Restaurant Staff', description: 'Food & beverage service' },
-      { value: 'maintenance', label: 'Maintenance', description: 'Facility maintenance' },
-      { value: 'accountant', label: 'Accountant', description: 'Financial management' },
-      { value: 'auditor', label: 'Auditor', description: 'Financial auditing' },
-      { value: 'central_storekeeper', label: 'Central Storekeeper', description: 'Central inventory management' },
-      { value: 'branch_storekeeper', label: 'Branch Storekeeper', description: 'Branch inventory management' },
-      { value: 'driver', label: 'Driver', description: 'Delivery and transportation' },
-      { value: 'employee', label: 'Employee', description: 'General employee access' }
+      // Admin / Executive
+      { value: 'super_admin',                    label: 'Super Admin',                    description: 'Full system access' },
+      { value: 'director',                       label: 'Director',                       description: 'Executive director access' },
+      { value: 'general_manager',                label: 'General Manager',                description: 'Multi-branch management' },
+      { value: 'branch_manager',                 label: 'Branch Manager',                 description: 'Single branch management' },
+      // Operations
+      { value: 'branch_operations_manager',      label: 'Branch Operations Manager',      description: 'Branch-level operations' },
+      { value: 'central_operations_manager',     label: 'Central Operations Manager',     description: 'Central operations management' },
+      { value: 'facilities_manager',             label: 'Facilities Manager',             description: 'Facilities management' },
+      { value: 'hr_manager',                     label: 'HR Manager',                     description: 'Human resources management' },
+      // Finance
+      { value: 'accountant',                     label: 'Accountant',                     description: 'Financial management' },
+      { value: 'branch_accountant',              label: 'Branch Accountant',              description: 'Branch financial management' },
+      { value: 'auditor',                        label: 'Auditor',                        description: 'Financial auditing' },
+      { value: 'cashier',                        label: 'Cashier',                        description: 'Cash handling and POS' },
+      { value: 'procurement',                    label: 'Procurement',                    description: 'Purchasing and procurement' },
+      { value: 'purchasing_manager',             label: 'Purchasing Manager',             description: 'Procurement management' },
+      // Reception
+      { value: 'receptionist',                   label: 'Receptionist',                   description: 'Front desk operations' },
+      // Restaurant & Bar
+      { value: 'restaurant',                     label: 'Restaurant Staff',               description: 'Food & beverage service' },
+      { value: 'pos_kitchen',                    label: 'POS / Kitchen',                  description: 'POS and kitchen combined' },
+      { value: 'waiter',                         label: 'Waiter',                         description: 'Table service' },
+      { value: 'waitress',                       label: 'Waitress',                       description: 'Table service' },
+      { value: 'head_waiter',                    label: 'Head Waiter',                    description: 'Lead table service' },
+      { value: 'bartender',                      label: 'Bartender',                      description: 'Bar service' },
+      { value: 'barman',                         label: 'Barman',                         description: 'Bar service' },
+      { value: 'barmaid',                        label: 'Barmaid',                        description: 'Bar service' },
+      { value: 'bar_manager',                    label: 'Bar Manager',                    description: 'Bar management' },
+      // Kitchen
+      { value: 'kitchen',                        label: 'Kitchen Staff',                  description: 'Kitchen operations' },
+      { value: 'kitchen_operations',             label: 'Kitchen Operations',             description: 'Kitchen operations management' },
+      { value: 'chef',                           label: 'Chef',                           description: 'Cooking and food prep' },
+      { value: 'head_chef',                      label: 'Head Chef',                      description: 'Lead chef' },
+      { value: 'cook',                           label: 'Cook',                           description: 'Food preparation' },
+      // Housekeeping
+      { value: 'housekeeping',                   label: 'Housekeeping',                   description: 'Room cleaning and laundry' },
+      { value: 'housekeeping_supervisor',        label: 'Housekeeping Supervisor',        description: 'Housekeeping team lead' },
+      // Maintenance
+      { value: 'maintenance',                    label: 'Maintenance',                    description: 'Facility maintenance' },
+      // Stores
+      { value: 'central_storekeeper',            label: 'Central Storekeeper',            description: 'Central inventory management' },
+      { value: 'branch_storekeeper',             label: 'Branch Storekeeper',             description: 'Branch inventory management' },
+      { value: 'storekeeper',                    label: 'Storekeeper',                    description: 'General storekeeping' },
+      // General
+      { value: 'employee',                       label: 'Employee',                       description: 'General employee access' },
+      { value: 'driver',                         label: 'Driver',                         description: 'Delivery and transportation' },
+      { value: 'guest',                          label: 'Guest',                          description: 'Guest portal access' },
+      // Kyogong branch cashiers
+      { value: 'kyogong_spa_cashier',            label: 'Kyogong Spa Cashier',            description: 'Kyogong spa POS' },
+      { value: 'kyogong_executive_bar_cashier',  label: 'Kyogong Executive Bar Cashier',  description: 'Kyogong executive bar POS' },
+      { value: 'kyogong_sports_bar_cashier',     label: 'Kyogong Sports Bar Cashier',     description: 'Kyogong sports bar POS' },
+      { value: 'kyogong_reception_cashier',      label: 'Kyogong Reception Cashier',      description: 'Kyogong reception POS' },
     ];
 
     res.status(200).json({

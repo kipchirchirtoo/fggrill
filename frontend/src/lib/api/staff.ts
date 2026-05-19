@@ -168,7 +168,7 @@ export const staffAPI = {
   getAttendanceSummary: (staffId?: string | number) => attendanceAPI.getSummary(staffId),
   getAttendanceReports: (params?: any) => fetchAPI<any[]>(`/staff/attendance/reports${buildQuery(params)}`),
   approveAttendance: (id: any) => fetchAPI<void>(`/staff/attendance/${id}/approve`, { method: 'PUT' }),
-  getRoles: () => fetchAPI<any[]>('/system/roles'),
+  getRoles: () => fetchAPI<any[]>('/staff/roles'),
   updateLeaveRequest: (id: any, data: any) => fetchAPI<any>(`/staff/leave/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   simplePayroll: simplePayrollAPI,
 
