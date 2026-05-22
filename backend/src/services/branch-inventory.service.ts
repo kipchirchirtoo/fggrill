@@ -149,7 +149,8 @@ export async function updateBranchStock(
       branch_id: branchId,
       item_sku: itemSku,
       quantity: Math.max(0, newStock),
-      reorder_level: reorderLevel !== undefined ? reorderLevel : undefined,
+      reorder_level: reorderLevel !== undefined ? reorderLevel : 10,
+      max_stock_level: 100,
       last_stock_in: quantityChange > 0 ? new Date().toISOString() : undefined,
       last_stock_out: quantityChange < 0 ? new Date().toISOString() : undefined,
       updated_at: new Date().toISOString()
@@ -807,6 +808,23 @@ export async function dispatchItems(
           dispatchId,
           dispatch.dispatch_number
         );
+
+        // Also deduct from simple_items.quantity (the central store master stock display)
+        const { data: simpleItem } = await supabase
+          .from('simple_items')
+          .select('quantity')
+          .eq('sku', item.item_sku)
+          .maybeSingle();
+        if (simpleItem !== null) {
+          const currentQty = simpleItem?.quantity ?? 0;
+          await supabase
+            .from('simple_items')
+            .update({
+              quantity: Math.max(0, currentQty - item.dispatched_quantity),
+              last_updated: new Date().toISOString()
+            })
+            .eq('sku', item.item_sku);
+        }
 
         // Add to in-transit
         const { error: transitError } = await supabase
