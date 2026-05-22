@@ -759,22 +759,27 @@ export async function dispatchItems(
       }
 
       if (!currentStock) {
-        // Item has never been stocked in the central warehouse
-        stockErrors.push(
-          `[${item.item_sku}] Item is not registered in the central warehouse stock. ` +
-          `Add it to master inventory before dispatching.`
-        );
+        // Item not in branch_stock — check if it exists in master catalog (simple_items)
+        const { data: catalogItem } = await supabase
+          .from('simple_items')
+          .select('sku')
+          .eq('sku', item.item_sku)
+          .maybeSingle();
+
+        if (!catalogItem) {
+          // Truly unknown item — block dispatch
+          stockErrors.push(
+            `[${item.item_sku}] Item is not in the master catalog. ` +
+            `Add it to master inventory before dispatching.`
+          );
+        }
+        // If it IS in the catalog, allow dispatch — updateBranchStock will auto-register it
         continue;
       }
 
       const available = currentStock.quantity ?? 0;
 
-      if (available === 0) {
-        stockErrors.push(
-          `[${item.item_sku}] Zero stock in central warehouse. ` +
-          `Cannot dispatch ${item.dispatched_quantity} unit(s).`
-        );
-      } else if (available < item.dispatched_quantity) {
+      if (available < item.dispatched_quantity) {
         stockErrors.push(
           `[${item.item_sku}] Insufficient stock. ` +
           `Available: ${available}, Required: ${item.dispatched_quantity}.`
