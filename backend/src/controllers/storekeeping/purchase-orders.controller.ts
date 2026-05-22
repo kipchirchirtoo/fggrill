@@ -60,7 +60,7 @@ export const getPurchaseOrders = async (
         const skus = [...new Set(allItems?.map(i => i.item_id) || [])];
         const { data: itemDetails, error: detailsError } = await supabase
             .from('simple_items')
-            .select('sku, description, unit_of_measure')
+            .select('sku, item_name, description, unit_of_measure')
             .in('sku', skus);
 
         if (detailsError) throw detailsError;
@@ -71,7 +71,7 @@ export const getPurchaseOrders = async (
                 .filter(i => i.po_id === order.id)
                 .map(i => {
                     const detail = (itemDetails || []).find(d => d.sku === i.item_id);
-                    const resolvedName = detail?.description || (detail as any)?.name || i.item_id;
+                    const resolvedName = (detail as any)?.item_name || detail?.description || i.item_id;
                     return {
                         ...i,
                         item: detail ? {
@@ -134,13 +134,13 @@ export const getPurchaseOrder = async (
         const skus = items?.map(i => i.item_id) || [];
         const { data: itemDetails } = await supabase
             .from('simple_items')
-            .select('sku, description, unit_of_measure, category')
+            .select('sku, item_name, description, unit_of_measure, category')
             .in('sku', skus);
 
         // Merge
         const enrichedItems = (items || []).map(item => {
             const detail = itemDetails?.find(d => d.sku === item.item_id);
-            const resolvedName = detail?.description || (detail as any)?.name || item.item_id;
+            const resolvedName = (detail as any)?.item_name || detail?.description || item.item_id;
             return {
                 ...item,
                 item_name: resolvedName,

@@ -540,7 +540,7 @@ function PurchaseOrdersContent() {
                     const selectedItem = items.find(it => (it.sku || it.id) === item.item_id);
                     const filteredItems = items.filter(storeItem => 
                       !itemSearchTerm || 
-                      ((storeItem as any).description || storeItem.name || '')?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
+                      ((storeItem as any).item_name || (storeItem as any).description || storeItem.name || '')?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
                       storeItem.sku?.toLowerCase().includes(itemSearchTerm.toLowerCase())
                     );
                     
@@ -585,7 +585,7 @@ function PurchaseOrdersContent() {
                                       <div className="flex items-center justify-between">
                                         <div>
                                           <p className="font-semibold text-gray-900 text-sm">
-                                            {(storeItem as any).description || storeItem.name}
+                                            {(storeItem as any).item_name || (storeItem as any).description || storeItem.name}
                                           </p>
                                           <p className="text-xs text-gray-500 mt-0.5">
                                             SKU: {storeItem.sku}
@@ -616,7 +616,7 @@ function PurchaseOrdersContent() {
                                       <span className="text-xs font-semibold text-green-700 uppercase">Selected Item</span>
                                     </div>
                                     <p className="font-bold text-gray-900 text-sm">
-                                      {(selectedItem as any).description || selectedItem.name}
+                                      {(selectedItem as any).item_name || (selectedItem as any).description || selectedItem.name}
                                     </p>
                                     <p className="text-xs text-gray-600 mt-1">
                                       SKU: <span className="font-mono font-semibold">{selectedItem.sku}</span>

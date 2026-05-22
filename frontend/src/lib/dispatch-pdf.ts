@@ -142,12 +142,15 @@ export const generateDispatchPDF = async (dispatch: DispatchData) => {
         }
     }
 
+    let grandTotal = 0;
+
     const tableData = (items || []).map((item: any) => {
         const qty = item.dispatched_quantity || item.quantity || item.approved_quantity || 0;
         const unit = item.item?.unit_of_measure || item.unit || item.unit_of_measure || 'pcs';
         const itemName = item.item?.item_name || item.item_name || item.name || item.item_sku || 'Item';
         const cost = item.item?.cost_price || item.cost_price || item.price || 0;
         const total = qty * cost;
+        grandTotal += total;
 
         return [
             itemName,
@@ -163,9 +166,22 @@ export const generateDispatchPDF = async (dispatch: DispatchData) => {
         startY: cursorY,
         head: [['ITEMS', 'QTY (Pkg)', 'QTY (Actual)', 'UNIT', 'COST', 'TOTAL']],
         body: tableData,
+        foot: [['', '', '', '', 'GRAND TOTAL', `KES ${grandTotal.toLocaleString()}`]],
+        showFoot: 'lastPage',
         theme: 'striped',
         headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 9 },
         bodyStyles: { fontSize: 9 },
+        footStyles: {
+            fillColor: [44, 62, 80],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 10,
+            halign: 'right'
+        },
+        columnStyles: {
+            4: { halign: 'right' },
+            5: { halign: 'right' }
+        },
         margin: { left: margin, right: margin }
     });
 

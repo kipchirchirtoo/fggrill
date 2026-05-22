@@ -269,6 +269,16 @@ export const getSuppliers = async (req: Request, res: Response) => {
         // Default: see own branch OR global
         query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
       }
+    } else {
+      // Central users: default to central/global suppliers (branch_id IS NULL)
+      // Allow explicit branch lookup only when a specific branchId query param is provided
+      const requestedBranch = req.query.branchId || req.query.branch_id;
+      if (scope === 'branch' && requestedBranch) {
+        query = query.eq('branch_id', Number(requestedBranch));
+      } else {
+        // Default and 'global' scope: only central suppliers
+        query = query.is('branch_id', null);
+      }
     }
 
     // 2. Apply Status Filter
