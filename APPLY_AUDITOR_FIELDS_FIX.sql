@@ -6,14 +6,16 @@ ALTER TABLE staff_advances
   ADD COLUMN IF NOT EXISTS accountant_confirmed_at TIMESTAMP WITH TIME ZONE,
   ADD COLUMN IF NOT EXISTS accountant_id UUID REFERENCES users(id),
   ADD COLUMN IF NOT EXISTS auditor_confirmed_at TIMESTAMP WITH TIME ZONE,
-  ADD COLUMN IF NOT EXISTS auditor_id UUID REFERENCES users(id);
+  ADD COLUMN IF NOT EXISTS auditor_id UUID REFERENCES users(id),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE;
 
 -- Add auditor fields to staff_loans
 ALTER TABLE staff_loans 
   ADD COLUMN IF NOT EXISTS accountant_confirmed_at TIMESTAMP WITH TIME ZONE,
   ADD COLUMN IF NOT EXISTS accountant_id UUID REFERENCES users(id),
   ADD COLUMN IF NOT EXISTS auditor_confirmed_at TIMESTAMP WITH TIME ZONE,
-  ADD COLUMN IF NOT EXISTS auditor_id UUID REFERENCES users(id);
+  ADD COLUMN IF NOT EXISTS auditor_id UUID REFERENCES users(id),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE;
 
 -- Update status constraints to include confirmation states
 -- For staff_advances

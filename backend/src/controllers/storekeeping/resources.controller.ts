@@ -1200,15 +1200,37 @@ export const generateWorksheet = async (req: Request, res: Response) => {
       }
       if (branch) branchName = branch.name;
 
-      let query = supabase.from('store_items').select('*').eq('is_active', true);
-      if (category && category !== 'ALL') query = query.eq('category', category as string);
+      const { data: branchStock, error: stockError } = await supabase
+        .from('branch_stock')
+        .select('*')
+        .eq('branch_id', bId)
+        .order('quantity', { ascending: true });
+      if (stockError) throw stockError;
 
-      const { data: activeItems } = await query;
-      items = (activeItems || []).map(ai => ({
-        ...ai,
-        item_sku: ai.item_code,
-        system_quantity: ai.current_stock || 0
-      }));
+      const skus = (branchStock || []).map((s: any) => s.item_sku);
+      let itemDetails: any[] = [];
+      if (skus.length > 0) {
+        const { data: simpleItems } = await supabase
+          .from('simple_items')
+          .select('sku, item_name, category, unit_of_measure')
+          .in('sku', skus);
+        itemDetails = simpleItems || [];
+      }
+
+      let filteredStock = branchStock || [];
+      if (category && category !== 'ALL') {
+        const catSkus = new Set(itemDetails.filter((i: any) => i.category === category).map((i: any) => i.sku));
+        filteredStock = filteredStock.filter((s: any) => catSkus.has(s.item_sku));
+      }
+
+      items = filteredStock.map((s: any) => {
+        const inv = itemDetails.find((i: any) => i.sku === s.item_sku);
+        return {
+          name: inv?.item_name || s.item_sku,
+          item_sku: s.item_sku,
+          system_quantity: s.quantity || 0
+        };
+      });
       title = `Inventory Count Worksheet${category ? ` - ${category}` : ''}`;
     }
 
