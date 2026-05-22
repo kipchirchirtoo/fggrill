@@ -20,7 +20,7 @@ export const getItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { search, ordering, category } = req.query;
+    const { search, ordering, category, store_type } = req.query;
 
     let query = supabase
       .from('simple_items')
@@ -30,6 +30,11 @@ export const getItems = async (
     // Filter by category if provided
     if (category) {
       query = query.eq('category', category);
+    }
+
+    // Filter by store_type if provided
+    if (store_type) {
+      query = query.eq('store_type', store_type);
     }
 
     if (search) {
@@ -57,10 +62,16 @@ export const getItems = async (
     const to = from + limit - 1;
 
     // Get stats for the cards - fetch all items to calculate accurate stats
-    const { data: allItems, error: statsError } = await supabase
+    let statsQuery = supabase
       .from('simple_items')
       .select('sku, quantity, reorder_level')
       .eq('is_active', true);
+
+    if (store_type) {
+      statsQuery = statsQuery.eq('store_type', store_type);
+    }
+
+    const { data: allItems, error: statsError } = await statsQuery;
 
     if (statsError) throw statsError;
 
@@ -193,13 +204,14 @@ export const createItem = async (
     let {
       sku, description, retail_price, quantity,
       barcode, item_name, category, unit_of_measure,
-      cost_price, supplier, reorder_level, image_url
+      cost_price, supplier, reorder_level, image_url,
+      store_type
     } = req.body;
 
     // =====================================================
     // SMART CATEGORIZATION & UNIT SUGGESTIONS
     // =====================================================
-    if (item_name && (!category || !unit_of_measure)) {
+    if (item_name && (!category || !unit_of_measure || !store_type)) {
       const name = item_name.toLowerCase();
 
       const foodKeywords = ['flour', 'sugar', 'milk', 'rice', 'salt', 'oil', 'beef', 'chicken', 'fish', 'potato', 'tomato', 'onion', 'bread', 'butter', 'egg', 'spice', 'garlic', 'ginger'];
@@ -223,6 +235,19 @@ export const createItem = async (
         else if (packetKeywords.some(k => name.includes(k))) unit_of_measure = 'packets';
         else if (bottleKeywords.some(k => name.includes(k))) unit_of_measure = 'bottles';
       }
+
+      if (!store_type) {
+        const lowerCat = (category || '').toLowerCase();
+        const barKeywords = ['wine', 'spirit', 'beer', 'whisky', 'whiskey', 'vodka', 'soda', 'liquor', 'rum', 'cognac', 'gin', 'brandy', 'tequila', 'champagne', 'cider', 'juice', 'water', 'tonic', 'liqueur', 'syrup', 'beverage', 'drink', 'coke', 'fanta', 'sprite', 'krest', 'stoney', 'novida', 'dasani', 'savanna', 'guinness', 'tusker', 'pilsner', 'smirnoff', 'gilbeys', 'jameson', 'hennessy'];
+        const isBeverage = lowerCat === 'beverage' || lowerCat === 'bar' || lowerCat === 'drinks' || lowerCat === 'spirits' || lowerCat === 'wines' || lowerCat === 'bar stock-alcoholic';
+        const isBarKeyword = barKeywords.some(kw => name.includes(kw));
+        store_type = (isBeverage || isBarKeyword) ? 'bar_store' : 'foodstuffs';
+      }
+    }
+
+    // Default store_type fallback
+    if (!store_type) {
+      store_type = 'foodstuffs';
     }
 
     // =====================================================
@@ -294,6 +319,7 @@ export const createItem = async (
             supplier: supplier || existingItem.supplier,
             reorder_level: reorder_level || existingItem.reorder_level,
             image_url: image_url || existingItem.image_url,
+            store_type: store_type || existingItem.store_type || 'foodstuffs',
             is_active: true,
             is_auto_sku: isAutoSku,
             last_updated: new Date().toISOString()
@@ -367,6 +393,7 @@ export const createItem = async (
         supplier,
         reorder_level,
         image_url,
+        store_type: store_type || 'foodstuffs',
         is_active: true,
         is_auto_sku: isAutoSku,
         last_updated: new Date().toISOString()
@@ -737,6 +764,64 @@ export const getStockHistory = async (
     res.status(200).json({
       success: true,
       data: data || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get central store inventory valuation split by store_type
+// @route   GET /api/store/valuation
+// @access  Private
+export const getCentralValuation = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data: items, error } = await supabase
+      .from('simple_items')
+      .select('sku, quantity, cost_price, store_type')
+      .eq('is_active', true);
+
+    if (error) throw error;
+
+    const summary = {
+      foodstuffs: {
+        item_count: 0,
+        total_quantity: 0,
+        total_value: 0
+      },
+      bar_store: {
+        item_count: 0,
+        total_quantity: 0,
+        total_value: 0
+      },
+      grand_total: {
+        item_count: 0,
+        total_quantity: 0,
+        total_value: 0
+      }
+    };
+
+    (items || []).forEach(item => {
+      const type = item.store_type === 'bar_store' ? 'bar_store' : 'foodstuffs';
+      const qty = Number(item.quantity || 0);
+      const cost = Number(item.cost_price || 0);
+      const val = qty * cost;
+
+      summary[type].item_count += 1;
+      summary[type].total_quantity += qty;
+      summary[type].total_value += val;
+
+      summary.grand_total.item_count += 1;
+      summary.grand_total.total_quantity += qty;
+      summary.grand_total.total_value += val;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: summary
     });
   } catch (error) {
     next(error);

@@ -822,7 +822,8 @@ export const getDispatchHistory = async (
     }
 
     const status = req.query.status as string;
-    const data = await BranchInventoryService.getDispatchHistory(central.id, status);
+    const store_type = req.query.store_type as string;
+    const data = await BranchInventoryService.getDispatchHistory(central.id, status, store_type);
 
     if (data?.length > 0) {
       // Debug logging for PDF generation issues

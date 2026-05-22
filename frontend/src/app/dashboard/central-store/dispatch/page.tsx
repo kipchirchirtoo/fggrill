@@ -46,6 +46,8 @@ export default function DispatchPage() {
     const [filterDate, setFilterDate] = useState('');
     const [filterBranch, setFilterBranch] = useState('');
 
+    const [dispatchStoreTypeFilter, setDispatchStoreTypeFilter] = useState<'all' | 'foodstuffs' | 'bar_store'>('all');
+
     // Map our UI tab to actual DB status (DELIVERED tab shows CONFIRMED + DELIVERED + DISPUTED)
     const getApiStatus = (tab: string) => {
         if (tab === 'DELIVERED') return 'CONFIRMED';
@@ -56,8 +58,9 @@ export default function DispatchPage() {
         setIsLoading(true);
         try {
             const apiStatus = getApiStatus(statusTab);
+            const storeTypeParam = dispatchStoreTypeFilter !== 'all' ? dispatchStoreTypeFilter : undefined;
             const [readyRes, vehiclesRes, driversRes] = await Promise.all([
-                storeAPI.getDispatchHistory(apiStatus),
+                storeAPI.getDispatchHistory(apiStatus, storeTypeParam),
                 storeAPI.getVehicles(),
                 storeAPI.getDrivers()
             ]);
@@ -67,8 +70,8 @@ export default function DispatchPage() {
                 // For DELIVERED tab, also include DELIVERED and DISPUTED statuses
                 if (statusTab === 'DELIVERED') {
                     const [deliveredRes, disputedRes] = await Promise.all([
-                        storeAPI.getDispatchHistory('DELIVERED'),
-                        storeAPI.getDispatchHistory('DISPUTED'),
+                        storeAPI.getDispatchHistory('DELIVERED', storeTypeParam),
+                        storeAPI.getDispatchHistory('DISPUTED', storeTypeParam),
                     ]);
                     if (deliveredRes.success) data = [...data, ...(deliveredRes.data || [])];
                     if (disputedRes.success) data = [...data, ...(disputedRes.data || [])];
@@ -82,7 +85,7 @@ export default function DispatchPage() {
             if (driversRes.success) setDrivers(driversRes.data || []);
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
-    }, [statusTab]);
+    }, [statusTab, dispatchStoreTypeFilter]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -223,6 +226,31 @@ export default function DispatchPage() {
                         </div>
                     </div>
 
+                    {/* Store Type Filter Tabs */}
+                    <div className="bg-white p-3 rounded-xl border border-stone-100 shadow-sm flex items-center justify-between gap-4">
+                        <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Store Classification:</span>
+                        <div className="bg-stone-100 p-1 rounded-lg flex gap-1">
+                            <button
+                                onClick={() => setDispatchStoreTypeFilter('all')}
+                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${dispatchStoreTypeFilter === 'all' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                            >
+                                All Stores
+                            </button>
+                            <button
+                                onClick={() => setDispatchStoreTypeFilter('foodstuffs')}
+                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${dispatchStoreTypeFilter === 'foodstuffs' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                            >
+                                🥦 Foodstuffs
+                            </button>
+                            <button
+                                onClick={() => setDispatchStoreTypeFilter('bar_store')}
+                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${dispatchStoreTypeFilter === 'bar_store' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                            >
+                                🍺 Bar Store
+                            </button>
+                        </div>
+                    </div>
+
                     {/* DELIVERED tab filters */}
                     {statusTab === 'DELIVERED' && (
                         <div className="flex flex-col sm:flex-row gap-3 p-4 bg-white border border-stone-100 rounded-xl shadow-sm">
@@ -323,12 +351,22 @@ export default function DispatchPage() {
                                     <div className="p-6 flex-1 min-w-0">
                                         <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-4">Shipment Contents</p>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                            {(dispatch.items || []).slice(0, 6).map((item, index) => (
-                                                <div key={item.item_sku ?? `item-${index}`} className="flex items-center justify-between p-2.5 rounded-md border border-stone-100 bg-stone-50/30">
-                                                    <span className="text-[12px] font-medium text-stone-800 truncate pr-2">{item.item_name}</span>
-                                                    <span className="text-[11px] font-bold text-stone-400 shrink-0">{item.quantity} {item.unit}</span>
-                                                </div>
-                                            ))}
+                                            {(dispatch.items || []).slice(0, 6).map((item, index) => {
+                                                const storeType = (item as any).store_type;
+                                                return (
+                                                    <div key={item.item_sku ?? `item-${index}`} className="flex flex-col justify-between p-2.5 rounded-md border border-stone-100 bg-stone-50/30 gap-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-[12px] font-medium text-stone-800 truncate pr-2">{item.item_name}</span>
+                                                            <span className="text-[11px] font-bold text-stone-400 shrink-0 text-right">{item.quantity} {item.unit}</span>
+                                                        </div>
+                                                        {storeType && (
+                                                            <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1 py-0.5 rounded self-start ${storeType === 'bar_store' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
+                                                                {storeType === 'bar_store' ? '🍺 Bar' : '🥦 Foodstuffs'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                             {(dispatch.items?.length || 0) > 6 && (
                                                 <div className="p-2.5 text-[11px] text-stone-400 italic">
                                                     + {(dispatch.items?.length || 0) - 6} more items...

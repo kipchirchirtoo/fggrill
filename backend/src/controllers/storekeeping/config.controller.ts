@@ -118,7 +118,7 @@ export const exportDataExcel = async (req: Request, res: Response, next: NextFun
         // Original logic: Item.objects.filter(is_active=True)
         const { data: items } = await supabase
             .from('simple_items')
-            .select('sku, description, retail_price, quantity')
+            .select('sku, description, retail_price, quantity, barcode, item_name, category, cost_price, supplier, store_type')
             .eq('is_active', true);
 
         // 2. Fetch Shop Stock (ShopItems)
@@ -156,21 +156,65 @@ export const exportDataExcel = async (req: Request, res: Response, next: NextFun
         const wb = XLSX.utils.book_new();
 
         // Warehouse Stock Sheet
-        const wsItemsData = [['SKU', 'Barcode', 'Name', 'Description', 'Category', 'Cost Price', 'Retail Price', 'Quantity', 'Supplier']];
+        const wsItemsData = [['SKU', 'Barcode', 'Name', 'Description', 'Category', 'Store Type', 'Cost Price', 'Retail Price', 'Quantity', 'Valuation (KES)']];
         if (items) {
-            items.forEach((item: any) => {
+            const foodstuffs = items.filter((i: any) => i.store_type !== 'bar_store');
+            const barStore = items.filter((i: any) => i.store_type === 'bar_store');
+
+            // 1. Foodstuffs Section
+            wsItemsData.push(['🥦 FOODSTUFFS STORE SECTION']);
+            let foodQty = 0;
+            let foodVal = 0;
+            foodstuffs.forEach((item: any) => {
+                const qty = item.quantity || 0;
+                const cost = item.cost_price || 0;
+                const val = qty * cost;
+                foodQty += qty;
+                foodVal += val;
                 wsItemsData.push([
                     item.sku,
                     item.barcode || '',
                     item.item_name || '',
-                    item.description,
+                    item.description || '',
                     item.category || '',
-                    item.cost_price || 0,
-                    item.retail_price,
-                    item.quantity,
-                    item.supplier || ''
+                    'Foodstuffs',
+                    cost,
+                    item.retail_price || 0,
+                    qty,
+                    val
                 ]);
             });
+            wsItemsData.push(['FOODSTUFFS SUBTOTAL', '', '', '', '', '', '', '', foodQty, foodVal]);
+            wsItemsData.push([]); // blank spacer row
+
+            // 2. Bar Store Section
+            wsItemsData.push(['🍺 BAR STORE SECTION']);
+            let barQty = 0;
+            let barVal = 0;
+            barStore.forEach((item: any) => {
+                const qty = item.quantity || 0;
+                const cost = item.cost_price || 0;
+                const val = qty * cost;
+                barQty += qty;
+                barVal += val;
+                wsItemsData.push([
+                    item.sku,
+                    item.barcode || '',
+                    item.item_name || '',
+                    item.description || '',
+                    item.category || '',
+                    'Bar Store',
+                    cost,
+                    item.retail_price || 0,
+                    qty,
+                    val
+                ]);
+            });
+            wsItemsData.push(['BAR STORE SUBTOTAL', '', '', '', '', '', '', '', barQty, barVal]);
+            wsItemsData.push([]); // blank spacer row
+
+            // 3. Grand Totals
+            wsItemsData.push(['GRAND TOTAL', '', '', '', '', '', '', '', foodQty + barQty, foodVal + barVal]);
         }
         const wsItems = XLSX.utils.aoa_to_sheet(wsItemsData);
         XLSX.utils.book_append_sheet(wb, wsItems, 'Warehouse Stock');

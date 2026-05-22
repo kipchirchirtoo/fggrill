@@ -9,7 +9,7 @@ import { Apple, RefreshCw, Search, AlertTriangle, Package } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatNumber } from '@/lib/utils';
 
-interface Item { id: string; sku: string; item_name: string; category: string; quantity: number; reorder_level: number; unit_of_measure: string; cost_price: number; }
+interface Item { id: string; sku: string; item_name?: string; category: string; quantity: number; reorder_level: number; unit_of_measure: string; cost_price: number; }
 
 export default function FoodstuffsPage() {
     const [items, setItems] = useState<Item[]>([]);
@@ -19,8 +19,8 @@ export default function FoodstuffsPage() {
     const fetchItems = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await storeAPI.getItems({ category: 'food' });
-            if (response.success) setItems(response.data || []);
+            const response = await storeAPI.getItems({ store_type: 'foodstuffs', limit: 1000 });
+            if (response.success) setItems((response.data || []) as any);
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
     }, []);

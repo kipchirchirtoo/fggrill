@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { IOSBadge } from '@/components/ui/ios-badge';
 import { Input } from '@/components/ui/input';
 import { storeAPI, procurementAPI, suppliersAPI, InventoryItem } from '@/lib/api';
-import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight, ShoppingCart, ListChecks, FileText } from 'lucide-react';
+import { Package, Plus, RefreshCw, Search, Trash2, Edit, AlertTriangle, ChevronRight, ShoppingCart, ListChecks, FileText, X } from 'lucide-react';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,11 +23,25 @@ export default function InventoryPage() {
   const [isEdit, setIsEdit] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '' });
+  const [formData, setFormData] = useState({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '', store_type: 'foodstuffs' });
   const [globalStats, setGlobalStats] = useState({ total: 0, inStock: 0, lowStock: 0, outOfStock: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   
+  // Tab switcher filter state for Foods vs Bar Store
+  const [storeTypeFilter, setStoreTypeFilter] = useState<'all' | 'foodstuffs' | 'bar_store'>('all');
+  
+  // Split valuation state
+  const [valuationData, setValuationData] = useState<any>({
+    foodstuffs: { item_count: 0, total_quantity: 0, total_value: 0 },
+    bar_store: { item_count: 0, total_quantity: 0, total_value: 0 },
+    grand_total: { item_count: 0, total_quantity: 0, total_value: 0 }
+  });
+
+  // Bulk reclassify state
+  const [selectedItemSkus, setSelectedItemSkus] = useState<Set<string>>(new Set());
+  const [isBulkReclassifying, setIsBulkReclassifying] = useState(false);
+
   // Procurement Planner States
   const [viewMode, setViewMode] = useState<'inventory' | 'planner'>('inventory');
   const [plannedItems, setPlannedItems] = useState<Set<string>>(new Set());
@@ -35,13 +49,25 @@ export default function InventoryPage() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
 
+  const fetchValuation = useCallback(async () => {
+    try {
+      const res = await storeAPI.getCentralValuation();
+      if (res.success) {
+        setValuationData(res.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch split valuation data:', e);
+    }
+  }, []);
+
   const fetchItems = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await storeAPI.getItems({ 
         page: currentPage, 
         limit: 50,
-        search: searchQuery 
+        search: searchQuery,
+        ...(storeTypeFilter !== 'all' ? { store_type: storeTypeFilter } : {})
       });
       
       if (response.success) {
@@ -63,9 +89,38 @@ export default function InventoryPage() {
       toast.error(error.message || 'Failed to fetch inventory items');
     }
     finally { setIsLoading(false); }
-  }, [currentPage, searchQuery]);
+  }, [currentPage, searchQuery, storeTypeFilter]);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  useEffect(() => { 
+    fetchItems();
+    fetchValuation();
+  }, [fetchItems, fetchValuation]);
+
+  const handleBulkReclassify = async (targetStoreType: 'foodstuffs' | 'bar_store') => {
+    if (selectedItemSkus.size === 0) return;
+    setIsBulkReclassifying(true);
+    toast.loading(`Reclassifying ${selectedItemSkus.size} items...`);
+    try {
+      let successCount = 0;
+      for (const sku of selectedItemSkus) {
+        const item = items.find(i => i.sku === sku);
+        if (item) {
+          await storeAPI.updateItem(sku, { store_type: targetStoreType });
+          successCount++;
+        }
+      }
+      toast.dismiss();
+      toast.success(`Successfully reclassified ${successCount} items to ${targetStoreType === 'foodstuffs' ? 'Foodstuffs' : 'Bar Store'}`);
+      setSelectedItemSkus(new Set());
+      fetchItems();
+      fetchValuation();
+    } catch (err: any) {
+      toast.dismiss();
+      toast.error(err.message || 'Failed to reclassify some items');
+    } finally {
+      setIsBulkReclassifying(false);
+    }
+  };
 
   const handleCreateOrUpdate = async () => {
     setIsActionLoading(true);
@@ -79,6 +134,7 @@ export default function InventoryPage() {
         toast.success(isEdit ? 'Item updated' : 'Item added');
         setModalOpen(false);
         fetchItems();
+        fetchValuation();
       } else {
         toast.error(response.message || 'Action failed');
       }
@@ -103,7 +159,8 @@ export default function InventoryPage() {
       unit_of_measure: item.unit_of_measure || '',
       reorder_level: item.reorder_level || 0,
       cost_price: item.cost_price || 0,
-      sku: item.sku || ''
+      sku: item.sku || '',
+      store_type: (item as any).store_type || 'foodstuffs'
     });
     setModalOpen(true);
   };
@@ -111,7 +168,7 @@ export default function InventoryPage() {
   const openAddModal = () => {
     setIsEdit(false);
     setSelectedItem(null);
-    setFormData({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '' });
+    setFormData({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '', store_type: 'foodstuffs' });
     setModalOpen(true);
   };
 
@@ -241,6 +298,37 @@ export default function InventoryPage() {
             </div>
           </div>
 
+          {/* Central Valuation Split Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white border border-stone-100 p-5 rounded-xl shadow-sm border-l-4 border-l-emerald-500">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">🥦 FOODSTUFFS STORE</p>
+                  <p className="text-[12px] text-stone-500 mt-1">{valuationData.foodstuffs.item_count} items • {valuationData.foodstuffs.total_quantity} units</p>
+                </div>
+                <p className="text-2xl font-bold text-stone-900">KES {formatNumber(valuationData.foodstuffs.total_value)}</p>
+              </div>
+            </div>
+            
+            <div className="bg-white border border-stone-100 p-5 rounded-xl shadow-sm border-l-4 border-l-amber-500">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">🍺 BAR STORE</p>
+                  <p className="text-[12px] text-stone-500 mt-1">{valuationData.bar_store.item_count} items • {valuationData.bar_store.total_quantity} units</p>
+                </div>
+                <p className="text-2xl font-bold text-stone-900">KES {formatNumber(valuationData.bar_store.total_value)}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-stone-900 text-white p-4 rounded-xl shadow-sm flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div>
+              <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider text-stone-400">GRAND TOTAL VALUATION</p>
+              <p className="text-[12px] text-stone-300 mt-0.5">{valuationData.grand_total.item_count} active SKUs across both stores</p>
+            </div>
+            <p className="text-2xl font-extrabold tracking-tight">KES {formatNumber(valuationData.grand_total.total_value)}</p>
+          </div>
+
           {/* Stats Summary - Minimal Stone */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-white border border-stone-100 p-4 rounded-lg shadow-sm">
@@ -280,17 +368,74 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Search & Filter */}
-          <div className="bg-white p-4 rounded-lg border border-stone-100 shadow-sm">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-              <input
-                placeholder={viewMode === 'inventory' ? "Search by name or SKU..." : "Filter low stock items..."}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
-              />
+          {/* Search, Tabs & Bulk Reclassify Actions */}
+          <div className="bg-white p-4 rounded-xl border border-stone-100 shadow-sm space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Search Bar */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                <input
+                  placeholder={viewMode === 'inventory' ? "Search by name or SKU..." : "Filter low stock items..."}
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                  className="w-full pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
+                />
+              </div>
+
+              {/* Tab Switcher */}
+              <div className="bg-stone-100 p-1 rounded-lg flex self-start md:self-auto shrink-0">
+                <button
+                  onClick={() => { setStoreTypeFilter('all'); setCurrentPage(1); }}
+                  className={`px-3 py-1.5 text-[12px] font-semibold rounded-md transition-all ${storeTypeFilter === 'all' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                >
+                  All ({valuationData.grand_total.item_count})
+                </button>
+                <button
+                  onClick={() => { setStoreTypeFilter('foodstuffs'); setCurrentPage(1); }}
+                  className={`px-3 py-1.5 text-[12px] font-semibold rounded-md transition-all ${storeTypeFilter === 'foodstuffs' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                >
+                  🥦 Foodstuffs ({valuationData.foodstuffs.item_count})
+                </button>
+                <button
+                  onClick={() => { setStoreTypeFilter('bar_store'); setCurrentPage(1); }}
+                  className={`px-3 py-1.5 text-[12px] font-semibold rounded-md transition-all ${storeTypeFilter === 'bar_store' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                >
+                  🍺 Bar Store ({valuationData.bar_store.item_count})
+                </button>
+              </div>
             </div>
+
+            {/* Bulk Actions (Admin-only / Super Admin "Reclassify" tool) */}
+            {selectedItemSkus.size > 0 && (
+              <div className="bg-stone-50 border border-stone-100 rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+                <p className="text-[12px] font-medium text-stone-600">
+                  Selected <span className="font-bold text-stone-900">{selectedItemSkus.size}</span> items
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Reclassify to:</span>
+                  <button
+                    onClick={() => handleBulkReclassify('foodstuffs')}
+                    disabled={isBulkReclassifying}
+                    className="h-8 px-3 text-[11px] font-bold bg-white border border-stone-200 text-stone-700 rounded hover:bg-stone-50"
+                  >
+                    🥦 foodstuffs
+                  </button>
+                  <button
+                    onClick={() => handleBulkReclassify('bar_store')}
+                    disabled={isBulkReclassifying}
+                    className="h-8 px-3 text-[11px] font-bold bg-white border border-stone-200 text-stone-700 rounded hover:bg-stone-50"
+                  >
+                    🍺 bar_store
+                  </button>
+                  <button
+                    onClick={() => setSelectedItemSkus(new Set())}
+                    className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Items Table - Minimal Monochrome */}
@@ -314,8 +459,23 @@ export default function InventoryPage() {
                         />
                       </th>
                     )}
+                    {viewMode === 'inventory' && (
+                      <th className="p-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={items.length > 0 && items.every(i => selectedItemSkus.has(i.sku))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedItemSkus(new Set(items.map(i => i.sku)));
+                            } else {
+                              setSelectedItemSkus(new Set());
+                            }
+                          }}
+                        />
+                      </th>
+                    )}
                     <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider">Item Details</th>
-                    <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider">Category</th>
+                    <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider">Category / Store</th>
                     <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider text-center">Stock Level</th>
                     <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider text-right">Unit Price</th>
                     <th className="p-4 font-semibold text-stone-500 uppercase text-[11px] tracking-wider text-right">Actions</th>
@@ -324,10 +484,10 @@ export default function InventoryPage() {
                 <tbody className="divide-y divide-stone-50">
                   {isLoading ? (
                     Array(5).fill(0).map((_, i) => (
-                      <tr key={`skeleton-${i}`}><td colSpan={viewMode === 'planner' ? 6 : 5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
+                      <tr key={`skeleton-${i}`}><td colSpan={viewMode === 'inventory' ? 6 : 5} className="p-4"><Skeleton className="h-10 w-full" /></td></tr>
                     ))
                   ) : items.length === 0 ? (
-                    <tr><td colSpan={viewMode === 'planner' ? 6 : 5} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
+                    <tr><td colSpan={6} className="p-20 text-center text-stone-400">No items found matching your search.</td></tr>
                   ) : (
                     items
                       .filter(item => {
@@ -338,8 +498,9 @@ export default function InventoryPage() {
                       })
                       .map((item, idx) => {
                         const isLow = (item.quantity ?? 0) <= (item.reorder_level ?? 0);
+                        const itemStoreType = (item as any).store_type || 'foodstuffs';
                         return (
-                          <tr key={item.id ?? item.sku ?? idx} className={`hover:bg-stone-50/50 transition-colors ${plannedItems.has(item.sku) ? 'bg-emerald-50/30' : ''}`}>
+                          <tr key={item.id ?? item.sku ?? idx} className={`hover:bg-stone-50/50 transition-colors ${plannedItems.has(item.sku) || selectedItemSkus.has(item.sku) ? 'bg-emerald-50/20' : ''}`}>
                             {viewMode === 'planner' && (
                               <td className="p-4">
                                 <input 
@@ -349,12 +510,31 @@ export default function InventoryPage() {
                                 />
                               </td>
                             )}
+                            {viewMode === 'inventory' && (
+                              <td className="p-4">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedItemSkus.has(item.sku)}
+                                  onChange={() => {
+                                    const next = new Set(selectedItemSkus);
+                                    if (next.has(item.sku)) next.delete(item.sku);
+                                    else next.add(item.sku);
+                                    setSelectedItemSkus(next);
+                                  }}
+                                />
+                              </td>
+                            )}
                             <td className="p-4">
                               <p className="font-medium text-stone-900">{item.item_name || item.name}</p>
                               <p className="text-[11px] font-mono text-stone-400 mt-0.5 uppercase tracking-tighter">{item.sku}</p>
                             </td>
-                            <td className="p-4">
-                              <span className="text-[12px] bg-stone-100 px-2 py-0.5 rounded text-stone-600 capitalize font-medium">{item.category}</span>
+                            <td className="p-4 space-y-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 capitalize font-medium">{item.category}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${itemStoreType === 'bar_store' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                  {itemStoreType === 'bar_store' ? '🍺 Bar' : '🥦 Foodstuffs'}
+                                </span>
+                              </div>
                             </td>
                             <td className="p-4 text-center">
                               <div className="flex flex-col items-center">
@@ -495,6 +675,18 @@ export default function InventoryPage() {
                     onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) })}
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Store Type (Classification) *</label>
+                <select
+                  required
+                  className="w-full h-10 px-3 bg-white border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-stone-400 transition-shadow font-medium text-stone-800"
+                  value={formData.store_type}
+                  onChange={(e) => setFormData({ ...formData, store_type: e.target.value })}
+                >
+                  <option value="foodstuffs">🥦 Foodstuffs (Consumables, dry store, packaging)</option>
+                  <option value="bar_store">🍺 Bar Store (Spirits, beers, wines, bar consumables)</option>
+                </select>
               </div>
             </div>
             <div className="p-5 bg-stone-50 border-t border-stone-100 flex justify-end gap-2">

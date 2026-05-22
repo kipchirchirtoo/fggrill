@@ -19,7 +19,8 @@ import {
   getCategoriesEndpoint,
   generateSKUEndpoint,
   getStockHistory,
-  generateBarcodeEndpoint
+  generateBarcodeEndpoint,
+  getCentralValuation
 } from '../controllers/storekeeping/items.controller';
 
 import {
@@ -269,6 +270,7 @@ router.get('/dashboard/central', authorize(centralRoles), getCentralDashboard);
 router.get('/dashboard/branch', authorize(branchRoles), getBranchDashboard);
 router.get('/branches-stock', authorize(centralRoles), getBranchesWithStock);
 router.get('/branches', authorize(staffRoles), getBranchesWithStock); // Alias for all staff
+router.get('/valuation', authorize(centralRoles), getCentralValuation);
 
 // =====================================================
 // VEHICLES ROUTES

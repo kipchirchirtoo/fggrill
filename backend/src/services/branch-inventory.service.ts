@@ -1197,7 +1197,7 @@ export async function getIncomingDispatches(branchId: number) {
 /**
  * Get dispatch history from central
  */
-export async function getDispatchHistory(fromBranchId: number, status?: string) {
+export async function getDispatchHistory(fromBranchId: number, status?: string, storeType?: string) {
   let query = supabase
     .from('dispatch_notes')
     .select('*')
@@ -1237,12 +1237,12 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
   if (allSkus.length > 0) {
     const { data: details } = await supabase
       .from('simple_items')
-      .select('sku, item_name, description, unit_of_measure, cost_price')
+      .select('sku, item_name, description, unit_of_measure, cost_price, store_type')
       .in('sku', allSkus);
     itemDetails = details || [];
   }
 
-  return dispatches.map(dispatch => {
+  const mappedDispatches = dispatches.map(dispatch => {
     const toBranch = branches.find(b => b.id === dispatch.to_branch_id);
     const vehicle = vehicles.find(v => v.id === dispatch.vehicle_id);
     const driver = drivers.find(d => d.id === dispatch.driver_id);
@@ -1265,11 +1265,20 @@ export async function getDispatchHistory(fromBranchId: number, status?: string) 
             item_name: detail?.item_name || i.item_sku,
             quantity: i.dispatched_quantity,
             cost_price: detail?.cost_price || 0,
-            unit: detail?.unit_of_measure || 'units'
+            unit: detail?.unit_of_measure || 'units',
+            store_type: detail?.store_type || 'foodstuffs'
           };
         })
     };
   });
+
+  if (storeType) {
+    return mappedDispatches.filter(d => 
+      d.items.some(i => i.store_type === storeType)
+    );
+  }
+
+  return mappedDispatches;
 }
 
 // ============================================================

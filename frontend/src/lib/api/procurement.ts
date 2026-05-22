@@ -54,6 +54,7 @@ export const procurementAPI = {
     limit?: number;
     page?: number;
     source_module?: string; // NEW: Module filter
+    store_type?: string;
   }) => {
     // Default to central_store module for procurement API
     const moduleParams = { source_module: 'central_store', ...params };

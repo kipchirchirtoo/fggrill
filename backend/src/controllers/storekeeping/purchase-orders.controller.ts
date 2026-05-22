@@ -14,7 +14,7 @@ export const getPurchaseOrders = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { status, from_date, to_date, supplier_id } = req.query;
+        const { status, from_date, to_date, supplier_id, store_type } = req.query;
         const user = (req as any).user;
         const sourceModule = (req as any).sourceModule;
         const enforcedBranchId = (req as any).enforcedBranchId;
@@ -60,13 +60,13 @@ export const getPurchaseOrders = async (
         const skus = [...new Set(allItems?.map(i => i.item_id) || [])];
         const { data: itemDetails, error: detailsError } = await supabase
             .from('simple_items')
-            .select('sku, item_name, description, unit_of_measure')
+            .select('sku, item_name, description, unit_of_measure, store_type')
             .in('sku', skus);
 
         if (detailsError) throw detailsError;
 
         // 3. Merge data
-        const enrichedOrders = filteredOrders.map(order => {
+        let enrichedOrders = filteredOrders.map(order => {
             const orderItems = (allItems || [])
                 .filter(i => i.po_id === order.id)
                 .map(i => {
@@ -89,6 +89,13 @@ export const getPurchaseOrders = async (
                 items: orderItems
             };
         });
+
+        // Filter by store_type if specified
+        if (store_type) {
+            enrichedOrders = enrichedOrders.filter(order => 
+                order.items.some(i => i.item?.store_type === store_type)
+            );
+        }
 
         res.status(200).json({
             success: true,

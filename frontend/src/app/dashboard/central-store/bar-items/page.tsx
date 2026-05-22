@@ -12,7 +12,7 @@ import { formatNumber } from '@/lib/utils';
 interface Item {
     id: string;
     sku: string;
-    item_name: string;
+    item_name?: string;
     description?: string;
     category: string;
     quantity: number;
@@ -29,48 +29,9 @@ export default function BarItemsPage() {
     const fetchItems = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Fetching all items (high limit) and filtering locally to ensure all "bar stuff" is captured
-            const response = await storeAPI.getItems({ limit: 5000 });
+            const response = await storeAPI.getItems({ store_type: 'bar_store', limit: 1000 });
             if (response.success) {
-                const allItems = response.data || [];
-                const barRelated = allItems.filter((item: Item) => {
-                    const category = item.category?.toLowerCase() || '';
-                    const itemName = item.item_name?.toLowerCase() || '';
-                    const description = item.description?.toLowerCase() || '';
-                    const sku = item.sku?.toUpperCase() || '';
-
-                    // Combine name and description for better matching
-                    const searchableText = `${itemName} ${description}`.trim();
-
-                    // Matches for beverage category or bar-specific SKU
-                    const isBeverage = category === 'beverage' || category === 'bar' || category === 'drinks' || category === 'spirits' || category === 'wines';
-                    const isBarSKU = sku.includes('-BAR-') || sku.startsWith('FGH-BAR-') || sku.includes('BAR');
-
-                    // Keywords that should definitely be included
-                    const barKeywords = [
-                        'wine', 'spirit', 'beer', 'whisky', 'whiskey', 'vodka', 'soda', 'liquor',
-                        'rum', 'cognac', 'gin', 'brandy', 'tequila', 'champagne', 'cider',
-                        'juice', 'water', 'tonic', 'liqueur', 'syrup', 'beverage', 'drink',
-                        'coke', 'fanta', 'sprite', 'krest', 'stoney', 'novida', 'dasani',
-                        'savanna', 'guinness', 'tusker', 'pilsner', 'whiteback', 'smirnoff',
-                        'gilbeys', 'jameson', 'hennessy', 'martell', 'viceroy', 'bond 7',
-                        'black label', 'red label', 'jack daniels', 'captain morgan'
-                    ];
-
-                    const isBarKeyword = barKeywords.some(kw => searchableText.includes(kw));
-
-                    // Strict exclusions for non-bar items that might have 'bar' in name (like Bar Soap)
-                    // But if it's already in beverage category, don't exclude it
-                    const isNonBarCategory = category === 'cleaning_supplies' ||
-                        category === 'toiletries' ||
-                        category === 'office_supplies';
-
-                    const isExcluded = isNonBarCategory &&
-                        (searchableText.includes('soap') || searchableText.includes('detergent') || searchableText.includes('paper'));
-
-                    return (isBeverage || isBarSKU || isBarKeyword) && !isExcluded;
-                });
-                setItems(barRelated);
+                setItems((response.data || []) as any);
             }
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }

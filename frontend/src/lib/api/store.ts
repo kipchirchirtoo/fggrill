@@ -13,6 +13,7 @@ export const storeAPI = {
   // Dashboard
   getCentralDashboard: () => fetchAPI<any>('/store/dashboard/central'),
   getBranchDashboard:  () => fetchAPI<any>('/store/dashboard/branch'),
+  getCentralValuation: () => fetchAPI<any>('/store/valuation'),
 
   // Stock Requests
   approveStockRequest: (id: string, data?: any) =>
@@ -30,7 +31,7 @@ export const storeAPI = {
     fetchAPI<any>(`/store/stock-requests/branch-performance/${branchId}${buildQuery({ days })}`),
 
   // Items / Inventory
-  getItems: (params?: { search?: string; category?: string; branch_id?: number; limit?: number; page?: number }) =>
+  getItems: (params?: { search?: string; category?: string; store_type?: string; branch_id?: number; limit?: number; page?: number }) =>
     fetchAPI<InventoryItem[]>(`/store/items${buildQuery(params)}`),
   getItem:    (id: string)           => fetchAPI<InventoryItem>(`/store/items/${id}`),
   createItem: (data: any)            => fetchAPI<InventoryItem>('/store/items',      { method: 'POST', body: JSON.stringify(data) }),
@@ -98,7 +99,7 @@ export const storeAPI = {
 
   // Dispatch
   createDispatch: (data: any) => fetchAPI<any>('/store/dispatch-notes', { method: 'POST', body: JSON.stringify(data) }),
-  getDispatchHistory: (status?: string) => fetchAPI<any[]>(`/store/dispatch-notes${buildQuery({ status })}`),
+  getDispatchHistory: (status?: string, store_type?: string) => fetchAPI<any[]>(`/store/dispatch-notes${buildQuery({ status, store_type })}`),
   dispatchItems: (id: string, data?: any) =>
     fetchAPI<any>(`/store/dispatch-notes/${id}/dispatch`, { method: 'PUT', ...(data ? { body: JSON.stringify(data) } : {}) }),
   updateDispatchLogistics: (id: string, data: any) =>

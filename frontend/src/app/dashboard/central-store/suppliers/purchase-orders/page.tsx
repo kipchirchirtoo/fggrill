@@ -44,15 +44,18 @@ export default function PurchaseOrdersPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [viewPO, setViewPO] = useState<PurchaseOrder | null>(null);
     const [isViewOpen, setIsViewOpen] = useState(false);
+    
+    const [poStoreTypeFilter, setPoStoreTypeFilter] = useState<'all' | 'foodstuffs' | 'bar_store'>('all');
 
     const fetchPOs = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await procurementAPI.getPurchaseOrders();
+            const params = poStoreTypeFilter !== 'all' ? { store_type: poStoreTypeFilter } : {};
+            const response = await procurementAPI.getPurchaseOrders(params);
             if (response.success) setPos(response.data || []);
         } catch (error) { console.error('Error fetching POs:', error); }
         finally { setIsLoading(false); }
-    }, []);
+    }, [poStoreTypeFilter]);
 
     useEffect(() => { fetchPOs(); }, [fetchPOs]);
 
@@ -127,14 +130,36 @@ export default function PurchaseOrdersPage() {
                     </div>
 
                     <IOSCard className="p-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                                placeholder="Search POs by number or supplier..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 h-9 text-sm"
-                            />
+                        <div className="flex flex-col md:flex-row gap-4 justify-between items-stretch md:items-center">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                    placeholder="Search POs by number or supplier..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-9 h-9 text-sm"
+                                />
+                            </div>
+                            <div className="bg-stone-100 p-1 rounded-lg flex self-start md:self-auto gap-1">
+                                <button
+                                    onClick={() => setPoStoreTypeFilter('all')}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${poStoreTypeFilter === 'all' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                                >
+                                    All Stores
+                                </button>
+                                <button
+                                    onClick={() => setPoStoreTypeFilter('foodstuffs')}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${poStoreTypeFilter === 'foodstuffs' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                                >
+                                    🥦 Foodstuffs
+                                </button>
+                                <button
+                                    onClick={() => setPoStoreTypeFilter('bar_store')}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${poStoreTypeFilter === 'bar_store' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                                >
+                                    🍺 Bar Store
+                                </button>
+                            </div>
                         </div>
                     </IOSCard>
 
