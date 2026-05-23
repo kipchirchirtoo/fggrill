@@ -39,27 +39,28 @@ build-tauri-linux:
 # ==================== TAURI BUILD (WINDOWS) ====================
 build-tauri-windows:
   stage: build
-  image: ubuntu:22.04
+  tags:
+    - shared-windows
+    - windows
+    - windows-1809
   before_script:
-    - apt-get update && apt-get install -y mingw-w64 nsis curl nodejs npm
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    - source $HOME/.cargo/env
-    - rustup target add x86_64-pc-windows-gnu
+    - choco install -y nodejs
+    - choco install -y rust-ms
+    - refreshenv
+    - rustup target add x86_64-pc-windows-msvc
   script:
     - cd famous-gates-desktop/apps/desktop
     - npm ci
-    - npm run tauri build -- --target x86_64-pc-windows-gnu
-  allow_failure: true
+    - npm run tauri build
   artifacts:
     name: "tauri-windows-$CI_COMMIT_SHORT_SHA"
     paths:
-      - famous-gates-desktop/apps/desktop/src-tauri/target/x86_64-pc-windows-gnu/release/bundle/msi/*.msi
-      - famous-gates-desktop/apps/desktop/src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis/*.exe
+      - famous-gates-desktop/apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+      - famous-gates-desktop/apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
     expire_in: 30 days
   only:
     - main
     - tags
-  allow_failure: true
 
 # ==================== ELECTRON BUILD (LINUX) ====================
 build-electron-linux:
