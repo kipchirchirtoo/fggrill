@@ -1723,8 +1723,8 @@ export function ConsolidatedNav() {
     }
 
 
-    // Director Navigation (accessible to Director, Auditor, and Central Store)
-    if (user.role === UserRole.DIRECTOR || user.role === UserRole.AUDITOR || user.role === UserRole.CENTRAL_STOREKEEPER) {
+    // Director Navigation (accessible to Director and Auditor only)
+    if (user.role === UserRole.DIRECTOR || user.role === UserRole.AUDITOR) {
       return directorNav;
     }
 
