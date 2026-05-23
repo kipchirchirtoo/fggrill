@@ -7,6 +7,9 @@ stages:
 variables:
   NODE_VERSION: "18"
   RUST_VERSION: "1.75"
+  # Required for Tauri desktop app compilation (runtime config)
+  SUPABASE_URL: "https://placeholder.supabase.co"
+  SUPABASE_ANON_KEY: "placeholder-key"
 
 # ==================== TAURI BUILD (LINUX) ====================
 build-tauri-linux:
@@ -26,7 +29,7 @@ build-tauri-linux:
   script:
     - cd famous-gates-desktop/apps/desktop
     - npm ci
-    - npm run tauri build -- --target x86_64-unknown-linux-gnu
+    - SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" npm run tauri build -- --target x86_64-unknown-linux-gnu
   artifacts:
     name: "tauri-linux-$CI_COMMIT_SHORT_SHA"
     paths:
