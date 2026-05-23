@@ -59,7 +59,14 @@ export function ProtectedRoute({
   }
 
   if (requireAuth && !user) return null;
-  if (rolesKey && user && !hasRole(user, rolesKey.split(',') as UserRole[])) return null;
+  if (rolesKey && user && !hasRole(user, rolesKey.split(',') as UserRole[])) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <span className="ml-2 text-gray-600">Access denied. Redirecting...</span>
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }
