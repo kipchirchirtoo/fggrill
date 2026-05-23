@@ -329,11 +329,11 @@ export const terminateAllSessions = async (req: Request, res: Response, next: Ne
  */
 export const getActiveSessions = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Get recent successful logins (last 24 hours)
+    // Get recent successful logins (last 24 hours) from audit_logs
     const { data, error } = await supabase
-      .from('admin_logs')
+      .from('audit_logs')
       .select('*, user:users(*)')
-      .eq('category', 'security')
+      .eq('action', 'login')
       .eq('status', 'success')
       .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false });
@@ -343,7 +343,7 @@ export const getActiveSessions = async (req: Request, res: Response, next: NextF
     // Deduplicate by user + IP
     const sessions = new Map();
     (data || []).forEach((log: any) => {
-      const key = `${log.email}-${log.ip_address}`;
+      const key = `${log.user_id}-${log.ip_address}`;
       if (!sessions.has(key)) {
         sessions.set(key, log);
       }

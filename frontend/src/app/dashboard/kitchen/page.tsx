@@ -254,25 +254,25 @@ export default function KitchenDashboard() {
                     key={order.id}
                     className={`border rounded-2xl p-4 shadow-sm transition-all ${statusStyle} ${isUrgent ? 'ring-2 ring-red-500 ring-offset-2' : ''}`}
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-stone-900">#{order.order_number}</p>
+                          <p className="font-bold text-stone-900 truncate" title={`#${order.order_number}`}>#{order.order_number}</p>
                           {isUrgent && (
-                            <span className="flex h-2 w-2 rounded-full bg-red-600 animate-ping" />
+                            <span className="flex h-2 w-2 rounded-full bg-red-600 animate-ping shrink-0" />
                           )}
                         </div>
-                        <p className="text-xs font-bold text-stone-400 mt-0.5 uppercase tracking-wide">
+                        <p className="text-xs font-bold text-stone-400 mt-0.5 uppercase tracking-wide truncate">
                           {order.table_number ? `Table ${order.table_number}` : order.order_type}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <div className={`flex items-center gap-1.5 text-xs font-bold ${isUrgent ? 'text-red-600' : 'text-stone-500'}`}>
-                          <Clock className="h-3.5 w-3.5" />
+                      <div className="text-right shrink-0">
+                        <div className={`flex items-center justify-end gap-1.5 text-xs font-bold ${isUrgent ? 'text-red-600' : 'text-stone-500'}`}>
+                          <Clock className="h-3.5 w-3.5 shrink-0" />
                           <span>{order.elapsed_minutes}m</span>
                         </div>
                         <div className="mt-1.5">
-                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${(order.status === 'pending' || order.status === 'confirmed') ? 'bg-yellow-200 text-yellow-800' :
+                          <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${(order.status === 'pending' || order.status === 'confirmed') ? 'bg-yellow-200 text-yellow-800' :
                             order.status === 'preparing' ? 'bg-blue-200 text-blue-800' :
                               order.status === 'ready' ? 'bg-green-200 text-green-800' :
                                 'bg-stone-200 text-stone-800'
@@ -291,10 +291,10 @@ export default function KitchenDashboard() {
                         >
                           <div className="flex items-start gap-2">
                             <span className="font-bold text-stone-900 shrink-0">{item.quantity}x</span>
-                            <span className="text-stone-700 font-medium leading-tight">{item.name}</span>
+                            <span className="text-stone-700 font-medium leading-tight break-words">{item.name}</span>
                           </div>
                           {item.notes && (
-                            <p className="text-[11px] text-amber-600 font-bold mt-1 ml-6">Note: {item.notes}</p>
+                            <p className="text-[11px] text-amber-600 font-bold mt-1 ml-6 break-words">Note: {item.notes}</p>
                           )}
                         </div>
                       ))}

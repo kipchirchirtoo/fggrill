@@ -77,7 +77,7 @@ export default function PaymentIntelligencePage() {
   ].filter(item => item.value > 0) : [];
 
   return (
-    <ProtectedRoute roles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.CENTRAL_STOREKEEPER]}>
       <DashboardLayout>
         <div className="p-6 space-y-6">
           {/* Header */}

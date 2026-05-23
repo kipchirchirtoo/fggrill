@@ -94,7 +94,7 @@ export default function DirectorDashboardEnhanced() {
 
   if (isLoading) {
     return (
-      <ProtectedRoute roles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN]}>
+      <ProtectedRoute allowedRoles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.CENTRAL_STOREKEEPER]}>
         <DashboardLayout>
           <div className="flex flex-col items-center justify-center h-screen space-y-4">
             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#007AFF]"></div>
@@ -112,7 +112,7 @@ export default function DirectorDashboardEnhanced() {
   const discrepancies = dashboardData?.discrepancies || {};
 
   return (
-    <ProtectedRoute roles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.CENTRAL_STOREKEEPER]}>
       <DashboardLayout>
         <div className="p-6 space-y-6">
           {/* Header */}

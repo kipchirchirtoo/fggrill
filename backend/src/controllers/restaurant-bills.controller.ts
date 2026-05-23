@@ -609,6 +609,269 @@ export const getBillAuditLog = async (
   }
 };
 
+// @desc    Merge bills
+// @route   POST /api/restaurant/bills/merge
+// @access  Private (Waiter, Cashier, Manager)
+export const mergeBills = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { bill_ids, target_bill_id } = req.body;
+
+    if (!bill_ids || bill_ids.length < 2) {
+      throw new AppError('At least 2 bills are required to merge', 400);
+    }
+
+    // Get all bills to merge
+    const { data: bills, error: billsError } = await supabase
+      .from('restaurant_bills')
+      .select('*')
+      .in('id', bill_ids);
+
+    if (billsError) throw billsError;
+    if (!bills || bills.length < 2) throw new AppError('Bills not found', 404);
+
+    // Check if any bills are already paid
+    const paidBills = bills.filter(b => b.status === 'PAID');
+    if (paidBills.length > 0) {
+      throw new AppError('Cannot merge paid bills', 400);
+    }
+
+    // Use target bill or create new one
+    let targetBill;
+    if (target_bill_id) {
+      const { data: target, error: targetError } = await supabase
+        .from('restaurant_bills')
+        .select('*')
+        .eq('id', target_bill_id)
+        .single();
+      if (targetError) throw targetError;
+      targetBill = target;
+    } else {
+      // Generate new bill number
+      const { data: billNumberData } = await supabase.rpc('generate_bill_number');
+      
+      // Create new target bill
+      const { data: newBill, error: newBillError } = await supabase
+        .from('restaurant_bills')
+        .insert([{
+          bill_number: billNumberData,
+          branch_id: bills[0].branch_id,
+          table_number: bills[0].table_number,
+          room_number: bills[0].room_number,
+          guest_name: bills[0].guest_name,
+          status: 'OPEN',
+          vat_rate: bills[0].vat_rate,
+          service_charge_rate: bills[0].service_charge_rate,
+          created_by: req.user?.id
+        }])
+        .select()
+        .single();
+      
+      if (newBillError) throw newBillError;
+      targetBill = newBill;
+    }
+
+    // Move all orders from source bills to target bill
+    const sourceBillIds = bills.filter(b => b.id !== targetBill.id).map(b => b.id);
+    
+    if (sourceBillIds.length > 0) {
+      const { error: updateError } = await supabase
+        .from('restaurant_orders')
+        .update({ bill_id: targetBill.id })
+        .in('bill_id', sourceBillIds);
+      
+      if (updateError) throw updateError;
+
+      // Mark source bills as merged
+      const { error: markError } = await supabase
+        .from('restaurant_bills')
+        .update({
+          status: 'CANCELLED',
+          is_merged: true,
+          merged_into: targetBill.id,
+          updated_at: new Date().toISOString()
+        })
+        .in('id', sourceBillIds);
+      
+      if (markError) throw markError;
+    }
+
+    // Recalculate target bill totals
+    await supabase.rpc('calculate_bill_totals', { p_bill_id: targetBill.id });
+
+    logger.info(`Bills ${bill_ids.join(', ')} merged into ${targetBill.bill_number}`);
+
+    res.status(200).json({
+      success: true,
+      data: targetBill
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Request void order (requires accountant approval)
+// @route   POST /api/restaurant/orders/:id/void-request
+// @access  Private (Waiter, Cashier)
+export const requestVoidOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id: orderId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      throw new AppError('Void reason is required', 400);
+    }
+
+    // Get order
+    const { data: order, error: orderError } = await supabase
+      .from('restaurant_orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+
+    if (orderError) throw orderError;
+    if (!order) throw new AppError('Order not found', 404);
+
+    if (order.status === 'voided' || order.status === 'cancelled') {
+      throw new AppError('Order already voided', 400);
+    }
+
+    // Create void request
+    const { data: voidRequest, error: voidError } = await supabase
+      .from('void_requests')
+      .insert([{
+        order_id: orderId,
+        requested_by: req.user?.id,
+        reason,
+        status: 'pending',
+        branch_id: order.branch_id,
+        created_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (voidError) throw voidError;
+
+    logger.info(`Void request created for order ${order.order_number} by user ${req.user?.id}`);
+
+    res.status(201).json({
+      success: true,
+      data: voidRequest
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve void order (Accountant/Manager only)
+// @route   POST /api/restaurant/void-requests/:id/approve
+// @access  Private (Accountant, Manager)
+export const approveVoidRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id: requestId } = req.params;
+    const { approved, rejection_reason } = req.body;
+
+    // Get void request
+    const { data: voidRequest, error: voidError } = await supabase
+      .from('void_requests')
+      .select('*, order:restaurant_orders(*)')
+      .eq('id', requestId)
+      .single();
+
+    if (voidError) throw voidError;
+    if (!voidRequest) throw new AppError('Void request not found', 404);
+
+    if (voidRequest.status !== 'pending') {
+      throw new AppError('Void request already processed', 400);
+    }
+
+    // Update void request
+    const { error: updateError } = await supabase
+      .from('void_requests')
+      .update({
+        status: approved ? 'approved' : 'rejected',
+        reviewed_by: req.user?.id,
+        reviewed_at: new Date().toISOString(),
+        rejection_reason: approved ? null : rejection_reason
+      })
+      .eq('id', requestId);
+
+    if (updateError) throw updateError;
+
+    // If approved, void the order
+    if (approved && voidRequest.order) {
+      await supabase
+        .from('restaurant_orders')
+        .update({
+          status: 'voided',
+          voided_at: new Date().toISOString(),
+          voided_by: req.user?.id,
+          void_reason: voidRequest.reason
+        })
+        .eq('id', voidRequest.order_id);
+
+      logger.info(`Order ${voidRequest.order.order_number} voided by accountant ${req.user?.id}`);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: voidRequest
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get pending void requests (for accountant)
+// @route   GET /api/restaurant/void-requests/pending
+// @access  Private (Accountant, Manager)
+export const getPendingVoidRequests = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { branch_id } = req.query;
+
+    let query = supabase
+      .from('void_requests')
+      .select(`
+        *,
+        order:restaurant_orders(order_number, table_number, total_amount),
+        requester:users!requested_by(id, first_name, last_name)
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (branch_id) {
+      query = query.eq('branch_id', branch_id);
+    }
+
+    const { data: requests, error } = await query;
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      count: requests?.length || 0,
+      data: requests || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get all open bills (for dashboard)
 // @route   GET /api/restaurant/bills/open
 // @access  Private

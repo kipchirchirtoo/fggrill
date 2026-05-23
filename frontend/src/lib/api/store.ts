@@ -170,6 +170,48 @@ export const storeAPI = {
     fetchAPI<void>(`/store/stock-take-items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   submitStockTakeToAuditor: (id: string) => fetchAPI<void>(`/store/stock-takes/${id}/complete`, { method: 'PUT' }),
   completeStockTake:        (id: string) => fetchAPI<void>(`/store/stock-takes/${id}/complete`, { method: 'PUT' }),
+  downloadBranchStockTakeWorksheetCategorized: (id: string) =>
+    fetchAPI<void>(`/stock-takes/${id}/worksheet-categorized`, { method: 'GET', responseType: 'blob' }),
+
+  // Central Store Stock Takes (Foodstuffs vs Bar Store)
+  getCentralStockTakes: (params?: { store_type?: string; status?: string }) =>
+    fetchAPI<any[]>(`/store/central-stock-takes${buildQuery(params)}`),
+  getCentralStockTake: (id: string) => fetchAPI<any>(`/store/central-stock-takes/${id}`),
+  createCentralStockTake: (data: { store_type: 'foodstuffs' | 'bar_store'; notes?: string }) =>
+    fetchAPI<any>('/store/central-stock-takes', { method: 'POST', body: JSON.stringify(data) }),
+  updateCentralStockTake: (id: string, data: any) =>
+    fetchAPI<any>(`/store/central-stock-takes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  submitCentralStockTake: (id: string) =>
+    fetchAPI<any>(`/store/central-stock-takes/${id}/submit`, { method: 'POST' }),
+  approveCentralStockTake: (id: string) =>
+    fetchAPI<any>(`/store/central-stock-takes/${id}/approve`, { method: 'POST' }),
+  rejectCentralStockTake: (id: string, reason: string) =>
+    fetchAPI<any>(`/store/central-stock-takes/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  downloadCentralStockTakeWorksheetPDF: (id: string, sessionNumber: string) =>
+    fetchAPI<void>(`/store/central-stock-takes/${id}/worksheet-pdf`, { method: 'GET', responseType: 'blob' }),
+  downloadCentralStockTakeExcel: (id: string, sessionNumber: string) =>
+    fetchAPI<void>(`/store/central-stock-takes/${id}/excel`, { method: 'GET', responseType: 'blob' }),
+
+  // Central Store Spoilage Log
+  getSpoilageRecords: (params?: { store_type?: string; reason?: string; status?: string; from_date?: string; to_date?: string }) =>
+    fetchAPI<any>(`/store/central-spoilage${buildQuery(params)}`),
+  getSpoilageSummary: (params?: { period?: string; store_type?: string }) =>
+    fetchAPI<any>(`/store/central-spoilage/summary${buildQuery(params)}`),
+  getSpoilageItems: (params?: { search?: string; store_type?: string }) =>
+    fetchAPI<any[]>(`/store/central-spoilage/items${buildQuery(params)}`),
+  createSpoilageRecord: (data: {
+    item_sku: string;
+    quantity: number;
+    unit: string;
+    reason: string;
+    reason_details?: string;
+    disposal_method?: string;
+    notes?: string;
+    spoilage_date?: string;
+  }) => fetchAPI<any>('/store/central-spoilage', { method: 'POST', body: JSON.stringify(data) }),
+  getSpoilageRecord: (id: string) => fetchAPI<any>(`/store/central-spoilage/${id}`),
+  updateSpoilageStatus: (id: string, data: { action: 'approve' | 'reject'; rejection_reason?: string }) =>
+    fetchAPI<any>(`/store/central-spoilage/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Config
   getAppConfig:       () => fetchAPI<any>('/store/app_config'),

@@ -2,12 +2,12 @@ import { Request } from 'express';
 
 /**
  * Determines if a user role is branch-restricted.
- * Roles like super_admin, general_manager, auditor, and hr_manager are typically global.
+ * Roles like super_admin, general_manager, director, auditor, and hr_manager are typically global.
  */
 export const isGlobalRole = (role: string | undefined): boolean => {
     if (!role) return false;
     // Global roles that can access data across all branches
-    const globalRoles = ['super_admin', 'general_manager', 'hr_manager', 'central_storekeeper', 'auditor'];
+    const globalRoles = ['super_admin', 'general_manager', 'hr_manager', 'central_storekeeper', 'auditor', 'director'];
     return globalRoles.includes(role.toLowerCase());
 };
 

@@ -114,6 +114,8 @@ export default function DirectorTasksPage() {
         UserRole.DIRECTOR,
         UserRole.SUPER_ADMIN,
         UserRole.GENERAL_MANAGER,
+        UserRole.AUDITOR,
+        UserRole.CENTRAL_STOREKEEPER,
       ]}
     >
       <DashboardLayout>

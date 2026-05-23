@@ -74,6 +74,34 @@ router.post('/:id/split/by-items',
   billsController.splitBillByItems
 );
 
+// ============ MERGE BILLS ============
+
+// Merge bills
+router.post('/merge',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.CASHIER, UserRole.BRANCH_MANAGER]),
+  billsController.mergeBills
+);
+
+// ============ VOID REQUESTS ============
+
+// Request void order (waiter/cashier)
+router.post('/orders/:id/void-request',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.CASHIER, UserRole.BRANCH_MANAGER]),
+  billsController.requestVoidOrder
+);
+
+// Approve void request (accountant/manager)
+router.post('/void-requests/:id/approve',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]),
+  billsController.approveVoidRequest
+);
+
+// Get pending void requests (accountant/manager)
+router.get('/void-requests/pending',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]),
+  billsController.getPendingVoidRequests
+);
+
 // ============ AUDIT & REPORTING ============
 
 // Get bill audit log

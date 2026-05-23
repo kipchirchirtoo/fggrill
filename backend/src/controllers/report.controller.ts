@@ -1097,3 +1097,63 @@ export const getReportStats = async (
     next(error);
   }
 };
+
+// @desc    Start async branded PDF report generation
+// @route   POST /api/reports/generate/async
+// @access  Private
+export const generateAsyncReport = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { reportType, filters, useRealData, data } = req.body;
+    logger.info(`Starting async report generation: ${reportType}`);
+    
+    const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+    
+    const response = await axios.post(`${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf/async`, {
+      reportType,
+      filters,
+      useRealData,
+      data
+    });
+
+    res.status(202).json({
+      success: true,
+      data: response.data
+    });
+  } catch (error: any) {
+    logger.error(`Error starting async report: ${error.message}`);
+    next(new AppError(error.response?.data?.error || 'Failed to start async report generation', 500));
+  }
+};
+
+// @desc    Check status of an async report generation job
+// @route   GET /api/reports/jobs/:id/status
+// @access  Private
+export const getReportJobStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const jobId = req.params.id;
+    
+    const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
+    
+    const response = await axios.get(`${PYTHON_SERVICE_URL}/api/reports/jobs/${jobId}`);
+
+    res.status(200).json({
+      success: true,
+      data: response.data
+    });
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      next(new AppError('Report job not found', 404));
+      return;
+    }
+    logger.error(`Error checking report job status: ${error.message}`);
+    next(new AppError('Failed to check report job status', 500));
+  }
+};

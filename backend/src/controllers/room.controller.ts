@@ -19,8 +19,25 @@ export const getRooms = async (
 
     query = applyBranchFilter(query, req);
     const isGlobal = isGlobalRole(req.user?.role);
-    if (isGlobal && req.query.branch_id) {
-      query = query.eq('branch_id', req.query.branch_id as string);
+    
+    // For global roles, use the query param branch_id if provided
+    // For non-global roles, applyBranchFilter already applied their branch from token
+    // But also support explicit branch_id filtering for all users when provided
+    if (req.query.branch_id) {
+      if (isGlobal) {
+        // Global users can view any branch
+        query = query.eq('branch_id', req.query.branch_id as string);
+      }
+      // Non-global users: applyBranchFilter already filtered by their branch_id from token
+      // We ignore query param branch_id for non-global to prevent cross-branch data leakage
+    }
+    
+    // Always ensure we filter by some branch_id to prevent returning unassigned rooms
+    // If after applyBranchFilter we still don't have a branch filter, apply a default
+    if (!isGlobal && !(req.user?.branch_id)) {
+      // This shouldn't happen for valid users, but as safety measure
+      logger.warn('User without branch_id attempted to access rooms:', req.user?.id);
+      query = query.eq('branch_id', -1); // Return nothing
     }
     if (req.query.status) {
       query = query.eq('status', req.query.status as string);

@@ -170,7 +170,7 @@ export default function DiscrepancyControlPage() {
 
   return (
     <ProtectedRoute
-      roles={[UserRole.DIRECTOR, UserRole.AUDITOR, UserRole.SUPER_ADMIN]}
+      allowedRoles={[UserRole.DIRECTOR, UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.CENTRAL_STOREKEEPER]}
     >
       <DashboardLayout>
         <div className="p-6 space-y-8">

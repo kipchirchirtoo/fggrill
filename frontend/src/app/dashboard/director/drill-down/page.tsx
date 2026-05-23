@@ -234,6 +234,7 @@ export default function DrillDownPage() {
         UserRole.SUPER_ADMIN,
         UserRole.GENERAL_MANAGER,
         UserRole.AUDITOR,
+        UserRole.CENTRAL_STOREKEEPER,
       ]}
     >
       <DashboardLayout>

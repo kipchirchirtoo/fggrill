@@ -54,42 +54,63 @@ const reportsBase = {
       payload.data = passedData;
     }
     
-    const result = await fetchAPI<Blob>('/reports/generate/branded-pdf', {
+    // Start async job via Express Gateway
+    const initResult = await fetchAPI<any>('/reports/generate/async', {
       method: 'POST',
-      body: JSON.stringify(payload),
-      responseType: 'blob'
-    }, REPORTS_SERVICE_URL);
+      body: JSON.stringify(payload)
+    });
     
-    if (result.success && result.data && typeof window !== 'undefined') {
-      const blob = result.data;
-      
-      // Check if blob has content
-      if (blob.size === 0) {
-        console.error('Received empty blob from server');
-        throw new Error('Received empty PDF file from server');
-      }
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
-      
-      // Append to body, click, and cleanup
-      document.body.appendChild(a);
-      a.click();
-      
-      // Cleanup
-      setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-      }, 100);
-      
-      return true;
+    if (!initResult.success || !initResult.data?.jobId) {
+      throw new Error('Failed to initialize async report generation');
     }
     
-    throw new Error('Failed to generate PDF report');
+    const jobId = initResult.data.jobId;
+    
+    // Poll for completion (up to 120 seconds)
+    let maxRetries = 60;
+    while (maxRetries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const statusResult = await fetchAPI<any>(`/reports/jobs/${jobId}/status`);
+      
+      if (!statusResult.success) {
+        throw new Error('Failed to check report status');
+      }
+      
+      const job = statusResult.data;
+      if (job.status === 'completed') {
+        if (!job.result_url) throw new Error('Completed but no result_url');
+        
+        // Fetch the blob from the public url
+        const response = await fetch(job.result_url);
+        const blob = await response.blob();
+        
+        if (blob.size === 0) {
+          throw new Error('Received empty PDF file from server');
+        }
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+        
+        return true;
+      } else if (job.status === 'failed') {
+        throw new Error(`Report generation failed: ${job.error || 'Unknown error'}`);
+      }
+      
+      maxRetries--;
+    }
+    
+    throw new Error('Report generation timed out');
   },
 };
 
@@ -191,76 +212,121 @@ export const auditorReportsAPI = {
       // Download manager not available
     }
 
-    const result = await fetchAPI<Blob>(`/reports/auditor/export/${reportType}${buildQuery(params)}`, {
-      responseType: 'blob'
-    }, REPORTS_SERVICE_URL);
+    const { useRealData = true, data: passedData, ...otherFilters } = params;
+    const payload: any = { reportType, filters: otherFilters, useRealData };
+    if (!useRealData && passedData) {
+      payload.data = passedData;
+    }
+
+    const initResult = await fetchAPI<any>('/reports/generate/async', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
     
-    if (result.success && result.data && typeof window !== 'undefined') {
-      const blob = result.data;
-      
-      // Check if blob has content
-      if (blob.size === 0) {
-        if (downloadId) {
-          const manager = (window as any).__downloadManager;
-          manager?.updateDownload(downloadId, { status: 'failed', error: 'Empty PDF file received' });
-        }
-        console.error('Received empty blob from server');
-        throw new Error('Received empty PDF file from server');
-      }
-      
-      // Use Tauri downloads if available, otherwise fallback to browser
-      const filename = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
-      
-      try {
-        // Dynamic import to avoid bundling issues
-        const { exportPDF } = await import('../tauri-downloads');
-        const success = await exportPDF(blob, filename);
-        if (success) {
-          if (downloadId) {
-            const manager = (window as any).__downloadManager;
-            manager?.updateDownload(downloadId, { status: 'completed' });
-          }
-          return true;
-        }
-        // If Tauri download fails, fall through to browser method
-      } catch (importError) {
-        // Tauri downloads not available, use browser method
-        console.log('Using browser download method');
-      }
-      
-      // Browser fallback method
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = filename;
-      
-      // Append to body, click, and cleanup
-      document.body.appendChild(a);
-      a.click();
-      
-      // Update download manager
+    if (!initResult.success || !initResult.data?.jobId) {
       if (downloadId) {
         const manager = (window as any).__downloadManager;
-        manager?.updateDownload(downloadId, { status: 'completed' });
+        manager?.updateDownload(downloadId, { status: 'failed', error: 'Failed to initialize async report generation' });
+      }
+      throw new Error('Failed to initialize async report generation');
+    }
+
+    const jobId = initResult.data.jobId;
+    let maxRetries = 60;
+    let finalBlob: Blob | null = null;
+    let finalError: string | null = null;
+
+    while (maxRetries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const statusResult = await fetchAPI<any>(`/reports/jobs/${jobId}/status`);
+      
+      if (!statusResult.success) {
+        finalError = 'Failed to check report status';
+        break;
       }
       
-      // Cleanup
-      setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-      }, 100);
+      const job = statusResult.data;
+      if (job.status === 'completed') {
+        if (!job.result_url) {
+          finalError = 'Completed but no result_url';
+          break;
+        }
+        
+        try {
+          const response = await fetch(job.result_url);
+          finalBlob = await response.blob();
+        } catch (fetchErr) {
+          finalError = 'Failed to download generated report';
+        }
+        break;
+      } else if (job.status === 'failed') {
+        finalError = `Report generation failed: ${job.error || 'Unknown error'}`;
+        break;
+      }
       
-      return true;
+      maxRetries--;
+    }
+
+    if (!finalBlob && !finalError) {
+      finalError = 'Report generation timed out';
+    }
+
+    if (finalError || !finalBlob) {
+      if (downloadId) {
+        const manager = (window as any).__downloadManager;
+        manager?.updateDownload(downloadId, { status: 'failed', error: finalError || 'Failed to generate PDF report' });
+      }
+      throw new Error(finalError || 'Failed to generate PDF report');
+    }
+
+    if (finalBlob.size === 0) {
+      if (downloadId) {
+        const manager = (window as any).__downloadManager;
+        manager?.updateDownload(downloadId, { status: 'failed', error: 'Empty PDF file received' });
+      }
+      console.error('Received empty blob from server');
+      throw new Error('Received empty PDF file from server');
     }
     
-    // Update download manager on failure
+    // Use Tauri downloads if available, otherwise fallback to browser
+    const filename = `${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+    
+    try {
+      // Dynamic import to avoid bundling issues
+      const { exportPDF } = await import('../tauri-downloads');
+      const success = await exportPDF(finalBlob, filename);
+      if (success) {
+        if (downloadId) {
+          const manager = (window as any).__downloadManager;
+          manager?.updateDownload(downloadId, { status: 'completed' });
+        }
+        return true;
+      }
+    } catch (importError) {
+      console.log('Using browser download method');
+    }
+    
+    // Browser fallback method
+    const url = window.URL.createObjectURL(finalBlob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    
+    document.body.appendChild(a);
+    a.click();
+    
     if (downloadId) {
       const manager = (window as any).__downloadManager;
-      manager?.updateDownload(downloadId, { status: 'failed', error: 'Failed to generate PDF report' });
+      manager?.updateDownload(downloadId, { status: 'completed' });
     }
     
-    throw new Error('Failed to generate PDF report');
+    setTimeout(() => {
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    }, 100);
+    
+    return true;
   },
 
   // Specialized Reports

@@ -142,23 +142,27 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
         if (!isVoiding || !voidReason.trim()) return;
 
         try {
-            const api = isRestaurant ? restaurantAPI : barAPI;
-            // Use updateOrderStatus or specific void endpoint if available. 
-            // Mapping 'cancelled' status as void.
-            const res = await api.updateOrderStatus(isVoiding, 'cancelled');
+            // Use the new void request endpoint for accountant approval
+            const res = await fetch('/api/restaurant/orders/' + isVoiding + '/void-request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: voidReason })
+            });
 
-            if (res.success) {
-                toast.success('Order voided successfully');
+            const data = await res.json();
+
+            if (data.success) {
+                toast.success('Void request submitted for accountant approval');
                 setIsVoiding(null);
                 setVoidReason('');
                 setVoidConfirmOpen(false);
                 fetchData(); // Refresh list
             } else {
-                toast.error('Failed to void order');
+                toast.error('Failed to submit void request');
             }
         } catch (error) {
             console.error('Void error', error);
-            toast.error('Error voiding order');
+            toast.error('Error submitting void request');
         }
     };
 
@@ -1251,7 +1255,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                                                             className="col-span-2 py-2.5 text-xs font-bold text-white bg-stone-800 hover:bg-stone-950 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
                                                                         >
                                                                             <FileText className="w-4 h-4" />
-                                                                            REPRINT PROFORMA BILL
+                                                                            RECALL BILL
                                                                         </button>
                                                                         <button
                                                                             onClick={(e) => {
@@ -1271,6 +1275,24 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                                                             className="py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors uppercase"
                                                                         >
                                                                             Void Order
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                toast.info('Merge bill feature - select multiple bills to merge');
+                                                                            }}
+                                                                            className="py-2 text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors uppercase"
+                                                                        >
+                                                                            Merge Bill
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                toast.info('Split bill feature - divide bill by items or amount');
+                                                                            }}
+                                                                            className="py-2 text-xs font-bold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors uppercase"
+                                                                        >
+                                                                            Split Bill
                                                                         </button>
                                                                     </div>
                                                                 )}

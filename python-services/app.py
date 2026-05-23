@@ -10,6 +10,9 @@ load_dotenv()
 import md5_fix
 
 import logging
+import uuid
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import pandas as pd
 try:
@@ -114,6 +117,7 @@ budget_analytics = BudgetAnalytics()
 branded_pdf_generator = BrandedPDFGenerator()
 security_report_generator = SecurityReportGenerator()
 database_fetcher = DatabaseFetcher()
+report_executor = ThreadPoolExecutor(max_workers=4)
 report_scheduler = ReportScheduler()
 
 # Start scheduler daemon in background
@@ -153,6 +157,187 @@ def health_check():
         'features': ['branded_reports', 'automated_scheduling', 'real_database'],
         'timestamp': datetime.now().isoformat()
     }), 200
+
+
+def get_supabase_client():
+    if database_fetcher and database_fetcher.client:
+        return database_fetcher.client
+    from supabase import create_client
+    url = os.getenv('SUPABASE_URL')
+    key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_ANON_KEY')
+    return create_client(url, key)
+
+def async_report_worker(job_id, report_type, filters, use_real_data, passed_data):
+    """Background worker to generate a report, upload to Supabase Storage, and update job status"""
+    db_client = get_supabase_client()
+    
+    try:
+        db_client.table('report_jobs').update({
+            'status': 'processing',
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', job_id).execute()
+    except Exception as e:
+        logger.error(f"Failed to update report job status to processing: {e}")
+
+    try:
+        logger.info(f"[Job {job_id}] Worker started for report type: {report_type}")
+        
+        if passed_data and not use_real_data:
+            report_data = passed_data
+            logger.info(f"[Job {job_id}] Using passed data from frontend")
+        elif passed_data and use_real_data:
+            report_data = passed_data
+            logger.info(f"[Job {job_id}] Using passed data from frontend (useRealData=True but data provided)")
+        elif use_real_data:
+            logger.info(f"[Job {job_id}] Fetching real data from database...")
+            report_data = database_fetcher.fetch_report_data(report_type, filters)
+        else:
+            logger.info(f"[Job {job_id}] Using mock data")
+            report_data = data_fetcher.fetch_report_data(report_type, filters)
+
+        if report_data is None:
+            logger.error(f"[Job {job_id}] Report data is None! Using empty structure")
+            report_data = database_fetcher._get_empty_structure(report_type, error="No data returned from fetcher")
+
+        logger.info(f"[Job {job_id}] Rendering PDF...")
+        pdf_file = branded_pdf_generator.generate_report(report_type, report_data, filters)
+        logger.info(f"[Job {job_id}] PDF rendered successfully: {pdf_file}")
+
+        bucket_name = "reports"
+        try:
+            buckets = db_client.storage.list_buckets()
+            existing = next((b for b in buckets if b.name == bucket_name), None)
+            if not existing:
+                db_client.storage.create_bucket(bucket_name, options={"public": True})
+                logger.info(f"Created Supabase Storage bucket '{bucket_name}'")
+        except Exception as bucket_err:
+            logger.warning(f"Error checking/creating storage bucket: {bucket_err}. Will attempt upload anyway.")
+
+        filename = f"{report_type}_{job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        logger.info(f"[Job {job_id}] Uploading file to storage: {filename}...")
+        
+        with open(pdf_file, 'rb') as f:
+            file_data = f.read()
+            
+        db_client.storage.from_(bucket_name).upload(
+            filename,
+            file_data,
+            file_options={"content-type": "application/pdf"}
+        )
+        
+        public_url = db_client.storage.from_(bucket_name).get_public_url(filename)
+        logger.info(f"[Job {job_id}] Uploaded successfully. Public URL: {public_url}")
+
+        try:
+            if os.path.exists(pdf_file):
+                os.remove(pdf_file)
+                logger.info(f"[Job {job_id}] Cleaned up local file {pdf_file}")
+        except Exception as cleanup_err:
+            logger.warning(f"Failed to clean up local file {pdf_file}: {cleanup_err}")
+
+        db_client.table('report_jobs').update({
+            'status': 'completed',
+            'result_url': public_url,
+            'completed_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', job_id).execute()
+
+    except Exception as e:
+        logger.error(f"[Job {job_id}] Error in async report worker: {e}", exc_info=True)
+        tb = traceback.format_exc()
+        try:
+            db_client.table('report_jobs').update({
+                'status': 'failed',
+                'error': f"{str(e)}\\n{tb}",
+                'completed_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }).eq('id', job_id).execute()
+        except Exception as db_err:
+            logger.error(f"Failed to update failed job status in DB: {db_err}")
+
+@app.route('/api/reports/generate/branded-pdf/async', methods=['POST'])
+def generate_branded_pdf_report_async():
+    """Enqueue an async branded PDF report generation job"""
+    try:
+        data = request.get_json()
+        report_type = data.get('reportType')
+        filters = data.get('filters', {})
+        use_real_data = data.get('useRealData', True)
+        passed_data = data.get('data')
+
+        logger.info(f"=== ASYNC PDF GENERATION REQUEST ===")
+        logger.info(f"Report Type: {report_type}")
+        
+        db_client = get_supabase_client()
+        
+        # Calculate branch ID from filters if possible
+        branch_id = filters.get('branch_id')
+        if not branch_id and isinstance(filters.get('branch_ids'), list) and len(filters.get('branch_ids')) > 0:
+            branch_id = filters.get('branch_ids')[0]
+            
+        insert_data = {
+            'report_type': report_type,
+            'filters': filters,
+            'status': 'pending'
+        }
+        
+        if branch_id:
+            try:
+                insert_data['branch_id'] = int(branch_id)
+            except (ValueError, TypeError):
+                pass
+                
+        # Insert initial pending job
+        res = db_client.table('report_jobs').insert(insert_data).execute()
+        if not res.data or len(res.data) == 0:
+            raise Exception("Failed to insert report job into database")
+            
+        job_id = res.data[0]['id']
+        logger.info(f"Created report job {job_id} with pending status")
+        
+        # Dispatch to thread pool
+        report_executor.submit(
+            async_report_worker, 
+            job_id, 
+            report_type, 
+            filters, 
+            use_real_data, 
+            passed_data
+        )
+        
+        return jsonify({
+            'jobId': job_id,
+            'status': 'pending',
+            'message': 'Report generation started successfully'
+        }), 202
+        
+    except Exception as e:
+        logger.error(f"Error enqueueing async PDF report: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e), 'message': 'Failed to start PDF generation'}), 500
+
+@app.route('/api/reports/jobs/<job_id>', methods=['GET'])
+def get_report_job_status(job_id):
+    """Check the status of an async report generation job"""
+    try:
+        db_client = get_supabase_client()
+        res = db_client.table('report_jobs').select('*').eq('id', job_id).execute()
+        
+        if not res.data or len(res.data) == 0:
+            return jsonify({'error': 'Job not found'}), 404
+            
+        job = res.data[0]
+        return jsonify({
+            'id': job.get('id'),
+            'status': job.get('status'),
+            'result_url': job.get('result_url'),
+            'error': job.get('error'),
+            'created_at': job.get('created_at'),
+            'completed_at': job.get('completed_at')
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching job status {job_id}: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e), 'message': 'Failed to fetch job status'}), 500
 
 
 @app.route('/api/reports/generate/branded-pdf', methods=['POST'])

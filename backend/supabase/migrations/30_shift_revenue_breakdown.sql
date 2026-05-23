@@ -55,9 +55,9 @@ DECLARE
   v_summary JSONB;
 BEGIN
   SELECT jsonb_build_object(
-    'total_cash', COALESCE(SUM(CASE WHEN payment_method = 'CASH' THEN amount ELSE 0 END), 0),
-    'total_mpesa', COALESCE(SUM(CASE WHEN payment_method IN ('MPESA', 'MPESA_MANUAL') THEN amount ELSE 0 END), 0),
-    'total_card', COALESCE(SUM(CASE WHEN payment_method = 'CARD' THEN amount ELSE 0 END), 0),
+    'total_cash', COALESCE(SUM(CASE WHEN UPPER(payment_method) = 'CASH' THEN amount ELSE 0 END), 0),
+    'total_mpesa', COALESCE(SUM(CASE WHEN UPPER(payment_method) IN ('MPESA', 'MPESA_MANUAL') THEN amount ELSE 0 END), 0),
+    'total_card', COALESCE(SUM(CASE WHEN UPPER(payment_method) = 'CARD' THEN amount ELSE 0 END), 0),
     'total_sales', COALESCE(SUM(amount), 0),
     'transaction_count', COUNT(*)
   ) INTO v_summary

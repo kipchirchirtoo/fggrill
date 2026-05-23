@@ -21,7 +21,9 @@ import {
   getInventoryReport,
   getDashboardReport,
   getConferenceReport,
-  exportReport
+  exportReport,
+  generateAsyncReport,
+  getReportJobStatus
 } from '../controllers/report.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -30,6 +32,8 @@ const router = express.Router();
 
 // Public export for testing (TODO: Re-enable protect)
 router.post('/export', exportReport);
+router.post('/generate/async', generateAsyncReport);
+router.get('/jobs/:id/status', getReportJobStatus);
 
 // Apply protection to all routes
 router.use(protect);

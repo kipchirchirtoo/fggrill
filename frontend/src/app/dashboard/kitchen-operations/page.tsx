@@ -153,15 +153,13 @@ export default function KitchenOperationsPage() {
                                 <p className="section-subtitle">Common kitchen tasks</p>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                             {quickActions.map((action) => (
-                                <Link key={action.href} href={action.href}>
-                                    <div className="action-card group">
-                                        <div className="action-card-icon">
-                                            <action.icon className="h-5 w-5" />
-                                        </div>
-                                        <p className="action-card-label">{action.title}</p>
+                                <Link key={action.href} href={action.href} className="action-card group">
+                                    <div className="action-card-icon">
+                                        <action.icon className="h-5 w-5" />
                                     </div>
+                                    <p className="action-card-label">{action.title}</p>
                                 </Link>
                             ))}
                         </div>

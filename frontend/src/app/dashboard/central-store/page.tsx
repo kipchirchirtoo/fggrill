@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
 import {
   Package, Truck, ClipboardList, RefreshCw, AlertTriangle,
-  Building2, Apple, Beer, Box, Navigation, ChevronRight, BarChart3
+  Building2, Apple, Beer, Box, Navigation, ChevronRight, BarChart3, ClipboardCheck, Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 import { KeyboardShortcutOverlay, useKeyboardShortcutOverlay } from '@/components/KeyboardShortcutOverlay';
@@ -55,6 +55,8 @@ export default function CentralStoreDashboard() {
         { href: '/dashboard/central-store/inventory', icon: Package, label: 'Master Catalog', desc: 'Global inventory', shortcut: 'Alt+I' },
         { href: '/dashboard/central-store/foodstuffs', icon: Apple, label: 'Foodstuffs', desc: 'Kitchen & Dry store' },
         { href: '/dashboard/central-store/bar-items', icon: Beer, label: 'Bar Store', desc: 'Beverages & Liquor' },
+        { href: '/dashboard/central-store/stock-takes', icon: ClipboardCheck, label: 'Stock Takes', desc: 'Foodstuffs vs Bar Store' },
+        { href: '/dashboard/central-store/spoilage', icon: Trash2, label: 'Spoilage Log', desc: 'Track losses & damage' },
       ]
     },
     {

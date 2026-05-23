@@ -6,11 +6,12 @@ import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { API_URL } from '@/lib/config';
-import { ArrowLeft, RefreshCw, Package, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Calendar, FileDown, Save, Send } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Package, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Calendar, FileDown, Save, Send, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { IOSButton } from '@/components/ui/ios-button';
 import { IOSCard } from '@/components/ui/ios-card';
 import { IOSBadge } from '@/components/ui/ios-badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { storeAPI, stockTakeAPI } from '@/lib/api';
 
 interface StockTakeItem {
@@ -24,6 +25,7 @@ interface StockTakeItem {
   variance_reason?: string;
   notes?: string;
   status: string;
+  is_manually_added?: boolean;
   item?: {
     name: string;
     unit: string;
@@ -57,6 +59,11 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   const [editedStocks, setEditedStocks] = useState<Record<string, number>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [newItemSku, setNewItemSku] = useState('');
+  const [newItemQuantity, setNewItemQuantity] = useState(0);
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
 
   const fetchStockTake = async () => {
     setIsLoading(true);
@@ -80,6 +87,21 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   useEffect(() => {
     fetchStockTake();
   }, [id]);
+
+  // Fetch available items for manual addition
+  useEffect(() => {
+    const fetchAvailableItems = async () => {
+      try {
+        const result = await storeAPI.getItems({ limit: 500 });
+        if (result.success) {
+          setAvailableItems(result.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching items:', error);
+      }
+    };
+    fetchAvailableItems();
+  }, []);
 
   const handleDownloadWorksheet = async () => {
     toast.info('Preparing worksheet...');
@@ -126,6 +148,35 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
       toast.error('Error saving progress');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAddManualItem = async () => {
+    if (!newItemSku || newItemQuantity === null) {
+      toast.error('Please select an item and enter quantity');
+      return;
+    }
+
+    try {
+      const result = await stockTakeAPI.updateStockTake(id, {
+        items: [{
+          item_sku: newItemSku,
+          counted_quantity: newItemQuantity,
+          is_new: true
+        }]
+      });
+
+      if (result.success) {
+        toast.success('Item added successfully');
+        setIsAddItemModalOpen(false);
+        setNewItemSku('');
+        setNewItemQuantity(0);
+        fetchStockTake();
+      } else {
+        toast.error(result.message || 'Failed to add item');
+      }
+    } catch (error) {
+      toast.error('Error adding item');
     }
   };
 
@@ -212,6 +263,12 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   const items = stockTake.items || [];
   const countedItems = items.filter(i => i.counted_quantity !== null);
   const itemsWithVariance = items.filter(i => i.variance !== 0);
+  
+  // Filter items by search term
+  const filteredItems = items.filter(item => 
+    item.item_sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.item?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <ProtectedRoute allowedRoles={[UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]}>
@@ -252,6 +309,13 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
               </IOSButton>
               {(stockTake.status?.toLowerCase() === 'draft' || stockTake.status?.toLowerCase() === 'in_progress') && (
                 <>
+                  <IOSButton
+                    variant="secondary"
+                    onClick={() => setIsAddItemModalOpen(true)}
+                    leftIcon={<Plus className="h-4 w-4" />}
+                  >
+                    Add Item
+                  </IOSButton>
                   <IOSButton
                     variant="secondary"
                     onClick={handleSaveProgress}
@@ -378,7 +442,21 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
 
           {/* Items List */}
           <IOSCard className="p-6">
-            <h2 className="text-lg font-bold mb-4">Stock Take Items</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">Stock Take Items</h2>
+              {(stockTake.status?.toLowerCase() === 'draft' || stockTake.status?.toLowerCase() === 'in_progress') && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search items..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 pr-4 py-2 border border-gray-300 rounded-md text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <RefreshCw className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                </div>
+              )}
+            </div>
             {items.length === 0 ? (
               <div className="text-center py-8">
                 <Package className="h-12 w-12 mx-auto text-gray-300 mb-2" />
@@ -398,10 +476,15 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => (
+                    {filteredItems.map((item) => (
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-3 px-4">
-                          <p className="font-medium">{item.item?.name || item.item_sku}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{item.item?.name || item.item_sku}</p>
+                            {item.is_manually_added && (
+                              <IOSBadge className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5">Manual</IOSBadge>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500">{item.item_sku}</p>
                           {item.variance_reason && (
                             <p className="text-xs text-orange-600 mt-1">Reason: {item.variance_reason}</p>
@@ -452,6 +535,46 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
               </div>
             )}
           </IOSCard>
+
+          {/* Add Item Modal */}
+          <Dialog open={isAddItemModalOpen} onOpenChange={setIsAddItemModalOpen}>
+            <DialogContent className="max-w-md w-[95vw]">
+              <DialogHeader>
+                <DialogTitle>Add Manual Item</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Item</label>
+                  <select
+                    value={newItemSku}
+                    onChange={(e) => setNewItemSku(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2.5"
+                  >
+                    <option value="">Select an item...</option>
+                    {availableItems.map(item => (
+                      <option key={item.sku} value={item.sku}>
+                        {item.item_name || item.description} ({item.sku})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Counted Quantity</label>
+                  <input
+                    type="number"
+                    value={newItemQuantity}
+                    onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 0)}
+                    className="w-full border rounded-lg px-3 py-2.5"
+                    placeholder="Enter quantity"
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <IOSButton variant="outline" onClick={() => setIsAddItemModalOpen(false)}>Cancel</IOSButton>
+                  <IOSButton onClick={handleAddManualItem} disabled={!newItemSku}>Add Item</IOSButton>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

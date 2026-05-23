@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import notificationService from '../services/notification.service';
 import { applyBranchFilter } from '../utils/branchIsolation';
+import { generateStockTakeWorksheetPDF, generateBranchStockTakeWorksheetPDF } from '../services/native-pdf-reports.service';
 
 /**
  * Delay utility for exponential backoff
@@ -167,29 +168,43 @@ export const createStockTake = async (req: Request, res: Response) => {
                 unit_cost: item.unit_cost,
                 variance_reason: item.variance_reason,
                 notes: item.notes,
-                status: item.counted_quantity !== null ? 'COUNTED' : 'PENDING'
+                status: item.counted_quantity !== null ? 'COUNTED' : 'PENDING',
+                is_manually_added: item.is_manually_added || false
             }));
         } else {
-            // Auto-populate from inventory_items
+            // Auto-populate from branch_stock (including zero-quantity items)
             let query = supabase
-                .from('inventory_items')
-                .select('item_code, current_stock, unit_cost')
-                .eq('is_active', true);
+                .from('branch_stock')
+                .select('item_sku, quantity')
+                .eq('branch_id', branch_id);
 
-            if (category_filter && category_filter !== 'ALL') {
-                query = query.eq('category', category_filter);
-            }
-
-            const { data: activeItems, error: fetchError } = await query;
+            const { data: branchStockItems, error: fetchError } = await query;
             if (fetchError) throw fetchError;
 
-            if (activeItems && activeItems.length > 0) {
-                itemsToInsert = activeItems.map((item: any) => ({
+            // Fetch item details from simple_items to get unit_cost
+            const skus = branchStockItems?.map(i => i.item_sku) || [];
+            let itemCostMap: Record<string, number> = {};
+            
+            if (skus.length > 0) {
+                const { data: itemsData } = await supabase
+                    .from('simple_items')
+                    .select('sku, cost_price')
+                    .in('sku', skus);
+                
+                itemCostMap = (itemsData || []).reduce((acc, item) => {
+                    acc[item.sku] = item.cost_price || 0;
+                    return acc;
+                }, {} as Record<string, number>);
+            }
+
+            if (branchStockItems && branchStockItems.length > 0) {
+                itemsToInsert = branchStockItems.map((item: any) => ({
                     stock_take_id: stockTake.id,
-                    item_sku: item.item_code,
-                    system_quantity: item.current_stock || 0,
-                    unit_cost: item.unit_cost || 0,
-                    status: 'PENDING'
+                    item_sku: item.item_sku,
+                    system_quantity: item.quantity || 0,
+                    unit_cost: itemCostMap[item.item_sku] || 0,
+                    status: 'PENDING',
+                    is_manually_added: false
                 }));
             }
         }
@@ -247,18 +262,44 @@ export const updateStockTake = async (req: Request, res: Response) => {
         // Update items if provided
         if (items && items.length > 0) {
             for (const item of items) {
-                const { error: itemError } = await supabase
-                    .from('stock_take_items')
-                    .update({
-                        counted_quantity: item.counted_quantity,
-                        variance_reason: item.variance_reason,
-                        notes: item.notes,
-                        status: item.counted_quantity !== null ? 'COUNTED' : 'PENDING',
-                        counted_at: item.counted_quantity !== null ? new Date().toISOString() : null
-                    })
-                    .eq('id', item.id);
+                const updateData: any = {
+                    counted_quantity: item.counted_quantity,
+                    variance_reason: item.variance_reason,
+                    notes: item.notes,
+                    status: item.counted_quantity !== null ? 'COUNTED' : 'PENDING',
+                    counted_at: item.counted_quantity !== null ? new Date().toISOString() : null
+                };
+                
+                // If adding a new item manually
+                if (item.is_new) {
+                    // Get unit_cost from simple_items
+                    const { data: itemData } = await supabase
+                        .from('simple_items')
+                        .select('cost_price')
+                        .eq('sku', item.item_sku)
+                        .single();
+                    
+                    updateData.unit_cost = itemData?.cost_price || 0;
+                    updateData.is_manually_added = true;
+                    
+                    const { error: insertError } = await supabase
+                        .from('stock_take_items')
+                        .insert({
+                            ...updateData,
+                            stock_take_id: id,
+                            item_sku: item.item_sku,
+                            system_quantity: 0
+                        });
+                    
+                    if (insertError) throw insertError;
+                } else {
+                    const { error: itemError } = await supabase
+                        .from('stock_take_items')
+                        .update(updateData)
+                        .eq('id', item.id);
 
-                if (itemError) throw itemError;
+                    if (itemError) throw itemError;
+                }
             }
         }
 
@@ -770,6 +811,51 @@ export const generateWorksheet = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Error generating stock take worksheet:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Generate branch stock take worksheet PDF with category grouping
+export const generateBranchStockTakeWorksheet = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const user = (req as any).user;
+
+        // Get stock take details
+        const { data: stockTake, error: takeError } = await supabase
+            .from('stock_takes')
+            .select('*, branch:branches(name)')
+            .eq('id', id)
+            .single();
+
+        if (takeError) throw takeError;
+        if (!stockTake) {
+            return res.status(404).json({ success: false, message: 'Stock take not found' });
+        }
+
+        const branchName = stockTake.branch?.name || 'Unknown Branch';
+        const takeNumber = stockTake.take_number || 'N/A';
+
+        // Get stock take items with item details
+        const { data: takeItems, error: itemsError } = await supabase
+            .from('stock_take_items')
+            .select('*, item:simple_items(item_name, category, unit_of_measure)')
+            .eq('stock_take_id', id);
+
+        if (itemsError) throw itemsError;
+
+        const items = takeItems || [];
+
+        await generateBranchStockTakeWorksheetPDF(res, {
+            title: 'Branch Stock Take Worksheet',
+            branchName,
+            takeNumber,
+            items,
+            generatedBy: `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'System'
+        });
+
+    } catch (error: any) {
+        console.error('Error generating branch stock take worksheet:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };

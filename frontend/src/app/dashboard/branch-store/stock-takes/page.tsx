@@ -43,12 +43,17 @@ export default function BranchStockTakesPage() {
 
   const handleStartStockTake = async () => {
     try {
-      await stockTakeAPI.createStockTake({
+      const result = await stockTakeAPI.createStockTake({
         branch_id: user?.branch_id || (user as any)?.branchId || 1,
         count_type: 'daily'
       });
-      toast.success('Stock take session initialized');
-      fetchStockTakes();
+      if (result.success) {
+        toast.success('Stock take session initialized - auto-populated from branch stock');
+        // Navigate to the new stock take detail page
+        window.location.href = `/dashboard/branch-store/stock-takes/${result.data.id}`;
+      } else {
+        toast.error(result.message || 'Failed');
+      }
     } catch (error: any) { toast.error(error.message || 'Failed'); }
   };
 

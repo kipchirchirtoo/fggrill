@@ -70,7 +70,7 @@ export default function BankingControlPage() {
   }, [dateRange]);
 
   return (
-    <ProtectedRoute roles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN]}>
+    <ProtectedRoute allowedRoles={[UserRole.DIRECTOR, UserRole.SUPER_ADMIN, UserRole.AUDITOR, UserRole.CENTRAL_STOREKEEPER]}>
       <DashboardLayout>
         <div className="p-6 space-y-8">
           {/* Header */}

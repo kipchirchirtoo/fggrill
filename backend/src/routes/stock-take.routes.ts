@@ -8,6 +8,7 @@ import {
     completeStockTake,
     generateWorksheet
 } from '../controllers/storekeeping/resources.controller';
+import { generateBranchStockTakeWorksheet } from '../controllers/stock-take.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
@@ -75,6 +76,12 @@ router.post('/:id/submit',
 router.get('/:id/worksheet',
     authorize(AUDIT_ROLES),
     generateWorksheet
+);
+
+// Branch stock take worksheet with category grouping
+router.get('/:id/worksheet-categorized',
+    authorize(AUDIT_ROLES),
+    generateBranchStockTakeWorksheet
 );
 
 export default router;

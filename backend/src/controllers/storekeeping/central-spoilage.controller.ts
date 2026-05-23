@@ -1,0 +1,506 @@
+import { Request, Response } from 'express';
+import { supabase } from '../../config/database';
+import { logger } from '../../utils/logger';
+import { generateOrderNumber } from '../../services/sku.service';
+
+// Spoilage reasons enum
+const SPOILAGE_REASONS = [
+  'EXPIRED',
+  'DAMAGED',
+  'SPOILED',
+  'QUALITY_ISSUE',
+  'THEFT',
+  'BREAKAGE',
+  'CONTAMINATION',
+  'OTHER'
+] as const;
+
+type SpoilageReason = typeof SPOILAGE_REASONS[number];
+
+// ============================================================
+// GET SPOILAGE RECORDS
+// ============================================================
+
+export const getSpoilageRecords = async (req: Request, res: Response) => {
+  try {
+    const { store_type, reason, status, from_date, to_date } = req.query;
+
+    let query = supabase
+      .from('v_central_spoilage_log')
+      .select('*');
+
+    if (store_type) {
+      query = query.eq('store_type', store_type);
+    }
+    if (reason) {
+      query = query.eq('reason', reason);
+    }
+    if (status) {
+      query = query.eq('status', status);
+    }
+    if (from_date) {
+      query = query.gte('spoilage_date', from_date);
+    }
+    if (to_date) {
+      query = query.lte('spoilage_date', to_date);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(100);
+
+    if (error) throw error;
+
+    // Calculate summary stats
+    const records = data || [];
+    const summary = {
+      totalRecords: records.length,
+      totalLoss: records.reduce((sum, r) => sum + (r.total_loss || 0), 0),
+      pendingApproval: records.filter(r => r.status === 'PENDING').length,
+      byReason: records.reduce((acc, r) => {
+        const reason = r.reason || 'OTHER';
+        acc[reason] = (acc[reason] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      byStoreType: records.reduce((acc, r) => {
+        const type = r.store_type || 'foodstuffs';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    };
+
+    res.json({
+      success: true,
+      count: records.length,
+      summary,
+      data: records
+    });
+  } catch (error: any) {
+    logger.error('Error fetching spoilage records:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch spoilage records'
+    });
+  }
+};
+
+// ============================================================
+// GET SPOILAGE SUMMARY/STATS
+// ============================================================
+
+export const getSpoilageSummary = async (req: Request, res: Response) => {
+  try {
+    const { period, store_type } = req.query; // 'today', 'week', 'month'
+
+    let fromDate: string;
+    const now = new Date();
+    
+    switch (period) {
+      case 'week':
+        fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      case 'month':
+        fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        break;
+      default: // today
+        fromDate = new Date().toISOString().split('T')[0];
+    }
+
+    let query = supabase
+      .from('central_spoilage_log')
+      .select('*')
+      .gte('created_at', fromDate);
+
+    if (store_type) {
+      query = query.eq('store_type', store_type);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    const records = data || [];
+
+    // Group by reason
+    const byReason = records.reduce((acc, record) => {
+      const reason = record.reason || 'OTHER';
+      acc[reason] = (acc[reason] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Group by day
+    const byDay = records.reduce((acc, record) => {
+      const day = new Date(record.created_at).toISOString().split('T')[0];
+      if (!acc[day]) {
+        acc[day] = { count: 0, loss: 0 };
+      }
+      acc[day].count++;
+      acc[day].loss += record.total_loss || 0;
+      return acc;
+    }, {} as Record<string, { count: number; loss: number }>);
+
+    res.json({
+      success: true,
+      data: {
+        totalRecords: records.length,
+        totalLoss: records.reduce((sum, r) => sum + (r.total_loss || 0), 0),
+        byReason,
+        byDay,
+        period: period || 'today'
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error fetching spoilage summary:', error);
+    res.json({
+      success: true,
+      data: {
+        totalRecords: 0,
+        totalLoss: 0,
+        byReason: {},
+        byDay: {},
+        period: 'today'
+      }
+    });
+  }
+};
+
+// ============================================================
+// GET ITEMS FOR SPOILAGE (searchable dropdown)
+// ============================================================
+
+export const getSpoilageItems = async (req: Request, res: Response) => {
+  try {
+    const { search, store_type } = req.query;
+
+    let query = supabase
+      .from('simple_items')
+      .select('sku, item_name, description, category, store_type, unit_of_measure, cost_price, quantity')
+      .eq('is_active', true);
+
+    if (store_type) {
+      query = query.eq('store_type', store_type);
+    }
+
+    if (search) {
+      const searchTerm = String(search).trim();
+      query = query.or(`item_name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+    }
+
+    const { data, error } = await query.order('item_name').limit(100);
+
+    if (error) throw error;
+
+    const items = (data || []).map(item => ({
+      id: item.sku,
+      name: item.item_name || item.description,
+      sku: item.sku,
+      category: item.category,
+      store_type: item.store_type,
+      unit: item.unit_of_measure || 'pcs',
+      cost: item.cost_price || 0,
+      stock: item.quantity || 0
+    }));
+
+    res.json({
+      success: true,
+      count: items.length,
+      data: items
+    });
+  } catch (error: any) {
+    logger.error('Error fetching spoilage items:', error);
+    res.json({
+      success: true,
+      count: 0,
+      data: []
+    });
+  }
+};
+
+// ============================================================
+// CREATE SPOILAGE RECORD (with atomic stock deduction)
+// ============================================================
+
+export const createSpoilageRecord = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    const {
+      item_sku,
+      quantity,
+      unit,
+      reason,
+      reason_details,
+      disposal_method,
+      notes,
+      spoilage_date
+    } = req.body;
+
+    // Validation
+    if (!item_sku || !quantity || !unit || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item SKU, quantity, unit, and reason are required'
+      });
+    }
+
+    if (!SPOILAGE_REASONS.includes(reason)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid reason. Must be one of: ${SPOILAGE_REASONS.join(', ')}`
+      });
+    }
+
+    if (quantity <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Quantity must be greater than 0'
+      });
+    }
+
+    // Get item details
+    const { data: item, error: itemError } = await supabase
+      .from('simple_items')
+      .select('*')
+      .eq('sku', item_sku)
+      .single();
+
+    if (itemError || !item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found'
+      });
+    }
+
+    // Check sufficient stock
+    if (item.quantity < quantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient stock. Available: ${item.quantity}, Requested: ${quantity}`
+      });
+    }
+
+    // Generate spoilage number
+    const { data: spoilageNumber, error: seqError } = await supabase
+      .rpc('get_spoilage_number');
+
+    if (seqError) throw seqError;
+
+    // Start transaction: create spoilage record and deduct stock atomically
+    const previousQuantity = item.quantity;
+    const newQuantity = previousQuantity - quantity;
+    const unitCost = item.cost_price || 0;
+
+    // 1. Create spoilage record
+    const { data: spoilage, error: spoilageError } = await supabase
+      .from('central_spoilage_log')
+      .insert({
+        spoilage_number: spoilageNumber,
+        item_sku,
+        item_name: item.item_name || item.description,
+        store_type: item.store_type || 'foodstuffs',
+        category: item.category,
+        quantity,
+        unit,
+        unit_cost: unitCost,
+        reason,
+        reason_details,
+        disposal_method,
+        status: 'PENDING',
+        recorded_by: userId,
+        notes,
+        spoilage_date: spoilage_date || new Date().toISOString().split('T')[0]
+      })
+      .select()
+      .single();
+
+    if (spoilageError) throw spoilageError;
+
+    // 2. Deduct stock from simple_items
+    const { error: updateError } = await supabase
+      .from('simple_items')
+      .update({
+        quantity: newQuantity,
+        last_updated: new Date().toISOString()
+      })
+      .eq('sku', item_sku);
+
+    if (updateError) throw updateError;
+
+    // 3. Log to stock_history
+    const orderNum = await generateOrderNumber('SPL');
+    const { error: historyError } = await supabase.from('stock_history').insert({
+      item_sku,
+      change_type: 'OUT',
+      quantity_change: quantity,
+      previous_quantity: previousQuantity,
+      new_quantity: newQuantity,
+      reason: `SPOILAGE: ${reason}`,
+      reference: spoilageNumber,
+      notes: reason_details || notes,
+      user_id: userId
+    });
+
+    if (historyError) {
+      logger.error('Error logging stock history:', historyError);
+      // Don't fail the operation if history logging fails
+    }
+
+    logger.info(`Spoilage recorded: ${spoilageNumber} - ${item_sku} -${quantity} units`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Spoilage recorded successfully - stock deducted',
+      data: {
+        ...spoilage,
+        previous_quantity: previousQuantity,
+        new_quantity: newQuantity,
+        order_number: orderNum
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error creating spoilage record:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to record spoilage'
+    });
+  }
+};
+
+// ============================================================
+// APPROVE/REJECT SPOILAGE RECORD
+// ============================================================
+
+export const updateSpoilageStatus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { action, rejection_reason } = req.body; // action: 'approve' | 'reject'
+    const userId = (req as any).user?.id;
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid action. Must be approve or reject'
+      });
+    }
+
+    // Get current record
+    const { data: current, error: fetchError } = await supabase
+      .from('central_spoilage_log')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !current) {
+      return res.status(404).json({
+        success: false,
+        message: 'Spoilage record not found'
+      });
+    }
+
+    if (current.status !== 'PENDING') {
+      return res.status(400).json({
+        success: false,
+        message: `Record is already ${current.status.toLowerCase()}`
+      });
+    }
+
+    const updateData: any = {
+      status: action === 'approve' ? 'APPROVED' : 'REJECTED',
+      approved_by: userId,
+      approved_at: new Date().toISOString()
+    };
+
+    if (action === 'reject') {
+      updateData.rejection_reason = rejection_reason;
+
+      // Revert stock deduction if rejected
+      const { data: item } = await supabase
+        .from('simple_items')
+        .select('quantity')
+        .eq('sku', current.item_sku)
+        .single();
+
+      if (item) {
+        const newQuantity = item.quantity + current.quantity;
+        await supabase
+          .from('simple_items')
+          .update({
+            quantity: newQuantity,
+            last_updated: new Date().toISOString()
+          })
+          .eq('sku', current.item_sku);
+
+        // Log reversal to stock_history
+        const orderNum = await generateOrderNumber('SPL-REV');
+        await supabase.from('stock_history').insert({
+          item_sku: current.item_sku,
+          change_type: 'IN',
+          quantity_change: current.quantity,
+          previous_quantity: item.quantity,
+          new_quantity: newQuantity,
+          reason: `SPOILAGE REVERSAL: ${current.reason}`,
+          reference: current.spoilage_number,
+          notes: `Reverted rejected spoilage: ${rejection_reason}`,
+          user_id: userId
+        });
+
+        logger.info(`Spoilage rejected and stock reverted: ${current.spoilage_number}`);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('central_spoilage_log')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: `Spoilage record ${action}d successfully`,
+      data
+    });
+  } catch (error: any) {
+    logger.error('Error updating spoilage status:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update spoilage status'
+    });
+  }
+};
+
+// ============================================================
+// GET SINGLE SPOILAGE RECORD
+// ============================================================
+
+export const getSpoilageRecord = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('v_central_spoilage_log')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          message: 'Spoilage record not found'
+        });
+      }
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error: any) {
+    logger.error('Error fetching spoilage record:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch spoilage record'
+    });
+  }
+};

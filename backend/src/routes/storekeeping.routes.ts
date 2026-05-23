@@ -99,6 +99,27 @@ import {
 } from '../controllers/storekeeping/resources.controller';
 
 import {
+  getCentralStockTakes,
+  getCentralStockTake,
+  createCentralStockTake,
+  updateCentralStockTake,
+  submitCentralStockTake,
+  approveCentralStockTake,
+  rejectCentralStockTake,
+  generateCentralStockTakeWorksheetPDF,
+  generateCentralStockTakeExcel
+} from '../controllers/storekeeping/central-stock-take.controller';
+
+import {
+  getSpoilageRecords,
+  getSpoilageSummary,
+  getSpoilageItems,
+  createSpoilageRecord,
+  updateSpoilageStatus,
+  getSpoilageRecord
+} from '../controllers/storekeeping/central-spoilage.controller';
+
+import {
   getReceivedItems,
   createUsageRecord,
   recordUsageEntry,
@@ -324,6 +345,33 @@ router.get('/stock-takes/:id', authorize(staffRoles), getStockTake);
 router.get('/stock-takes/:id/items', authorize(staffRoles), getStockTakeItems);
 router.put('/stock-takes/:id/complete', authorize(managerRoles), completeStockTake);
 router.put('/stock-take-items/:id', authorize(staffRoles), updateStockTakeItem);
+
+// =====================================================
+// CENTRAL STORE STOCK TAKES (Foodstuffs vs Bar Store)
+// =====================================================
+
+router.route('/central-stock-takes')
+  .get(authorize(staffRoles), getCentralStockTakes)
+  .post(authorize(managerRoles), createCentralStockTake);
+
+router.get('/central-stock-takes/:id', authorize(staffRoles), getCentralStockTake);
+router.put('/central-stock-takes/:id', authorize(managerRoles), updateCentralStockTake);
+router.post('/central-stock-takes/:id/submit', authorize(managerRoles), submitCentralStockTake);
+router.post('/central-stock-takes/:id/approve', authorize(auditorRoles), approveCentralStockTake);
+router.post('/central-stock-takes/:id/reject', authorize(auditorRoles), rejectCentralStockTake);
+router.get('/central-stock-takes/:id/worksheet-pdf', authorize(staffRoles), generateCentralStockTakeWorksheetPDF);
+router.get('/central-stock-takes/:id/excel', authorize(staffRoles), generateCentralStockTakeExcel);
+
+// =====================================================
+// CENTRAL STORE SPOILAGE LOG ROUTES
+// =====================================================
+
+router.get('/central-spoilage', authorize(staffRoles), getSpoilageRecords);
+router.get('/central-spoilage/summary', authorize(staffRoles), getSpoilageSummary);
+router.get('/central-spoilage/items', authorize(staffRoles), getSpoilageItems);
+router.post('/central-spoilage', authorize(managerRoles), createSpoilageRecord);
+router.get('/central-spoilage/:id', authorize(staffRoles), getSpoilageRecord);
+router.patch('/central-spoilage/:id/status', authorize(auditorRoles), updateSpoilageStatus);
 
 // =====================================================
 // KITCHEN USAGE TRACKING ROUTES

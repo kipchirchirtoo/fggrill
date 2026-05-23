@@ -765,7 +765,7 @@ async function linkPaymentToActiveShift(
             shift_id: shift.id,
             transaction_id: paymentId,
             transaction_ref: paymentRef,
-            payment_method: paymentMethod,
+            payment_method: paymentMethod?.toUpperCase(),
             amount,
             transaction_time: new Date().toISOString()
         });

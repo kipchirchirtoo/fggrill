@@ -1,6 +1,6 @@
 {
   "productName": "Famous Gates Hotels",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "identifier": "com.hirall.famousgates",
   "build": {
     "beforeDevCommand": "npm run build:frontend -- --watch",
