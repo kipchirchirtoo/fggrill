@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager};
 use std::path::PathBuf;
+use std::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DownloadRequest {
@@ -33,7 +34,6 @@ pub async fn cmd_download_file(
     request: DownloadRequest,
 ) -> Result<DownloadResponse, String> {
     use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
-    use tauri_plugin_fs::FsExt;
     use tauri_plugin_notification::NotificationExt;
     
     // Get Downloads directory
@@ -55,7 +55,7 @@ pub async fn cmd_download_file(
         let overwrite = app
             .dialog()
             .message(format!("File '{}' already exists. Do you want to overwrite it?", request.filename))
-            .kind(MessageDialogKind::Question)
+            .kind(MessageDialogKind::Warning)
             .blocking_show();
             
         if !overwrite {
@@ -108,8 +108,7 @@ pub async fn cmd_save_file(
     app: AppHandle,
     request: SaveFileRequest,
 ) -> Result<DownloadResponse, String> {
-    use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
-    use tauri_plugin_fs::FsExt;
+    use tauri_plugin_dialog::DialogExt;
     use tauri_plugin_notification::NotificationExt;
     
     // Show save dialog
@@ -129,20 +128,26 @@ pub async fn cmd_save_file(
         }
     };
     
-    // Write the file
-    match app.fs().write(&file_path, &request.data) {
+    // Convert FilePath to PathBuf for writing
+    let file_path_buf: PathBuf = file_path.into();
+    
+    // Write the file using std::fs
+    match fs::write(&file_path_buf, &request.data) {
         Ok(_) => {
             // Show success notification
+            let file_name = file_path_buf.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
             let _ = app
                 .notification()
                 .builder()
                 .title("File Saved")
-                .body(&format!("Successfully saved {}", file_path.file_name().unwrap_or_default().to_string_lossy()))
+                .body(&format!("Successfully saved {}", file_name))
                 .show();
                 
             Ok(DownloadResponse {
                 success: true,
-                file_path: Some(file_path.to_string_lossy().to_string()),
+                file_path: Some(file_path_buf.to_string_lossy().to_string()),
                 error: None,
             })
         }
@@ -170,7 +175,6 @@ pub async fn cmd_save_to_downloads(
     app: AppHandle,
     request: SaveFileRequest,
 ) -> Result<DownloadResponse, String> {
-    use tauri_plugin_fs::FsExt;
     use tauri_plugin_notification::NotificationExt;
     
     // Get Downloads directory
@@ -187,8 +191,8 @@ pub async fn cmd_save_to_downloads(
     
     let file_path = downloads_dir.join(&request.filename);
     
-    // Write the file
-    match app.fs().write(&file_path, &request.data) {
+    // Write the file using std::fs
+    match fs::write(&file_path, &request.data) {
         Ok(_) => {
             // Show success notification
             let _ = app

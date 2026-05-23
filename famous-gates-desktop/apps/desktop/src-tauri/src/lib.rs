@@ -1,6 +1,8 @@
 // Famous Gates Hotels — Tauri 2 Library Root
 // Registers all plugins, commands, and state
 
+use tauri::Manager;
+
 mod commands;
 mod events;
 mod models;
