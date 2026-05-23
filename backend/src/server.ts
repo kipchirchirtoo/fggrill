@@ -67,6 +67,9 @@ initializeApp().then(({ app, httpServer }) => {
     res.status(200).json({ ok: true, timestamp: new Date().toISOString() });
   });
 
+  // Trust proxy (required for Render/Heroku/Railway behind load balancer)
+  app.set('trust proxy', 1);
+
   // Middleware
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));

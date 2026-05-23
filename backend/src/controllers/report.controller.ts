@@ -6,6 +6,7 @@ import { HousekeepingTask } from '../models/HousekeepingTask';
 import { MaintenanceTask } from '../models/MaintenanceTask';
 import { InventoryItem } from '../models/Inventory';
 import { logger } from '../utils/logger';
+import { AppError } from '../middleware/errorHandler';
 import axios from 'axios';
 import {
   generateSupplierStatementPDF,
