@@ -59,8 +59,7 @@ build-tauri-windows:
   script:
     - cd famous-gates-desktop/apps/desktop
     - npm ci
-    - npm run tauri build -- --target x86_64-pc-windows-gnu
-  allow_failure: true
+    - SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" npm run tauri build -- --target x86_64-pc-windows-gnu
   artifacts:
     name: "tauri-windows-$CI_COMMIT_SHORT_SHA"
     paths:
