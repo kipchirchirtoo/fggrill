@@ -42,7 +42,6 @@ jobs:
 
       - name: install frontend dependencies
         run: |
-          cd famous-gates-desktop
           npm install
 
       - uses: tauri-apps/tauri-action@v0
@@ -53,7 +52,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         with:
-          projectPath: famous-gates-desktop
+          projectPath: .
           tagName: v__VERSION__
           releaseName: "Famous Gates Hotels v__VERSION__"
           releaseBody: "Automated release of the Famous Gates Hotels Desktop Application."
