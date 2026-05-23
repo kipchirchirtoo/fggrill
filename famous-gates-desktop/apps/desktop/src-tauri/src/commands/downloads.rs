@@ -129,7 +129,7 @@ pub async fn cmd_save_file(
     };
     
     // Convert FilePath to PathBuf for writing
-    let file_path_buf: PathBuf = file_path.into();
+    let file_path_buf: PathBuf = file_path.as_ref().to_path_buf();
     
     // Write the file using std::fs
     match fs::write(&file_path_buf, &request.data) {
@@ -229,14 +229,23 @@ pub async fn cmd_save_to_downloads(
 /// Open the Downloads folder in file explorer
 #[command]
 pub async fn cmd_open_downloads_folder(app: AppHandle) -> Result<bool, String> {
-    use tauri_plugin_shell::ShellExt;
+    use std::process::Command;
     
     let downloads_dir = match app.path().download_dir() {
         Ok(dir) => dir,
         Err(e) => return Err(format!("Failed to get downloads directory: {}", e)),
     };
     
-    match app.shell().open(downloads_dir.to_string_lossy(), None) {
+    // Cross-platform folder opening
+    let result = if cfg!(target_os = "windows") {
+        Command::new("explorer").arg(&downloads_dir).spawn()
+    } else if cfg!(target_os = "macos") {
+        Command::new("open").arg(&downloads_dir).spawn()
+    } else {
+        Command::new("xdg-open").arg(&downloads_dir).spawn()
+    };
+    
+    match result {
         Ok(_) => Ok(true),
         Err(e) => Err(format!("Failed to open downloads folder: {}", e)),
     }
