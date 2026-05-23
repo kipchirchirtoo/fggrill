@@ -23,7 +23,7 @@ export default function InventoryPage() {
   const [isEdit, setIsEdit] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '', store_type: 'foodstuffs' });
+  const [formData, setFormData] = useState({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '', store_type: 'foodstuffs', quantity: 0 });
   const [globalStats, setGlobalStats] = useState({ total: 0, inStock: 0, lowStock: 0, outOfStock: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -125,7 +125,7 @@ export default function InventoryPage() {
   const handleCreateOrUpdate = async () => {
     setIsActionLoading(true);
     try {
-      const payload = { ...formData, quantity: isEdit ? (selectedItem?.quantity || 0) : 0 };
+      const payload = { ...formData, quantity: isEdit ? (selectedItem?.quantity || 0) : formData.quantity };
       const response = isEdit && selectedItem
         ? await storeAPI.updateItem(selectedItem.sku, payload)
         : await storeAPI.createItem(payload);
@@ -160,7 +160,8 @@ export default function InventoryPage() {
       reorder_level: item.reorder_level || 0,
       cost_price: item.cost_price || 0,
       sku: item.sku || '',
-      store_type: (item as any).store_type || 'foodstuffs'
+      store_type: (item as any).store_type || 'foodstuffs',
+      quantity: item.quantity || 0
     });
     setModalOpen(true);
   };
@@ -168,7 +169,7 @@ export default function InventoryPage() {
   const openAddModal = () => {
     setIsEdit(false);
     setSelectedItem(null);
-    setFormData({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '', store_type: 'foodstuffs' });
+    setFormData({ item_name: '', category: '', unit_of_measure: '', reorder_level: 0, cost_price: 0, sku: '', store_type: 'foodstuffs', quantity: 0 });
     setModalOpen(true);
   };
 
@@ -675,6 +676,21 @@ export default function InventoryPage() {
                     onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) })}
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Initial Stock Quantity</label>
+                <Input
+                  type="number"
+                  min="0"
+                  className="bg-white border-stone-200"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+                  placeholder="Enter initial stock amount (optional)"
+                  disabled={isEdit}
+                />
+                <p className="text-[10px] text-stone-400 mt-1">
+                  {isEdit ? 'Stock cannot be edited here. Use Receiving/GRN to adjust stock.' : 'Leave at 0 to add stock later via receiving/GRN'}
+                </p>
               </div>
               <div>
                 <label className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-1.5 block">Store Type (Classification) *</label>

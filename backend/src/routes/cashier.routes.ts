@@ -62,6 +62,10 @@ router.use((req: any, res, next) => {
         'restaurant_manager',
         'auditor',
         'general_manager',
+        'director',
+        'hr_manager',
+        'finance_manager',
+        'night_auditor',
         'kyogong_spa_cashier',
         'kyogong_executive_bar_cashier',
         'kyogong_sports_bar_cashier',
@@ -82,8 +86,8 @@ router.use((req: any, res, next) => {
 router.get('/logbook/today', getCashierLogbookToday);
 router.post('/logbook', saveCashierLogbook);
 router.post('/logbook/:id/submit', submitLogbookForAudit);
-router.get('/logbook/pending', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT] as any), getLogbooksForAudit);
-router.post('/logbook/:id/audit', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT] as any), auditLogbook);
+router.get('/logbook/pending', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.FINANCE_MANAGER, UserRole.NIGHT_AUDITOR] as any), getLogbooksForAudit);
+router.post('/logbook/:id/audit', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.FINANCE_MANAGER, UserRole.NIGHT_AUDITOR] as any), auditLogbook);
 
 // ============================================
 // EXISTING ROUTES

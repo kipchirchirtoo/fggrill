@@ -29,7 +29,7 @@ export const CATEGORY_CODES: Record<string, { code: string; name: string }> = {
 };
 
 // Order number types
-export type OrderType = 'STKIN' | 'STKOUT' | 'PO' | 'DN' | 'INV' | 'TRF';
+export type OrderType = 'STKIN' | 'STKOUT' | 'PO' | 'DN' | 'INV' | 'TRF' | 'SPL' | 'SPL-REV';
 
 /**
  * Get category code from category name

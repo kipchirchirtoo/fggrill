@@ -93,7 +93,7 @@ export const getPurchaseOrders = async (
         // Filter by store_type if specified
         if (store_type) {
             enrichedOrders = enrichedOrders.filter(order => 
-                order.items.some(i => i.item?.store_type === store_type)
+                order.items.some((i: any) => i.item?.store_type === store_type)
             );
         }
 

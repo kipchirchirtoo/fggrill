@@ -17,8 +17,7 @@ import {
   generateLeaveManagementPDF,
   generateDocumentationPDF,
 } from '../services/native-pdf-reports.service';
-
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 // @desc    Get occupancy report
 // @route   GET /api/reports/occupancy

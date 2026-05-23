@@ -385,9 +385,14 @@ export const approveCentralStockTake = async (req: Request, res: Response) => {
       }
 
       for (const item of varianceItems) {
+        const { data: current } = await supabase
+          .from('simple_items')
+          .select('quantity')
+          .eq('sku', item.item_sku)
+          .single();
         await supabase
           .from('simple_items')
-          .update({ quantity: supabase.raw(`quantity + ${item.variance}`) })
+          .update({ quantity: (current?.quantity ?? 0) + item.variance })
           .eq('sku', item.item_sku);
       }
     }

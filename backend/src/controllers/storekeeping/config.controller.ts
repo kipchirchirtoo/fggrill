@@ -156,7 +156,7 @@ export const exportDataExcel = async (req: Request, res: Response, next: NextFun
         const wb = XLSX.utils.book_new();
 
         // Warehouse Stock Sheet
-        const wsItemsData = [['SKU', 'Barcode', 'Name', 'Description', 'Category', 'Store Type', 'Cost Price', 'Retail Price', 'Quantity', 'Valuation (KES)']];
+        const wsItemsData: (string | number)[][] = [['SKU', 'Barcode', 'Name', 'Description', 'Category', 'Store Type', 'Cost Price', 'Retail Price', 'Quantity', 'Valuation (KES)']];
         if (items) {
             const foodstuffs = items.filter((i: any) => i.store_type !== 'bar_store');
             const barStore = items.filter((i: any) => i.store_type === 'bar_store');

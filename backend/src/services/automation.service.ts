@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 class AutomationService {
   private emailTransporter: nodemailer.Transporter;
@@ -165,7 +166,7 @@ class AutomationService {
 
       for (const reportType of reportTypes) {
         try {
-          await axios.post(`${process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com'}/api/reports/generate/pdf`, {
+          await axios.post(`${PYTHON_SERVICE_URL}/api/reports/generate/pdf`, {
             reportType,
             filters: {
               startDate: today,
@@ -380,7 +381,7 @@ class AutomationService {
       const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       // Call Python service to generate report
-      await axios.post(`${process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com'}/api/reports/generate/pdf`, {
+      await axios.post(`${PYTHON_SERVICE_URL}/api/reports/generate/pdf`, {
         reportType: 'revenue_analysis',
         filters: {
           startDate: startDate.toISOString().split('T')[0],

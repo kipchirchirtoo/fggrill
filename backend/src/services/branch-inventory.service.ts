@@ -1274,7 +1274,7 @@ export async function getDispatchHistory(fromBranchId: number, status?: string, 
 
   if (storeType) {
     return mappedDispatches.filter(d => 
-      d.items.some(i => i.store_type === storeType)
+      d.items.some((i: any) => i.store_type === storeType)
     );
   }
 
