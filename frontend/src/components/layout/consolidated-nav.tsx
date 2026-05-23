@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useAuth, UserRole } from '@/lib/auth-context';
-import { useBranchContext } from '@/lib/branch-context';
+import { useBranch } from '@/lib/branch-context';
 import {
   CentralStoreNav,
   DirectorNav,
@@ -20,7 +20,7 @@ interface ConsolidatedNavProps {
 
 export function ConsolidatedNav({ onItemClick }: ConsolidatedNavProps) {
   const { user } = useAuth();
-  const { activeBranch } = useBranchContext();
+  const { activeBranch } = useBranch();
 
   if (!user) return null;
 
