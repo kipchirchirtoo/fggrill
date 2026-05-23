@@ -1,3 +1,4 @@
+# Trigger: $(date)
 stages:
   - build
   - package
