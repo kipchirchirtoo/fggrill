@@ -129,7 +129,10 @@ pub async fn cmd_save_file(
     };
     
     // Convert FilePath to PathBuf for writing
-    let file_path_buf: PathBuf = file_path.as_ref().to_path_buf();
+    let file_path_buf: PathBuf = match file_path {
+        tauri_plugin_fs::FilePath::Path(p) => p,
+        _ => return Err("Invalid file path type".to_string()),
+    };
     
     // Write the file using std::fs
     match fs::write(&file_path_buf, &request.data) {
