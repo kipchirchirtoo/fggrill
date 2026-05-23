@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, dialog, ipcMain, session, net, protocol } = require('electron');
+const { app, BrowserWindow, globalShortcut, dialog, ipcMain, session, net, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -1179,19 +1179,58 @@ function createWindow() {
             return { action: 'allow' };
         }
 
+        // API/Backend URLs: Open in external browser to prevent renderer crash
+        if (url.includes('/api/') || url.includes(':5000') || url.includes(':3000') || 
+            url.endsWith('.json') || url.includes('localhost') || url.includes('127.0.0.1')) {
+            console.log(`[LinkHandler] Opening API URL in system browser: ${url}`);
+            shell.openExternal(url);
+            return { action: 'deny' };
+        }
+
+        // External sites: Open in system browser
+        const allowedDomains = ['famousgate.hirall.com', 'famousgates.com', 'localhost:3000'];
+        const isExternal = !allowedDomains.some(domain => url.includes(domain));
+        if (isExternal && (url.startsWith('http://') || url.startsWith('https://'))) {
+            console.log(`[LinkHandler] Opening external URL in system browser: ${url}`);
+            shell.openExternal(url);
+            return { action: 'deny' };
+        }
+
         // Everything else: navigate in the main window
         setImmediate(() => mainWindow.loadURL(url));
         return { action: 'deny' };
     });
 
-    // 2. Allow all navigation — the live site handles its own routing
+    // 2. Handle navigation — prevent crashes from API/backend URLs
     mainWindow.webContents.on('will-navigate', (event, url) => {
         console.log(`[LinkHandler] Navigation: ${url}`);
-        // Let everything through — live site, Supabase auth redirects, etc.
-        // Only block truly dangerous schemes
+        
+        // Block dangerous schemes
         if (url.startsWith('javascript:') || url.startsWith('vbscript:')) {
             event.preventDefault();
+            return;
         }
+        
+        // API/Backend URLs: Open in external browser to prevent renderer crash
+        if (url.includes('/api/') || url.includes(':5000') || url.includes(':3000') || 
+            url.endsWith('.json') || url.includes('localhost') || url.includes('127.0.0.1')) {
+            console.log(`[LinkHandler] Opening navigation URL in system browser: ${url}`);
+            event.preventDefault();
+            shell.openExternal(url);
+            return;
+        }
+        
+        // External sites (not our domain): Open in system browser
+        const allowedDomains = ['famousgate.hirall.com', 'famousgates.com', 'localhost:3000'];
+        const isExternal = !allowedDomains.some(domain => url.includes(domain));
+        if (isExternal && (url.startsWith('http://') || url.startsWith('https://'))) {
+            console.log(`[LinkHandler] Opening external navigation in system browser: ${url}`);
+            event.preventDefault();
+            shell.openExternal(url);
+            return;
+        }
+        
+        // Let allowed navigation through — live site, Supabase auth redirects, etc.
     });
 
     // Handle protocol navigation failures (e.g. missing file in local build)
