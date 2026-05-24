@@ -40,7 +40,8 @@ export const getRooms = async (
     
     // Always ensure we filter by some branch_id to prevent returning unassigned rooms
     // If after applyBranchFilter we still don't have a branch filter, apply a default
-    if (!isGlobal && !(req.user?.branch_id)) {
+    // Skip this check if branch_id was provided via query parameter
+    if (!isGlobal && !(req.user?.branch_id) && !req.query.branch_id) {
       // This shouldn't happen for valid users, but as safety measure
       logger.warn('User without branch_id attempted to access rooms:', req.user?.id);
       query = query.eq('branch_id', -1); // Return nothing
