@@ -40,10 +40,9 @@ class KDSScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: isUrgent ? AppColors.kError : AppColors.kPrimary,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('#$orderNo', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                const Spacer(),
                 const Text('12m', style: TextStyle(color: Colors.white, fontSize: 12)),
               ],
             ),

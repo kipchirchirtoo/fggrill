@@ -140,10 +140,9 @@ class _BarPOSScreenState extends ConsumerState<BarPOSScreen> {
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Tab: Walk-in', style: TextStyle(fontWeight: FontWeight.bold)),
-              const Spacer(),
               TextButton(onPressed: () {}, child: const Text('Open Tab')),
             ],
           ),

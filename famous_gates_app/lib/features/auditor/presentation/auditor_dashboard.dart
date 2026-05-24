@@ -35,10 +35,9 @@ class AuditorDashboard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Critical Exceptions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        const Spacer(),
                         ElevatedButton.icon(
                           onPressed: () {},
                           icon: const Icon(Icons.download),
@@ -63,9 +62,9 @@ class AuditorDashboard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
+          color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,7 +72,7 @@ class AuditorDashboard extends StatelessWidget {
             Icon(icon, color: color, size: 28),
             const SizedBox(height: 16),
             Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-            Text(label, style: TextStyle(color: color.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(label, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.bold)),
           ],
         ),
       ),

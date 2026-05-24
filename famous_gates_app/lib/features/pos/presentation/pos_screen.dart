@@ -308,7 +308,7 @@ class _POSScreenState extends ConsumerState<POSScreen> {
         label: Text(label),
         style: OutlinedButton.styleFrom(
           foregroundColor: color ?? AppColors.kTextPrimary,
-          side: BorderSide(color: color?.withOpacity(0.5) ?? AppColors.kDivider),
+          side: BorderSide(color: color?.withValues(alpha: 0.5) ?? AppColors.kDivider),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
       ),

@@ -51,7 +51,7 @@ class AppTheme {
           color: AppColors.kTextPrimary,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.kCardBg,
         elevation: 2,
         shape: RoundedRectangleBorder(
