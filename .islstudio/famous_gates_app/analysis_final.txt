@@ -1,0 +1,18 @@
+Analyzing famous_gates_app...                                   
+
+  error • The argument type 'CardTheme' can't be assigned to the parameter type 'CardThemeData?'.  • lib/core/theme/app_theme.dart:54:18 • argument_type_not_assignable
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/auditor/presentation/auditor_dashboard.dart:66:24 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/auditor/presentation/auditor_dashboard.dart:68:43 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/auditor/presentation/auditor_dashboard.dart:76:55 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/features/auditor/presentation/auditor_dashboard.dart:94:21 • prefer_const_constructors
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/maintenance/presentation/maintenance_dashboard.dart:68:53 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/maintenance/presentation/maintenance_dashboard.dart:84:22 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/pos/presentation/pos_screen.dart:311:42 • deprecated_member_use
+warning • Unused import: 'package:flutter_riverpod/flutter_riverpod.dart' • lib/features/restaurant/presentation/table_map_view.dart:2:8 • unused_import
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/restaurant/presentation/table_map_view.dart:77:20 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/features/restaurant/presentation/table_map_view.dart:92:70 • deprecated_member_use
+   info • Use 'const' with the constructor to improve performance • lib/features/shared/widgets/inventory_dashboard.dart:69:39 • prefer_const_constructors
+   info • Use 'const' literals as arguments to constructors of '@immutable' classes • lib/features/shared/widgets/inventory_dashboard.dart:72:41 • prefer_const_literals_to_create_immutables
+warning • Unused import: 'package:flutter/material.dart' • test/widget_test.dart:1:8 • unused_import
+
+14 issues found. (ran in 9.9s)
