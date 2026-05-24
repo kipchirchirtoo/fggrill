@@ -27,9 +27,15 @@ export const getRooms = async (
       if (isGlobal) {
         // Global users can view any branch
         query = query.eq('branch_id', req.query.branch_id as string);
+      } else {
+        // Non-global users: only allow branch_id if it matches their assigned branch
+        // This allows frontend to explicitly specify branch for clarity
+        const queryBranchId = parseInt(req.query.branch_id as string);
+        if (queryBranchId === req.user?.branch_id) {
+          query = query.eq('branch_id', queryBranchId);
+        }
+        // If branch_id doesn't match, applyBranchFilter already filtered by their branch
       }
-      // Non-global users: applyBranchFilter already filtered by their branch_id from token
-      // We ignore query param branch_id for non-global to prevent cross-branch data leakage
     }
     
     // Always ensure we filter by some branch_id to prevent returning unassigned rooms
