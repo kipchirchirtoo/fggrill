@@ -1,0 +1,11 @@
+name: phosphor_flutter
+description: Local compatibility shim for phosphor_flutter on Flutter versions where IconData is final.
+version: 2.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.1.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
