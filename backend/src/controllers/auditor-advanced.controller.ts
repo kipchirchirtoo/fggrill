@@ -392,6 +392,24 @@ export const handleApprovalRequest = async (req: Request, res: Response, next: N
     }
 };
 
+export const approvePendingRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    req.body = {
+        ...req.body,
+        requestId: req.body.requestId || req.body.id,
+        status: 'approved',
+    };
+    return handleApprovalRequest(req, res, next);
+};
+
+export const rejectPendingRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    req.body = {
+        ...req.body,
+        requestId: req.body.requestId || req.body.id,
+        status: 'rejected',
+    };
+    return handleApprovalRequest(req, res, next);
+};
+
 /**
  * Submit an approval for a transaction/process (Legacy/Unified Wrapper)
  */
@@ -572,4 +590,3 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         next(error);
     }
 };
-

@@ -6,7 +6,7 @@ import { UserRole } from '../models/User';
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER]));
+router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]));
 
 router.get('/kra-p10', generateKRAP10);
 router.get('/nssf', generateNSSFReport);

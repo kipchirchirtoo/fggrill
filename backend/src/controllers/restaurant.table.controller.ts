@@ -15,14 +15,9 @@ export const getTables = async (
 
     let query = supabase
       .from('restaurant_tables')
-      .select(`
-        *,
-        section:restaurant_sections(*),
-        current_assignment:restaurant_table_assignments!inner(
-          *,
-          server:staff_profiles(*)
-        )
-      `)
+      .select(
+        'id, branch_id, section_id, table_number, capacity, status, position_x, position_y, is_active, notes'
+      )
       .eq('is_active', true);
 
     const branchId = req.user?.branch_id || req.query.branch_id;
@@ -57,12 +52,7 @@ export const getTableById = async (
       .from('restaurant_tables')
       .select(`
         *,
-        section:restaurant_sections(*),
-        current_assignment:restaurant_table_assignments(
-          *,
-          server:staff_profiles(*)
-        ),
-        current_order:restaurant_orders!inner(*)
+        section:restaurant_sections(*)
       `)
       .eq('id', req.params.id)
       .single();
@@ -247,8 +237,7 @@ export const assignServer = async (
       }])
       .select(`
         *,
-        table:restaurant_tables(*),
-        server:staff_profiles(*)
+        table:restaurant_tables(*)
       `)
       .single();
 

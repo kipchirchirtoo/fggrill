@@ -234,7 +234,8 @@ export const addOrderToBill = async (
       quantity: item.quantity,
       unit_price: item.unit_price,
       total_price: item.quantity * item.unit_price,
-      special_instructions: item.special_instructions
+      special_instructions: item.special_instructions,
+      item_name: item.name || item.item_name || ''
     }));
 
     const { error: itemsError } = await supabase

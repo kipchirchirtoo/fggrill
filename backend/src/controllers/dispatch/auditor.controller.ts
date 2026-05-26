@@ -91,7 +91,13 @@ export const getAuditorDeliveryDetail = async (req: Request, res: Response) => {
 export const reviewDelivery = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { action, notes } = req.body;
+    const rawAction = req.body.action || req.body.status;
+    const action = rawAction === 'approved'
+      ? 'approve'
+      : rawAction === 'flagged'
+        ? 'flag'
+        : rawAction;
+    const { notes } = req.body;
     const userId = (req as any).user?.id;
 
     if (!action || !['approve', 'flag'].includes(action)) {

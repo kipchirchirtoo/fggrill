@@ -1,0 +1,1764 @@
+{
+  "generatedAt": "2026-05-24T19:47:34.608Z",
+  "source": "live database metadata",
+  "filters": [
+    "restaurant_tables",
+    "restaurant_table_assignments",
+    "staff_profiles"
+  ],
+  "tables": [
+    {
+      "name": "restaurant_table_assignments",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "table_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "server_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "assigned_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "timezone('utc'::text, now())",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "foreignKeys": [
+        {
+          "constraint": "restaurant_table_assignments_table_id_fkey",
+          "sourceTable": "restaurant_table_assignments",
+          "sourceColumn": "table_id",
+          "targetTable": "restaurant_tables",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "restaurant_tables!restaurant_table_assignments_table_id_fkey"
+        }
+      ],
+      "referencedBy": []
+    },
+    {
+      "name": "restaurant_tables",
+      "comment": "Physical tables with layout coordinates for floor plan",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "branch_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": 32,
+          "numericScale": 0
+        },
+        {
+          "name": "section_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "table_number",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "capacity",
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": 32,
+          "numericScale": 0
+        },
+        {
+          "name": "status",
+          "type": "table_status",
+          "nullable": false,
+          "default": "'available'::table_status",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "position_x",
+          "type": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": 10,
+          "numericScale": 2
+        },
+        {
+          "name": "position_y",
+          "type": "numeric",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": 10,
+          "numericScale": 2
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "timezone('utc'::text, now())",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "foreignKeys": [
+        {
+          "constraint": "restaurant_tables_branch_id_fkey",
+          "sourceTable": "restaurant_tables",
+          "sourceColumn": "branch_id",
+          "targetTable": "branches",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "branches!restaurant_tables_branch_id_fkey"
+        },
+        {
+          "constraint": "restaurant_tables_section_id_fkey",
+          "sourceTable": "restaurant_tables",
+          "sourceColumn": "section_id",
+          "targetTable": "restaurant_sections",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "restaurant_sections!restaurant_tables_section_id_fkey"
+        }
+      ],
+      "referencedBy": [
+        {
+          "constraint": "restaurant_reservations_table_id_fkey",
+          "sourceTable": "restaurant_reservations",
+          "sourceColumn": "table_id",
+          "targetTable": "restaurant_tables",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "restaurant_tables!restaurant_reservations_table_id_fkey"
+        },
+        {
+          "constraint": "restaurant_table_assignments_table_id_fkey",
+          "sourceTable": "restaurant_table_assignments",
+          "sourceColumn": "table_id",
+          "targetTable": "restaurant_tables",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "restaurant_tables!restaurant_table_assignments_table_id_fkey"
+        }
+      ]
+    },
+    {
+      "name": "staff_profiles",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "department",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "shift",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "basic_salary",
+          "type": "numeric",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": 10,
+          "numericScale": 2
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "id_number",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "emergency_contact",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "address",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'active'::text",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "timezone('utc'::text, now())",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "branch_id",
+          "type": "integer",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": 32,
+          "numericScale": 0
+        },
+        {
+          "name": "national_id",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "rfid_tag",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "rest_day",
+          "type": "integer",
+          "nullable": true,
+          "default": "0",
+          "maxLength": null,
+          "numericPrecision": 32,
+          "numericScale": 0
+        },
+        {
+          "name": "hourly_base_rate",
+          "type": "numeric",
+          "nullable": true,
+          "default": "0",
+          "maxLength": null,
+          "numericPrecision": 10,
+          "numericScale": 2
+        },
+        {
+          "name": "kra_pin",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "nssf_number",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "nhif_number",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "shif_number",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "bank_name",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "bank_branch",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "account_number",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "mpesa_number",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "employment_type",
+          "type": "text",
+          "nullable": true,
+          "default": "'permanent'::text",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "contract_expiry",
+          "type": "date",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "next_of_kin_name",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "next_of_kin_phone",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "next_of_kin_relationship",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "supervisor_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "archive_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "first_name",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "last_name",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "position",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "nssf_enabled",
+          "type": "boolean",
+          "nullable": true,
+          "default": "true",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "shif_enabled",
+          "type": "boolean",
+          "nullable": true,
+          "default": "true",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "housing_fund_enabled",
+          "type": "boolean",
+          "nullable": true,
+          "default": "true",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "uniform_enabled",
+          "type": "boolean",
+          "nullable": true,
+          "default": "false",
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        },
+        {
+          "name": "profile_photo",
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "maxLength": null,
+          "numericPrecision": null,
+          "numericScale": null
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "foreignKeys": [
+        {
+          "constraint": "staff_profiles_branch_id_fkey",
+          "sourceTable": "staff_profiles",
+          "sourceColumn": "branch_id",
+          "targetTable": "branches",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "branches!staff_profiles_branch_id_fkey"
+        },
+        {
+          "constraint": "staff_profiles_user_id_fkey",
+          "sourceTable": "staff_profiles",
+          "sourceColumn": "user_id",
+          "targetTable": "users",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "users!staff_profiles_user_id_fkey"
+        }
+      ],
+      "referencedBy": [
+        {
+          "constraint": "director_review_tasks_assigned_to_user_id_fkey",
+          "sourceTable": "director_review_tasks",
+          "sourceColumn": "assigned_to_user_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "SET NULL",
+          "supabaseHint": "staff_profiles!director_review_tasks_assigned_to_user_id_fkey"
+        },
+        {
+          "constraint": "director_review_tasks_director_id_fkey",
+          "sourceTable": "director_review_tasks",
+          "sourceColumn": "director_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "SET NULL",
+          "supabaseHint": "staff_profiles!director_review_tasks_director_id_fkey"
+        },
+        {
+          "constraint": "payroll_records_staff_id_fkey",
+          "sourceTable": "payroll_records",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!payroll_records_staff_id_fkey"
+        },
+        {
+          "constraint": "restaurant_bill_payments_cashier_id_fkey",
+          "sourceTable": "restaurant_bill_payments",
+          "sourceColumn": "cashier_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "staff_profiles!restaurant_bill_payments_cashier_id_fkey"
+        },
+        {
+          "constraint": "restaurant_orders_waiter_id_fkey",
+          "sourceTable": "restaurant_orders",
+          "sourceColumn": "waiter_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "SET NULL",
+          "supabaseHint": "staff_profiles!restaurant_orders_waiter_id_fkey"
+        },
+        {
+          "constraint": "staff_advances_staff_id_fkey",
+          "sourceTable": "staff_advances",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!staff_advances_staff_id_fkey"
+        },
+        {
+          "constraint": "staff_credit_bills_staff_id_fkey",
+          "sourceTable": "staff_credit_bills",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!staff_credit_bills_staff_id_fkey"
+        },
+        {
+          "constraint": "staff_leave_staff_id_fkey",
+          "sourceTable": "staff_leave",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!staff_leave_staff_id_fkey"
+        },
+        {
+          "constraint": "staff_loans_staff_id_fkey",
+          "sourceTable": "staff_loans",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!staff_loans_staff_id_fkey"
+        },
+        {
+          "constraint": "staff_monthly_statutory_deductions_staff_id_fkey",
+          "sourceTable": "staff_monthly_statutory_deductions",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "staff_profiles!staff_monthly_statutory_deductions_staff_id_fkey"
+        },
+        {
+          "constraint": "staff_payroll_staff_id_fkey",
+          "sourceTable": "staff_payroll",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!staff_payroll_staff_id_fkey"
+        },
+        {
+          "constraint": "fk_spa_staff_profile",
+          "sourceTable": "staff_payroll_adjustments",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "SET NULL",
+          "supabaseHint": "staff_profiles!fk_spa_staff_profile"
+        },
+        {
+          "constraint": "staff_performance_staff_id_fkey",
+          "sourceTable": "staff_performance",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!staff_performance_staff_id_fkey"
+        },
+        {
+          "constraint": "staff_schedules_staff_id_fkey",
+          "sourceTable": "staff_schedules",
+          "sourceColumn": "staff_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "CASCADE",
+          "supabaseHint": "staff_profiles!staff_schedules_staff_id_fkey"
+        },
+        {
+          "constraint": "void_bills_audit_waiter_id_fkey",
+          "sourceTable": "void_bills_audit",
+          "sourceColumn": "waiter_id",
+          "targetTable": "staff_profiles",
+          "targetColumn": "id",
+          "updateRule": "NO ACTION",
+          "deleteRule": "NO ACTION",
+          "supabaseHint": "staff_profiles!void_bills_audit_waiter_id_fkey"
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "adjustment_category",
+      "values": [
+        "credit_bill",
+        "advance",
+        "loan_installment",
+        "nssf",
+        "shif",
+        "paye",
+        "housing_levy",
+        "uniform",
+        "absent_day",
+        "contribution",
+        "extra_day",
+        "other",
+        "bonus",
+        "overtime",
+        "allowance",
+        "unpaid_leave",
+        "penalty"
+      ]
+    },
+    {
+      "name": "adjustment_reason",
+      "values": [
+        "physical_count",
+        "damage",
+        "theft",
+        "spoilage",
+        "expiry",
+        "breakage",
+        "system_error",
+        "other"
+      ]
+    },
+    {
+      "name": "adjustment_status",
+      "values": [
+        "pending",
+        "applied",
+        "cancelled",
+        "approved",
+        "rejected"
+      ]
+    },
+    {
+      "name": "adjustment_type",
+      "values": [
+        "deduction",
+        "addition"
+      ]
+    },
+    {
+      "name": "bar_stock_request_status",
+      "values": [
+        "pending",
+        "approved",
+        "partially_fulfilled",
+        "fulfilled",
+        "rejected",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "bill_payment_method",
+      "values": [
+        "CASH",
+        "MPESA",
+        "CARD",
+        "BANK_TRANSFER",
+        "CREDIT"
+      ]
+    },
+    {
+      "name": "bill_status",
+      "values": [
+        "OPEN",
+        "CLOSED",
+        "PAID",
+        "CANCELLED"
+      ]
+    },
+    {
+      "name": "booking_status",
+      "values": [
+        "pending",
+        "confirmed",
+        "checked_in",
+        "checked_out",
+        "cancelled",
+        "no_show"
+      ]
+    },
+    {
+      "name": "branch",
+      "values": [
+        "Bomet",
+        "Kapsoit",
+        "Kericho",
+        "Mogogosiek",
+        "Litein",
+        "Bomet Town",
+        "Kaplong"
+      ]
+    },
+    {
+      "name": "branch_enum",
+      "values": [
+        "Bomet",
+        "Kericho",
+        "Kapsoit",
+        "Litein"
+      ]
+    },
+    {
+      "name": "budget_category",
+      "values": [
+        "operations",
+        "maintenance",
+        "marketing",
+        "supplies",
+        "utilities",
+        "salaries",
+        "taxes",
+        "insurance",
+        "rent",
+        "other"
+      ]
+    },
+    {
+      "name": "budget_period",
+      "values": [
+        "monthly",
+        "quarterly",
+        "yearly"
+      ]
+    },
+    {
+      "name": "category_enum",
+      "values": [
+        "Food & Beverage",
+        "Housekeeping",
+        "Sauna & Wellness",
+        "Administration",
+        "Maintenance"
+      ]
+    },
+    {
+      "name": "costing_method",
+      "values": [
+        "weighted_average",
+        "fifo",
+        "lifo",
+        "standard"
+      ]
+    },
+    {
+      "name": "delivery_status",
+      "values": [
+        "pending",
+        "preparing",
+        "ready_for_pickup",
+        "out_for_delivery",
+        "delivered",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "dispatch_status",
+      "values": [
+        "pending",
+        "in_transit",
+        "completed",
+        "audited",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "equipment_status",
+      "values": [
+        "operational",
+        "needs_maintenance",
+        "under_maintenance",
+        "out_of_service"
+      ]
+    },
+    {
+      "name": "expense_category",
+      "values": [
+        "salaries",
+        "utilities",
+        "supplies",
+        "maintenance",
+        "marketing",
+        "taxes",
+        "insurance",
+        "rent",
+        "other"
+      ]
+    },
+    {
+      "name": "financial_record_status",
+      "values": [
+        "DRAFT",
+        "SUBMITTED",
+        "REVIEWED",
+        "FLAGGED"
+      ]
+    },
+    {
+      "name": "grn_status",
+      "values": [
+        "draft",
+        "completed",
+        "partially_accepted",
+        "rejected",
+        "approved"
+      ]
+    },
+    {
+      "name": "hk_inspection_result",
+      "values": [
+        "passed",
+        "passed_with_notes",
+        "failed",
+        "needs_rework"
+      ]
+    },
+    {
+      "name": "hk_linen_status",
+      "values": [
+        "clean_available",
+        "in_use",
+        "soiled_collected",
+        "in_laundry",
+        "damaged",
+        "retired"
+      ]
+    },
+    {
+      "name": "hk_lost_found_status",
+      "values": [
+        "found",
+        "guest_contacted",
+        "claimed",
+        "shipped",
+        "unclaimed",
+        "disposed",
+        "stored"
+      ]
+    },
+    {
+      "name": "hk_maintenance_status",
+      "values": [
+        "submitted",
+        "acknowledged",
+        "assigned",
+        "in_progress",
+        "completed",
+        "verified",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "hk_priority",
+      "values": [
+        "critical",
+        "urgent",
+        "high",
+        "normal",
+        "low"
+      ]
+    },
+    {
+      "name": "hk_room_status",
+      "values": [
+        "vacant_clean",
+        "vacant_dirty",
+        "occupied_clean",
+        "occupied_dirty",
+        "out_of_order",
+        "out_of_service",
+        "inspected",
+        "cleaning_in_progress",
+        "do_not_disturb",
+        "stay_over",
+        "checkout",
+        "early_makeup",
+        "late_checkout",
+        "turndown_pending",
+        "turndown_complete"
+      ]
+    },
+    {
+      "name": "hk_shift_type",
+      "values": [
+        "morning",
+        "afternoon",
+        "evening",
+        "night",
+        "split"
+      ]
+    },
+    {
+      "name": "hk_supply_request_status",
+      "values": [
+        "pending",
+        "approved",
+        "rejected",
+        "fulfilled",
+        "partially_fulfilled",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "hk_task_status",
+      "values": [
+        "pending",
+        "assigned",
+        "in_progress",
+        "paused",
+        "completed",
+        "pending_inspection",
+        "inspection_passed",
+        "inspection_failed",
+        "rework_required",
+        "cancelled",
+        "skipped"
+      ]
+    },
+    {
+      "name": "hk_task_type",
+      "values": [
+        "checkout_full_clean",
+        "checkout_vip_clean",
+        "stay_over_service",
+        "stay_over_full",
+        "deep_clean",
+        "turndown_service",
+        "inspection",
+        "touch_up",
+        "linen_change",
+        "restock_amenities",
+        "public_area_clean",
+        "emergency_clean",
+        "guest_request",
+        "pre_arrival_vip"
+      ]
+    },
+    {
+      "name": "housekeeping_task_type",
+      "values": [
+        "daily_clean",
+        "checkout_clean",
+        "deep_clean",
+        "maintenance_clean",
+        "linen_change",
+        "restock",
+        "inspection"
+      ]
+    },
+    {
+      "name": "invoice_status",
+      "values": [
+        "draft",
+        "sent",
+        "paid",
+        "overdue",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "issue_status",
+      "values": [
+        "pending",
+        "approved",
+        "issued",
+        "partially_issued",
+        "rejected",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "item_category",
+      "values": [
+        "food",
+        "beverage",
+        "linen",
+        "toiletries",
+        "cleaning_supplies",
+        "maintenance_items",
+        "office_supplies",
+        "kitchen_equipment",
+        "amenities",
+        "other"
+      ]
+    },
+    {
+      "name": "item_condition_status",
+      "values": [
+        "good",
+        "damaged",
+        "short",
+        "expired",
+        "rejected"
+      ]
+    },
+    {
+      "name": "kitchen_usage_type",
+      "values": [
+        "CONSUMED",
+        "SPOILT",
+        "LOST",
+        "DAMAGED",
+        "EXPIRED",
+        "RETURNED",
+        "ADJUSTMENT"
+      ]
+    },
+    {
+      "name": "maintenance_type",
+      "values": [
+        "preventive",
+        "corrective",
+        "emergency",
+        "inspection"
+      ]
+    },
+    {
+      "name": "movement_type",
+      "values": [
+        "receipt",
+        "issue",
+        "return",
+        "transfer_out",
+        "transfer_in",
+        "adjustment_plus",
+        "adjustment_minus",
+        "damage",
+        "expiry",
+        "theft",
+        "opening_balance"
+      ]
+    },
+    {
+      "name": "order_item_status",
+      "values": [
+        "pending",
+        "preparing",
+        "ready",
+        "served",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "order_payment_status",
+      "values": [
+        "pending",
+        "partial",
+        "paid"
+      ]
+    },
+    {
+      "name": "order_status",
+      "values": [
+        "draft",
+        "pending",
+        "approved",
+        "rejected",
+        "ordered",
+        "received",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "order_type",
+      "values": [
+        "dine_in",
+        "room_service",
+        "takeaway"
+      ]
+    },
+    {
+      "name": "payment_method",
+      "values": [
+        "cash",
+        "card",
+        "mpesa",
+        "bank_transfer",
+        "pdq",
+        "cheque"
+      ]
+    },
+    {
+      "name": "payment_method_type",
+      "values": [
+        "cash",
+        "cheque",
+        "bank_transfer",
+        "mobile_money",
+        "mpesa",
+        "credit_card",
+        "debit_card",
+        "eft",
+        "rtgs"
+      ]
+    },
+    {
+      "name": "payment_split_type",
+      "values": [
+        "equal",
+        "by_item",
+        "by_guest",
+        "custom"
+      ]
+    },
+    {
+      "name": "payment_status",
+      "values": [
+        "pending",
+        "partial",
+        "paid",
+        "refunded",
+        "completed",
+        "failed"
+      ]
+    },
+    {
+      "name": "payment_status_type",
+      "values": [
+        "draft",
+        "pending_approval",
+        "approved",
+        "processed",
+        "rejected",
+        "cancelled",
+        "failed"
+      ]
+    },
+    {
+      "name": "payment_terms",
+      "values": [
+        "cash",
+        "credit_7_days",
+        "credit_15_days",
+        "credit_30_days",
+        "credit_45_days",
+        "credit_60_days",
+        "credit_90_days",
+        "advance_payment"
+      ]
+    },
+    {
+      "name": "po_status",
+      "values": [
+        "draft",
+        "pending_approval",
+        "approved",
+        "sent_to_supplier",
+        "partially_received",
+        "fully_received",
+        "cancelled",
+        "closed"
+      ]
+    },
+    {
+      "name": "prep_station_type",
+      "values": [
+        "grill",
+        "salad",
+        "dessert",
+        "drinks",
+        "fry",
+        "pantry",
+        "bakery"
+      ]
+    },
+    {
+      "name": "procurement_audit_action",
+      "values": [
+        "create",
+        "update",
+        "delete",
+        "approve",
+        "reject",
+        "submit",
+        "lock",
+        "unlock",
+        "process",
+        "cancel"
+      ]
+    },
+    {
+      "name": "requisition_priority",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ]
+    },
+    {
+      "name": "requisition_status",
+      "values": [
+        "draft",
+        "pending_approval",
+        "approved",
+        "rejected",
+        "converted_to_po",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "reservation_status",
+      "values": [
+        "pending",
+        "confirmed",
+        "seated",
+        "completed",
+        "cancelled",
+        "no_show"
+      ]
+    },
+    {
+      "name": "room_amenity",
+      "values": [
+        "wifi",
+        "tv",
+        "ac",
+        "minibar",
+        "balcony",
+        "jacuzzi",
+        "kitchen"
+      ]
+    },
+    {
+      "name": "room_status",
+      "values": [
+        "available",
+        "occupied",
+        "cleaning",
+        "maintenance",
+        "out_of_order",
+        "reserved",
+        "out-of-order"
+      ]
+    },
+    {
+      "name": "room_type",
+      "values": [
+        "Standard",
+        "Deluxe",
+        "Suite",
+        "Deluxe Twin",
+        "Executive",
+        "VIP Suite",
+        "Cottage",
+        "Conference Hall"
+      ]
+    },
+    {
+      "name": "shift_status",
+      "values": [
+        "open",
+        "closed",
+        "reconciled",
+        "verified"
+      ]
+    },
+    {
+      "name": "spoilage_reason",
+      "values": [
+        "EXPIRED",
+        "DAMAGED",
+        "SPOILED",
+        "QUALITY_ISSUE",
+        "THEFT",
+        "BREAKAGE",
+        "CONTAMINATION",
+        "OTHER"
+      ]
+    },
+    {
+      "name": "subcategory_enum",
+      "values": [
+        "Bar Stock-Alcoholic",
+        "Bar Stock-Non-alcoholic",
+        "Kitchen Supplies",
+        "Restaurant Items",
+        "Linens & Bedding",
+        "Cleaning Supplies",
+        "Guest Amenities",
+        "Towels & Robes",
+        "Spa Products",
+        "Maintenance Supplies",
+        "Stationery",
+        "Office Supplies",
+        "Printing Materials",
+        "Electrical",
+        "Plumbing",
+        "General Repair"
+      ]
+    },
+    {
+      "name": "supplier_credit_note_status",
+      "values": [
+        "draft",
+        "submitted",
+        "approved",
+        "rejected",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "supplier_invoice_status",
+      "values": [
+        "draft",
+        "submitted",
+        "pending_approval",
+        "approved",
+        "rejected",
+        "paid",
+        "partially_paid",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "supplier_ledger_transaction_type",
+      "values": [
+        "opening_balance",
+        "invoice",
+        "payment",
+        "credit_note",
+        "debit_note",
+        "adjustment"
+      ]
+    },
+    {
+      "name": "supplier_status",
+      "values": [
+        "active",
+        "inactive",
+        "blacklisted",
+        "pending_approval"
+      ]
+    },
+    {
+      "name": "supply_status",
+      "values": [
+        "sufficient",
+        "low",
+        "critical",
+        "out_of_stock"
+      ]
+    },
+    {
+      "name": "table_status",
+      "values": [
+        "available",
+        "occupied",
+        "reserved",
+        "cleaning",
+        "maintenance"
+      ]
+    },
+    {
+      "name": "task_priority",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ]
+    },
+    {
+      "name": "task_status",
+      "values": [
+        "pending",
+        "in_progress",
+        "completed",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "transaction_type",
+      "values": [
+        "income",
+        "expense"
+      ]
+    },
+    {
+      "name": "transfer_status",
+      "values": [
+        "pending",
+        "in_transit",
+        "received",
+        "rejected",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "transfer_status_enum",
+      "values": [
+        "pending",
+        "approved",
+        "in_transit",
+        "completed",
+        "cancelled"
+      ]
+    },
+    {
+      "name": "unit_of_measurement",
+      "values": [
+        "pieces",
+        "kg",
+        "grams",
+        "liters",
+        "ml",
+        "boxes",
+        "cartons",
+        "packets",
+        "bottles",
+        "cans",
+        "rolls",
+        "sets",
+        "pairs",
+        "units"
+      ]
+    },
+    {
+      "name": "user_role",
+      "values": [
+        "super_admin",
+        "manager",
+        "receptionist",
+        "housekeeping",
+        "restaurant",
+        "maintenance",
+        "accountant",
+        "guest",
+        "bartender",
+        "general_manager",
+        "branch_manager",
+        "central_storekeeper",
+        "branch_storekeeper",
+        "housekeeping_supervisor",
+        "branch_operations_manager",
+        "central_operations_manager",
+        "facilities_manager",
+        "pos_kitchen",
+        "auditor",
+        "employee",
+        "kitchen",
+        "cashier",
+        "branch_accountant",
+        "storekeeper",
+        "head_chef",
+        "sous_chef",
+        "front_desk_supervisor",
+        "concierge",
+        "bell_captain",
+        "bellhop",
+        "room_attendant",
+        "laundry_attendant",
+        "restaurant_manager",
+        "line_cook",
+        "prep_cook",
+        "waiter",
+        "waitress",
+        "head_waiter",
+        "barista",
+        "food_runner",
+        "busser",
+        "host_hostess",
+        "kitchen_operations",
+        "kitchen_helper",
+        "dishwasher",
+        "maintenance_supervisor",
+        "electrician",
+        "plumber",
+        "hvac_technician",
+        "groundskeeper",
+        "security_supervisor",
+        "security_guard",
+        "night_auditor",
+        "finance_manager",
+        "hr_manager",
+        "payroll_clerk",
+        "procurement",
+        "kyogong_spa_cashier",
+        "kyogong_executive_bar_cashier",
+        "kyogong_sports_bar_cashier",
+        "kyogong_reception_cashier",
+        "chef",
+        "cook",
+        "barman",
+        "barmaid",
+        "bar_manager",
+        "driver",
+        "director",
+        "inventory_clerk",
+        "purchasing_manager"
+      ]
+    },
+    {
+      "name": "vat_rate_type",
+      "values": [
+        "standard_16",
+        "zero_rated",
+        "exempt",
+        "withholding_vat"
+      ]
+    },
+    {
+      "name": "waste_reason",
+      "values": [
+        "spoilage",
+        "expiry",
+        "damage",
+        "overcooking",
+        "customer_return",
+        "quality_control",
+        "other"
+      ]
+    },
+    {
+      "name": "work_order_priority",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ]
+    },
+    {
+      "name": "work_order_status",
+      "values": [
+        "pending",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled"
+      ]
+    }
+  ]
+}

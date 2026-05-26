@@ -425,7 +425,7 @@ export async function getShiftPnL(shiftId: number): Promise<ShiftPnL | null> {
  * Get shift P&Ls for a branch with filters
  */
 export async function getShiftPnLs(
-  branchId: number,
+  branchId?: number,
   filters?: {
     status?: ShiftFinancialStatus;
     startDate?: string;
@@ -438,8 +438,11 @@ export async function getShiftPnLs(
     let query = supabase
       .from('shift_financials')
       .select('*', { count: 'exact' })
-      .eq('branch_id', branchId)
       .order('generated_at', { ascending: false });
+
+    if (branchId !== undefined) {
+      query = query.eq('branch_id', branchId);
+    }
 
     if (filters?.status) {
       query = query.eq('status', filters.status);
@@ -479,7 +482,7 @@ export async function getShiftPnLs(
  * Get multi-shift summary for a branch
  */
 export async function getMultiShiftSummary(
-  branchId: number,
+  branchId: number | undefined,
   startDate: string,
   endDate: string
 ): Promise<{
@@ -490,12 +493,17 @@ export async function getMultiShiftSummary(
   shiftCount: number;
 }> {
   try {
-    const { data: shifts, error } = await supabase
+    let query = supabase
       .from('shift_financials')
       .select('*')
-      .eq('branch_id', branchId)
       .gte('generated_at', startDate)
       .lte('generated_at', endDate);
+
+    if (branchId !== undefined) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data: shifts, error } = await query;
 
     if (error) throw error;
 
@@ -521,7 +529,7 @@ export async function getMultiShiftSummary(
  * Get food cost trend over time
  */
 export async function getFoodCostTrend(
-  branchId: number,
+  branchId: number | undefined,
   startDate: string,
   endDate: string
 ): Promise<{
@@ -531,13 +539,18 @@ export async function getFoodCostTrend(
   cogs: number;
 }[]> {
   try {
-    const { data: shifts, error } = await supabase
+    let query = supabase
       .from('shift_financials')
       .select('generated_at, food_cost_percentage, total_revenue, actual_cogs')
-      .eq('branch_id', branchId)
       .gte('generated_at', startDate)
       .lte('generated_at', endDate)
       .order('generated_at', { ascending: true });
+
+    if (branchId !== undefined) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data: shifts, error } = await query;
 
     if (error) throw error;
 

@@ -3,6 +3,7 @@ import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { autoDeductIngredients, deductIngredientsForItem } from './kitchen/recipes.controller';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import notificationService from '../services/notification.service';
 
 /**
  * Helper to parse branch_id from query or body
@@ -14,6 +15,30 @@ const parseBranchId = (id: any): number | undefined => {
   }
   const parsed = parseInt(id);
   return isNaN(parsed) ? undefined : parsed;
+};
+
+const notifyRolesForOrder = async (
+  roles: string[],
+  branchId: number | string | undefined,
+  title: string,
+  message: string,
+  metadata: any,
+  actionUrl: string,
+  priority: 'low' | 'medium' | 'high' | 'urgent' = 'high'
+) => {
+  if (!branchId) return;
+  await Promise.allSettled(
+    roles.map((role) =>
+      notificationService.notifyRole(role, title, message, {
+        type: priority === 'urgent' ? 'warning' : 'info',
+        category: 'restaurant_order',
+        priority,
+        branchId,
+        actionUrl,
+        metadata
+      })
+    )
+  );
 };
 
 // @desc    Get all menu categories
@@ -448,11 +473,10 @@ export const createOrder = async (
         quantity: qty,
         unit_price: unitPrice,
         total_price: qty * unitPrice,
-        special_instructions: notes
+        special_instructions: notes,
+        item_name: item.name || item.item_name || ''
       };
     });
-
-    // console.log('Inserting order items:', JSON.stringify(orderItems, null, 2));
 
     const { error: itemsError } = await supabase
       .from('restaurant_order_items')
@@ -501,6 +525,21 @@ export const createOrder = async (
     });
 
     logger.info(`New order created: ${order?.order_number || 'unknown'} `);
+
+    await notifyRolesForOrder(
+      ['kitchen', 'pos_kitchen', 'kitchen_operations', 'head_chef', 'sous_chef'],
+      updatedOrder.branch_id,
+      `New restaurant order #${updatedOrder.order_number}`,
+      `${updatedOrder.items?.length || orderItems.length} item(s) sent to kitchen.`,
+      {
+        order_id: updatedOrder.id,
+        order_number: updatedOrder.order_number,
+        status: updatedOrder.status,
+        source: 'restaurant'
+      },
+      '/kitchen',
+      'high'
+    );
   } catch (error) {
     next(error);
   }
@@ -564,12 +603,24 @@ export const updateOrderStatus = async (
       throw updateError;
     }
 
-    res.status(200).json({
-      success: true,
-      data: updatedOrder
-    });
-
     logger.info(`Order ${order.order_number} status updated to ${status} `);
+
+    if (status === 'ready') {
+      await notifyRolesForOrder(
+        ['restaurant', 'waiter', 'waitress', 'head_waiter', 'food_runner'],
+        updatedOrder.branch_id,
+        `Order #${updatedOrder.order_number} ready`,
+        `${updatedOrder.table_number ? `Table ${updatedOrder.table_number}` : updatedOrder.order_type || 'Restaurant order'} is ready to serve.`,
+        {
+          order_id: updatedOrder.id,
+          order_number: updatedOrder.order_number,
+          status,
+          source: 'restaurant'
+        },
+        '/restaurant',
+        'urgent'
+      );
+    }
 
     // Auto-deduct ingredients if served or delivered
     if (['served', 'delivered'].includes(status)) {
@@ -654,11 +705,12 @@ export const addItemsToOrder = async (
     // Create new order items
     const newItems = items.map((item: any) => ({
       order_id: id,
-      menu_item_id: item.menu_item_id || item.id, // Support both formats
+      menu_item_id: item.menu_item_id || item.id,
       quantity: item.quantity,
       unit_price: item.unit_price || item.price,
       total_price: (item.quantity) * (item.unit_price || item.price),
-      special_instructions: item.notes || item.special_instructions
+      special_instructions: item.notes || item.special_instructions,
+      item_name: item.name || item.item_name || ''
     }));
 
     const { error: insertError } = await supabase
@@ -989,11 +1041,11 @@ export const createRoomServiceOrder = async (
 
       orderItems.push({
         menu_item_id: menuItem.id,
-        name: menuItem.name,
+        item_name: menuItem.name,
         quantity: item.quantity,
         unit_price: menuItem.price,
         total_price: itemTotal,
-        notes: item.notes || null
+        special_instructions: item.notes || null
       });
     }
 

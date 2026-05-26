@@ -19,6 +19,13 @@ import {
 } from '../services/shiftPnLService';
 import { ReviewShiftPnLInput, ApproveShiftPnLInput } from '../types/foodControl';
 
+const parseOptionalInt = (value: unknown): number | undefined => {
+  if (value === null || value === undefined || value === '') return undefined;
+  if (String(value).trim().toLowerCase() === 'null') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 /**
  * @desc    Generate or refresh shift P&L
  * @route   POST /api/v1/finance/shift-pnl/generate/:shiftId
@@ -84,7 +91,9 @@ export const getPnLs = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = (req as any).user?.branch_id;
+    const userBranchId = parseOptionalInt((req as any).user?.branch_id);
+    const queryBranchId = parseOptionalInt(req.query.branch_id ?? req.query.branchId);
+    const branchId = userBranchId ?? queryBranchId;
     const { status, startDate, endDate, page = 1, limit = 20 } = req.query;
 
     const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -207,17 +216,21 @@ export const getBranchSummary = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = (req as any).user?.branch_id;
-    const { startDate, endDate } = req.query;
-
-    if (!startDate || !endDate) {
-      throw new AppError('Start date and end date are required', 400);
-    }
+    const branchId = parseOptionalInt((req as any).user?.branch_id) ??
+      parseOptionalInt(req.query.branch_id ?? req.query.branchId);
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = String(
+      req.query.startDate ?? req.query.start_date ?? thirtyDaysAgo.toISOString()
+    );
+    const endDate = String(
+      req.query.endDate ?? req.query.end_date ?? today.toISOString()
+    );
 
     const summary = await getMultiShiftSummary(
       branchId,
-      startDate as string,
-      endDate as string
+      startDate,
+      endDate
     );
 
     res.json({
@@ -240,17 +253,21 @@ export const getFoodCostTrendData = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const branchId = (req as any).user?.branch_id;
-    const { startDate, endDate } = req.query;
-
-    if (!startDate || !endDate) {
-      throw new AppError('Start date and end date are required', 400);
-    }
+    const branchId = parseOptionalInt((req as any).user?.branch_id) ??
+      parseOptionalInt(req.query.branch_id ?? req.query.branchId);
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startDate = String(
+      req.query.startDate ?? req.query.start_date ?? thirtyDaysAgo.toISOString()
+    );
+    const endDate = String(
+      req.query.endDate ?? req.query.end_date ?? today.toISOString()
+    );
 
     const trend = await getFoodCostTrend(
       branchId,
-      startDate as string,
-      endDate as string
+      startDate,
+      endDate
     );
 
     // Calculate trend direction

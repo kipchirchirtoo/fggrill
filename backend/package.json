@@ -19,7 +19,8 @@
     "build:prod": "./scripts/build.sh",
     "test:full": "./scripts/test.sh",
     "deploy": "./scripts/deploy.sh",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "schema:inspect": "node scripts/inspect-live-schema.js"
   },
   "dependencies": {
     "@getbrevo/brevo": "^4.0.1",

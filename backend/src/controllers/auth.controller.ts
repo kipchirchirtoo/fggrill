@@ -797,7 +797,7 @@ export const posLogin = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { pin } = req.body;
+    const pin = String(req.body.pin || '').trim().toUpperCase();
 
     if (!pin) {
       res.status(400).json({
@@ -807,12 +807,12 @@ export const posLogin = async (
       return;
     }
 
-    // Validate PIN format (RXXXX, BXXXX, or CXXXX — letter + 4 digits)
-    const pinRegex = /^[RBC]\d{4}$/;
+    // Validate outlet-aware PIN format: R/M/E/N/C + 4 digits.
+    const pinRegex = /^[RMENC]\d{4}$/;
     if (!pinRegex.test(pin)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid PIN format. Waiters use RXXXX, Bar staff use BXXXX, Cashiers use CXXXX'
+        message: 'Invalid PIN format. Use RXXXX, MXXXX, EXXXX, NXXXX, or CXXXX'
       });
       return;
     }
@@ -834,7 +834,7 @@ export const posLogin = async (
         email: 'N/A (PIN)',
         status: 'invalid_pin',
         req,
-        message: `Failed PIN attempt: ${pin}`,
+        message: `Failed PIN attempt: ${pin[0]}****`,
         authMethod: 'pos_pin'
       });
       return;
@@ -848,6 +848,15 @@ export const posLogin = async (
 
     // Validate role against PIN prefix
     const prefix = pin[0];
+    const maskedPin = `${prefix}****`;
+    const normalizedRole = String(user.role || '').toLowerCase();
+    const outletTypeByPrefix: Record<string, string> = {
+      R: 'restaurant',
+      M: 'main_bar',
+      E: 'executive_bar',
+      N: 'non_consumables',
+      C: 'cashier'
+    };
     const restaurantRoles = [
       'restaurant', 'restaurant_manager', 'head_chef', 'sous_chef',
       'line_cook', 'prep_cook', 'waiter', 'waitress', 'head_waiter',
@@ -862,20 +871,31 @@ export const posLogin = async (
       'barmaid', 'barman', 'bartender', 'barista', 'bar_manager',
       'manager', 'branch_manager', 'super_admin', 'cashier',
       'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
-      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'
+      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier',
+      'general_manager', 'director', 'auditor'
     ];
 
     const cashierRoles = [
       'cashier', 'accountant', 'manager', 'branch_manager', 'super_admin',
       'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
-      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'
+      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier',
+      'general_manager', 'director', 'auditor', 'finance_manager',
+      'branch_accountant'
     ];
 
-    logger.info(`POS Login Attempt - User: ${user.email}, Role: ${user.role}, Prefix: ${prefix}, PIN: ${pin}`);
-    logger.info(`Allowed Cashier Roles: ${JSON.stringify(cashierRoles)}`);
-    logger.info(`Is role allowed for C prefix? ${cashierRoles.includes(user.role)}`);
+    const nonConsumablesRoles = [
+      ...cashierRoles,
+      'branch_storekeeper',
+      'storekeeper',
+      'inventory_clerk',
+      'procurement_manager',
+      'procurement',
+      'purchasing_manager'
+    ];
 
-    if (prefix === 'R' && !restaurantRoles.includes(user.role)) {
+    logger.info(`POS Login Attempt - User: ${user.email}, Role: ${user.role}, Prefix: ${prefix}, PIN: ${maskedPin}`);
+
+    if (prefix === 'R' && !restaurantRoles.includes(normalizedRole)) {
       logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix R`);
       res.status(403).json({
         success: false,
@@ -884,22 +904,103 @@ export const posLogin = async (
       return;
     }
 
-    if (prefix === 'B' && !barRoles.includes(user.role)) {
-      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix B`);
+    if ((prefix === 'M' || prefix === 'E') && !barRoles.includes(normalizedRole)) {
+      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix ${prefix}`);
       res.status(403).json({
         success: false,
-        message: 'This PIN is for bar staff only'
+        message: 'This PIN is for bar POS staff only'
       });
       return;
     }
 
-    if (prefix === 'C' && !cashierRoles.includes(user.role)) {
+    if (prefix === 'N' && !nonConsumablesRoles.includes(normalizedRole)) {
+      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix N`);
+      res.status(403).json({
+        success: false,
+        message: 'This PIN is for non-consumables POS staff only'
+      });
+      return;
+    }
+
+    if (prefix === 'C' && !cashierRoles.includes(normalizedRole)) {
       logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix C`);
       res.status(403).json({
         success: false,
         message: 'This PIN is for cashier/finance staff only [FIX-V1]'
       });
       return;
+    }
+
+    let outlet: any = null;
+    let activeShiftId: string | null = null;
+
+    if (user.branch_id) {
+      const { data: outletData, error: outletError } = await supabase
+        .from('pos_outlets')
+        .select('*')
+        .eq('branch_id', user.branch_id)
+        .eq('pin_prefix', prefix)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (outletError) {
+        logger.warn('Failed to resolve POS outlet during PIN login', {
+          userId: user.id,
+          prefix,
+          error: outletError.message
+        });
+      }
+
+      outlet = outletData || null;
+    }
+
+    if (outlet && prefix !== 'C') {
+      const managerOverrideRoles = new Set([
+        'super_admin',
+        'general_manager',
+        'director',
+        'auditor',
+        'branch_manager',
+        'cashier',
+        'accountant',
+        'branch_accountant',
+        'finance_manager'
+      ]);
+      const { data: assignment, error: assignmentError } = await supabase
+        .from('pos_outlet_assignments')
+        .select('id')
+        .eq('outlet_id', outlet.id)
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (assignmentError) {
+        logger.warn('Failed to verify POS outlet assignment', {
+          userId: user.id,
+          outletId: outlet.id,
+          error: assignmentError.message
+        });
+      }
+
+      if (!assignment && !managerOverrideRoles.has(normalizedRole)) {
+        res.status(403).json({
+          success: false,
+          message: 'This PIN is not assigned to the selected POS outlet'
+        });
+        return;
+      }
+    }
+
+    if (outlet) {
+      const { data: activeShift } = await supabase
+        .from('pos_outlet_shifts')
+        .select('id')
+        .eq('outlet_id', outlet.id)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      activeShiftId = activeShift?.id || null;
     }
 
     // Update last login
@@ -924,7 +1025,10 @@ export const posLogin = async (
         email: user.email,
         role: user.role,
         aud: 'authenticated',
-        isPosLogin: true
+        isPosLogin: true,
+        active_outlet_id: outlet?.id || null,
+        active_outlet_type: outlet?.outlet_type || outletTypeByPrefix[prefix],
+        active_outlet_prefix: prefix
       },
       jwtSecret,
       { expiresIn: '12h' }
@@ -964,7 +1068,13 @@ export const posLogin = async (
     res.status(200).json({
       success: true,
       data: {
-        user,
+        user: {
+          ...user,
+          outlet,
+          active_shift_id: activeShiftId
+        },
+        outlet,
+        active_shift_id: activeShiftId,
         session: {
           access_token: accessToken,
           refresh_token: refreshToken,
@@ -974,7 +1084,7 @@ export const posLogin = async (
       }
     });
 
-    logger.info(`User ${user.email} logged in via POS PIN: ${pin}`);
+    logger.info(`User ${user.email} logged in via POS PIN: ${maskedPin}`);
 
     await logAuthAttempt({
       email: user.email,
@@ -982,7 +1092,7 @@ export const posLogin = async (
       userId: user.id,
       req,
       authMethod: 'pos_pin',
-      message: `POS PIN Success: ${pin}`
+      message: `POS PIN Success: ${maskedPin}`
     });
   } catch (error) {
     next(error);

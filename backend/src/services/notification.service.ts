@@ -30,6 +30,12 @@ export interface NotificationFilter {
   priority?: string;
 }
 
+type NotificationUserContext = string | {
+  id?: string;
+  role?: string;
+  branch_id?: number | string | null;
+};
+
 class NotificationService {
   /**
    * Initialize notifications table
@@ -134,8 +140,15 @@ class NotificationService {
   /**
    * Get notifications for a specific user
    */
-  async getNotificationsForUser(userId: string, filters?: NotificationFilter): Promise<Notification[]> {
+  async getNotificationsForUser(userContext: NotificationUserContext, filters?: NotificationFilter): Promise<Notification[]> {
+    const userId = typeof userContext === 'string' ? userContext : userContext?.id;
     try {
+      const role =
+        typeof userContext === 'string' ? filters?.role : userContext?.role;
+      const branchId = typeof userContext === 'string'
+        ? filters?.branch_id
+        : (Number(userContext?.branch_id || 0) || undefined);
+
       // Validate userId is a valid UUID
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!userId || !uuidRegex.test(userId)) {
@@ -143,11 +156,23 @@ class NotificationService {
         return [];
       }
 
-      // Build query for notifications - ONLY user-specific notifications
+      const visibilityClauses = [`user_id.eq.${userId}`];
+      if (role && branchId) {
+        visibilityClauses.push(`and(user_id.is.null,role.eq.${role},branch_id.eq.${branchId})`);
+      }
+      if (role) {
+        visibilityClauses.push(`and(user_id.is.null,role.eq.${role},branch_id.is.null)`);
+      }
+      if (branchId) {
+        visibilityClauses.push(`and(user_id.is.null,role.is.null,branch_id.eq.${branchId})`);
+      }
+      visibilityClauses.push('and(user_id.is.null,role.is.null,branch_id.is.null)');
+
+      // Include user-specific notifications plus role/branch scoped broadcasts.
       let query = supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', userId); // Only get notifications specifically for this user
+        .or(visibilityClauses.join(','));
 
       // Apply filters
       if (filters?.is_read !== undefined) {
@@ -197,8 +222,12 @@ class NotificationService {
   /**
    * Get unread count for a user
    */
-  async getUnreadCount(userId: string): Promise<number> {
+  async getUnreadCount(userContext: NotificationUserContext): Promise<number> {
+    const userId = typeof userContext === 'string' ? userContext : userContext?.id;
     try {
+      const role = typeof userContext === 'string' ? undefined : userContext?.role;
+      const branchId = typeof userContext === 'string' ? undefined : (Number(userContext?.branch_id || 0) || undefined);
+
       // Validate userId is a valid UUID
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!userId || !uuidRegex.test(userId)) {
@@ -206,10 +235,22 @@ class NotificationService {
         return 0;
       }
 
+      const visibilityClauses = [`user_id.eq.${userId}`];
+      if (role && branchId) {
+        visibilityClauses.push(`and(user_id.is.null,role.eq.${role},branch_id.eq.${branchId})`);
+      }
+      if (role) {
+        visibilityClauses.push(`and(user_id.is.null,role.eq.${role},branch_id.is.null)`);
+      }
+      if (branchId) {
+        visibilityClauses.push(`and(user_id.is.null,role.is.null,branch_id.eq.${branchId})`);
+      }
+      visibilityClauses.push('and(user_id.is.null,role.is.null,branch_id.is.null)');
+
       const { count, error } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId) // Only count notifications specifically for this user
+        .or(visibilityClauses.join(','))
         .eq('is_read', false);
 
       if (error) {

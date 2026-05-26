@@ -36,6 +36,8 @@ import {
   submitApproval,
   getApprovalHistory,
   handleApprovalRequest,
+  approvePendingRequest,
+  rejectPendingRequest,
   getPayrollVariances,
   getPendingApprovals
 } from '../controllers/auditor-advanced.controller';
@@ -137,6 +139,16 @@ router.post('/approvals/handle',
   handleApprovalRequest
 );
 
+router.post('/approvals/approve',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  approvePendingRequest
+);
+
+router.post('/approvals/reject',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  rejectPendingRequest
+);
+
 router.get('/payroll/variances',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
   getPayrollVariances
@@ -154,6 +166,8 @@ router.get('/verify/branch-orders', authorize([UserRole.AUDITOR, UserRole.SUPER_
 router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), getSoldItemsAnalysis);
 router.get('/verify/bar-stock', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);
 router.post('/verify/bar-stock/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyBarStockTake);
+router.get('/bar/stock-audits', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);
+router.post('/bar/stock-audits/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyBarStockTake);
 router.get('/verify/details', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getAnomalyDetail);
 router.post('/verify/clear', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyAnomaly);
 

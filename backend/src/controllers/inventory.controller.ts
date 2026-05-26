@@ -3,6 +3,154 @@ import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { applyBranchFilter } from '../utils/branchIsolation';
 
+const branchNameToId = (branch: unknown): number | null => {
+  if (branch === null || branch === undefined || branch === '') return null;
+  const parsed = Number(branch);
+  if (Number.isFinite(parsed)) return parsed;
+
+  const normalized = String(branch).trim().toLowerCase();
+  const map: Record<string, number> = {
+    bomet: 1,
+    kericho: 2,
+    kapsoit: 3,
+    litein: 4
+  };
+  return map[normalized] ?? null;
+};
+
+const numberValue = (value: unknown, fallback = 0): number => {
+  if (value === null || value === undefined || value === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const generateSimpleSku = (name: string, category = 'general'): string => {
+  const categoryCode = category.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase() || 'GEN';
+  const nameCode = name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase() || 'ITEM';
+  return `INV-${categoryCode}-${nameCode}-${Date.now().toString().slice(-6)}`;
+};
+
+const mapSimpleInventoryItem = (item: any) => {
+  const quantity = numberValue(item.quantity);
+  const unitCost = numberValue(item.cost_price ?? item.unit_cost);
+  const reorderLevel = numberValue(item.reorder_level);
+  const name = item.item_name || item.name || item.description || item.sku || '';
+  const status = quantity <= 0
+    ? 'out'
+    : quantity <= reorderLevel
+      ? 'critical'
+      : quantity <= reorderLevel * 1.5
+        ? 'low'
+        : 'in_stock';
+
+  return {
+    ...item,
+    id: item.sku,
+    item_code: item.sku,
+    code: item.sku,
+    name,
+    sku: item.sku,
+    unit: item.unit_of_measure || item.unit || 'units',
+    unit_cost: unitCost,
+    unitCost,
+    reorderLevel,
+    min_stock_level: reorderLevel,
+    max_stock_level: item.max_order_quantity ?? 0,
+    status,
+    supplierName: item.supplier || '',
+    branchId: item.branch_id != null ? String(item.branch_id) : '',
+    totalValue: quantity * unitCost
+  };
+};
+
+const toSimpleItemPayload = (body: any, req: Request, isUpdate = false) => {
+  const itemName = body.item_name || body.name || body.description || '';
+  const category = body.category || 'other';
+  const costPrice = numberValue(body.cost_price ?? body.unit_cost ?? body.unitCost, 0);
+  const branchId = branchNameToId(body.branch_id ?? body.branchId ?? body.branch);
+  const payload: any = {
+    item_name: itemName,
+    description: body.description || itemName,
+    category,
+    unit_of_measure: body.unit_of_measure || body.unit || 'units',
+    quantity: numberValue(body.quantity ?? body.current_stock ?? body.stock_quantity, 0),
+    cost_price: costPrice,
+    retail_price: numberValue(body.retail_price ?? body.selling_price, costPrice),
+    reorder_level: numberValue(
+      body.reorder_level ?? body.reorderLevel ?? body.min_stock_level ?? body.minStock,
+      10
+    ),
+    supplier: body.supplier || body.supplierName || null,
+    barcode: body.barcode || null,
+    image_url: body.image_url || body.imageUrl || null,
+    store_type: body.store_type || body.storeType || null,
+    branch_id: branchId,
+    is_active: body.is_active !== undefined ? body.is_active : true,
+    is_master_item: body.is_master_item !== undefined ? body.is_master_item : true,
+    min_order_quantity: numberValue(body.min_order_quantity, 1),
+    max_order_quantity: numberValue(body.max_order_quantity ?? body.max_stock_level ?? body.maxStock, 1000),
+    lead_time_days: numberValue(body.lead_time_days, 0),
+    is_perishable: body.is_perishable ?? false,
+    shelf_life_days: body.shelf_life_days ?? null,
+    last_updated: new Date().toISOString()
+  };
+
+  Object.keys(payload).forEach((key) => {
+    if (payload[key] === undefined) delete payload[key];
+  });
+
+  if (!isUpdate) {
+    payload.sku = body.sku || body.item_code || body.code || generateSimpleSku(itemName, category);
+  } else {
+    delete payload.sku;
+    if (body.item_name === undefined && body.name === undefined && body.description === undefined) {
+      delete payload.item_name;
+      delete payload.description;
+    }
+    if (body.quantity === undefined && body.current_stock === undefined && body.stock_quantity === undefined) {
+      delete payload.quantity;
+    }
+    if (body.branch_id === undefined && body.branchId === undefined && body.branch === undefined) {
+      delete payload.branch_id;
+    }
+    if (body.retail_price === undefined && body.selling_price === undefined) {
+      delete payload.retail_price;
+    }
+    if (body.supplier === undefined && body.supplierName === undefined) {
+      delete payload.supplier;
+    }
+    if (body.barcode === undefined) {
+      delete payload.barcode;
+    }
+    if (body.image_url === undefined && body.imageUrl === undefined) {
+      delete payload.image_url;
+    }
+    if (body.store_type === undefined && body.storeType === undefined) {
+      delete payload.store_type;
+    }
+    if (body.is_active === undefined) {
+      delete payload.is_active;
+    }
+    if (body.min_order_quantity === undefined) {
+      delete payload.min_order_quantity;
+    }
+    if (body.max_order_quantity === undefined && body.max_stock_level === undefined && body.maxStock === undefined) {
+      delete payload.max_order_quantity;
+    }
+    if (body.lead_time_days === undefined) {
+      delete payload.lead_time_days;
+    }
+    if (body.is_perishable === undefined) {
+      delete payload.is_perishable;
+    }
+    if (body.shelf_life_days === undefined) {
+      delete payload.shelf_life_days;
+    }
+  }
+
+  return payload;
+};
+
 // @desc    Get all inventory items
 // @route   GET /api/inventory/items
 // @access  Private
@@ -12,19 +160,39 @@ export const getItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const { branch_id, branchId, branch, category, search, store_type } = req.query;
+    const branchFilter = branchNameToId(branch_id ?? branchId ?? branch);
+
     let query = supabase
-      .from('inventory_items')
-      .select('*');
+      .from('simple_items')
+      .select('*')
+      .eq('is_active', true);
+
+    if (branchFilter !== null) query = query.eq('branch_id', branchFilter);
+    if (category) query = query.eq('category', String(category));
+    if (store_type) query = query.eq('store_type', String(store_type));
+    if (search) {
+      const searchTerm = String(search).trim();
+      query = query.or(`sku.ilike.%${searchTerm}%,item_name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`);
+    }
 
     query = applyBranchFilter(query, req);
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+    const limit = numberValue(req.query.limit, 500);
+    const page = numberValue(req.query.page, 1);
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, error } = await query
+      .order('last_updated', { ascending: false })
+      .range(from, to);
 
     if (error) throw error;
 
     res.status(200).json({
       success: true,
-      data
+      count: data?.length || 0,
+      data: (data || []).map(mapSimpleInventoryItem)
     });
   } catch (error) {
     next(error);
@@ -40,11 +208,21 @@ export const getItem = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
-      .from('inventory_items')
+    let { data, error } = await supabase
+      .from('simple_items')
       .select('*')
-      .eq('id', req.params.id)
-      .single();
+      .eq('sku', req.params.id)
+      .maybeSingle();
+
+    if (!data && !error) {
+      const barcodeResult = await supabase
+        .from('simple_items')
+        .select('*')
+        .eq('barcode', req.params.id)
+        .maybeSingle();
+      data = barcodeResult.data;
+      error = barcodeResult.error;
+    }
 
     if (error) throw error;
     if (!data) {
@@ -57,7 +235,7 @@ export const getItem = async (
 
     res.status(200).json({
       success: true,
-      data
+      data: mapSimpleInventoryItem(data)
     });
   } catch (error) {
     next(error);
@@ -73,41 +251,10 @@ export const createItem = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const {
-      item_code, code,
-      name,
-      description,
-      category,
-      unit,
-      min_stock_level, minStock,
-      max_stock_level, maxStock,
-      reorder_level, reorderPoint,
-      unit_cost, unitCost,
-      supplier,
-      branch_id, branchId, branch,
-      is_active
-    } = req.body;
-
-    // Robust mapping from possible frontend names to DB names
-    const item = {
-      item_code: item_code || code,
-      name,
-      description,
-      category: category || 'other',
-      unit: unit || 'pcs',
-      min_stock_level: min_stock_level || minStock || 0,
-      max_stock_level: max_stock_level || maxStock || 0,
-      reorder_level: reorder_level || reorderPoint || min_stock_level || minStock || 0,
-      unit_cost: unit_cost || unitCost || 0,
-      supplier,
-      branch_id: branch_id || branchId || (branch === 'Bomet' ? 1 : branch === 'Kericho' ? 2 : branch === 'Kapsoit' ? 3 : branch === 'Litein' ? 4 : null),
-      is_active: is_active !== undefined ? is_active : true,
-      created_by_id: req.user?.id,
-      created_at: new Date().toISOString()
-    };
+    const item = toSimpleItemPayload(req.body, req);
 
     const { data, error } = await supabase
-      .from('inventory_items') // Standardize on inventory_items for general module
+      .from('simple_items')
       .insert([item])
       .select()
       .single();
@@ -116,7 +263,7 @@ export const createItem = async (
 
     res.status(201).json({
       success: true,
-      data
+      data: mapSimpleInventoryItem(data)
     });
   } catch (error) {
     next(error);
@@ -132,22 +279,38 @@ export const updateItem = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
-      .from('inventory_items')
-      .update({
-        ...req.body,
-        updated_at: new Date().toISOString(),
-        updated_by_id: req.user.id
-      })
-      .eq('id', req.params.id)
+    const payload = toSimpleItemPayload(req.body, req, true);
+
+    let { data, error } = await supabase
+      .from('simple_items')
+      .update(payload)
+      .eq('sku', req.params.id)
       .select()
-      .single();
+      .maybeSingle();
+
+    if (!data && !error) {
+      const barcodeResult = await supabase
+        .from('simple_items')
+        .update(payload)
+        .eq('barcode', req.params.id)
+        .select()
+        .maybeSingle();
+      data = barcodeResult.data;
+      error = barcodeResult.error;
+    }
 
     if (error) throw error;
+    if (!data) {
+      res.status(404).json({
+        success: false,
+        message: 'Item not found'
+      });
+      return;
+    }
 
     res.status(200).json({
       success: true,
-      data
+      data: mapSimpleInventoryItem(data)
     });
   } catch (error) {
     next(error);
@@ -163,12 +326,32 @@ export const deleteItem = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('inventory_items')
-      .delete()
-      .eq('id', req.params.id);
+    let { data, error } = await supabase
+      .from('simple_items')
+      .update({ is_active: false, last_updated: new Date().toISOString() })
+      .eq('sku', req.params.id)
+      .select('sku')
+      .maybeSingle();
+
+    if (!data && !error) {
+      const barcodeResult = await supabase
+        .from('simple_items')
+        .update({ is_active: false, last_updated: new Date().toISOString() })
+        .eq('barcode', req.params.id)
+        .select('sku')
+        .maybeSingle();
+      data = barcodeResult.data;
+      error = barcodeResult.error;
+    }
 
     if (error) throw error;
+    if (!data) {
+      res.status(404).json({
+        success: false,
+        message: 'Item not found'
+      });
+      return;
+    }
 
     res.status(200).json({
       success: true,

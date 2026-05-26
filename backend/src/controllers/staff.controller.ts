@@ -1200,6 +1200,44 @@ export const createStaffSchedule = async (
   }
 };
 
+// @desc    Get staff schedules
+// @route   GET /api/staff/schedules
+// @access  Private (Admin, Manager, HR, Auditor)
+export const getStaffSchedules = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { date, staff_id, branch_id } = req.query;
+
+    let query = supabase
+      .from('staff_schedules')
+      .select('*, staff:staff_profiles(id, first_name, last_name, department, position, branch_id)')
+      .order('date', { ascending: false });
+
+    if (date) query = query.eq('date', date);
+    if (staff_id) query = query.eq('staff_id', staff_id);
+    if (branch_id) query = query.eq('staff.branch_id', branch_id);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const schedules = (data || []).map((row: any) => ({
+      ...row,
+      staff_name: row.staff
+        ? [row.staff.first_name, row.staff.last_name].filter(Boolean).join(' ')
+        : null,
+      department: row.staff?.department,
+      position: row.staff?.position
+    }));
+
+    res.json({ success: true, data: schedules });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Process staff payroll
 // @route   POST /api/staff/payroll
 // @access  Private (Admin, Manager, Accountant)

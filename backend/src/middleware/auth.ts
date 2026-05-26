@@ -112,7 +112,11 @@ export const protect = async (
             last_name: user.last_name,
             is_central: !effectiveBranchId,
             primary_role: user.role,          // always the DB role, for audit
-            active_context: !!(decoded.active_role) // flag: user is in switched context
+            active_context: !!(decoded.active_role), // flag: user is in switched context
+            active_outlet_id: decoded.active_outlet_id || null,
+            active_outlet_type: decoded.active_outlet_type || null,
+            active_outlet_prefix: decoded.active_outlet_prefix || null,
+            is_pos_login: decoded.isPosLogin === true
           };
           next();
           return;

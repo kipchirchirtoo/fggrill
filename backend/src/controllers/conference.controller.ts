@@ -447,7 +447,8 @@ export const createConferenceBooking = async (
                         quantity: meal.pax || num_participants || 1,
                         unit_price: meal.price || 0,
                         total_price: (meal.pax || num_participants || 1) * (meal.price || 0),
-                        special_instructions: `Meal Type: ${meal.name}`
+                        special_instructions: `Meal Type: ${meal.name}`,
+                        item_name: meal.name || ''
                     }));
 
                     const { error } = await supabase.from('restaurant_order_items').insert(orderItems);

@@ -346,13 +346,18 @@ export const getDashboardReport = async (
 
     if (mtError) throw mtError;
 
-    // Get inventory alerts
+    // Get inventory alerts from the current stock table. The legacy
+    // inventory_items.current_stock column is no longer part of this schema.
     const { data: lowStockItems, error: invError } = await supabase
-      .from('inventory_items')
-      .select('*')
-      .filter('current_stock', 'lte', 'minimum_stock');
+      .from('simple_items')
+      .select('sku, item_name, quantity, reorder_level')
+      .eq('is_active', true);
 
     if (invError) throw invError;
+
+    const lowStockCount = (lowStockItems || []).filter((item: any) =>
+      Number(item.quantity || 0) <= Number(item.reorder_level || 0)
+    ).length;
 
     // Calculate metrics
     const metrics = {
@@ -366,7 +371,7 @@ export const getDashboardReport = async (
         maintenance: maintenanceTasks?.length || 0
       },
       inventory: {
-        lowStock: lowStockItems?.length || 0
+        lowStock: lowStockCount
       },
       occupancy: {
         current: await calculateCurrentOccupancy()

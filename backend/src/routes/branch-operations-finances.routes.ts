@@ -7,6 +7,7 @@ enum UserRole {
   SUPER_ADMIN = 'super_admin',
   GENERAL_MANAGER = 'general_manager',
   ACCOUNTANT = 'accountant',
+  BRANCH_ACCOUNTANT = 'branch_accountant',
   BRANCH_MANAGER = 'branch_manager',
   BRANCH_OPERATIONS_MANAGER = 'branch_operations_manager'
 }
@@ -52,6 +53,7 @@ router.route('/budgets')
       UserRole.SUPER_ADMIN,
       UserRole.GENERAL_MANAGER,
       UserRole.ACCOUNTANT,
+      UserRole.BRANCH_ACCOUNTANT,
       UserRole.BRANCH_MANAGER,
       UserRole.BRANCH_OPERATIONS_MANAGER
     ]),
@@ -61,7 +63,8 @@ router.route('/budgets')
     authorize([
       UserRole.SUPER_ADMIN,
       UserRole.GENERAL_MANAGER,
-      UserRole.ACCOUNTANT
+      UserRole.ACCOUNTANT,
+      UserRole.BRANCH_ACCOUNTANT
     ]),
     createBudget
   );
@@ -72,6 +75,7 @@ router.route('/budgets/:id')
       UserRole.SUPER_ADMIN,
       UserRole.GENERAL_MANAGER,
       UserRole.ACCOUNTANT,
+      UserRole.BRANCH_ACCOUNTANT,
       UserRole.BRANCH_MANAGER,
       UserRole.BRANCH_OPERATIONS_MANAGER
     ]),
@@ -81,7 +85,8 @@ router.route('/budgets/:id')
     authorize([
       UserRole.SUPER_ADMIN,
       UserRole.GENERAL_MANAGER,
-      UserRole.ACCOUNTANT
+      UserRole.ACCOUNTANT,
+      UserRole.BRANCH_ACCOUNTANT
     ]),
     updateBudget
   )
@@ -98,7 +103,8 @@ router.post(
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.ACCOUNTANT
+    UserRole.ACCOUNTANT,
+    UserRole.BRANCH_ACCOUNTANT
   ]),
   linkExpenseToBudget
 );
@@ -109,6 +115,7 @@ router.get(
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
     UserRole.ACCOUNTANT,
+    UserRole.BRANCH_ACCOUNTANT,
     UserRole.BRANCH_MANAGER,
     UserRole.BRANCH_OPERATIONS_MANAGER
   ]),
@@ -121,6 +128,7 @@ router.get(
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
     UserRole.ACCOUNTANT,
+    UserRole.BRANCH_ACCOUNTANT,
     UserRole.BRANCH_MANAGER,
     UserRole.BRANCH_OPERATIONS_MANAGER
   ]),

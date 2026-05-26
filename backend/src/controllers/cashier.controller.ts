@@ -12,6 +12,292 @@ import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
+function isImmediateCashierPaymentMethod(method?: string): boolean {
+    const normalized = (method || '').toLowerCase();
+    return ['cash', 'credit_bill', 'credit_bill_manual'].includes(normalized);
+}
+
+function normalizeRestaurantBillPaymentMethod(method?: string): string {
+    const normalized = (method || '').toLowerCase().replace(/[\s_-]/g, '');
+    if (normalized.includes('mpesa')) return 'MPESA';
+    if (normalized.includes('card')) return 'CARD';
+    if (normalized.includes('bank')) return 'BANK_TRANSFER';
+    if (normalized.includes('credit')) return 'CREDIT';
+    return 'CASH';
+}
+
+const PUBLIC_SHORT_CODE_PATTERN = /^(?:[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}|[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6})$/;
+
+type CashierShortCodeResolution = {
+    source: string;
+    lookupId: string;
+    row?: any;
+};
+
+function isPublicShortCode(value: string): boolean {
+    return PUBLIC_SHORT_CODE_PATTERN.test(value.toUpperCase());
+}
+
+function isMissingShortCodeSchema(error: any): boolean {
+    const message = `${error?.message || ''} ${error?.details || ''}`;
+    return error?.code === '42703' ||
+        error?.code === 'PGRST204' ||
+        /short_code/i.test(message) && /column|schema cache|does not exist/i.test(message);
+}
+
+async function queryShortCodeCandidate(
+    table: string,
+    code: string,
+    req: Request,
+    select = '*'
+): Promise<any | null> {
+    try {
+        let query = supabase
+            .from(table)
+            .select(select)
+            .eq('short_code', code);
+
+        query = applyBranchFilter(query, req);
+
+        const { data, error } = await query.maybeSingle();
+        if (error) {
+            if (isMissingShortCodeSchema(error)) return null;
+            logger.warn(`Short code lookup failed on ${table}: ${error.message}`);
+            return null;
+        }
+        return data || null;
+    } catch (error: any) {
+        if (isMissingShortCodeSchema(error)) return null;
+        logger.warn(`Short code lookup threw on ${table}: ${error?.message || error}`);
+        return null;
+    }
+}
+
+async function resolveCashierScannedCode(
+    code: string,
+    req: Request
+): Promise<CashierShortCodeResolution | null> {
+    const normalized = code.toUpperCase();
+
+    try {
+        let unpaidQuery = supabase
+            .from('unpaid_bills')
+            .select('bill_number, scan_reference, short_code, branch_id')
+            .eq('scan_reference', normalized);
+        unpaidQuery = applyBranchFilter(unpaidQuery, req);
+
+        const { data: unpaidBill, error: unpaidError } = await unpaidQuery.maybeSingle();
+        if (!unpaidError && unpaidBill?.bill_number) {
+            return {
+                source: 'unpaid_bill',
+                lookupId: String(unpaidBill.bill_number).toUpperCase(),
+                row: unpaidBill
+            };
+        }
+        if (unpaidError && !isMissingShortCodeSchema(unpaidError)) {
+            logger.warn(`Scan reference lookup failed: ${unpaidError.message}`);
+        }
+    } catch (error: any) {
+        if (!isMissingShortCodeSchema(error)) {
+            logger.warn(`Scan reference lookup threw: ${error?.message || error}`);
+        }
+    }
+
+    try {
+        const { data: barcodeRow, error: barcodeError } = await supabase
+            .from('pos_barcodes')
+            .select('*')
+            .eq('barcode_value', normalized)
+            .maybeSingle();
+
+        if (barcodeError) {
+            if (!['42P01', '42703', 'PGRST205', 'PGRST204'].includes(barcodeError.code)) {
+                logger.warn(`POS barcode lookup failed: ${barcodeError.message}`);
+            }
+            return null;
+        }
+
+        if (!barcodeRow) return null;
+
+        if (barcodeRow.transaction_id) {
+            const transactionKey = String(barcodeRow.transaction_id).toUpperCase();
+            if (transactionKey.startsWith('CS-')) {
+                return { source: 'pos', lookupId: transactionKey, row: barcodeRow };
+            }
+
+            let transactionQuery = supabase
+                .from('pos_transactions')
+                .select('transaction_ref, transaction_number, branch_id')
+                .eq('id', barcodeRow.transaction_id);
+            transactionQuery = applyBranchFilter(transactionQuery, req);
+            const { data: transaction } = await transactionQuery.maybeSingle();
+            if (transaction?.transaction_ref || transaction?.transaction_number) {
+                return {
+                    source: 'pos',
+                    lookupId: String(transaction.transaction_ref || transaction.transaction_number).toUpperCase(),
+                    row: transaction
+                };
+            }
+        }
+
+        if (barcodeRow.order_id) {
+            let restaurantQuery = supabase
+                .from('restaurant_orders')
+                .select('order_number, branch_id')
+                .eq('id', barcodeRow.order_id);
+            restaurantQuery = applyBranchFilter(restaurantQuery, req);
+            const { data: restaurantOrder } = await restaurantQuery.maybeSingle();
+            if (restaurantOrder?.order_number) {
+                return {
+                    source: 'restaurant',
+                    lookupId: String(restaurantOrder.order_number).toUpperCase(),
+                    row: restaurantOrder
+                };
+            }
+
+            let barQuery = supabase
+                .from('bar_orders')
+                .select('order_number, branch_id')
+                .eq('id', barcodeRow.order_id);
+            barQuery = applyBranchFilter(barQuery, req);
+            const { data: barOrder } = await barQuery.maybeSingle();
+            if (barOrder?.order_number) {
+                return {
+                    source: 'bar',
+                    lookupId: String(barOrder.order_number).toUpperCase(),
+                    row: barOrder
+                };
+            }
+        }
+
+        if (barcodeRow.bill_id) {
+            let unpaidByIdQuery = supabase
+                .from('unpaid_bills')
+                .select('bill_number, branch_id')
+                .eq('id', barcodeRow.bill_id);
+            unpaidByIdQuery = applyBranchFilter(unpaidByIdQuery, req);
+            const { data: unpaidById } = await unpaidByIdQuery.maybeSingle();
+            if (unpaidById?.bill_number) {
+                return {
+                    source: 'unpaid_bill',
+                    lookupId: String(unpaidById.bill_number).toUpperCase(),
+                    row: unpaidById
+                };
+            }
+
+            let restaurantBillQuery = supabase
+                .from('restaurant_bills')
+                .select('bill_number, branch_id')
+                .eq('id', barcodeRow.bill_id);
+            restaurantBillQuery = applyBranchFilter(restaurantBillQuery, req);
+            const { data: restaurantBill } = await restaurantBillQuery.maybeSingle();
+            if (restaurantBill?.bill_number) {
+                return {
+                    source: 'restaurant_bill',
+                    lookupId: String(restaurantBill.bill_number).toUpperCase(),
+                    row: restaurantBill
+                };
+            }
+        }
+    } catch (error: any) {
+        logger.warn(`POS barcode resolution threw: ${error?.message || error}`);
+    }
+
+    return null;
+}
+
+async function resolveCashierShortCode(
+    code: string,
+    req: Request
+): Promise<CashierShortCodeResolution | null> {
+    const normalized = code.toUpperCase();
+    if (!isPublicShortCode(normalized)) return null;
+
+    const lookups: Array<{
+        table: string;
+        source: string;
+        select: string;
+        map: (row: any) => string | undefined;
+    }> = [
+        {
+            table: 'restaurant_orders',
+            source: 'restaurant',
+            select: 'order_number, short_code, branch_id',
+            map: (row) => row.order_number
+        },
+        {
+            table: 'bar_orders',
+            source: 'bar',
+            select: 'order_number, short_code, branch_id',
+            map: (row) => row.order_number
+        },
+        {
+            table: 'pos_transactions',
+            source: 'pos',
+            select: 'transaction_ref, transaction_number, short_code, branch_id',
+            map: (row) => row.transaction_ref || row.transaction_number
+        },
+        {
+            table: 'shift_transactions',
+            source: 'kyogong',
+            select: 'transaction_number, short_code, branch_id',
+            map: (row) => row.transaction_number
+        },
+        {
+            table: 'unpaid_bills',
+            source: 'unpaid_bill',
+            select: 'bill_number, short_code, branch_id',
+            map: (row) => row.bill_number
+        },
+        {
+            table: 'restaurant_bills',
+            source: 'restaurant_bill',
+            select: 'bill_number, short_code, branch_id',
+            map: (row) => row.bill_number
+        },
+        {
+            table: 'payments',
+            source: 'payment',
+            select: 'id, reference, reference_number, amount, currency, payment_method, status, short_code, branch_id',
+            map: (row) => row.reference || row.reference_number
+        },
+        {
+            table: 'reservations',
+            source: 'hotel',
+            select: 'confirmation_number, short_code, branch_id',
+            map: (row) => row.confirmation_number
+        },
+        {
+            table: 'conference_hall_bookings',
+            source: 'conference',
+            select: 'invoice_number, short_code, branch_id',
+            map: (row) => row.invoice_number
+        },
+        {
+            table: 'finance_invoices',
+            source: 'invoice',
+            select: 'invoice_number, short_code, branch_id',
+            map: (row) => row.invoice_number
+        },
+        {
+            table: 'accounting_ar_invoices',
+            source: 'invoice',
+            select: 'invoice_number, short_code, branch_id',
+            map: (row) => row.invoice_number
+        }
+    ];
+
+    for (const lookup of lookups) {
+        const row = await queryShortCodeCandidate(lookup.table, normalized, req, lookup.select);
+        const lookupId = row ? lookup.map(row) : undefined;
+        if (lookupId) {
+            return { source: lookup.source, lookupId: String(lookupId).toUpperCase(), row };
+        }
+    }
+
+    return null;
+}
+
 /**
  * Get Bill Details by Booking ID (or Barcode)
  */
@@ -27,7 +313,40 @@ export const getBillDetails = async (
             throw new AppError('ID is required', 400);
         }
 
-        const searchId = bookingId.toUpperCase();
+        let searchId = bookingId.toUpperCase();
+        const scannedCodeResolution = await resolveCashierScannedCode(searchId, req);
+        if (scannedCodeResolution) {
+            searchId = scannedCodeResolution.lookupId;
+        }
+
+        const shortCodeResolution = await resolveCashierShortCode(searchId, req);
+        if (shortCodeResolution) {
+            if (shortCodeResolution.source === 'payment') {
+                const payment = shortCodeResolution.row;
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'payment_receipt',
+                        payment: {
+                            id: payment.id,
+                            short_code: payment.short_code,
+                            reference: payment.reference || payment.reference_number,
+                            status: payment.status,
+                            payment_method: payment.payment_method
+                        },
+                        financials: {
+                            total_amount: payment.amount || 0,
+                            amount_paid: payment.amount || 0,
+                            balance: 0,
+                            currency: payment.currency || 'KES'
+                        },
+                        payment_status: payment.status || 'completed'
+                    }
+                });
+                return;
+            }
+            searchId = shortCodeResolution.lookupId;
+        }
 
         // Check if it's an accounting invoice (starts with INV)
         if (searchId.startsWith('INV')) {
@@ -50,6 +369,7 @@ export const getBillDetails = async (
                         invoice: {
                             id: arInvoice.id,
                             invoice_number: arInvoice.invoice_number,
+                            short_code: arInvoice.short_code,
                             customer_name: arInvoice.customer?.customer_name || 'Walk-in',
                             status: arInvoice.status,
                             items: (arInvoice.items || []).map((item: any) => ({
@@ -87,6 +407,7 @@ export const getBillDetails = async (
                         invoice: {
                             id: finInvoice.id,
                             invoice_number: finInvoice.invoice_number,
+                            short_code: finInvoice.short_code,
                             customer_name: finInvoice.customer_name || 'Walk-in',
                             status: finInvoice.status,
                             items: [] // finance_invoices might need a joined query for items if detail is needed
@@ -134,6 +455,7 @@ export const getBillDetails = async (
                     booking: {
                         id: reservation.id,
                         order_number: reservation.confirmation_number,
+                        short_code: reservation.short_code,
                         guest_name: reservation.guest_name || 'Guest',
                         room_number: reservation.room?.room_number || reservation.room_number,
                         status: reservation.status,
@@ -185,11 +507,12 @@ export const getBillDetails = async (
                 success: true,
                 data: {
                     type: 'restaurant',
-                    order: {
-                        id: order.id,
-                        order_number: order.order_number,
-                        order_type: order.order_type,
-                        table_number: order.table_number,
+	                    order: {
+	                        id: order.id,
+	                        order_number: order.order_number,
+	                        short_code: order.short_code,
+	                        order_type: order.order_type,
+	                        table_number: order.table_number,
                         room_number: order.room_number,
                         guest_name: order.guest_name || 'Walk-in',
                         status: order.status,
@@ -246,10 +569,11 @@ export const getBillDetails = async (
                 success: true,
                 data: {
                     type: 'bar',
-                    order: {
-                        id: order.id,
-                        order_number: order.order_number,
-                        order_type: order.order_type,
+	                    order: {
+	                        id: order.id,
+	                        order_number: order.order_number,
+	                        short_code: order.short_code,
+	                        order_type: order.order_type,
                         table_number: order.seat_number, // bar uses seat_number
                         room_number: order.room_number,
                         guest_name: order.guest_name || 'Walk-in',
@@ -296,10 +620,11 @@ export const getBillDetails = async (
                     success: true,
                     data: {
                         type: 'kyogong',
-                        order: {
-                            id: tx.id,
-                            order_number: tx.transaction_number,
-                            guest_name: tx.customer_name || 'Walk-in',
+	                    order: {
+	                        id: tx.id,
+	                        order_number: tx.transaction_number,
+	                        short_code: tx.short_code,
+	                        guest_name: tx.customer_name || 'Walk-in',
                             status: tx.status,
                             service_category: tx.service_category,
                             items: tx.items?.map((item: any) => ({
@@ -340,6 +665,7 @@ export const getBillDetails = async (
                         booking: {
                             id: booking.id,
                             invoice_number: booking.invoice_number,
+                            short_code: booking.short_code,
                             company_name: booking.company_name || booking.customer_name,
                             contact_person: booking.contact_person,
                             phone: booking.customer_phone,
@@ -401,10 +727,11 @@ export const getBillDetails = async (
                 success: true,
                 data: {
                     type: 'pos',
-                    order: {
-                        id: finalTx.id,
-                        order_number: finalTx.transaction_ref,
-                        guest_name: finalTx.customer_name || 'Walk-in',
+	                    order: {
+	                        id: finalTx.id,
+	                        order_number: finalTx.transaction_ref,
+	                        short_code: finalTx.short_code,
+	                        guest_name: finalTx.customer_name || 'Walk-in',
                         status: finalTx.status,
                         items: finalTx.items?.map((item: any) => ({
                             name: item.product?.name || 'Unknown Item',
@@ -437,33 +764,72 @@ export const getBillDetails = async (
 
             query = applyBranchFilter(query, req);
 
-            const { data: bill, error: billError } = await query.single();
+            const { data: bill, error: billError } = await query.maybeSingle();
 
-            if (billError || !bill) {
+            if (billError) throw new AppError('Bill lookup failed', 500);
+
+            if (bill) {
+                res.json({
+                    success: true,
+                    data: {
+                        type: 'unpaid_bill',
+                        bill_type: bill.bill_type,
+                        revenue_type: bill.revenue_type || bill.bill_type,
+                        bill: {
+                            id: bill.id,
+                            bill_number: bill.bill_number,
+                            short_code: bill.short_code,
+                            customer_name: bill.customer_name,
+                            room_number: bill.room_number,
+                            status: bill.status,
+                            due_date: bill.due_date,
+                            remarks: bill.remarks
+                        },
+                        financials: {
+                            total_amount: bill.total_amount,
+                            amount_paid: bill.paid_amount || 0,
+                            balance: bill.balance_amount || (bill.total_amount - (bill.paid_amount || 0)),
+                            currency: 'KES'
+                        }
+                    }
+                });
+                return;
+            }
+
+            let restaurantBillQuery = supabase
+                .from('restaurant_bills')
+                .select('*')
+                .eq('bill_number', searchId);
+
+            restaurantBillQuery = applyBranchFilter(restaurantBillQuery, req);
+            const { data: restaurantBill, error: restaurantBillError } = await restaurantBillQuery.maybeSingle();
+
+            if (restaurantBillError || !restaurantBill) {
                 throw new AppError('Bill not found', 404);
             }
 
             res.json({
                 success: true,
                 data: {
-                    type: 'unpaid_bill',
-                    bill_type: bill.bill_type,
-                    revenue_type: bill.revenue_type || bill.bill_type,
+                    type: 'restaurant_bill',
+                    bill_type: 'restaurant',
+                    revenue_type: 'RESTAURANT',
                     bill: {
-                        id: bill.id,
-                        bill_number: bill.bill_number,
-                        customer_name: bill.customer_name,
-                        room_number: bill.room_number,
-                        status: bill.status,
-                        due_date: bill.due_date,
-                        remarks: bill.remarks
+                        id: restaurantBill.id,
+                        bill_number: restaurantBill.bill_number,
+                        short_code: restaurantBill.short_code,
+                        customer_name: restaurantBill.guest_name || 'Walk-in',
+                        room_number: restaurantBill.room_number,
+                        status: restaurantBill.status,
+                        remarks: restaurantBill.internal_notes
                     },
                     financials: {
-                        total_amount: bill.total_amount,
-                        amount_paid: bill.paid_amount || 0,
-                        balance: bill.balance_amount || (bill.total_amount - (bill.paid_amount || 0)),
+                        total_amount: restaurantBill.total_amount,
+                        amount_paid: restaurantBill.paid_amount || 0,
+                        balance: restaurantBill.balance || 0,
                         currency: 'KES'
-                    }
+                    },
+                    payment_status: restaurantBill.status === 'PAID' ? 'paid' : 'unpaid'
                 }
             });
             return;
@@ -795,10 +1161,22 @@ export const processCashierPayment = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { bookingId, amount, method, reference } = req.body;
+        let { bookingId } = req.body;
+        const { amount, method, reference } = req.body;
 
         if (!bookingId || !amount || !method) {
             throw new AppError('ID, amount, and method are required', 400);
+        }
+
+        bookingId = String(bookingId).toUpperCase();
+        const scannedCodeResolution = await resolveCashierScannedCode(bookingId, req);
+        if (scannedCodeResolution) {
+            bookingId = scannedCodeResolution.lookupId;
+        }
+
+        const shortCodeResolution = await resolveCashierShortCode(bookingId, req);
+        if (shortCodeResolution) {
+            bookingId = shortCodeResolution.lookupId;
         }
 
         const paymentRef = reference || `CASH-${Date.now()}`;
@@ -842,7 +1220,7 @@ export const processCashierPayment = async (
             }
 
             // 3. Record Payment in Database
-            const isVerifiedMethod = method === 'cash';
+            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
             const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
             const paymentPayload: any = {
@@ -956,7 +1334,7 @@ export const processCashierPayment = async (
             }
 
             // 2. Record Payment in Database
-            const isVerifiedMethod = method === 'cash';
+            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
             const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
             const { data: payment, error: paymentError } = await supabase
@@ -1040,18 +1418,19 @@ export const processCashierPayment = async (
         // Check if it's a restaurant order
         if (bookingId.startsWith('ORD')) {
             // 1. Fetch the order ID (UUID) from order number
-            const { data: order, error: orderError } = await supabase
+            let orderQuery = supabase
                 .from('restaurant_orders')
                 .select('id, total_amount')
-                .eq('order_number', bookingId)
-                .single();
+                .eq('order_number', bookingId);
+            orderQuery = applyBranchFilter(orderQuery, req);
+            const { data: order, error: orderError } = await orderQuery.single();
 
             if (orderError || !order) {
                 throw new AppError('Restaurant order not found', 404);
             }
 
             // 2. Record Payment in Database
-            const isVerifiedMethod = method === 'cash';
+            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
             const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
             const { data: payment, error: paymentError } = await supabase
@@ -1143,18 +1522,19 @@ export const processCashierPayment = async (
         // Check if it's a bar order
         if (bookingId.startsWith('BAR')) {
             // 1. Fetch the order ID (UUID) from order number
-            const { data: order, error: orderError } = await supabase
+            let orderQuery = supabase
                 .from('bar_orders')
                 .select('id, total')
-                .eq('order_number', bookingId)
-                .single();
+                .eq('order_number', bookingId);
+            orderQuery = applyBranchFilter(orderQuery, req);
+            const { data: order, error: orderError } = await orderQuery.single();
 
             if (orderError || !order) {
                 throw new AppError('Bar order not found', 404);
             }
 
             // 2. Record Payment in Database
-            const isVerifiedMethod = method === 'cash';
+            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
             const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
             const { data: payment, error: paymentError } = await supabase
@@ -1222,17 +1602,18 @@ export const processCashierPayment = async (
         // Check if it's a POS transaction
         if (bookingId.startsWith('CS-')) {
             // 1. Fetch the transaction from ref
-            const { data: transaction, error: txError } = await supabase
+            let txQuery = supabase
                 .from('pos_transactions')
                 .select('*')
-                .eq('transaction_ref', bookingId)
-                .single();
+                .eq('transaction_ref', bookingId);
+            txQuery = applyBranchFilter(txQuery, req);
+            const { data: transaction, error: txError } = await txQuery.single();
 
             if (txError || !transaction) {
                 throw new AppError('POS transaction not found', 404);
             }
 
-            const isVerifiedMethod = method === 'cash';
+            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
             const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
             // 2. Record Payment in Database
@@ -1305,14 +1686,15 @@ export const processCashierPayment = async (
         // Check if it's a Kyogong Shift Transaction
         const kyogongPattern = /^[A-Z]+-\d{8}-\d{4}$/;
         if (kyogongPattern.test(bookingId.toString()) || bookingId.toString().includes('-202')) {
-            const { data: transaction, error: txError } = await supabase
+            let txQuery = supabase
                 .from('shift_transactions')
                 .select('*')
-                .eq('transaction_number', bookingId)
-                .single();
+                .eq('transaction_number', bookingId);
+            txQuery = applyBranchFilter(txQuery, req);
+            const { data: transaction, error: txError } = await txQuery.single();
 
             if (!txError && transaction) {
-                const isVerifiedMethod = method === 'cash';
+                const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
                 const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
                 // 2. Record Payment
@@ -1391,17 +1773,80 @@ export const processCashierPayment = async (
 
         if (billPrefix) {
             // 1. Fetch the bill
-            const { data: bill, error: billError } = await supabase
+            let unpaidBillQuery = supabase
                 .from('unpaid_bills')
                 .select('*')
-                .eq('bill_number', bookingId)
-                .single();
+                .eq('bill_number', bookingId);
 
-            if (billError || !bill) {
-                throw new AppError('Bill not found', 404);
+            unpaidBillQuery = applyBranchFilter(unpaidBillQuery, req);
+            const { data: bill, error: billError } = await unpaidBillQuery.maybeSingle();
+
+            if (billError) throw new AppError('Bill lookup failed', 500);
+
+            if (!bill) {
+                let restaurantBillQuery = supabase
+                    .from('restaurant_bills')
+                    .select('*')
+                    .eq('bill_number', bookingId);
+
+                restaurantBillQuery = applyBranchFilter(restaurantBillQuery, req);
+                const { data: restaurantBill, error: restaurantBillError } = await restaurantBillQuery.maybeSingle();
+
+                if (restaurantBillError || !restaurantBill) {
+                    throw new AppError('Bill not found', 404);
+                }
+
+                if (Number(amount) > Number(restaurantBill.balance || 0)) {
+                    throw new AppError(`Payment amount (${amount}) exceeds bill balance (${restaurantBill.balance || 0})`, 400);
+                }
+
+                const { data: paymentNumberData, error: paymentNumberError } = await supabase
+                    .rpc('generate_payment_number');
+                if (paymentNumberError) throw paymentNumberError;
+
+                const { data: payment, error: paymentError } = await supabase
+                    .from('restaurant_bill_payments')
+                    .insert({
+                        bill_id: restaurantBill.id,
+                        payment_number: paymentNumberData,
+                        amount,
+                        payment_method: normalizeRestaurantBillPaymentMethod(method),
+                        payment_reference: paymentRef,
+                        notes: 'Recorded from cashier station',
+                        paid_by: req.user?.id,
+                        cashier_id: req.user?.staff_profile_id
+                    })
+                    .select()
+                    .single();
+
+                if (paymentError) {
+                    throw new AppError(`Restaurant bill payment recording failed: ${paymentError.message}`, 500);
+                }
+
+                const { error } = await supabase.from('cashier_transactions').insert({
+                    transaction_number: `BILL-${restaurantBill.bill_number}`,
+                    branch_id: restaurantBill.branch_id || req.user?.branch_id,
+                    cashier_id: req.user?.id,
+                    transaction_type: 'payment',
+                    revenue_type: 'RESTAURANT',
+                    reference_type: 'restaurant_bill',
+                    reference_id: restaurantBill.id,
+                    payment_method: method,
+                    amount: amount,
+                    customer_name: restaurantBill.guest_name || 'Walk-in'
+                });
+
+                if (error) throw error;
+
+                res.json({
+                    success: true,
+                    message: 'Restaurant bill payment processed successfully',
+                    data: payment
+                });
+                return;
             }
 
-            const isVerifiedMethod = method === 'cash';
+            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
             const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
             // 2. Record Payment in Database
@@ -1499,7 +1944,7 @@ export const processCashierPayment = async (
         }
 
         // 1. Record Payment in Database
-        const isVerifiedMethod = method === 'cash';
+        const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
         const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
 
         const { data: payment, error: paymentError } = await supabase
@@ -2771,15 +3216,19 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
         }
 
         // Calculate new paid amount
-        const new_paid_amount = (credit.paid_amount || 0) + payment_amount;
-        const new_balance = credit.total_amount - new_paid_amount;
+        const new_paid_amount = Math.min(
+            Number(credit.total_amount || 0),
+            Number(credit.paid_amount || 0) + Number(payment_amount || 0)
+        );
+        const new_balance = Math.max(0, Number(credit.total_amount || 0) - new_paid_amount);
 
         // Update credit bill
         const { data: updatedCredit, error: updateError } = await supabase
             .from('credit_bills')
             .update({
                 paid_amount: new_paid_amount,
-                balance_amount: new_balance
+                balance_amount: new_balance,
+                status: new_balance <= 0 ? 'paid' : credit.status
             })
             .eq('id', id)
             .select()
@@ -3725,6 +4174,99 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
             res.json({
                 success: true,
                 message: 'Cash payment confirmed'
+            });
+        } else if (method === 'CARD' || method === 'CREDIT_BILL') {
+            const { reference, credit_bill } = req.body;
+            let creditBillId = credit_bill?.id || null;
+
+            if (method === 'CREDIT_BILL' && credit_bill && !creditBillId) {
+                const { data: creditNumberData } = await supabase.rpc('generate_credit_number');
+                const creditNumber = creditNumberData || `CR${Date.now()}`;
+                const totalAmount = Number(transaction.total_amount || 0);
+
+                const { data: creditBill, error: creditError } = await supabase
+                    .from('credit_bills')
+                    .insert({
+                        ...credit_bill,
+                        credit_number: credit_bill.credit_number || creditNumber,
+                        branch_id: credit_bill.branch_id || transaction.branch_id,
+                        bill_type: credit_bill.bill_type || 'pos_sale',
+                        reference_type: 'pos_transaction',
+                        reference_id: transaction.id,
+                        total_amount: credit_bill.total_amount || totalAmount,
+                        balance_amount: credit_bill.balance_amount || totalAmount,
+                        payment_method: 'credit_bill',
+                        deduction_months: credit_bill.deduction_months || 1,
+                        monthly_deduction: (credit_bill.total_amount || totalAmount) / (credit_bill.deduction_months || 1),
+                        status: 'active',
+                        approval_status: 'pending',
+                        created_by: req.user?.id
+                    })
+                    .select('id, credit_number')
+                    .single();
+
+                if (creditError) {
+                    throw new AppError(`Credit bill creation failed: ${creditError.message}`, 500);
+                }
+                creditBillId = creditBill?.id || null;
+            }
+
+            await supabase
+                .from('pos_transactions')
+                .update({
+                    status: 'PAID',
+                    payment_method: method,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id);
+
+            const paymentReference =
+                reference || creditBillId || `POS-${method}-${transaction.transaction_ref}`;
+
+            const { error: paymentError } = await supabase.from('payments').insert({
+                pos_transaction_id: transaction.id,
+                credit_bill_id: creditBillId,
+                amount: transaction.total_amount,
+                currency: 'KES',
+                payment_method: method.toLowerCase(),
+                status: 'completed',
+                reference: paymentReference,
+                metadata: {
+                    manual_entry: true,
+                    transaction_ref: transaction.transaction_ref,
+                    credit_bill_id: creditBillId,
+                    verified_at: new Date().toISOString()
+                }
+            });
+
+            if (paymentError) {
+                console.error('Database error:', paymentError);
+                throw paymentError;
+            }
+
+            const { error: txnError } = await supabase.from('cashier_transactions').insert({
+                transaction_number: `POS-${transaction.transaction_ref}`,
+                branch_id: transaction.branch_id,
+                cashier_id: req.user?.id || transaction.cashier_id,
+                transaction_type: 'payment',
+                revenue_type: 'POS_SALE',
+                reference_type: 'pos_transaction',
+                reference_id: transaction.id,
+                credit_bill_id: creditBillId,
+                payment_method: method.toLowerCase(),
+                amount: transaction.total_amount,
+                payment_reference: paymentReference,
+                customer_name: transaction.customer_name
+            });
+
+            if (txnError) {
+                console.error('Database error:', txnError);
+                throw txnError;
+            }
+
+            res.json({
+                success: true,
+                message: `${method === 'CARD' ? 'Card' : 'Credit bill'} payment confirmed`
             });
         } else {
             throw new AppError('Payment method not supported yet or in development', 400);

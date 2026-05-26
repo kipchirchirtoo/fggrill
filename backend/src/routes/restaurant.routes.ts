@@ -204,9 +204,78 @@ router.get('/kitchen/orders',
   }
 );
 
+// Kitchen Display - Get completed restaurant order history (restaurant only)
+router.get('/kitchen/orders/history',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.AUDITOR]),
+  async (req, res) => {
+    try {
+      const branchIdRaw = req.query.branch_id as string;
+      const branchId = branchIdRaw && !['true', 'false', 'null', 'undefined'].includes(branchIdRaw) ? branchIdRaw : undefined;
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 250);
+
+      let ordersQuery = supabase
+        .from('restaurant_orders')
+        .select('*')
+        .in('status', ['served', 'delivered', 'completed', 'paid'])
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (branchId) {
+        ordersQuery = ordersQuery.eq('branch_id', branchId);
+      }
+
+      const { data: orders, error: ordersError } = await ordersQuery;
+      if (ordersError) throw ordersError;
+
+      if (!orders || orders.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
+      const orderIds = orders.map((o: any) => o.id);
+      const { data: allItems, error: itemsError } = await supabase
+        .from('restaurant_order_items')
+        .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name')
+        .in('order_id', orderIds);
+
+      if (itemsError) {
+        console.warn('Failed to fetch kitchen order history items:', itemsError.message);
+      }
+
+      const itemsByOrder: Record<string, any[]> = {};
+      for (const item of (allItems || [])) {
+        if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
+        itemsByOrder[item.order_id].push(item);
+      }
+
+      const history = orders.map((order: any) => {
+        const items = itemsByOrder[order.id] || [];
+        return {
+          ...order,
+          elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
+          items_count: items.length,
+          total: order.total_amount,
+          items: items.map((item: any) => ({
+            id: item.id,
+            name: item.item_name || `Item #${item.menu_item_id}`,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            notes: item.special_instructions,
+            status: 'ready'
+          }))
+        };
+      });
+
+      res.json({ success: true, data: history });
+    } catch (error) {
+      console.error('Kitchen order history error:', error);
+      res.status(500).json({ success: false, error: 'Failed to fetch kitchen order history' });
+    }
+  }
+);
+
 // Kitchen Display - Mark item as ready
 router.put('/kitchen/orders/:orderId/items/:itemId/ready',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
   async (req, res) => {
     try {
       const { orderId, itemId } = req.params;

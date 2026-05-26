@@ -51,6 +51,7 @@ import staffAuditRoutes from './staff-audit.routes';
 import storekeepingEnhancedRoutes from './storekeeping';
 import cashierRoutes from './cashier.routes';
 import cashierClearanceRoutes from './cashier-clearance.routes';
+import outletPosRoutes from './outlet-pos.routes';
 import profitLossRoutes from './profit-loss.routes';
 import wastageRoutes from './wastage.routes';
 import kitchenLedgerRoutes from './kitchen-ledger.routes';
@@ -64,6 +65,7 @@ import pettyCashRoutes from './petty-cash.routes';
 import creditRoutes from './credit.routes';
 import kitchenRoutes from './kitchen.routes';
 import payrollRoutes from './payroll.routes';
+import payrollSimpleRoutes from './payroll-simple.routes';
 import procurementRoutes from './procurement.routes';
 import hrReportRoutes from './hr-reports.routes';
 import stockTakeRoutes from './stock-take.routes';
@@ -117,6 +119,7 @@ router.use('/verify', verifyRoutes);
 
 // API routes
 router.use('/staff/performance', staffPerformanceRoutes); // Must come BEFORE /staff
+router.use('/staff/simple-payroll', payrollSimpleRoutes); // Must come BEFORE /staff
 router.use('/staff', staffAuditRoutes);
 router.use('/staff', staffRoutes);
 router.use('/auth', authRoutes);
@@ -163,16 +166,19 @@ router.use('/channel-manager', channelManagerRoutes);
 router.use('/employee-portal', employeePortalRoutes);
 router.use('/guest-portal', guestPortalRoutes);
 router.use('/payroll', payrollRoutes);
+router.use('/payroll/simple', payrollSimpleRoutes);
 router.use('/email', emailRoutes);
 router.use('/landing-email', landingEmailRoutes);
 router.use('/barcode', barcodeRoutes);
 router.use('/storekeeping', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
 router.use('/cashier', cashierClearanceRoutes);
+router.use('/pos', outletPosRoutes);
 router.use('/wastage', wastageRoutes);
 router.use('/kitchen-ledger', kitchenLedgerRoutes);
 router.use('/additional-services', additionalServicesRoutes);
 router.use('/reports/auditor', auditorReportsRoutes);
+router.use('/auditor-reports', auditorReportsRoutes);
 router.use('/conference', conferenceRoutes);
 router.use('/catering', cateringRoutes);
 router.use('/attendance', attendanceRoutes);

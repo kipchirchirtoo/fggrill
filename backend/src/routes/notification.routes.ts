@@ -24,7 +24,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       priority: req.query.priority as string | undefined
     };
 
-    const notifications = await notificationService.getNotificationsForUser(userId, filters);
+    const notifications = await notificationService.getNotificationsForUser(req.user as any, filters);
 
     res.json({
       success: true,
@@ -55,7 +55,7 @@ router.get('/unread-count', authenticate, async (req: Request, res: Response) =>
       });
     }
 
-    const count = await notificationService.getUnreadCount(userId);
+    const count = await notificationService.getUnreadCount(req.user as any);
 
     res.json({
       success: true,
