@@ -193,6 +193,35 @@ async function queryShortCodeCandidate(
     select = '*'
 ): Promise<any | null> {
     try {
+        if (table === 'pos_shift_orders') {
+            const safeSelect = select.includes('shift_id') ? select : `${select}, shift_id`;
+            const { data, error } = await supabase
+                .from(table)
+                .select(safeSelect)
+                .eq('short_code', code)
+                .maybeSingle();
+
+            if (error) {
+                if (isMissingShortCodeSchema(error)) return null;
+                logger.warn(`Short code lookup failed on ${table}: ${error.message}`);
+                return null;
+            }
+
+            if (!data) return null;
+
+            const userBranchId = parseBranchId(req.user?.branch_id ?? req.user?.branchId);
+            if (!isGlobalRole(req.user?.role) && userBranchId) {
+                const { data: shift } = await supabase
+                    .from('pos_outlet_shifts')
+                    .select('branch_id')
+                    .eq('id', (data as any).shift_id)
+                    .maybeSingle();
+                if (Number(shift?.branch_id) !== userBranchId) return null;
+            }
+
+            return data;
+        }
+
         let query = supabase
             .from(table)
             .select(select)
@@ -377,6 +406,12 @@ async function resolveCashierShortCode(
             source: 'pos',
             select: 'transaction_ref, transaction_number, short_code, branch_id',
             map: (row) => row.transaction_ref || row.transaction_number
+        },
+        {
+            table: 'pos_shift_orders',
+            source: 'pos_shift_order',
+            select: 'order_number, short_code',
+            map: (row) => row.order_number
         },
         {
             table: 'shift_transactions',
@@ -888,6 +923,69 @@ export const getBillDetails = async (
                         currency: 'KES'
                     },
                     payment_status: finalTx.status.toLowerCase()
+                }
+            });
+            return;
+        }
+
+        // Check if it's an outlet POS captain order
+        if (searchId.startsWith('POS')) {
+            let posOrderQuery = supabase
+                .from('pos_shift_orders')
+                .select('*')
+                .or(`order_number.eq.${searchId},short_code.eq.${searchId}`);
+
+            const effectiveBranchId = parseBranchId(req.query.branch_id) ||
+                parseBranchId(req.user?.branch_id ?? req.user?.branchId);
+            if (effectiveBranchId) {
+                const { data: shifts } = await supabase
+                    .from('pos_outlet_shifts')
+                    .select('id')
+                    .eq('branch_id', effectiveBranchId);
+                const shiftIds = (shifts || []).map((shift: any) => shift.id);
+                if (!shiftIds.length) {
+                    throw new AppError('POS captain order not found', 404);
+                }
+                posOrderQuery = posOrderQuery.in('shift_id', shiftIds);
+            }
+
+            const { data: posOrder, error: posOrderError } = await posOrderQuery.single();
+
+            if (posOrderError || !posOrder) {
+                throw new AppError('POS captain order not found', 404);
+            }
+
+            const items = Array.isArray(posOrder.items) ? posOrder.items : [];
+            const totalAmount = Number(posOrder.total_amount || 0);
+            const amountPaid = Number(posOrder.amount_paid || 0);
+            const balance = Number(posOrder.balance_amount ?? Math.max(0, totalAmount - amountPaid));
+
+            res.json({
+                success: true,
+                data: {
+                    type: 'pos_shift_order',
+                    source: 'pos',
+                    order: {
+                        id: posOrder.id,
+                        order_number: posOrder.order_number,
+                        short_code: posOrder.short_code,
+                        guest_name: posOrder.customer_name || 'Walk-in',
+                        waiter_name: posOrder.waiter_name,
+                        status: posOrder.payment_status === 'paid' ? 'cleared' : 'unpaid',
+                        items: items.map((item: any) => ({
+                            name: item.name || item.item_name || 'POS item',
+                            quantity: Number(item.quantity || item.qty || 1),
+                            price: Number(item.unit_price || item.price || 0),
+                            total: Number(item.line_total || 0)
+                        }))
+                    },
+                    financials: {
+                        total_amount: totalAmount,
+                        amount_paid: amountPaid,
+                        balance,
+                        currency: 'KES'
+                    },
+                    payment_status: posOrder.payment_status === 'paid' ? 'cleared' : posOrder.payment_status
                 }
             });
             return;
@@ -4869,6 +4967,39 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const { data: barOrders, error: bErr } = await barQuery;
         if (bErr && bErr.code !== '42703') throw bErr;
 
+        let posOrders: any[] = [];
+        let posShiftIds: string[] = [];
+        let shiftLookup: Record<string, any> = {};
+        try {
+            let posShiftQuery = supabase
+                .from('pos_outlet_shifts')
+                .select('id, branch_id, outlet:pos_outlets(name, outlet_type)');
+            if (effectiveBranchId) posShiftQuery = posShiftQuery.eq('branch_id', effectiveBranchId);
+            const { data: posShifts, error: posShiftErr } = await posShiftQuery;
+            if (posShiftErr) throw posShiftErr;
+
+            shiftLookup = Object.fromEntries((posShifts || []).map((shift: any) => [shift.id, shift]));
+            posShiftIds = Object.keys(shiftLookup);
+            if (posShiftIds.length) {
+                const allowedStatuses = status === 'all' ? ['unpaid', 'partial'] : [status];
+                const { data: fetchedPosOrders, error: posErr } = await supabase
+                    .from('pos_shift_orders')
+                    .select('*')
+                    .in('shift_id', posShiftIds)
+                    .in('payment_status', allowedStatuses)
+                    .neq('status', 'cancelled')
+                    .gte('created_at', from.toISOString())
+                    .lte('created_at', to.toISOString())
+                    .order('created_at', { ascending: false });
+                if (posErr) throw posErr;
+                posOrders = fetchedPosOrders || [];
+            }
+        } catch (posError: any) {
+            if (!['42P01', '42703', 'PGRST205', 'PGRST204'].includes(posError?.code)) {
+                throw posError;
+            }
+        }
+
         // Normalise into a common shape
         const mapped = [
             ...(restaurantOrders || []).map((o: any) => ({
@@ -4932,7 +5063,44 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 })(),
                 items: o.items || [],
                 is_waiter_order: true
-            }))
+            })),
+            ...posOrders.map((o: any) => {
+                const items = Array.isArray(o.items) ? o.items : [];
+                const shift = shiftLookup[o.shift_id];
+                const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
+                return {
+                    id: o.id,
+                    source: 'pos',
+                    source_type: 'CAPTAIN_ORDER',
+                    bill_type: 'pos_shift_order',
+                    order_number: o.order_number,
+                    bill_number: o.order_number,
+                    short_code: o.short_code,
+                    location: o.customer_name || outlet?.name || 'POS station',
+                    guest_name: o.customer_name || 'Walk-in',
+                    customer_name: o.customer_name || 'Walk-in',
+                    total_amount: Number(o.total_amount || 0),
+                    paid_amount: Number(o.amount_paid || 0),
+                    balance_amount: Number(o.balance_amount || o.total_amount || 0),
+                    payment_status: o.payment_status === 'paid' ? 'cleared' : o.payment_status,
+                    status: o.payment_status === 'paid' ? 'cleared' : o.payment_status,
+                    created_at: o.created_at,
+                    bill_date: o.created_at,
+                    branch_id: shift?.branch_id || effectiveBranchId,
+                    waiter: null,
+                    waiter_id: o.waiter_id || o.created_by,
+                    waiter_name: o.waiter_name || '',
+                    items: items.map((item: any, index: number) => ({
+                        id: item.outlet_item_id || `${o.id}-${index}`,
+                        item_name: item.name || item.item_name || 'POS item',
+                        quantity: Number(item.quantity || item.qty || 1),
+                        unit_price: Number(item.unit_price || item.price || 0),
+                        total_price: Number(item.line_total || 0)
+                    })),
+                    is_waiter_order: true,
+                    is_captain_order: true
+                };
+            })
         ].filter((row) => {
             if (!search) return true;
             return [
@@ -4963,15 +5131,21 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
             payment_reference
         } = req.body;
 
-        const table = source === 'restaurant' ? 'restaurant_orders' : 'bar_orders';
-        const amountField = source === 'restaurant' ? 'total_amount' : 'total';
-        const revenueType = source === 'restaurant' ? 'restaurant' : 'bar';
+        const normalizedSource = String(source || '').toLowerCase();
+        const isRestaurantOrder = normalizedSource === 'restaurant';
+        const isPosCaptainOrder = ['pos', 'pos_shift_order', 'captain', 'captain_order'].includes(normalizedSource);
+        const table = isRestaurantOrder ? 'restaurant_orders' : isPosCaptainOrder ? 'pos_shift_orders' : 'bar_orders';
+        const amountField = isRestaurantOrder || isPosCaptainOrder ? 'total_amount' : 'total';
+        const revenueType = isRestaurantOrder || isPosCaptainOrder ? 'restaurant' : 'bar';
+        const waiterField = isPosCaptainOrder ? 'waiter_id' : 'created_by';
+        const customerField = isPosCaptainOrder ? 'customer_name' : 'guest_name';
+        const waiterSelect = waiterField === 'created_by' ? '' : `, ${waiterField}`;
 
-        const { data: order, error: fetchErr } = await supabase
+        const { data: order, error: fetchErr } = await (supabase
             .from(table)
-            .select(`id, status, ${amountField}, amount_paid, balance_amount, branch_id, order_number, short_code, created_by, guest_name`)
+            .select(`id, status, ${amountField}, amount_paid, balance_amount, order_number, short_code, created_by${waiterSelect}, ${customerField}${isPosCaptainOrder ? ', shift_id, outlet_id, staff_credit_bill_id' : ', branch_id'}`)
             .eq('id', id)
-            .single();
+            .single() as any);
 
         if (fetchErr || !order) throw new AppError('Order not found', 404);
         const totalAmount = Number((order as any)[amountField] || 0);
@@ -4989,34 +5163,45 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
         const nextBalance = Math.max(0, totalAmount - nextPaid);
         const isCleared = nextBalance <= 0.01;
         const normalizedMethod = String(payment_method || 'cash').toLowerCase();
-        const completedStatus = source === 'restaurant' ? 'delivered' : 'completed';
+        const completedStatus = isRestaurantOrder ? 'delivered' : isPosCaptainOrder ? 'paid' : 'completed';
+        let orderBranchId = (order as any).branch_id;
+        if (isPosCaptainOrder && !orderBranchId && (order as any).shift_id) {
+            const { data: shift } = await supabase
+                .from('pos_outlet_shifts')
+                .select('branch_id')
+                .eq('id', (order as any).shift_id)
+                .maybeSingle();
+            orderBranchId = shift?.branch_id;
+        }
 
         if (normalizedMethod === 'credit_bill') {
+            const waiterUserId = (order as any)[waiterField] || (order as any).created_by;
             const { data: staffProfile } = await supabase
                 .from('staff_profiles')
                 .select('id, first_name, last_name')
-                .or(`user_id.eq.${(order as any).created_by},id.eq.${(order as any).created_by}`)
+                .or(`user_id.eq.${waiterUserId},id.eq.${waiterUserId}`)
                 .maybeSingle();
 
             if (staffProfile?.id) {
                 const billNumber = (order as any).order_number || (order as any).short_code || id;
-                await supabase.from('staff_credit_bills').insert({
+                const { data: staffCreditBill } = await supabase.from('staff_credit_bills').insert({
                     staff_id: staffProfile.id,
                     amount: amountPaid,
-                    description: `Uncleared ${source} order ${billNumber} migrated from cashier`,
+                    description: `Uncleared ${isPosCaptainOrder ? 'captain POS' : normalizedSource} order ${billNumber} migrated from cashier`,
                     bill_date: new Date().toISOString().slice(0, 10),
                     status: 'pending',
-                    branch_id: (order as any).branch_id
-                });
+                    branch_id: orderBranchId,
+                    ...(isPosCaptainOrder ? { source_pos_order_id: id } : {})
+                }).select('id').single();
 
                 await supabase.from('unpaid_bills').insert({
-                    bill_type: `${source}_order`,
+                    bill_type: isPosCaptainOrder ? 'pos_shift_order' : `${normalizedSource}_order`,
                     reference_type: table,
                     reference_id: id,
                     customer_type: 'staff',
                     customer_name: `${staffProfile.first_name || ''} ${staffProfile.last_name || ''}`.trim() || 'Waiter',
                     waiter_id: staffProfile.id,
-                    branch_id: (order as any).branch_id,
+                    branch_id: orderBranchId,
                     total_amount: amountPaid,
                     paid_amount: 0,
                     balance_amount: amountPaid,
@@ -5027,39 +5212,66 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                     status: 'unpaid',
                     created_by: req.user?.id
                 });
+
+                if (isPosCaptainOrder && staffCreditBill?.id) {
+                    await supabase
+                        .from('pos_shift_orders')
+                        .update({ staff_credit_bill_id: staffCreditBill.id, updated_at: new Date().toISOString() })
+                        .eq('id', id);
+                }
             }
+        }
+
+        const updatePayload: Record<string, any> = {
+            payment_status: isCleared ? (isPosCaptainOrder && normalizedMethod === 'credit_bill' ? 'credit_bill' : 'paid') : 'partial',
+            status: isCleared ? (normalizedMethod === 'credit_bill' && isPosCaptainOrder ? 'credit_bill' : completedStatus) : (order as any).status,
+            amount_paid: nextPaid,
+            balance_amount: nextBalance,
+            updated_at: new Date().toISOString()
+        };
+        if (!isPosCaptainOrder) {
+            updatePayload.payment_method = payment_method;
+            if (isCleared) updatePayload.paid_at = new Date().toISOString();
         }
 
         const { error: updateErr } = await supabase
             .from(table)
-            .update({
-                payment_status: isCleared ? 'paid' : 'partial',
-                payment_method,
-                status: isCleared ? completedStatus : (order as any).status,
-                amount_paid: nextPaid,
-                balance_amount: nextBalance,
-                updated_at: new Date().toISOString(),
-                ...(isCleared ? { paid_at: new Date().toISOString() } : {})
-            })
+            .update(updatePayload)
             .eq('id', id);
 
         if (updateErr) throw updateErr;
+
+        if (isPosCaptainOrder) {
+            try {
+                await supabase.from('pos_shift_payments').insert({
+                    shift_id: (order as any).shift_id,
+                    outlet_id: (order as any).outlet_id,
+                    order_id: id,
+                    payment_method: normalizedMethod,
+                    amount: amountPaid,
+                    reference: payment_reference || `${normalizedMethod}-${Date.now()}`,
+                    received_by: req.user?.id
+                });
+            } catch (posPaymentErr) {
+                logger.warn('Could not record POS shift payment for cashier order clearance:', posPaymentErr);
+            }
+        }
 
         // Record cashier transaction for audit trail
         try {
             const { data: txNumber } = await supabase.rpc('generate_cashier_transaction_number');
             await supabase.from('cashier_transactions').insert({
                 transaction_number: txNumber || `CT${Date.now()}`,
-                branch_id: order.branch_id,
+                branch_id: orderBranchId,
                 cashier_id: req.user?.id,
                 transaction_type: 'payment',
                 revenue_type: revenueType,
                 reference_type: table,
-                reference_id: order.id,
+                reference_id: (order as any).id,
                 payment_method,
                 amount: amountPaid,
                 payment_reference,
-                customer_name: (order as any).guest_name || (order as any).order_number
+                customer_name: (order as any)[customerField] || (order as any).order_number
             });
         } catch (txErr) {
             logger.warn('Could not record cashier transaction for order payment:', txErr);

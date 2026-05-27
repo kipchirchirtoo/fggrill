@@ -157,16 +157,18 @@ router.get('/kitchen/orders',
       const { data: orders, error: ordersError } = await ordersQuery;
       if (ordersError) throw ordersError;
 
-      if (!orders || orders.length === 0) {
-        return res.json({ success: true, data: [] });
-      }
-
       // Fetch order items separately to avoid FK join issues
-      const orderIds = orders.map((o: any) => o.id);
-      const { data: allItems, error: itemsError } = await supabase
-        .from('restaurant_order_items')
-        .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name')
-        .in('order_id', orderIds);
+      const orderIds = (orders || []).map((o: any) => o.id);
+      let allItems: any[] = [];
+      let itemsError: any = null;
+      if (orderIds.length) {
+        const itemsResult = await supabase
+          .from('restaurant_order_items')
+          .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name')
+          .in('order_id', orderIds);
+        allItems = itemsResult.data || [];
+        itemsError = itemsResult.error;
+      }
 
       if (itemsError) {
         console.warn('Failed to fetch order items:', itemsError.message);
@@ -178,7 +180,7 @@ router.get('/kitchen/orders',
         itemsByOrder[item.order_id].push(item);
       }
 
-      const ordersWithTime = orders.map((order: any) => {
+      const ordersWithTime = (orders || []).map((order: any) => {
         const items = itemsByOrder[order.id] || [];
         return {
           ...order,
@@ -196,7 +198,74 @@ router.get('/kitchen/orders',
         };
       });
 
-      res.json({ success: true, data: ordersWithTime });
+      let posOrdersWithTime: any[] = [];
+      try {
+        let shiftQuery = supabase
+          .from('pos_outlet_shifts')
+          .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
+          .eq('status', 'open');
+
+        if (branchId) {
+          shiftQuery = shiftQuery.eq('branch_id', branchId);
+        }
+
+        const { data: outletShifts, error: shiftError } = await shiftQuery;
+        if (shiftError) throw shiftError;
+
+        const restaurantShiftIds = (outletShifts || [])
+          .filter((shift: any) => {
+            const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+            return String(outlet?.outlet_type || '').toLowerCase() === 'restaurant';
+          })
+          .map((shift: any) => shift.id);
+
+        if (restaurantShiftIds.length) {
+          const { data: posOrders, error: posOrdersError } = await supabase
+            .from('pos_shift_orders')
+            .select('*')
+            .in('shift_id', restaurantShiftIds)
+            .in('status', ['open'])
+            .in('payment_status', ['unpaid', 'partial'])
+            .order('created_at', { ascending: true });
+
+          if (posOrdersError) throw posOrdersError;
+
+          posOrdersWithTime = (posOrders || []).map((order: any) => {
+            const orderItems = Array.isArray(order.items) ? order.items : [];
+            const tableMatch = String(order.customer_name || '').match(/^Table\s+(\d+)/i);
+            return {
+              id: `pos:${order.id}`,
+              source: 'pos_shift_order',
+              source_id: order.id,
+              order_number: order.order_number,
+              short_code: order.short_code,
+              order_type: tableMatch ? 'dine_in' : 'takeaway',
+              table_number: tableMatch ? Number(tableMatch[1]) : null,
+              waiter_name: order.waiter_name,
+              customer_name: order.customer_name || 'Walk-in',
+              status: 'pending',
+              payment_status: order.payment_status,
+              created_at: order.created_at,
+              elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
+              items_count: orderItems.length,
+              total: order.total_amount,
+              total_amount: order.total_amount,
+              items: orderItems.map((item: any, index: number) => ({
+                id: item.outlet_item_id || `${order.id}-${index}`,
+                name: item.name || item.item_name || 'POS item',
+                quantity: Number(item.quantity || item.qty || 1),
+                unit_price: Number(item.unit_price || item.price || 0),
+                notes: item.notes,
+                status: 'pending'
+              }))
+            };
+          });
+        }
+      } catch (posError: any) {
+        console.warn('Failed to fetch POS captain orders for kitchen display:', posError?.message || posError);
+      }
+
+      res.json({ success: true, data: [...ordersWithTime, ...posOrdersWithTime] });
     } catch (error) {
       console.error('Kitchen orders error:', error);
       res.status(500).json({ success: false, error: 'Failed to fetch kitchen orders' });

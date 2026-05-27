@@ -3,6 +3,8 @@ import { protect } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import {
   closeShift,
+  createOutlet,
+  createOutletItem,
   getActiveShift,
   getOutletItems,
   getOutletStaff,
@@ -14,7 +16,10 @@ import {
   payShiftOrder,
   recordShiftOrder,
   reviewShift,
+  syncOutletItems,
   submitShift,
+  updateOutlet,
+  updateOutletItem,
   updateStockCount
 } from '../controllers/outlet-pos.controller';
 
@@ -59,8 +64,13 @@ router.use((req, res, next) => {
 });
 
 router.get('/outlets', getOutlets);
+router.post('/outlets', createOutlet);
 router.get('/staff', getOutletStaff);
 router.get('/outlets/:outletId/items', getOutletItems);
+router.post('/outlets/:outletId/items', createOutletItem);
+router.patch('/outlets/:outletId/items/:itemId', updateOutletItem);
+router.post('/outlets/:outletId/sync-items', syncOutletItems);
+router.patch('/outlets/:outletId', updateOutlet);
 router.get('/outlets/:outletId/shifts/active', getActiveShift);
 router.post('/outlets/:outletId/shifts/open', openShift);
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:pdf/pdf.dart';
@@ -9,6 +8,7 @@ import 'package:printing/printing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/admin_providers.dart';
 import '../../data/module_guides_data.dart';
+import 'pos_outlet_management_section.dart';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────
 
@@ -670,49 +670,9 @@ class CashierStationSection extends StatelessWidget {
     return Column(
       children: [
         _sectionHeader('Cashier Station', PhosphorIcons.creditCard(),
-            subtitle: 'POS cashier terminal and payment processing'),
-        Expanded(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: const BorderSide(color: AppColors.kDivider),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(PhosphorIcons.creditCard(),
-                          size: 48, color: AppColors.kPrimary),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Open the live Cashier Station',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Bill lookup, POS cart, unpaid bills, credit bills, shifts, barcode scan, and reconciliation are handled in the dedicated cashier module.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.kTextSecondary),
-                      ),
-                      const SizedBox(height: 18),
-                      FilledButton.icon(
-                        onPressed: () => context.go('/cashier'),
-                        icon: const Icon(Icons.point_of_sale, size: 18),
-                        label: const Text('Go to Cashier Station'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+            subtitle:
+                'Define branch POS outlets and sellable items for restaurant, bars, and non-consumables'),
+        const Expanded(child: PosOutletManagementSection()),
       ],
     );
   }
@@ -1034,16 +994,19 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                   pw.SizedBox(height: 80),
                   pw.Text(
                     'Prepared by HIRALL SOLUTIONS',
-                    style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey400),
+                    style: pw.TextStyle(
+                        font: font, fontSize: 10, color: PdfColors.grey400),
                   ),
                   pw.Text(
                     DateTime.now().toLocal().toString().split(' ')[0],
-                    style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey400),
+                    style: pw.TextStyle(
+                        font: font, fontSize: 10, color: PdfColors.grey400),
                   ),
                   pw.SizedBox(height: 4),
                   pw.Text(
                     'CONFIDENTIAL — INTERNAL USE ONLY',
-                    style: pw.TextStyle(font: fontBold, fontSize: 9, color: PdfColors.grey400),
+                    style: pw.TextStyle(
+                        font: fontBold, fontSize: 9, color: PdfColors.grey400),
                   ),
                 ],
               ),
@@ -1061,24 +1024,33 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
             build: (_) => [
               // Module title banner
               pw.Container(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFf5f5f4)),
+                padding:
+                    const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration:
+                    const pw.BoxDecoration(color: PdfColor.fromInt(0xFFf5f5f4)),
                 child: pw.Text(
                   g.title,
-                  style: pw.TextStyle(font: fontBold, fontSize: 20, color: const PdfColor.fromInt(0xFF1c1917)),
+                  style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 20,
+                      color: const PdfColor.fromInt(0xFF1c1917)),
                 ),
               ),
               pw.SizedBox(height: 8),
               // Description
               pw.Text(
                 g.description,
-                style: pw.TextStyle(font: fontItalic, fontSize: 11, color: PdfColors.grey700),
+                style: pw.TextStyle(
+                    font: fontItalic, fontSize: 11, color: PdfColors.grey700),
               ),
               pw.SizedBox(height: 16),
 
               // Key Capabilities
               pw.Text('KEY CAPABILITIES',
-                  style: pw.TextStyle(font: fontBold, fontSize: 13, color: const PdfColor.fromInt(0xFF1c1917))),
+                  style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 13,
+                      color: const PdfColor.fromInt(0xFF1c1917))),
               pw.SizedBox(height: 6),
               ...g.features.map(
                 (f) => pw.Padding(
@@ -1086,7 +1058,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                   child: pw.Row(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('• ', style: pw.TextStyle(font: fontBold, fontSize: 10)),
+                      pw.Text('• ',
+                          style: pw.TextStyle(font: fontBold, fontSize: 10)),
                       pw.Expanded(
                         child: pw.RichText(
                           text: pw.TextSpan(
@@ -1094,11 +1067,17 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                               if (f.contains(':'))
                                 pw.TextSpan(
                                   text: '${f.split(':').first}: ',
-                                  style: pw.TextStyle(font: fontBold, fontSize: 10),
+                                  style: pw.TextStyle(
+                                      font: fontBold, fontSize: 10),
                                 ),
                               pw.TextSpan(
-                                text: f.contains(':') ? f.split(':').skip(1).join(':') : f,
-                                style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey800),
+                                text: f.contains(':')
+                                    ? f.split(':').skip(1).join(':')
+                                    : f,
+                                style: pw.TextStyle(
+                                    font: font,
+                                    fontSize: 10,
+                                    color: PdfColors.grey800),
                               ),
                             ],
                           ),
@@ -1112,9 +1091,15 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
 
               // Detailed Overview
               pw.Text('DETAILED OVERVIEW',
-                  style: pw.TextStyle(font: fontBold, fontSize: 13, color: const PdfColor.fromInt(0xFF1c1917))),
+                  style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 13,
+                      color: const PdfColor.fromInt(0xFF1c1917))),
               pw.SizedBox(height: 6),
-              ...g.content.split('\n').where((l) => l.trim().isNotEmpty).map((line) {
+              ...g.content
+                  .split('\n')
+                  .where((l) => l.trim().isNotEmpty)
+                  .map((line) {
                 final t = line.trim();
                 if (t.startsWith('### ')) {
                   return pw.Padding(
@@ -1132,13 +1117,19 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                   return pw.Padding(
                     padding: const pw.EdgeInsets.only(left: 12, bottom: 3),
                     child: pw.Text('• ${t.substring(2)}',
-                        style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey800)),
+                        style: pw.TextStyle(
+                            font: font,
+                            fontSize: 10,
+                            color: PdfColors.grey800)),
                   );
                 } else {
                   return pw.Padding(
                     padding: const pw.EdgeInsets.only(bottom: 4),
                     child: pw.Text(t,
-                        style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey800)),
+                        style: pw.TextStyle(
+                            font: font,
+                            fontSize: 10,
+                            color: PdfColors.grey800)),
                   );
                 }
               }),
@@ -1146,34 +1137,44 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
 
               // Operational Steps
               pw.Text('OPERATIONAL STEPS',
-                  style: pw.TextStyle(font: fontBold, fontSize: 13, color: const PdfColor.fromInt(0xFF1c1917))),
+                  style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 13,
+                      color: const PdfColor.fromInt(0xFF1c1917))),
               pw.SizedBox(height: 6),
               ...g.howToUse.asMap().entries.map(
-                (e) => pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 6),
-                  child: pw.Row(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Container(
-                        width: 20,
-                        height: 20,
-                        decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1c1917)),
-                        child: pw.Center(
-                          child: pw.Text(
-                            '${e.key + 1}',
-                            style: pw.TextStyle(font: fontBold, fontSize: 9, color: PdfColors.white),
+                    (e) => pw.Padding(
+                      padding: const pw.EdgeInsets.only(bottom: 6),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const pw.BoxDecoration(
+                                color: PdfColor.fromInt(0xFF1c1917)),
+                            child: pw.Center(
+                              child: pw.Text(
+                                '${e.key + 1}',
+                                style: pw.TextStyle(
+                                    font: fontBold,
+                                    fontSize: 9,
+                                    color: PdfColors.white),
+                              ),
+                            ),
                           ),
-                        ),
+                          pw.SizedBox(width: 8),
+                          pw.Expanded(
+                            child: pw.Text(e.value,
+                                style: pw.TextStyle(
+                                    font: font,
+                                    fontSize: 10,
+                                    color: PdfColors.grey800)),
+                          ),
+                        ],
                       ),
-                      pw.SizedBox(width: 8),
-                      pw.Expanded(
-                        child: pw.Text(e.value,
-                            style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey800)),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
               pw.SizedBox(height: 16),
               pw.Divider(color: PdfColors.grey300),
               pw.SizedBox(height: 4),
@@ -1181,9 +1182,11 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('FAMOUSGATE-DOC-${g.id.toUpperCase()}-2026',
-                      style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey400)),
+                      style: pw.TextStyle(
+                          font: font, fontSize: 8, color: PdfColors.grey400)),
                   pw.Text('© HIRALL SOLUTIONS',
-                      style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey400)),
+                      style: pw.TextStyle(
+                          font: font, fontSize: 8, color: PdfColors.grey400)),
                 ],
               ),
             ],
@@ -1214,7 +1217,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
     return Column(
       children: [
         _sectionHeader('Systems Documentation', PhosphorIcons.bookOpen(),
-            subtitle: 'Training guides & operational manuals — by HIRALL SOLUTIONS'),
+            subtitle:
+                'Training guides & operational manuals — by HIRALL SOLUTIONS'),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -1225,7 +1229,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                           color: const Color(0xFF1c1917),
                           borderRadius: BorderRadius.circular(20)),
@@ -1238,7 +1243,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                           color: Colors.red.shade50,
                           borderRadius: BorderRadius.circular(20)),
@@ -1252,20 +1258,25 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                     const Spacer(),
                     if (!isShowingContent || !isMobile)
                       ElevatedButton.icon(
-                        onPressed: _isPdfGenerating ? null : () => _generatePdf(),
+                        onPressed:
+                            _isPdfGenerating ? null : () => _generatePdf(),
                         icon: _isPdfGenerating
                             ? const SizedBox(
                                 width: 14,
                                 height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
                             : Icon(PhosphorIcons.printer(), size: 15),
                         label: const Text('Print Full Manual'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1c1917),
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          textStyle: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                       ),
                   ],
@@ -1274,9 +1285,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
 
                 // Main content: list + detail
                 Expanded(
-                  child: isMobile
-                      ? _buildMobileLayout()
-                      : _buildDesktopLayout(),
+                  child:
+                      isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
                 ),
               ],
             ),
@@ -1330,7 +1340,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200, width: 2, style: BorderStyle.solid),
+        border: Border.all(
+            color: Colors.grey.shade200, width: 2, style: BorderStyle.solid),
       ),
       child: Center(
         child: Column(
@@ -1342,13 +1353,21 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10)],
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 10)
+                ],
               ),
-              child: Icon(PhosphorIcons.bookOpen(), size: 32, color: Colors.grey.shade300),
+              child: Icon(PhosphorIcons.bookOpen(),
+                  size: 32, color: Colors.grey.shade300),
             ),
             const SizedBox(height: 16),
             const Text('Education Hub',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1c1917))),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1c1917))),
             const SizedBox(height: 6),
             SizedBox(
               width: 260,
@@ -1374,7 +1393,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
           onChanged: (v) => setState(() => _searchQuery = v),
           decoration: InputDecoration(
             hintText: 'Search modules...',
-            prefixIcon: Icon(PhosphorIcons.magnifyingGlass(), size: 18, color: Colors.grey.shade500),
+            prefixIcon: Icon(PhosphorIcons.magnifyingGlass(),
+                size: 18, color: Colors.grey.shade500),
             suffixIcon: _searchQuery.isNotEmpty
                 ? IconButton(
                     icon: Icon(PhosphorIcons.x(), size: 16),
@@ -1391,7 +1411,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
                 borderSide: BorderSide(color: Colors.grey.shade200)),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFF1c1917), width: 1.5)),
+                borderSide:
+                    const BorderSide(color: Color(0xFF1c1917), width: 1.5)),
             filled: true,
             fillColor: Colors.white,
             contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -1402,7 +1423,8 @@ class _EmployeeDocsSectionState extends State<EmployeeDocsSection> {
           child: guides.isEmpty
               ? Center(
                   child: Text('No modules found',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 13)))
+                      style:
+                          TextStyle(color: Colors.grey.shade500, fontSize: 13)))
               : ListView.separated(
                   itemCount: guides.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 6),
@@ -1451,8 +1473,17 @@ class _GuideListTile extends StatelessWidget {
             width: isActive ? 1.5 : 1,
           ),
           boxShadow: isActive
-              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 12, offset: const Offset(0, 4))]
-              : [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4)],
+              ? [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4))
+                ]
+              : [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 4)
+                ],
         ),
         child: Row(
           children: [
@@ -1465,7 +1496,8 @@ class _GuideListTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(iconData,
-                  size: 22, color: isActive ? Colors.white : Colors.grey.shade400),
+                  size: 22,
+                  color: isActive ? Colors.white : Colors.grey.shade400),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1478,18 +1510,22 @@ class _GuideListTile extends StatelessWidget {
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
-                          color: isActive ? const Color(0xFF1c1917) : const Color(0xFF44403c))),
+                          color: isActive
+                              ? const Color(0xFF1c1917)
+                              : const Color(0xFF44403c))),
                   const SizedBox(height: 2),
                   Text(guide.description,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                 ],
               ),
             ),
             Icon(PhosphorIcons.caretRight(),
                 size: 14,
-                color: isActive ? const Color(0xFF1c1917) : Colors.grey.shade300),
+                color:
+                    isActive ? const Color(0xFF1c1917) : Colors.grey.shade300),
           ],
         ),
       ),
@@ -1519,7 +1555,9 @@ class _GuideDetailPanel extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)
+        ],
       ),
       child: Column(
         children: [
@@ -1528,17 +1566,20 @@ class _GuideDetailPanel extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
               border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
             ),
             child: Row(
               children: [
                 if (onBack != null) ...[
                   IconButton(
-                    icon: Icon(PhosphorIcons.caretLeft(), size: 20, color: Colors.grey.shade600),
+                    icon: Icon(PhosphorIcons.caretLeft(),
+                        size: 20, color: Colors.grey.shade600),
                     onPressed: onBack,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -1558,11 +1599,14 @@ class _GuideDetailPanel extends StatelessWidget {
                     children: [
                       Text(guide.title,
                           style: const TextStyle(
-                              fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1c1917))),
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1c1917))),
                       Text(guide.description,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade500)),
                     ],
                   ),
                 ),
@@ -1570,15 +1614,21 @@ class _GuideDetailPanel extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: isPdfGenerating ? null : onDownload,
                   icon: isPdfGenerating
-                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 1.5))
                       : Icon(PhosphorIcons.downloadSimple(), size: 14),
                   label: const Text('Download'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF1c1917),
                     side: const BorderSide(color: Color(0xFF1c1917)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
@@ -1593,16 +1643,17 @@ class _GuideDetailPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Key Capabilities
-                  _SectionLabel(label: 'Key Capabilities'),
+                  const _SectionLabel(label: 'Key Capabilities'),
                   const SizedBox(height: 12),
                   LayoutBuilder(builder: (_, c) {
                     final cols = c.maxWidth > 500 ? 2 : 1;
-                    return _FeatureGrid(features: guide.features, columns: cols);
+                    return _FeatureGrid(
+                        features: guide.features, columns: cols);
                   }),
                   const SizedBox(height: 28),
 
                   // Deep Dive Analysis
-                  _SectionLabel(label: 'Deep Dive Analysis'),
+                  const _SectionLabel(label: 'Deep Dive Analysis'),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -1616,14 +1667,14 @@ class _GuideDetailPanel extends StatelessWidget {
                   const SizedBox(height: 28),
 
                   // Operational Steps
-                  _SectionLabel(label: 'Operational Steps'),
+                  const _SectionLabel(label: 'Operational Steps'),
                   const SizedBox(height: 12),
                   ...guide.howToUse.asMap().entries.map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _StepTile(index: e.key + 1, text: e.value),
-                    ),
-                  ),
+                        (e) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _StepTile(index: e.key + 1, text: e.value),
+                        ),
+                      ),
 
                   // Footer branding
                   const SizedBox(height: 28),
@@ -1640,7 +1691,10 @@ class _GuideDetailPanel extends StatelessWidget {
                         ),
                         child: const Center(
                           child: Text('HS',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Color(0xFF1c1917))),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                  color: Color(0xFF1c1917))),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1648,21 +1702,29 @@ class _GuideDetailPanel extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('Developed by HIRALL SOLUTIONS',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  letterSpacing: 0.5)),
                           Text('Excellence in Enterprise Resource Management',
-                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.grey.shade500)),
                         ],
                       ),
                       const Spacer(),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           'FAMOUSGATE-DOC-${guide.id.toUpperCase()}-2026',
-                          style: TextStyle(fontSize: 10, color: Colors.grey.shade400, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade400,
+                              fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -1712,7 +1774,8 @@ class _FeatureGrid extends StatelessWidget {
             children: row.map((f) {
               final parts = f.split(':');
               final title = parts.first.trim();
-              final desc = parts.length > 1 ? parts.skip(1).join(':').trim() : '';
+              final desc =
+                  parts.length > 1 ? parts.skip(1).join(':').trim() : '';
               return Expanded(
                 child: Container(
                   margin: const EdgeInsets.only(right: 8),
@@ -1736,9 +1799,15 @@ class _FeatureGrid extends StatelessWidget {
                       Expanded(
                         child: RichText(
                           text: TextSpan(
-                            style: const TextStyle(fontSize: 13, color: Color(0xFF44403c), height: 1.4),
+                            style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF44403c),
+                                height: 1.4),
                             children: [
-                              TextSpan(text: '$title: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              TextSpan(
+                                  text: '$title: ',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold)),
                               TextSpan(text: desc),
                             ],
                           ),
@@ -1773,14 +1842,18 @@ class _MarkdownContent extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12, bottom: 6),
             child: Text(t.replaceFirst('### ', ''),
                 style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1c1917))),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1c1917))),
           );
         } else if (t.startsWith('#### ')) {
           return Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 4),
             child: Text(t.replaceFirst('#### ', ''),
                 style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1c1917))),
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1c1917))),
           );
         } else if (t.startsWith('- ')) {
           return Padding(
@@ -1788,10 +1861,13 @@ class _MarkdownContent extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF44403c))),
+                const Text('• ',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: Color(0xFF44403c))),
                 Expanded(
                   child: Text(t.substring(2),
-                      style: const TextStyle(fontSize: 14, color: Color(0xFF57534e), height: 1.6)),
+                      style: const TextStyle(
+                          fontSize: 14, color: Color(0xFF57534e), height: 1.6)),
                 ),
               ],
             ),
@@ -1800,7 +1876,8 @@ class _MarkdownContent extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(t,
-                style: const TextStyle(fontSize: 14, color: Color(0xFF57534e), height: 1.7)),
+                style: const TextStyle(
+                    fontSize: 14, color: Color(0xFF57534e), height: 1.7)),
           );
         }
       }).toList(),
@@ -1834,13 +1911,18 @@ class _StepTile extends StatelessWidget {
             child: Center(
               child: Text('$index',
                   style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12)),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(text,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF44403c), fontWeight: FontWeight.w500)),
+                style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF44403c),
+                    fontWeight: FontWeight.w500)),
           ),
         ],
       ),

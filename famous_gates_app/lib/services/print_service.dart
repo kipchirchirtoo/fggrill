@@ -30,6 +30,8 @@ class PrintService {
     final totalAmount = sale.total;
     final baseAmount = totalAmount > 0 ? totalAmount / 1.16 : 0;
     final taxAmount = totalAmount - baseAmount;
+    final isPendingPayment =
+        ['pending', 'unpaid'].contains(sale.paymentMethod.trim().toLowerCase());
 
     pw.MemoryImage? logoImage;
     try {
@@ -144,7 +146,8 @@ class PrintService {
                   ]),
               pw.SizedBox(height: 6),
               _infoRow('Payment:', sale.paymentMethod.toUpperCase()),
-              _infoRow('Paid:', 'KES ${money.format(totalAmount)}'),
+              _infoRow('Paid:',
+                  'KES ${money.format(isPendingPayment ? 0 : totalAmount)}'),
               pw.SizedBox(height: 6),
               _dashedLine(context),
               pw.SizedBox(height: 6),

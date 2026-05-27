@@ -36,6 +36,18 @@ const REVIEW_ROLES = new Set([
   'branch_manager'
 ]);
 
+const MANAGE_OUTLET_ROLES = new Set([
+  'super_admin',
+  'general_manager',
+  'director',
+  'branch_manager',
+  'restaurant_manager',
+  'bar_manager',
+  'finance_manager',
+  'accountant',
+  'branch_accountant'
+]);
+
 const PROFIT_VIEW_ROLES = new Set([
   'super_admin',
   'general_manager',
@@ -64,6 +76,8 @@ const isGlobalUser = (req: Request): boolean => GLOBAL_ROLES.has(roleFor(req));
 
 const canViewProfit = (req: Request): boolean => PROFIT_VIEW_ROLES.has(roleFor(req));
 
+const canManageOutlets = (req: Request): boolean => MANAGE_OUTLET_ROLES.has(roleFor(req));
+
 const assertUser = (req: Request): void => {
   if (!req.user?.id) {
     throw new AppError('Authentication required', 401);
@@ -88,6 +102,15 @@ const ensureBranchAccess = (req: Request, branchId: unknown): void => {
   const reqBranchId = branchIdFor(req);
   if (!reqBranchId || Number(branchId) !== reqBranchId) {
     throw new AppError('Forbidden: outlet belongs to another branch', 403);
+  }
+};
+
+const ensureOutletManagementAccess = (req: Request, branchId?: unknown): void => {
+  if (!canManageOutlets(req)) {
+    throw new AppError('Forbidden: POS outlet management requires an admin or manager role', 403);
+  }
+  if (branchId !== undefined && branchId !== null) {
+    ensureBranchAccess(req, branchId);
   }
 };
 
@@ -441,6 +464,42 @@ const seedOutletItemsFromExistingMenus = async (
     }));
   }
 
+  if (outletType === 'non_consumables') {
+    let query = supabase
+      .from('dynamic_services')
+      .select('id, name, base_price, service_type, is_active, branch_id')
+      .eq('is_active', true)
+      .in('service_type', [
+        'swimming',
+        'pool',
+        'pool_token',
+        'pool_tokens',
+        'car_wash',
+        'sauna',
+        'non_consumable',
+        'non_consumables'
+      ])
+      .order('name', { ascending: true });
+    if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+    const { data, error } = await query;
+    if (error) throw error;
+    sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => ({
+      outlet_id: outlet.id,
+      source_table: 'dynamic_services',
+      source_item_id: null,
+      sku: `NDS-${item.id}`,
+      name: item.name,
+      category: item.service_type || 'Non-consumables',
+      unit: 'service',
+      cost_price: 0,
+      selling_price: item.base_price || 0,
+      opening_stock: 0,
+      current_stock: 0,
+      track_stock: false,
+      is_active: true
+    }));
+  }
+
   if (!sourceRows.length) return [];
 
   const { error: upsertError } = await supabase
@@ -457,6 +516,182 @@ const seedOutletItemsFromExistingMenus = async (
     .order('name', { ascending: true });
   if (error) throw error;
   return (data || []) as Array<Record<string, any>>;
+};
+
+export const createOutlet = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = Number(req.body.branch_id ?? req.body.branchId ?? branchIdFor(req));
+    if (!Number.isFinite(branchId)) throw new AppError('Branch is required', 400);
+    ensureOutletManagementAccess(req, branchId);
+
+    const outletType = String(req.body.outlet_type || req.body.outletType || '').trim() as OutletType;
+    const name = String(req.body.name || '').trim();
+    const pinPrefix = String(req.body.pin_prefix || req.body.pinPrefix || '').trim().toUpperCase();
+    if (!outletType || !name || !pinPrefix) {
+      throw new AppError('Outlet type, name and PIN prefix are required', 400);
+    }
+
+    const { data, error } = await supabase
+      .from('pos_outlets')
+      .upsert({
+        branch_id: branchId,
+        outlet_type: outletType,
+        name,
+        pin_prefix: pinPrefix,
+        is_active: req.body.is_active ?? req.body.isActive ?? true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'branch_id,outlet_type' })
+      .select('*')
+      .single();
+
+    if (error || !data) throw error || new AppError('Failed to save POS outlet', 500);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateOutlet = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { outletId } = req.params;
+    const { data: outlet, error: outletError } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', outletId)
+      .single();
+    if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
+    ensureOutletManagementAccess(req, outlet.branch_id);
+
+    const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (req.body.name !== undefined) patch.name = String(req.body.name).trim();
+    if (req.body.pin_prefix !== undefined || req.body.pinPrefix !== undefined) {
+      patch.pin_prefix = String(req.body.pin_prefix ?? req.body.pinPrefix).trim().toUpperCase();
+    }
+    if (req.body.is_active !== undefined || req.body.isActive !== undefined) {
+      patch.is_active = req.body.is_active ?? req.body.isActive;
+    }
+
+    const { data, error } = await supabase
+      .from('pos_outlets')
+      .update(patch)
+      .eq('id', outletId)
+      .select('*')
+      .single();
+
+    if (error || !data) throw error || new AppError('Failed to update POS outlet', 500);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const normalizeOutletItemPayload = (
+  outletId: string,
+  payload: Record<string, any>,
+  existing?: Record<string, any>
+): Record<string, any> => {
+  const name = payload.name !== undefined ? String(payload.name).trim() : existing?.name;
+  if (!name) throw new AppError('Item name is required', 400);
+  const sku = String(payload.sku ?? existing?.sku ?? `${Date.now()}`).trim();
+  return {
+    outlet_id: outletId,
+    source_table: payload.source_table ?? existing?.source_table ?? 'manual',
+    source_item_id: payload.source_item_id ?? existing?.source_item_id ?? null,
+    sku,
+    name,
+    category: payload.category ?? existing?.category ?? 'Manual',
+    unit: payload.unit ?? existing?.unit ?? 'each',
+    cost_price: numberValue(payload.cost_price ?? payload.costPrice ?? existing?.cost_price),
+    selling_price: numberValue(payload.selling_price ?? payload.sellingPrice ?? payload.price ?? existing?.selling_price),
+    opening_stock: numberValue(payload.opening_stock ?? payload.openingStock ?? existing?.opening_stock),
+    current_stock: numberValue(payload.current_stock ?? payload.currentStock ?? existing?.current_stock),
+    track_stock: payload.track_stock ?? payload.trackStock ?? existing?.track_stock ?? true,
+    is_active: payload.is_active ?? payload.isActive ?? existing?.is_active ?? true,
+    updated_at: new Date().toISOString()
+  };
+};
+
+export const createOutletItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { outletId } = req.params;
+    const { data: outlet, error: outletError } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', outletId)
+      .single();
+    if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
+    ensureOutletManagementAccess(req, outlet.branch_id);
+
+    const row = normalizeOutletItemPayload(outletId, req.body || {});
+    const { data, error } = await supabase
+      .from('pos_outlet_items')
+      .upsert(row, { onConflict: 'outlet_id,sku' })
+      .select('*')
+      .single();
+
+    if (error || !data) throw error || new AppError('Failed to save outlet item', 500);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateOutletItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { outletId, itemId } = req.params;
+    const { data: outlet, error: outletError } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', outletId)
+      .single();
+    if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
+    ensureOutletManagementAccess(req, outlet.branch_id);
+
+    const { data: existing, error: existingError } = await supabase
+      .from('pos_outlet_items')
+      .select('*')
+      .eq('id', itemId)
+      .eq('outlet_id', outletId)
+      .single();
+    if (existingError || !existing) throw new AppError('Outlet item not found', 404);
+
+    const row = normalizeOutletItemPayload(outletId, req.body || {}, existing);
+    const { data, error } = await supabase
+      .from('pos_outlet_items')
+      .update(row)
+      .eq('id', itemId)
+      .eq('outlet_id', outletId)
+      .select('*')
+      .single();
+
+    if (error || !data) throw error || new AppError('Failed to update outlet item', 500);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const syncOutletItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { outletId } = req.params;
+    const { data: outlet, error: outletError } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', outletId)
+      .single();
+    if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
+    ensureOutletManagementAccess(req, outlet.branch_id);
+
+    const data = await seedOutletItemsFromExistingMenus(outlet);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const getOutlets = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

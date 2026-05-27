@@ -40,6 +40,32 @@ export const getBranches = async (
   }
 };
 
+// @desc    Get single branch
+// @route   GET /api/system/branches/:id
+// @access  Private
+export const getBranch = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('branches')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Create branch
 // @route   POST /api/system/branches
 // @access  Private (Admin)
@@ -75,6 +101,90 @@ export const createBranch = async (
     logger.info(`Branch created: ${name} (${code}) by user ${req.user.id}`);
 
     res.status(201).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update branch
+// @route   PUT /api/system/branches/:id
+// @access  Private (Super Admin)
+export const updateBranch = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const allowed = [
+      'name',
+      'code',
+      'location',
+      'address',
+      'phone',
+      'email',
+      'manager_id',
+      'is_main_branch',
+      'status',
+      'branch_type',
+      'number_of_rooms',
+      'timezone',
+      'currency',
+      'settings'
+    ];
+    const payload = Object.fromEntries(
+      Object.entries(req.body).filter(([key, value]) => allowed.includes(key) && value !== undefined)
+    );
+
+    const { data, error } = await supabase
+      .from('branches')
+      .update({
+        ...payload,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    logger.info(`Branch updated: ${req.params.id} by user ${req.user.id}`);
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Deactivate branch
+// @route   DELETE /api/system/branches/:id
+// @access  Private (Super Admin)
+export const deleteBranch = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('branches')
+      .update({
+        status: 'inactive',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    logger.info(`Branch deactivated: ${req.params.id} by user ${req.user.id}`);
+
+    res.status(200).json({
       success: true,
       data
     });
@@ -128,6 +238,35 @@ export const getDepartments = async (
   }
 };
 
+// @desc    Get single department
+// @route   GET /api/system/departments/:id
+// @access  Private
+export const getDepartment = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('departments')
+      .select(`
+        *,
+        branch:branches(id, name)
+      `)
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Create department
 // @route   POST /api/system/departments
 // @access  Private (Admin)
@@ -160,6 +299,88 @@ export const createDepartment = async (
     logger.info(`Department created: ${name} (${code}) by user ${req.user.id}`);
 
     res.status(201).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update department
+// @route   PUT /api/system/departments/:id
+// @access  Private (Super Admin / General Manager)
+export const updateDepartment = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const allowed = [
+      'branch_id',
+      'name',
+      'code',
+      'supervisor_id',
+      'budget_allocated',
+      'status'
+    ];
+    const payload = Object.fromEntries(
+      Object.entries(req.body).filter(([key, value]) => allowed.includes(key) && value !== undefined)
+    );
+
+    const { data, error } = await supabase
+      .from('departments')
+      .update({
+        ...payload,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select(`
+        *,
+        branch:branches(id, name)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    logger.info(`Department updated: ${req.params.id} by user ${req.user.id}`);
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Deactivate department
+// @route   DELETE /api/system/departments/:id
+// @access  Private (Super Admin / General Manager)
+export const deleteDepartment = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data, error } = await supabase
+      .from('departments')
+      .update({
+        status: 'inactive',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select(`
+        *,
+        branch:branches(id, name)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    logger.info(`Department deactivated: ${req.params.id} by user ${req.user.id}`);
+
+    res.status(200).json({
       success: true,
       data
     });
@@ -309,4 +530,3 @@ export const getSystemUsers = async (
     next(error);
   }
 };
-

@@ -41,6 +41,16 @@ export const migratePendingBills = async (branchId?: number) => {
                 locationFields: [], // POS might not have table/room directly
                 statusValue: 'pending',
                 typeLabel: 'POS Transaction'
+            },
+            {
+                table: 'pos_shift_orders',
+                idField: 'id',
+                waiterField: 'waiter_id',
+                amountField: 'balance_amount',
+                numberField: 'order_number',
+                locationFields: ['customer_name'],
+                statusValue: 'open',
+                typeLabel: 'Captain POS Order'
             }
         ];
 

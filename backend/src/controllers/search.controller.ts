@@ -1,180 +1,181 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 
+type SearchRecord = Record<string, any>;
+
+type SearchConfig = {
+  module: string;
+  table: string;
+  keys: string[];
+  label: (row: SearchRecord) => string;
+  subtitle: (row: SearchRecord) => string;
+};
+
+const valueText = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+};
+
+const pickFirst = (row: SearchRecord, keys: string[]): string => {
+  for (const key of keys) {
+    const value = valueText(row[key]).trim();
+    if (value) return value;
+  }
+  return '';
+};
+
+const nameFrom = (row: SearchRecord): string => {
+  const fullName = pickFirst(row, ['name', 'full_name', 'guest_name', 'customer_name']);
+  if (fullName) return fullName;
+  return `${valueText(row.first_name)} ${valueText(row.last_name)}`.trim();
+};
+
+const configs: SearchConfig[] = [
+  {
+    module: 'staff',
+    table: 'staff_profiles',
+    keys: ['first_name', 'last_name', 'name', 'employee_id', 'staff_id', 'email', 'phone', 'phone_number', 'department', 'position'],
+    label: (row) => nameFrom(row) || pickFirst(row, ['employee_id', 'staff_id']) || 'Staff Profile',
+    subtitle: (row) => [pickFirst(row, ['employee_id', 'staff_id']), pickFirst(row, ['department', 'position'])].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'user',
+    table: 'users',
+    keys: ['first_name', 'last_name', 'name', 'email', 'role', 'phone_number'],
+    label: (row) => nameFrom(row) || row.email || 'System User',
+    subtitle: (row) => [row.email, row.role].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'branch',
+    table: 'branches',
+    keys: ['name', 'code', 'location', 'address', 'email', 'phone'],
+    label: (row) => row.name || 'Branch',
+    subtitle: (row) => [row.code, row.location, row.status].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'department',
+    table: 'departments',
+    keys: ['name', 'code', 'status'],
+    label: (row) => row.name || 'Department',
+    subtitle: (row) => [row.code, row.status].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'booking',
+    table: 'bookings',
+    keys: ['confirmation_number', 'booking_number', 'short_code', 'guest_name', 'status', 'phone', 'guest_phone'],
+    label: (row) => `Booking ${pickFirst(row, ['confirmation_number', 'booking_number', 'short_code']) || row.id}`,
+    subtitle: (row) => [row.guest_name, row.status, row.total_amount ? `KES ${row.total_amount}` : ''].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'restaurant_order',
+    table: 'restaurant_orders',
+    keys: ['order_number', 'short_code', 'table_number', 'waiter_name', 'customer_name', 'status', 'payment_status'],
+    label: (row) => `Restaurant Order ${pickFirst(row, ['order_number', 'short_code']) || row.id}`,
+    subtitle: (row) => [row.waiter_name, row.status, row.total_amount ? `KES ${row.total_amount}` : ''].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'bar_order',
+    table: 'bar_orders',
+    keys: ['order_number', 'short_code', 'bartender_name', 'customer_name', 'status', 'payment_status'],
+    label: (row) => `Bar Order ${pickFirst(row, ['order_number', 'short_code']) || row.id}`,
+    subtitle: (row) => [row.bartender_name, row.status, row.total_amount ? `KES ${row.total_amount}` : ''].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'pos_outlet',
+    table: 'pos_outlets',
+    keys: ['name', 'code', 'outlet_type', 'status'],
+    label: (row) => row.name || row.code || 'POS Outlet',
+    subtitle: (row) => [row.code, row.outlet_type, row.status].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'stock_item',
+    table: 'store_items',
+    keys: ['name', 'item_name', 'sku', 'category', 'store_type'],
+    label: (row) => pickFirst(row, ['name', 'item_name']) || row.sku || 'Stock Item',
+    subtitle: (row) => [row.sku, row.category, row.store_type].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'payment',
+    table: 'payments',
+    keys: ['payment_id', 'reference', 'transaction_id', 'method', 'status'],
+    label: (row) => `Payment ${pickFirst(row, ['payment_id', 'reference', 'transaction_id']) || row.id}`,
+    subtitle: (row) => [row.method, row.status, row.amount ? `KES ${row.amount}` : ''].filter(Boolean).join(' - ')
+  },
+  {
+    module: 'audit',
+    table: 'audit_logs',
+    keys: ['action', 'entity', 'entity_id', 'user_email', 'description', 'details'],
+    label: (row) => pickFirst(row, ['action', 'entity']) || 'Audit Log',
+    subtitle: (row) => [row.entity, row.user_email, row.created_at].filter(Boolean).join(' - ')
+  }
+];
+
+const rowMatches = (row: SearchRecord, keys: string[], query: string): boolean => {
+  return keys.some((key) => valueText(row[key]).toLowerCase().includes(query));
+};
+
 /**
- * Global search across multiple modules
- * Searches: staff, guests, orders, bookings, bills, transactions, receipts, payments
+ * Global search across SuperAdmin-owned records. It intentionally tolerates
+ * missing legacy tables/columns so one older module cannot break global search.
  */
 export const globalSearch = async (req: Request, res: Response) => {
   try {
     const { q, modules } = req.query;
-    
+
     if (!q || typeof q !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'Search query is required'
+        message: 'Search query is required'
       });
     }
 
     const searchQuery = q.trim().toLowerCase();
-    
+
     if (searchQuery.length < 2) {
       return res.status(400).json({
         success: false,
-        error: 'Search query must be at least 2 characters'
+        message: 'Search query must be at least 2 characters'
       });
     }
 
-    // Parse modules filter if provided
-    const modulesList: string[] = modules 
-      ? (typeof modules === 'string' ? modules.split(',') : Array.isArray(modules) ? modules.map(m => String(m)) : [String(modules)])
-      : ['staff', 'guest', 'order', 'booking', 'bill', 'transaction', 'receipt', 'payment'];
+    const moduleFilter = modules
+      ? new Set(
+          (typeof modules === 'string' ? modules.split(',') : Array.isArray(modules) ? modules : [modules])
+            .map((module) => String(module).trim())
+            .filter(Boolean)
+        )
+      : null;
 
-    const results: any[] = [];
+    const selectedConfigs = moduleFilter
+      ? configs.filter((config) => moduleFilter.has(config.module))
+      : configs;
 
-    // Search Staff
-    if (modulesList.includes('staff')) {
-      const { data: staff, error } = await supabase
-        .from('staff_profiles')
-        .select('id, staff_id, first_name, last_name, email, phone, position, branch_id')
-        .or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,staff_id.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`)
-        .limit(10);
+    const settled = await Promise.allSettled(
+      selectedConfigs.map(async (config) => {
+        const { data, error } = await supabase
+          .from(config.table)
+          .select('*')
+          .limit(100);
 
-      if (!error && staff) {
-        results.push(...staff.map(s => ({
-          ...s,
-          type: 'staff',
-          display_name: `${s.first_name} ${s.last_name}`,
-          subtitle: `${s.staff_id} - ${s.position}`
-        })));
-      }
-    }
+        if (error || !data) return [];
 
-    // Search Guests
-    if (modulesList.includes('guest')) {
-      const { data: guests, error } = await supabase
-        .from('guests')
-        .select('id, first_name, last_name, email, phone, id_number')
-        .or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,id_number.ilike.%${searchQuery}%`)
-        .limit(10);
+        return data
+          .filter((row) => rowMatches(row, config.keys, searchQuery))
+          .slice(0, 12)
+          .map((row) => ({
+            type: config.module,
+            id: row.id,
+            display_name: config.label(row),
+            subtitle: config.subtitle(row),
+            metadata: row
+          }));
+      })
+    );
 
-      if (!error && guests) {
-        results.push(...guests.map(g => ({
-          ...g,
-          type: 'guest',
-          display_name: `${g.first_name} ${g.last_name}`,
-          subtitle: g.email || g.phone
-        })));
-      }
-    }
-
-    // Search Bookings
-    if (modulesList.includes('booking')) {
-      const { data: bookings, error } = await supabase
-        .from('bookings')
-        .select('id, booking_number, guest_id, check_in, check_out, status, total_amount')
-        .or(`booking_number.ilike.%${searchQuery}%`)
-        .limit(10);
-
-      if (!error && bookings) {
-        results.push(...bookings.map(b => ({
-          ...b,
-          type: 'booking',
-          display_name: `Booking ${b.booking_number}`,
-          subtitle: `${b.status} - KES ${b.total_amount}`
-        })));
-      }
-    }
-
-    // Search Orders (Restaurant/Bar)
-    if (modulesList.includes('order')) {
-      const { data: orders, error } = await supabase
-        .from('orders')
-        .select('id, order_number, table_number, status, total_amount, created_at')
-        .or(`order_number.ilike.%${searchQuery}%`)
-        .limit(10);
-
-      if (!error && orders) {
-        results.push(...orders.map(o => ({
-          ...o,
-          type: 'order',
-          display_name: `Order ${o.order_number}`,
-          subtitle: `Table ${o.table_number} - ${o.status}`
-        })));
-      }
-    }
-
-    // Search Bills
-    if (modulesList.includes('bill')) {
-      const { data: bills, error } = await supabase
-        .from('bills')
-        .select('id, bill_number, guest_name, total_amount, status, created_at')
-        .or(`bill_number.ilike.%${searchQuery}%,guest_name.ilike.%${searchQuery}%`)
-        .limit(10);
-
-      if (!error && bills) {
-        results.push(...bills.map(b => ({
-          ...b,
-          type: 'bill',
-          display_name: `Bill ${b.bill_number}`,
-          subtitle: `${b.guest_name} - KES ${b.total_amount}`
-        })));
-      }
-    }
-
-    // Search Transactions
-    if (modulesList.includes('transaction')) {
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('id, transaction_id, type, amount, status, created_at')
-        .or(`transaction_id.ilike.%${searchQuery}%`)
-        .limit(10);
-
-      if (!error && transactions) {
-        results.push(...transactions.map(t => ({
-          ...t,
-          type: 'transaction',
-          display_name: `Transaction ${t.transaction_id}`,
-          subtitle: `${t.type} - KES ${t.amount}`
-        })));
-      }
-    }
-
-    // Search Receipts
-    if (modulesList.includes('receipt')) {
-      const { data: receipts, error } = await supabase
-        .from('receipts')
-        .select('id, receipt_number, amount, payment_method, created_at')
-        .or(`receipt_number.ilike.%${searchQuery}%`)
-        .limit(10);
-
-      if (!error && receipts) {
-        results.push(...receipts.map(r => ({
-          ...r,
-          type: 'receipt',
-          display_name: `Receipt ${r.receipt_number}`,
-          subtitle: `${r.payment_method} - KES ${r.amount}`
-        })));
-      }
-    }
-
-    // Search Payments
-    if (modulesList.includes('payment')) {
-      const { data: payments, error } = await supabase
-        .from('payments')
-        .select('id, payment_id, amount, method, status, created_at')
-        .or(`payment_id.ilike.%${searchQuery}%`)
-        .limit(10);
-
-      if (!error && payments) {
-        results.push(...payments.map(p => ({
-          ...p,
-          type: 'payment',
-          display_name: `Payment ${p.payment_id}`,
-          subtitle: `${p.method} - KES ${p.amount}`
-        })));
-      }
-    }
+    const results = settled.flatMap((entry) =>
+      entry.status === 'fulfilled' ? entry.value : []
+    );
 
     return res.status(200).json({
       success: true,
@@ -182,13 +183,12 @@ export const globalSearch = async (req: Request, res: Response) => {
       count: results.length,
       query: searchQuery
     });
-
   } catch (error) {
     console.error('Global search error:', error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to perform search',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: 'Failed to perform search',
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 };

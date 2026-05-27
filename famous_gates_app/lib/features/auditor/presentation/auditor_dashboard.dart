@@ -6,6 +6,7 @@ import '../../../core/widgets/widgets.dart';
 import '../domain/providers.dart';
 import '../domain/models.dart';
 import '../data/repository.dart';
+import 'branch_orders_tab.dart';
 
 class AuditorDashboard extends ConsumerStatefulWidget {
   const AuditorDashboard({super.key});
@@ -27,6 +28,10 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
             label: 'Overview',
             icon: PhosphorIcons.chartBar(),
             content: const _AuditorOverviewTab()),
+        DashboardTab(
+            label: 'Branch Orders',
+            icon: PhosphorIcons.package(),
+            content: const BranchOrdersTab()),
         DashboardTab(
             label: 'Audit Logs',
             icon: PhosphorIcons.listBullets(),

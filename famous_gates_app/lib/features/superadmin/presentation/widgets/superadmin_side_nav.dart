@@ -25,7 +25,7 @@ class SuperAdminNavItem {
   // Grouped nav — single source of truth
   static List<SuperAdminNavGroup> get groupedItems => [
         SuperAdminNavGroup(
-          label: 'Superadmin',
+          label: 'Command',
           items: [
             SuperAdminNavItem(
                 section: SuperAdminSection.adminDashboard,
@@ -44,18 +44,30 @@ class SuperAdminNavItem {
                 label: 'System Health',
                 icon: PhosphorIcons.chartLine()),
             SuperAdminNavItem(
-                section: SuperAdminSection.roleMigration,
-                label: 'Role Migration',
-                icon: PhosphorIcons.arrowsCounterClockwise()),
+                section: SuperAdminSection.globalSearch,
+                label: 'Global Search',
+                icon: PhosphorIcons.magnifyingGlass()),
           ],
         ),
         SuperAdminNavGroup(
-          label: 'Users & Access',
+          label: 'Access & Organization',
           items: [
             SuperAdminNavItem(
                 section: SuperAdminSection.globalUsers,
                 label: 'Users',
                 icon: PhosphorIcons.users()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.personnelRegistry,
+                label: 'Personnel Registry',
+                icon: PhosphorIcons.identificationBadge()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.rolesPermissions,
+                label: 'Roles & Permissions',
+                icon: PhosphorIcons.key()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.branches,
+                label: 'Branches',
+                icon: PhosphorIcons.buildings()),
             SuperAdminNavItem(
                 section: SuperAdminSection.departments,
                 label: 'Departments',
@@ -63,16 +75,8 @@ class SuperAdminNavItem {
           ],
         ),
         SuperAdminNavGroup(
-          label: 'Hotel Operations',
+          label: 'Hotel Setup',
           items: [
-            SuperAdminNavItem(
-                section: SuperAdminSection.reservations,
-                label: 'Reservations',
-                icon: PhosphorIcons.calendarBlank()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.checkin,
-                label: 'Check-In',
-                icon: PhosphorIcons.checkCircle()),
             SuperAdminNavItem(
                 section: SuperAdminSection.rooms,
                 label: 'Rooms',
@@ -82,30 +86,22 @@ class SuperAdminNavItem {
                 label: 'Rate Plans',
                 icon: PhosphorIcons.trendUp()),
             SuperAdminNavItem(
-                section: SuperAdminSection.guests,
-                label: 'Guests',
-                icon: PhosphorIcons.userCircle()),
+                section: SuperAdminSection.paymentBillingSettings,
+                label: 'Payment & Billing',
+                icon: PhosphorIcons.creditCard()),
             SuperAdminNavItem(
-                section: SuperAdminSection.housekeeping,
-                label: 'Housekeeping',
-                icon: PhosphorIcons.sparkle()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.maintenance,
-                label: 'Maintenance',
-                icon: PhosphorIcons.wrench()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.channelManager,
-                label: 'Channel Manager',
-                icon: PhosphorIcons.globe()),
+                section: SuperAdminSection.reportTemplates,
+                label: 'Report Templates',
+                icon: PhosphorIcons.fileText()),
           ],
         ),
         SuperAdminNavGroup(
-          label: 'Food & Beverage',
+          label: 'POS & Sales Setup',
           items: [
-            SuperAdminNavItem(
-                section: SuperAdminSection.restaurant,
-                label: 'Restaurant',
-                icon: PhosphorIcons.forkKnife()),
+            const SuperAdminNavItem(
+                section: SuperAdminSection.posConfiguration,
+                label: 'POS Configuration',
+                icon: Icons.point_of_sale),
             SuperAdminNavItem(
                 section: SuperAdminSection.restaurantMenu,
                 label: 'Restaurant Menu',
@@ -119,55 +115,34 @@ class SuperAdminNavItem {
                 label: 'Kyogong Services',
                 icon: PhosphorIcons.sparkle()),
             SuperAdminNavItem(
-                section: SuperAdminSection.wastageAnalytics,
-                label: 'Wastage Analytics',
-                icon: PhosphorIcons.trash()),
-          ],
-        ),
-        SuperAdminNavGroup(
-          label: 'People & HR',
-          items: [
-            SuperAdminNavItem(
-                section: SuperAdminSection.personnelRegistry,
-                label: 'Personnel Registry',
-                icon: PhosphorIcons.users()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.hrPayroll,
-                label: 'HR & Payroll',
-                icon: PhosphorIcons.money()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.idCards,
-                label: 'ID Cards',
-                icon: PhosphorIcons.identificationCard()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.employeeDocs,
-                label: 'Employee Docs',
-                icon: PhosphorIcons.fileText()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.cashierStation,
-                label: 'Cashier Station',
+                section: SuperAdminSection.cashierStationConfig,
+                label: 'Cashier Station Config',
                 icon: PhosphorIcons.creditCard()),
           ],
         ),
         SuperAdminNavGroup(
-          label: 'Finance & Store',
+          label: 'Finance & Inventory',
           items: [
             SuperAdminNavItem(
                 section: SuperAdminSection.finance,
                 label: 'Finance',
                 icon: PhosphorIcons.currencyDollar()),
             SuperAdminNavItem(
-                section: SuperAdminSection.storekeeping,
-                label: 'Storekeeping',
-                icon: PhosphorIcons.warehouse()),
-            SuperAdminNavItem(
                 section: SuperAdminSection.inventory,
                 label: 'Inventory',
                 icon: PhosphorIcons.package()),
             SuperAdminNavItem(
+                section: SuperAdminSection.storekeepingConfig,
+                label: 'Storekeeping Config',
+                icon: PhosphorIcons.warehouse()),
+            SuperAdminNavItem(
                 section: SuperAdminSection.suppliers,
                 label: 'Suppliers',
                 icon: PhosphorIcons.truck()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.payrollSettings,
+                label: 'Payroll Settings',
+                icon: PhosphorIcons.money()),
           ],
         ),
         SuperAdminNavGroup(
@@ -188,12 +163,8 @@ class SuperAdminNavItem {
           ],
         ),
         SuperAdminNavGroup(
-          label: 'System & Config',
+          label: 'System',
           items: [
-            SuperAdminNavItem(
-                section: SuperAdminSection.branches,
-                label: 'Branches',
-                icon: PhosphorIcons.buildings()),
             SuperAdminNavItem(
                 section: SuperAdminSection.auditLogs,
                 label: 'Audit Logs',
@@ -203,13 +174,9 @@ class SuperAdminNavItem {
                 label: 'Reports',
                 icon: PhosphorIcons.chartBar()),
             SuperAdminNavItem(
-                section: SuperAdminSection.communications,
-                label: 'Communications',
-                icon: PhosphorIcons.chatCircle()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.bookingsInvoices,
-                label: 'Bookings & Invoices',
-                icon: PhosphorIcons.receipt()),
+                section: SuperAdminSection.integrations,
+                label: 'Integrations',
+                icon: PhosphorIcons.globe()),
             SuperAdminNavItem(
                 section: SuperAdminSection.settings,
                 label: 'Settings',
@@ -283,8 +250,7 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
                       height: 40,
                       decoration: const BoxDecoration(
                           color: AppColors.kPrimary,
-                          borderRadius:
-                              BorderRadius.all(Radius.circular(10))),
+                          borderRadius: BorderRadius.all(Radius.circular(10))),
                       child: const Center(
                         child: Text('S',
                             style: TextStyle(
@@ -302,8 +268,8 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
                               style: TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 15)),
                           Text('Famous Gates',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey)),
+                              style:
+                                  TextStyle(fontSize: 11, color: Colors.grey)),
                         ],
                       ),
                     ),
@@ -318,8 +284,7 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
               itemCount: groups.length,
               itemBuilder: (_, gi) {
                 final group = groups[gi];
-                final isGroupCollapsed =
-                    _collapsedGroups.contains(group.label);
+                final isGroupCollapsed = _collapsedGroups.contains(group.label);
 
                 if (widget.isCollapsed) {
                   // Icon-only mode
@@ -338,12 +303,10 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
                             child: Container(
                               margin: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 10),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
                                 color: isActive
-                                    ? AppColors.kPrimary
-                                        .withValues(alpha: 0.1)
+                                    ? AppColors.kPrimary.withValues(alpha: 0.1)
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -360,8 +323,7 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
                       );
                     }),
                     if (gi < groups.length - 1)
-                      const Divider(
-                          height: 1, indent: 12, endIndent: 12),
+                      const Divider(height: 1, indent: 12, endIndent: 12),
                   ]);
                 }
 
@@ -417,8 +379,7 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
                                   horizontal: 8, vertical: 1),
                               decoration: BoxDecoration(
                                 color: isActive
-                                    ? AppColors.kPrimary
-                                        .withValues(alpha: 0.1)
+                                    ? AppColors.kPrimary.withValues(alpha: 0.1)
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(8),
                               ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,8 @@ final _terminalClockProvider = StreamProvider.autoDispose<DateTime>((ref) {
       .startWith(DateTime.now());
 });
 
+const _kGold = Color(0xFFD4A843);
+
 class TerminalScreen extends ConsumerWidget {
   const TerminalScreen({super.key});
 
@@ -27,6 +30,7 @@ class TerminalScreen extends ConsumerWidget {
     final pin = ref.watch(_terminalPinProvider);
     final isLoading = ref.watch(_terminalLoadingProvider);
     final now = ref.watch(_terminalClockProvider).valueOrNull ?? DateTime.now();
+    final selectedPrefix = pin.isNotEmpty ? pin[0] : null;
 
     return KeyboardListener(
       focusNode: FocusNode()..requestFocus(),
@@ -46,63 +50,54 @@ class TerminalScreen extends ConsumerWidget {
         body: Stack(
           fit: StackFit.expand,
           children: [
+            // 1 — Background photo
+            Image.asset(
+              'assets/frontend_public/IMG_8704.JPG',
+              fit: BoxFit.cover,
+            ),
+            // 2 — Backdrop blur
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+              child: const SizedBox.expand(),
+            ),
+            // 3 — Dark gradient
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    const Color(0xFF111827),
-                    const Color(0xFF1A3C5E),
-                    Colors.black.withValues(alpha: 0.92),
+                    Colors.black.withValues(alpha: 0.82),
+                    Colors.black.withValues(alpha: 0.60),
+                    Colors.black.withValues(alpha: 0.84),
                   ],
+                  stops: const [0.0, 0.5, 1.0],
                 ),
               ),
             ),
+            // 4 — UI content
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 20),
                 child: Column(
                   children: [
                     const _TopBar(),
                     const Spacer(),
                     _BrandClock(now: now),
-                    const SizedBox(height: 24),
-                    _PinDots(pinLength: pin.length, isLoading: isLoading),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 12),
+                    _PinDots(
+                        pinLength: pin.length, isLoading: isLoading),
+                    const SizedBox(height: 12),
                     _PinPad(
-                      onKey: (value) => _appendPin(ref, value, context),
+                      selectedPrefix: selectedPrefix,
+                      onKey: (v) => _appendPin(ref, v, context),
                       onDelete: () => _deletePin(ref),
                       onStaff: () => context.go('/hr-terminal'),
                       disabled: isLoading,
                     ),
-                    const SizedBox(height: 18),
-                    const Opacity(
-                      opacity: 0.42,
-                      child: Column(
-                        children: [
-                          Text(
-                            'FAMOUS GATES HOTELS',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 10,
-                              letterSpacing: 4,
-                            ),
-                          ),
-                          SizedBox(height: 6),
-                          Text(
-                            'HIRALL SYSTEMS',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontFamily: 'monospace',
-                              fontSize: 9,
-                              letterSpacing: 3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const SizedBox(height: 8),
+                    const _FooterBranding(),
                     const Spacer(),
                   ],
                 ),
@@ -114,10 +109,10 @@ class TerminalScreen extends ConsumerWidget {
     );
   }
 
-  static void _appendPin(WidgetRef ref, String value, BuildContext context) {
+  static void _appendPin(
+      WidgetRef ref, String value, BuildContext context) {
     final pin = ref.read(_terminalPinProvider);
-    final loading = ref.read(_terminalLoadingProvider);
-    if (loading) return;
+    if (ref.read(_terminalLoadingProvider)) return;
 
     final isPrefix = RegExp(r'^[RMENC]$').hasMatch(value);
     final isDigit = RegExp(r'^\d$').hasMatch(value);
@@ -131,7 +126,8 @@ class TerminalScreen extends ConsumerWidget {
       if (pin.isEmpty) {
         AppNotifier.showSnackBar(
           context,
-          const SnackBar(content: Text('Select the POS station first.')),
+          const SnackBar(
+              content: Text('Select the POS station first.')),
         );
         return;
       }
@@ -152,7 +148,8 @@ class TerminalScreen extends ConsumerWidget {
         pin.substring(0, pin.length - 1);
   }
 
-  static Future<void> _login(BuildContext context, WidgetRef ref) async {
+  static Future<void> _login(
+      BuildContext context, WidgetRef ref) async {
     if (!context.mounted) return;
     final pin = ref.read(_terminalPinProvider);
     if (pin.length < _minPinLength) {
@@ -162,10 +159,10 @@ class TerminalScreen extends ConsumerWidget {
       );
       return;
     }
-
     ref.read(_terminalLoadingProvider.notifier).state = true;
     try {
-      final user = await ref.read(authNotifierProvider.notifier).posLogin(pin);
+      final user =
+          await ref.read(authNotifierProvider.notifier).posLogin(pin);
       final route = _routeForPosUser(user.outletType, user.role, pin);
       debugPrint(
           'Terminal login role=${user.role} outlet=${user.outletType} route=$route');
@@ -177,9 +174,7 @@ class TerminalScreen extends ConsumerWidget {
       if (context.mounted) {
         ref.read(_terminalPinProvider.notifier).state = '';
         AppNotifier.showSnackBar(
-          context,
-          SnackBar(content: Text('$error')),
-        );
+            context, SnackBar(content: Text('$error')));
       }
     } finally {
       if (context.mounted) {
@@ -188,7 +183,8 @@ class TerminalScreen extends ConsumerWidget {
     }
   }
 
-  static String _routeForPosUser(String? outletType, String role, String pin) {
+  static String _routeForPosUser(
+      String? outletType, String role, String pin) {
     switch (pin.substring(0, 1).toUpperCase()) {
       case 'R':
         return '/pos/restaurant';
@@ -226,6 +222,10 @@ class TerminalScreen extends ConsumerWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Top bar
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _TopBar extends StatelessWidget {
   const _TopBar();
 
@@ -233,40 +233,73 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+        // FG logo badge — white pill so logo reads on dark overlay
         Container(
           width: 42,
           height: 42,
+          padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
-            color: const Color(0xFFD4A843),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Center(
-            child: Text(
-              'FG',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(11),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.30),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
-            ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/frontend_public/fglogo.png',
+            fit: BoxFit.contain,
           ),
         ),
         const SizedBox(width: 12),
         const Text(
           'Famous Gates Terminal',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            letterSpacing: 0.2,
+          ),
         ),
         const Spacer(),
-        TextButton.icon(
+        // Pill-style backoffice link
+        TextButton(
           onPressed: () => context.go('/login'),
-          icon: const Icon(Icons.arrow_forward, size: 16),
-          label: const Text('Backoffice'),
-          style: TextButton.styleFrom(foregroundColor: Colors.white70),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white54,
+            backgroundColor: Colors.white.withValues(alpha: 0.07),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.12)),
+            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('BACKOFFICE',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5)),
+              SizedBox(width: 5),
+              Icon(Icons.arrow_forward_rounded, size: 13),
+            ],
+          ),
         ),
       ],
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clock
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _BrandClock extends StatelessWidget {
   const _BrandClock({required this.now});
@@ -285,54 +318,61 @@ class _BrandClock extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontFamily: 'SF Pro Display',
-            fontSize: 58,
-            fontWeight: FontWeight.w800,
+            fontSize: 62,
+            fontWeight: FontWeight.w700,
             height: 1,
+            letterSpacing: -1.5,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
-          date,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-            letterSpacing: 1.4,
+          date.toUpperCase(),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.45),
+            fontWeight: FontWeight.w600,
+            fontSize: 11,
+            letterSpacing: 2.0,
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Instruction hint
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.10), width: 1),
+          ),
+          child: Text(
+            'Select your station  •  Enter your PIN',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.38),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.4,
+            ),
           ),
         ),
       ],
     );
   }
 
-  static String _weekday(int value) {
-    return const [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ][value - 1];
-  }
+  static String _weekday(int v) => const [
+        'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+        'Friday', 'Saturday', 'Sunday'
+      ][v - 1];
 
-  static String _month(int value) {
-    return const [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ][value - 1];
-  }
+  static String _month(int v) => const [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ][v - 1];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PIN dots
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _PinDots extends StatelessWidget {
   const _PinDots({required this.pinLength, required this.isLoading});
@@ -347,35 +387,53 @@ class _PinDots extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(PhosphorIcons.shieldCheck(), size: 16, color: Colors.white38),
-            const SizedBox(width: 8),
+            Icon(PhosphorIcons.shieldCheck(),
+                size: 14, color: Colors.white38),
+            const SizedBox(width: 7),
             const Text(
               'ENTER PIN',
               style: TextStyle(
                 color: Colors.white38,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w700,
-                letterSpacing: 2.4,
+                letterSpacing: 2.8,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         Row(
           mainAxisSize: MainAxisSize.min,
-          children: List.generate(TerminalScreen._maxPinLength, (index) {
-            final active = pinLength > index;
+          children: List.generate(TerminalScreen._maxPinLength, (i) {
+            final active = pinLength > i;
+            // FIX: always keep boxShadow with same blurRadius (never lerps to
+            // negative). Only the *color* alpha transitions — safe to interpolate.
             return AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              margin: const EdgeInsets.symmetric(horizontal: 6),
-              width: active ? 15 : 13,
-              height: active ? 15 : 13,
+              duration: const Duration(milliseconds: 180),
+              // Do NOT use easeOutBack — it overshoots t=1 and makes
+              // blurRadius go negative during BoxDecoration.lerp.
+              curve: Curves.easeOut,
+              margin: const EdgeInsets.symmetric(horizontal: 7),
+              width: active ? 14 : 10,
+              height: active ? 14 : 10,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: active
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.16),
-                border: Border.all(color: Colors.white24),
+                color: active ? Colors.white : Colors.transparent,
+                border: Border.all(
+                  color: active
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.28),
+                  width: 1.5,
+                ),
+                // Always present, same blurRadius — avoids negative lerp
+                boxShadow: [
+                  BoxShadow(
+                    color: active
+                        ? Colors.white.withValues(alpha: 0.45)
+                        : Colors.transparent,
+                    blurRadius: 8.0, // constant — never changes during lerp
+                  ),
+                ],
               ),
             );
           }),
@@ -383,26 +441,23 @@ class _PinDots extends StatelessWidget {
         SizedBox(
           height: 28,
           child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 120),
+            duration: const Duration(milliseconds: 150),
             opacity: isLoading ? 1 : 0,
             child: const Padding(
-              padding: EdgeInsets.only(top: 12),
+              padding: EdgeInsets.only(top: 10),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 14,
-                    height: 14,
+                    width: 13,
+                    height: 13,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white70,
-                    ),
+                        strokeWidth: 1.8, color: Colors.white60),
                   ),
-                  SizedBox(width: 10),
-                  Text(
-                    'Authenticating...',
-                    style: TextStyle(color: Colors.white60),
-                  ),
+                  SizedBox(width: 9),
+                  Text('Authenticating…',
+                      style:
+                          TextStyle(color: Colors.white54, fontSize: 12)),
                 ],
               ),
             ),
@@ -413,14 +468,20 @@ class _PinDots extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PIN pad card
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _PinPad extends StatelessWidget {
   const _PinPad({
+    required this.selectedPrefix,
     required this.onKey,
     required this.onDelete,
     required this.onStaff,
     required this.disabled,
   });
 
+  final String? selectedPrefix;
   final ValueChanged<String> onKey;
   final VoidCallback onDelete;
   final VoidCallback onStaff;
@@ -428,86 +489,291 @@ class _PinPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 620),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 28,
-              offset: const Offset(0, 18),
-            ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 8,
-              child: _StationPrefixPad(onKey: onKey, disabled: disabled),
-            ),
-            Container(
-              width: 1,
-              height: 246,
-              margin: const EdgeInsets.symmetric(horizontal: 14),
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
-            Expanded(
-              flex: 9,
-              child: _NumberPad(
-                onKey: onKey,
-                onDelete: onDelete,
-                onStaff: onStaff,
-                disabled: disabled,
+    final screenW = MediaQuery.of(context).size.width;
+    // Responsive card width: tablet ≤1024 → 560, desktop → 640
+    final cardW = screenW >= 1100 ? 640.0 : 560.0;
+
+    // Wrap in Center + SizedBox so the card doesn't inherit the Column's
+    // tight full-width constraint (which ConstrainedBox cannot shrink below).
+    return Center(
+      child: SizedBox(
+        width: cardW,
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.09),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.38),
+                    blurRadius: 48,
+                    offset: const Offset(0, 20),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Gold accent top line
+                  Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                        Colors.transparent,
+                        _kGold.withValues(alpha: 0.75),
+                        Colors.transparent,
+                      ]),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Station column
+                        Expanded(
+                          flex: 10,
+                          child: _StationColumn(
+                            selectedPrefix: selectedPrefix,
+                            onKey: onKey,
+                            disabled: disabled,
+                          ),
+                        ),
+                        // Gradient divider
+                        Container(
+                          width: 1,
+                          height: 290,
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.white
+                                    .withValues(alpha: 0.15),
+                                Colors.white
+                                    .withValues(alpha: 0.15),
+                                Colors.transparent,
+                              ],
+                              stops: const [0, 0.1, 0.9, 1],
+                            ),
+                          ),
+                        ),
+                        // Number pad column
+                        Expanded(
+                          flex: 11,
+                          child: _NumberColumn(
+                            onKey: onKey,
+                            onDelete: onDelete,
+                            onStaff: onStaff,
+                            disabled: disabled,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _StationPrefixPad extends StatelessWidget {
-  const _StationPrefixPad({required this.onKey, required this.disabled});
+// ─────────────────────────────────────────────────────────────────────────────
+// Station definitions
+// ─────────────────────────────────────────────────────────────────────────────
 
+class _Station {
+  const _Station(this.prefix, this.label, this.color);
+  final String prefix;
+  final String label;
+  final Color color;
+}
+
+const _kStations = [
+  _Station('R', 'Restaurant', Color(0xFFFF9F43)),
+  _Station('M', 'Main Bar', Color(0xFF748FFC)),
+  _Station('E', 'Executive Bar', Color(0xFFDA77F2)),
+  _Station('N', 'Non-consumables', Color(0xFF4DABF7)),
+  _Station('C', 'Cashier Station', Color(0xFF69DB7C)),
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Station column
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StationColumn extends StatelessWidget {
+  const _StationColumn({
+    required this.selectedPrefix,
+    required this.onKey,
+    required this.disabled,
+  });
+
+  final String? selectedPrefix;
   final ValueChanged<String> onKey;
   final bool disabled;
-
-  static const _stations = [
-    _StationKey('R', 'Restaurant', Colors.orangeAccent),
-    _StationKey('M', 'Main Bar', Colors.indigoAccent),
-    _StationKey('E', 'Executive Bar', Colors.purpleAccent),
-    _StationKey('N', 'Non-consumables', Colors.lightBlueAccent),
-    _StationKey('C', 'Cashier Station', Colors.greenAccent),
-  ];
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PadSectionTitle('Station'),
+        const _Label('STATION'),
         const SizedBox(height: 10),
-        for (final station in _stations) ...[
-          _StationButton(
-            station: station,
+        for (int i = 0; i < _kStations.length; i++) ...[
+          _StationTile(
+            station: _kStations[i],
+            isActive: selectedPrefix == _kStations[i].prefix,
             disabled: disabled,
-            onTap: () => onKey(station.prefix),
+            onTap: () => onKey(_kStations[i].prefix),
           ),
-          if (station != _stations.last) const SizedBox(height: 8),
+          if (i < _kStations.length - 1) const SizedBox(height: 8),
         ],
       ],
     );
   }
 }
 
-class _NumberPad extends StatelessWidget {
-  const _NumberPad({
+class _StationTile extends StatelessWidget {
+  const _StationTile({
+    required this.station,
+    required this.isActive,
+    required this.onTap,
+    required this.disabled,
+  });
+
+  final _Station station;
+  final bool isActive;
+  final VoidCallback onTap;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        height: 50,
+        decoration: BoxDecoration(
+          color: isActive
+              ? station.color.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isActive
+                ? station.color.withValues(alpha: 0.55)
+                : Colors.white.withValues(alpha: 0.09),
+            width: isActive ? 1.5 : 1.0,
+          ),
+          // Keep boxShadow always present (same blurRadius) — only alpha changes
+          boxShadow: [
+            BoxShadow(
+              color: isActive
+                  ? station.color.withValues(alpha: 0.28)
+                  : Colors.transparent,
+              blurRadius: 14.0, // constant — no negative lerp risk
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: InkWell(
+          onTap: disabled ? null : onTap,
+          borderRadius: BorderRadius.circular(14),
+          splashColor: station.color.withValues(alpha: 0.18),
+          highlightColor: station.color.withValues(alpha: 0.09),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                // Circular colour badge
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: station.color.withValues(alpha: 0.16),
+                    border: Border.all(
+                      color: station.color.withValues(alpha: 0.45),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      station.prefix,
+                      style: TextStyle(
+                        color: station.color,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    station.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isActive
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.78),
+                      fontSize: 13,
+                      fontWeight: isActive
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    ),
+                  ),
+                ),
+                // Checkmark when active
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: isActive ? 1.0 : 0.0,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: station.color.withValues(alpha: 0.18),
+                      border: Border.all(
+                          color: station.color.withValues(alpha: 0.50),
+                          width: 1.2),
+                    ),
+                    child: Icon(
+                      Icons.check_rounded,
+                      color: station.color,
+                      size: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Number column
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _NumberColumn extends StatelessWidget {
+  const _NumberColumn({
     required this.onKey,
     required this.onDelete,
     required this.onStaff,
@@ -521,180 +787,191 @@ class _NumberPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final keys = <Widget>[
-      for (final number in [1, 2, 3, 4, 5, 6, 7, 8, 9])
-        _PadButton(
-          label: '$number',
-          onTap: () => onKey('$number'),
-          disabled: disabled,
-        ),
-      _PadButton(
-        label: 'Staff',
-        compact: true,
-        onTap: onStaff,
-        disabled: disabled,
-      ),
-      _PadButton(label: '0', onTap: () => onKey('0'), disabled: disabled),
-      _PadButton(
-        icon: Icons.backspace_outlined,
-        onTap: onDelete,
-        disabled: disabled,
-      ),
-    ];
-
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _PadSectionTitle('PIN'),
+        const _Label('PIN'),
         const SizedBox(height: 10),
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 1.55,
-          children: keys,
+          crossAxisSpacing: 9,
+          mainAxisSpacing: 9,
+          childAspectRatio: 1.18,
+          children: [
+            for (final n in [1, 2, 3, 4, 5, 6, 7, 8, 9])
+              _NumKey(
+                  label: '$n',
+                  onTap: () => onKey('$n'),
+                  disabled: disabled),
+            _NumKey(
+                label: 'Staff',
+                isSpecial: true,
+                onTap: onStaff,
+                disabled: disabled),
+            _NumKey(
+                label: '0',
+                onTap: () => onKey('0'),
+                disabled: disabled),
+            _NumKey(
+                icon: Icons.backspace_rounded,
+                isDelete: true,
+                onTap: onDelete,
+                disabled: disabled),
+          ],
+        ),
+        const SizedBox(height: 10),
+        // Auto-submit hint
+        Text(
+          'Submits automatically at 5 digits',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.22),
+            fontSize: 9.5,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3,
+          ),
+          textAlign: TextAlign.center,
         ),
       ],
     );
   }
 }
 
-class _PadSectionTitle extends StatelessWidget {
-  const _PadSectionTitle(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        label.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white54,
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 2,
-        ),
-      ),
-    );
-  }
-}
-
-class _StationButton extends StatelessWidget {
-  const _StationButton({
-    required this.station,
-    required this.onTap,
-    required this.disabled,
-  });
-
-  final _StationKey station;
-  final VoidCallback onTap;
-  final bool disabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: disabled ? null : onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          height: 42,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 34,
-                child: Text(
-                  station.prefix,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: station.color,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  station.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StationKey {
-  const _StationKey(this.prefix, this.label, this.color);
-
-  final String prefix;
-  final String label;
-  final Color color;
-}
-
-class _PadButton extends StatelessWidget {
-  const _PadButton({
+class _NumKey extends StatefulWidget {
+  const _NumKey({
     this.label,
     this.icon,
-    this.compact = false,
+    this.isSpecial = false,
+    this.isDelete = false,
     required this.onTap,
     required this.disabled,
   });
 
   final String? label;
   final IconData? icon;
-  final bool compact;
+  final bool isSpecial;
+  final bool isDelete;
   final VoidCallback onTap;
   final bool disabled;
 
   @override
+  State<_NumKey> createState() => _NumKeyState();
+}
+
+class _NumKeyState extends State<_NumKey> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: disabled ? null : onTap,
+    final bgAlpha =
+        widget.isDelete ? 0.05 : widget.isSpecial ? 0.07 : 0.12;
+    final borderAlpha =
+        widget.isDelete ? 0.06 : widget.isSpecial ? 0.08 : 0.14;
+
+    return AnimatedScale(
+      scale: _pressed ? 0.88 : 1.0,
+      duration: const Duration(milliseconds: 80),
+      curve: Curves.easeOut,
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(14),
-        child: Container(
+        child: Ink(
           decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: bgAlpha),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: borderAlpha),
+              width: 1,
+            ),
           ),
-          child: Center(
-            child: icon != null
-                ? Icon(icon, color: Colors.white54, size: 28)
-                : Text(
-                    label!,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: compact ? 12 : 28,
-                      fontWeight: compact ? FontWeight.w800 : FontWeight.w400,
-                      letterSpacing: compact ? 1.2 : 0,
+          child: InkWell(
+            onTapDown: widget.disabled
+                ? null
+                : (_) => setState(() => _pressed = true),
+            onTapUp: widget.disabled
+                ? null
+                : (_) => setState(() => _pressed = false),
+            onTapCancel: () => setState(() => _pressed = false),
+            onTap: widget.disabled ? null : widget.onTap,
+            borderRadius: BorderRadius.circular(14),
+            splashColor: Colors.white.withValues(alpha: 0.15),
+            highlightColor: Colors.white.withValues(alpha: 0.08),
+            child: Center(
+              child: widget.icon != null
+                  ? Icon(widget.icon,
+                      color: Colors.white.withValues(alpha: 0.42),
+                      size: 22)
+                  : Text(
+                      widget.label!,
+                      style: TextStyle(
+                        color: widget.isSpecial
+                            ? Colors.white.withValues(alpha: 0.38)
+                            : Colors.white.withValues(alpha: 0.92),
+                        fontSize: widget.isSpecial ? 11 : 26,
+                        fontWeight: widget.isSpecial
+                            ? FontWeight.w700
+                            : FontWeight.w300,
+                        letterSpacing: widget.isSpecial ? 1.0 : 0,
+                      ),
                     ),
-                  ),
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _Label extends StatelessWidget {
+  const _Label(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.35),
+        fontSize: 9.5,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 2.5,
+      ),
+    );
+  }
+}
+
+class _FooterBranding extends StatelessWidget {
+  const _FooterBranding();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          'FAMOUS GATES HOTELS',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.28),
+            fontWeight: FontWeight.w800,
+            fontSize: 9,
+            letterSpacing: 3.5,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          'HIRALL SYSTEMS',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.16),
+            fontFamily: 'monospace',
+            fontSize: 8,
+            letterSpacing: 3,
+          ),
+        ),
+      ],
     );
   }
 }

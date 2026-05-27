@@ -229,6 +229,45 @@ class AuditorRepository {
     };
   }
 
+  // ── Branch-orders / Stock-requests ───────────────────────────────────────
+
+  Future<BranchOrdersData> getBranchOrders({
+    String? startDate,
+    String? endDate,
+  }) async {
+    final response = await _dio.get('/auditor/verify/branch-orders',
+        queryParameters: {
+          if (startDate != null) 'start_date': startDate,
+          if (endDate != null) 'end_date': endDate,
+        });
+    final data = _unwrap(response.data);
+    return BranchOrdersData.fromJson(data);
+  }
+
+  /// Review a single stock request.
+  /// [action] must be 'APPROVE', 'REJECT', or left null for UNDER_REVIEW.
+  Future<void> reviewStockRequest(
+    String id,
+    String action, {
+    String? notes,
+  }) async {
+    await _dio.put('/storekeeping/stock-requests/$id/review', data: {
+      'action': action,
+      if (notes != null && notes.isNotEmpty) 'review_notes': notes,
+    });
+  }
+
+  /// Approve multiple requests at once (auditor bulk action).
+  Future<void> bulkApproveStockRequests(
+    List<String> requestIds, {
+    String? notes,
+  }) async {
+    await _dio.post('/storekeeping/stock-requests/bulk-approve', data: {
+      'request_ids': requestIds,
+      'approved_quantity_notes': notes ?? 'Bulk approved by auditor',
+    });
+  }
+
   Future<List<AuditLogEntry>> getAuditLogsPaged(
       {String? severity, String? action, int page = 1, int limit = 50}) async {
     final branchId = await _branchId;

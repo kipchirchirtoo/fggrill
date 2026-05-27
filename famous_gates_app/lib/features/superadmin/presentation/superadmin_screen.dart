@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/superadmin_providers.dart';
-import 'widgets/superadmin_side_nav.dart' show SuperAdminSideNav, SuperAdminNavItem;
+import 'widgets/superadmin_side_nav.dart'
+    show SuperAdminSideNav, SuperAdminNavItem;
 import 'widgets/superadmin_top_bar.dart';
 
 // Superadmin-specific sections
@@ -16,22 +17,16 @@ import 'sections/audit_logs_section.dart';
 import 'sections/settings_section.dart';
 import 'sections/admin_menu_sections.dart';
 import 'sections/operations_sections.dart';
+import 'sections/configuration_sections.dart';
 
 // Admin sections reused in superadmin
 import '../../admin/presentation/sections/misc_admin_sections.dart';
 import '../../admin/presentation/sections/staff_section.dart';
 import '../../admin/presentation/sections/overview_section.dart';
 import '../../admin/presentation/sections/finance_section.dart';
-import '../../admin/presentation/sections/guests_section.dart';
-import '../../admin/presentation/sections/hr_payroll_section.dart';
-import '../../admin/presentation/sections/housekeeping_section.dart';
 import '../../admin/presentation/sections/inventory_section.dart';
-import '../../admin/presentation/sections/maintenance_section.dart';
 import '../../admin/presentation/sections/reports_section.dart';
-import '../../admin/presentation/sections/reservations_section.dart';
-import '../../admin/presentation/sections/restaurant_section.dart';
 import '../../admin/presentation/sections/rooms_section.dart';
-import '../../admin/presentation/sections/storekeeping_section.dart';
 import '../../admin/presentation/sections/suppliers_section.dart';
 import '../../admin/presentation/sections/vehicles_section.dart';
 import '../../admin/presentation/sections/central_store_subsections.dart';
@@ -85,59 +80,52 @@ class SuperAdminScreen extends ConsumerWidget {
 
   Widget _buildSection(SuperAdminSection section, WidgetRef ref) {
     final widgets = <SuperAdminSection, Widget>{
-      // ── Superadmin-only ──────────────────────────────────────
+      // Command
       SuperAdminSection.adminDashboard: const OverviewSection(),
       SuperAdminSection.behavioralIntelligence:
           const BehavioralIntelligenceSection(),
       SuperAdminSection.securityCenter: const SecurityCenterSection(),
       SuperAdminSection.systemHealth: const SystemHealthSection(),
-      SuperAdminSection.roleMigration: const RoleMigrationSection(),
+      SuperAdminSection.globalSearch: const SuperAdminSearchSection(),
 
-      // ── Users & Access ────────────────────────────────────────
+      // Access & Organization
       SuperAdminSection.globalUsers: const GlobalUsersSection(),
+      SuperAdminSection.personnelRegistry: const StaffSection(),
+      SuperAdminSection.rolesPermissions: const RolesPermissionsSection(),
+      SuperAdminSection.branches: const BranchesSection(),
       SuperAdminSection.departments: const DepartmentsSection(),
 
-      // ── Hotel Operations ─────────────────────────────────────
-      SuperAdminSection.reservations: const ReservationsSection(),
-      SuperAdminSection.checkin: const CheckInSection(),
+      // Hotel Setup
       SuperAdminSection.rooms: const RoomsSection(),
       SuperAdminSection.rates: const RatePlansSection(),
-      SuperAdminSection.guests: const GuestsSection(),
-      SuperAdminSection.housekeeping: const HousekeepingSection(),
-      SuperAdminSection.maintenance: const MaintenanceSection(),
-      SuperAdminSection.channelManager: const ChannelManagerSection(),
+      SuperAdminSection.paymentBillingSettings:
+          const PaymentBillingSettingsSection(),
+      SuperAdminSection.reportTemplates: const ReportTemplatesSection(),
 
-      // ── Food & Beverage ───────────────────────────────────────
-      SuperAdminSection.restaurant: const RestaurantSection(),
+      // POS & Sales Setup
+      SuperAdminSection.posConfiguration: const CashierStationSection(),
       SuperAdminSection.restaurantMenu: const RestaurantMenuAdminSection(),
       SuperAdminSection.barMenu: const BarMenuAdminSection(),
       SuperAdminSection.kyogongServices: const KyogongServicesAdminSection(),
-      SuperAdminSection.wastageAnalytics: const WastageAnalyticsSection(),
+      SuperAdminSection.cashierStationConfig:
+          const CashierStationConfigSection(),
 
-      // ── People & HR ───────────────────────────────────────────
-      SuperAdminSection.personnelRegistry: const StaffSection(),
-      SuperAdminSection.hrPayroll: const HrPayrollSection(),
-      SuperAdminSection.idCards: const IDCardsAdminSection(),
-      SuperAdminSection.employeeDocs: const EmployeeDocsSection(),
-      SuperAdminSection.cashierStation: const CashierStationSection(),
-
-      // ── Finance & Store ───────────────────────────────────────
+      // Finance & Inventory
       SuperAdminSection.finance: const FinanceSection(),
-      SuperAdminSection.storekeeping: const StorekeepingSection(),
       SuperAdminSection.inventory: const InventorySection(),
+      SuperAdminSection.storekeepingConfig: const StorekeepingConfigSection(),
       SuperAdminSection.suppliers: const SuppliersSection(),
+      SuperAdminSection.payrollSettings: const PayrollSettingsSection(),
 
-      // ── Logistics ─────────────────────────────────────────────
+      // Logistics
       SuperAdminSection.fleetOverview: const FleetOverviewSection(),
       SuperAdminSection.vehicles: const VehiclesSection(),
       SuperAdminSection.drivers: const DriversSection(),
 
-      // ── System & Config ───────────────────────────────────────
-      SuperAdminSection.branches: const BranchesSection(),
+      // System
       SuperAdminSection.auditLogs: const SuperAdminAuditLogsSection(),
       SuperAdminSection.reports: const ReportsSection(),
-      SuperAdminSection.communications: const CommunicationsSection(),
-      SuperAdminSection.bookingsInvoices: const BookingsInvoicesSection(),
+      SuperAdminSection.integrations: const SystemIntegrationsSection(),
       SuperAdminSection.settings: const SuperAdminSettingsSection(),
     };
 
@@ -219,8 +207,7 @@ class _MobileNavSheet extends ConsumerWidget {
                     color: isActive
                         ? AppColors.kPrimary
                         : AppColors.kTextSecondary,
-                    fontWeight:
-                        isActive ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
                 selected: isActive,
@@ -252,14 +239,14 @@ class _MobileBottomNav extends ConsumerWidget {
       SuperAdminSection.behavioralIntelligence: PhosphorIcons.cube(),
       SuperAdminSection.securityCenter: PhosphorIcons.shield(),
       SuperAdminSection.globalUsers: PhosphorIcons.users(),
-      SuperAdminSection.settings: PhosphorIcons.treeStructure(),
+      SuperAdminSection.settings: PhosphorIcons.gear(),
     };
     final keys = items.keys.toList();
     final idx = keys.indexOf(currentSection).clamp(0, items.length - 1);
     return BottomNavigationBar(
       currentIndex: idx,
-      onTap: (i) => ref.read(superAdminSectionProvider.notifier).state =
-          keys[i],
+      onTap: (i) =>
+          ref.read(superAdminSectionProvider.notifier).state = keys[i],
       selectedItemColor: AppColors.kPrimary,
       unselectedItemColor: AppColors.kTextSecondary,
       type: BottomNavigationBarType.fixed,

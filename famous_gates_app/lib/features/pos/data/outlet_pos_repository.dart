@@ -63,11 +63,20 @@ class OutletPosRepository {
     required String shiftId,
     required List<OutletCartItem> items,
     String? customerName,
+    String? orderType,
+    String? tableNumber,
+    String? roomNumber,
   }) async {
     final total = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
     final response = await _dio.post('/pos/shifts/$shiftId/orders', data: {
       'customer_name':
           customerName?.trim().isEmpty == true ? null : customerName,
+      if (orderType != null && orderType.trim().isNotEmpty)
+        'order_type': orderType.trim(),
+      if (tableNumber != null && tableNumber.trim().isNotEmpty)
+        'table_number': tableNumber.trim(),
+      if (roomNumber != null && roomNumber.trim().isNotEmpty)
+        'room_number': roomNumber.trim(),
       'items': items.map((item) => item.toJson()).toList(),
       'total_amount': total,
     });
@@ -298,6 +307,7 @@ class OutletShiftOrder {
   const OutletShiftOrder({
     required this.id,
     required this.orderNumber,
+    this.shortCode,
     required this.customerName,
     required this.paymentStatus,
     required this.status,
@@ -305,11 +315,13 @@ class OutletShiftOrder {
     this.amountPaid = 0,
     this.balanceAmount = 0,
     this.waiterName,
+    this.createdAt,
     this.items = const [],
   });
 
   final String id;
   final String orderNumber;
+  final String? shortCode;
   final String customerName;
   final String paymentStatus;
   final String status;
@@ -317,6 +329,7 @@ class OutletShiftOrder {
   final double amountPaid;
   final double balanceAmount;
   final String? waiterName;
+  final DateTime? createdAt;
   final List<dynamic> items;
 
   factory OutletShiftOrder.fromJson(Map<String, dynamic> json) {
@@ -324,6 +337,7 @@ class OutletShiftOrder {
     return OutletShiftOrder(
       id: '${json['id']}',
       orderNumber: '${json['order_number'] ?? ''}',
+      shortCode: json['short_code'] as String?,
       customerName: '${json['customer_name'] ?? 'Walk-in'}',
       paymentStatus: '${json['payment_status'] ?? 'unpaid'}',
       status: '${json['status'] ?? 'open'}',
@@ -331,6 +345,7 @@ class OutletShiftOrder {
       amountPaid: _num(json['amount_paid']),
       balanceAmount: _num(json['balance_amount'] ?? json['balance']),
       waiterName: json['waiter_name'] as String?,
+      createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
       items: items is List ? items : const [],
     );
   }

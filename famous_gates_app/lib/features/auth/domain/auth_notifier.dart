@@ -15,13 +15,20 @@ class AuthNotifier extends AsyncNotifier<User?> {
     return ref.read(authRepositoryProvider).getCurrentUser();
   }
 
-  Future<User> login(String email, String password) async {
+  Future<User> login(String email, String password,
+      {bool rememberMe = false}) async {
     state = const AsyncValue.loading();
     final result = await AsyncValue.guard(() {
-      return ref.read(authRepositoryProvider).login(email, password);
+      return ref
+          .read(authRepositoryProvider)
+          .login(email, password, rememberMe: rememberMe);
     });
     state = result;
     return result.requireValue;
+  }
+
+  Future<String?> getRememberedEmail() {
+    return ref.read(authRepositoryProvider).getRememberedEmail();
   }
 
   Future<User> posLogin(String pin) async {

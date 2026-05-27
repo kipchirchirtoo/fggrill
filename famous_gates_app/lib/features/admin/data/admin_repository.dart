@@ -320,6 +320,116 @@ class AdminRepository {
     await _dio.delete('/restaurant/menu/items/$id');
   }
 
+  Future<List<Map<String, dynamic>>> getPosOutlets({
+    String? branchId,
+    String? outletType,
+  }) async {
+    final response = await _dio.get('/pos/outlets', queryParameters: {
+      if (branchId != null && branchId.isNotEmpty) 'branch_id': branchId,
+      if (outletType != null && outletType.isNotEmpty)
+        'outlet_type': outletType,
+    });
+    return _parseMapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createPosOutlet(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/pos/outlets', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> updatePosOutlet(
+      String id, Map<String, dynamic> data) async {
+    final response = await _dio.patch('/pos/outlets/$id', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getPosOutletItems(String outletId) async {
+    final response = await _dio.get('/pos/outlets/$outletId/items');
+    return _parseMapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createPosOutletItem(
+      String outletId, Map<String, dynamic> data) async {
+    final response =
+        await _dio.post('/pos/outlets/$outletId/items', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> updatePosOutletItem(
+      String outletId, String itemId, Map<String, dynamic> data) async {
+    final response =
+        await _dio.patch('/pos/outlets/$outletId/items/$itemId', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> syncPosOutletItems(String outletId) async {
+    final response = await _dio.post('/pos/outlets/$outletId/sync-items');
+    return _parseMapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> globalSearch(String query) async {
+    final response = await _dio.get('/search', queryParameters: {'q': query});
+    return _parseMapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getSystemRoles() async {
+    final response = await _dio.get('/system/roles');
+    return _parseMapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getRolePermissions(String roleId) async {
+    final response = await _dio.get('/system/roles/$roleId/permissions');
+    return _parseMapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> getPaymentStats() async {
+    final response = await _dio.get('/payments-verification/stats');
+    return _parseMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getReportTemplates() async {
+    final response = await _dio.get('/reports/templates');
+    return _parseMapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createReportTemplate(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/reports/templates', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> updateReportTemplate(
+      String id, Map<String, dynamic> data) async {
+    final response = await _dio.put('/reports/templates/$id', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<void> deleteReportTemplate(String id) async {
+    await _dio.delete('/reports/templates/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollPolicies() async {
+    final response = await _dio.get('/payroll-policies');
+    return _parseMapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createPayrollPolicy(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/payroll-policies', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> updatePayrollPolicy(
+      String id, Map<String, dynamic> data) async {
+    final response = await _dio.put('/payroll-policies/$id', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<void> deletePayrollPolicy(String id) async {
+    await _dio.delete('/payroll-policies/$id');
+  }
+
   Future<List<InventoryItem>> getInventory(
       {String? branchId, String? category}) async {
     final params = <String, dynamic>{};

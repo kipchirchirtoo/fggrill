@@ -3,63 +3,54 @@ import '../../../core/services/services.dart';
 
 // SuperAdmin Navigation Sections
 enum SuperAdminSection {
-  // ── Superadmin-only ─────────────────────────────────────────
+  // Command
   adminDashboard,
   behavioralIntelligence,
   securityCenter,
   systemHealth,
-  roleMigration,
+  globalSearch,
 
-  // ── Users & Access ───────────────────────────────────────────
+  // Access & Organization
   globalUsers,
+  personnelRegistry,
+  rolesPermissions,
+  branches,
   departments,
 
-  // ── Hotel Operations ─────────────────────────────────────────
-  reservations,
-  checkin,
+  // Hotel Setup
   rooms,
   rates,
-  guests,
-  housekeeping,
-  maintenance,
-  channelManager,
+  paymentBillingSettings,
+  reportTemplates,
 
-  // ── Food & Beverage ──────────────────────────────────────────
-  restaurant,
+  // POS & Sales Setup
+  posConfiguration,
   restaurantMenu,
   barMenu,
   kyogongServices,
-  wastageAnalytics,
+  cashierStationConfig,
 
-  // ── People & HR ──────────────────────────────────────────────
-  personnelRegistry,
-  hrPayroll,
-  idCards,
-  employeeDocs,
-  cashierStation,
-
-  // ── Finance & Store ──────────────────────────────────────────
+  // Finance & Inventory
   finance,
-  storekeeping,
   inventory,
+  storekeepingConfig,
   suppliers,
+  payrollSettings,
 
-  // ── Logistics ────────────────────────────────────────────────
+  // Logistics
   fleetOverview,
   vehicles,
   drivers,
 
-  // ── System & Config ──────────────────────────────────────────
-  branches,
+  // System
   auditLogs,
   reports,
-  communications,
-  bookingsInvoices,
+  integrations,
   settings,
 }
 
-final superAdminSectionProvider = StateProvider<SuperAdminSection>(
-    (ref) => SuperAdminSection.behavioralIntelligence);
+final superAdminSectionProvider =
+    StateProvider<SuperAdminSection>((ref) => SuperAdminSection.adminDashboard);
 
 // AI Anomalies Provider
 final aiAnomaliesProvider =

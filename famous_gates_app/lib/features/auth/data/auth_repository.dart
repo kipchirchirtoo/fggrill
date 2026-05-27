@@ -27,8 +27,12 @@ class AuthRepository {
   static const outletTypeKey = 'fg_outlet_type';
   static const outletPrefixKey = 'fg_outlet_prefix';
   static const activeShiftIdKey = 'fg_active_shift_id';
+  // Remember-me keys
+  static const rememberMeKey = 'fg_remember_me';
+  static const rememberedEmailKey = 'fg_remembered_email';
 
-  Future<User> login(String email, String password) async {
+  Future<User> login(String email, String password,
+      {bool rememberMe = false}) async {
     try {
       final response = await _dio.post('/auth/login', data: {
         'email': email,
@@ -53,10 +57,26 @@ class AuthRepository {
         refreshToken: refreshToken,
         user: user,
       );
+      // Persist remember-me preference and (optionally) email.
+      final storage = _ref.read(secureStorageProvider);
+      await storage.write(
+          key: rememberMeKey, value: rememberMe ? 'true' : 'false');
+      if (rememberMe) {
+        await storage.write(key: rememberedEmailKey, value: email);
+      } else {
+        await storage.delete(key: rememberedEmailKey);
+      }
       return user;
     } on DioException catch (error) {
       throw Exception(_messageFromDio(error));
     }
+  }
+
+  /// Returns the email that was previously saved with "Remember me",
+  /// or null if none was saved.
+  Future<String?> getRememberedEmail() async {
+    final storage = _ref.read(secureStorageProvider);
+    return storage.read(key: rememberedEmailKey);
   }
 
   Future<User> posLogin(String pin) async {
@@ -156,6 +176,16 @@ class AuthRepository {
 
   Future<User?> getCurrentUser() async {
     final storage = _ref.read(secureStorageProvider);
+
+    // If the user did NOT tick "Remember me" last time, clear the stored token
+    // so the next app launch requires a fresh login.
+    final rememberMe = await storage.read(key: rememberMeKey);
+    if (rememberMe == 'false') {
+      await storage.delete(key: jwtKey);
+      await storage.delete(key: refreshKey);
+      return null;
+    }
+
     final token = await storage.read(key: jwtKey);
     if (token == null || token.isEmpty) return null;
 

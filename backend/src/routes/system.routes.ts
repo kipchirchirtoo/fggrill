@@ -1,9 +1,15 @@
 import express from 'express';
 import {
   getBranches,
+  getBranch,
   createBranch,
+  updateBranch,
+  deleteBranch,
   getDepartments,
+  getDepartment,
   createDepartment,
+  updateDepartment,
+  deleteDepartment,
   getRoles,
   getRolePermissions,
   getSystemUsers,
@@ -45,6 +51,11 @@ router.get('/users',
 router.route('/branches')
   .post(authorize([UserRole.SUPER_ADMIN]), createBranch);
 
+router.route('/branches/:id')
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]), getBranch)
+  .put(authorize([UserRole.SUPER_ADMIN]), updateBranch)
+  .delete(authorize([UserRole.SUPER_ADMIN]), deleteBranch);
+
 // =====================================================
 // DEPARTMENTS ROUTES
 // =====================================================
@@ -52,6 +63,11 @@ router.route('/branches')
 router.route('/departments')
   .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]), getDepartments)
   .post(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), createDepartment);
+
+router.route('/departments/:id')
+  .get(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]), getDepartment)
+  .put(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), updateDepartment)
+  .delete(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), deleteDepartment);
 
 // =====================================================
 // ROLES & PERMISSIONS ROUTES

@@ -54,6 +54,19 @@ router.route('/')
   .get(getReports)
   .post(createReport);
 
+// Report Templates must be registered before /:id so "templates" is not
+// captured as a report id.
+router.route('/templates')
+  .get(getReportTemplates)
+  .post(createReportTemplate);
+
+router.route('/templates/:id')
+  .put(updateReportTemplate)
+  .delete(deleteReportTemplate);
+
+// Statistics must also stay before /:id.
+router.get('/stats/overview', getReportStats);
+
 router.route('/:id')
   .get(getReport)
   .put(updateReport)
@@ -64,17 +77,5 @@ router.post('/:id/schedule', scheduleReport);
 router.post('/:id/send', sendReport);
 
 router.get('/:id/history', getReportHistory);
-
-// Report Templates
-router.route('/templates')
-  .get(getReportTemplates)
-  .post(createReportTemplate);
-
-router.route('/templates/:id')
-  .put(updateReportTemplate)
-  .delete(deleteReportTemplate);
-
-// Statistics
-router.get('/stats/overview', getReportStats);
 
 export default router;
