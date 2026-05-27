@@ -52,6 +52,7 @@ const allowedRoles = new Set([
 router.use(protect);
 router.use((req, res, next) => {
   const role = String(req.user?.role || '').toLowerCase();
+  if (req.user?.is_pos_login && req.user?.active_outlet_type) return next();
   if (allowedRoles.has(role)) return next();
   logger.warn(`Forbidden: Outlet POS access denied for user ${req.user?.id} with role ${req.user?.role}`);
   return res.status(403).json({ success: false, message: 'Forbidden: POS outlet access required' });

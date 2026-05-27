@@ -943,6 +943,7 @@ const _routeRoles = <String, Set<String>>{
     ..._restaurantRoles,
     ..._barRoles,
     ..._storeRoles,
+    'pos_kitchen',
     ..._accountingRoles,
     'kyogong_spa_cashier',
     'branch_manager',

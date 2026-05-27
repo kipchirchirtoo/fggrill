@@ -70,7 +70,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   }
 
   void _refresh() {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   @override

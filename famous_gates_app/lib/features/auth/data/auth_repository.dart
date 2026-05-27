@@ -65,6 +65,9 @@ class AuthRepository {
         'pin': pin,
       });
       final authData = _authDataFromResponse(response.data);
+      final prefix = pin.trim().toUpperCase().substring(0, 1);
+      authData['active_outlet_prefix'] ??= prefix;
+      authData['active_outlet_type'] ??= _outletTypeFromPinPrefix(prefix);
       final user = User.fromJson(_userJsonFromAuthData(authData));
       final sessionJson = _sessionJsonFromAuthData(authData);
       final accessToken = _stringValue(
@@ -117,6 +120,23 @@ class AuthRepository {
       Map<String, dynamic> authData) {
     final sessionJson = authData['session'];
     return sessionJson is Map ? Map<String, dynamic>.from(sessionJson) : null;
+  }
+
+  String? _outletTypeFromPinPrefix(String prefix) {
+    switch (prefix) {
+      case 'R':
+        return 'restaurant';
+      case 'M':
+        return 'main_bar';
+      case 'E':
+        return 'executive_bar';
+      case 'N':
+        return 'non_consumables';
+      case 'C':
+        return 'cashier';
+      default:
+        return null;
+    }
   }
 
   String _stringValue(Object? value) {

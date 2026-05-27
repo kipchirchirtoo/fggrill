@@ -166,7 +166,7 @@ class TerminalScreen extends ConsumerWidget {
     ref.read(_terminalLoadingProvider.notifier).state = true;
     try {
       final user = await ref.read(authNotifierProvider.notifier).posLogin(pin);
-      final route = _routeForPosUser(user.outletType, user.role);
+      final route = _routeForPosUser(user.outletType, user.role, pin);
       debugPrint(
           'Terminal login role=${user.role} outlet=${user.outletType} route=$route');
       if (context.mounted) {
@@ -188,7 +188,19 @@ class TerminalScreen extends ConsumerWidget {
     }
   }
 
-  static String _routeForPosUser(String? outletType, String role) {
+  static String _routeForPosUser(String? outletType, String role, String pin) {
+    switch (pin.substring(0, 1).toUpperCase()) {
+      case 'R':
+        return '/pos/restaurant';
+      case 'M':
+        return '/pos/main-bar';
+      case 'E':
+        return '/pos/executive-bar';
+      case 'N':
+        return '/pos/non-consumables';
+      case 'C':
+        return '/cashier';
+    }
     switch (outletType) {
       case 'restaurant':
         return '/pos/restaurant';
