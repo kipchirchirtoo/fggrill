@@ -5,6 +5,7 @@ import {
   closeShift,
   getActiveShift,
   getOutletItems,
+  getOutletStaff,
   getOutlets,
   getShiftOrders,
   getShiftSummary,
@@ -57,6 +58,7 @@ router.use((req, res, next) => {
 });
 
 router.get('/outlets', getOutlets);
+router.get('/staff', getOutletStaff);
 router.get('/outlets/:outletId/items', getOutletItems);
 router.get('/outlets/:outletId/shifts/active', getActiveShift);
 router.post('/outlets/:outletId/shifts/open', openShift);

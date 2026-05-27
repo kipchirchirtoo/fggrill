@@ -34,6 +34,147 @@ type CashierShortCodeResolution = {
     row?: any;
 };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function parseBranchId(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function resolveCashierBranchId(req: Request, requestedBranchId?: unknown): number {
+    const userBranchId = parseBranchId(req.user?.branch_id ?? req.user?.branchId);
+    const requested = parseBranchId(requestedBranchId);
+    const isGlobal = isGlobalRole(req.user?.role);
+
+    if (!isGlobal) {
+        if (!userBranchId) {
+            throw new AppError('Branch context is required for cashier POS access', 403);
+        }
+        if (requested && requested !== userBranchId) {
+            throw new AppError('Forbidden: cannot access POS items from another branch', 403);
+        }
+        return userBranchId;
+    }
+
+    const effectiveBranchId = requested || userBranchId;
+    if (!effectiveBranchId) {
+        throw new AppError('branch_id is required for POS branch isolation', 400);
+    }
+    return effectiveBranchId;
+}
+
+function normalizeSearchTerm(value: unknown): string {
+    return String(value || '').trim();
+}
+
+function normalizePOSItemIds(items: any[]): string[] {
+    return Array.from(new Set(
+        items
+            .map((item) => String(item?.product_id || item?.outlet_item_id || item?.id || '').trim())
+            .filter((id) => UUID_PATTERN.test(id))
+    ));
+}
+
+async function loadCashierPOSItems(
+    branchId: number,
+    options: { search?: string; itemIds?: string[] } = {}
+): Promise<any[]> {
+    const params: any[] = [branchId];
+    const filters: string[] = ['po.branch_id = $1', 'po.is_active = TRUE', 'poi.is_active = TRUE'];
+
+    if (options.search) {
+        params.push(`%${options.search.toLowerCase()}%`);
+        filters.push(`(
+            LOWER(poi.name) LIKE $${params.length}
+            OR LOWER(COALESCE(poi.sku, '')) LIKE $${params.length}
+            OR LOWER(COALESCE(poi.category, '')) LIKE $${params.length}
+            OR LOWER(COALESCE(po.name, '')) LIKE $${params.length}
+        )`);
+    }
+
+    if (options.itemIds?.length) {
+        params.push(options.itemIds);
+        filters.push(`poi.id = ANY($${params.length}::uuid[])`);
+    }
+
+    const outletItemsSql = `
+        SELECT
+            poi.id::text AS id,
+            poi.id::text AS product_id,
+            poi.id::text AS outlet_item_id,
+            poi.outlet_id::text AS outlet_id,
+            po.outlet_type,
+            po.name AS outlet_name,
+            po.branch_id,
+            poi.sku,
+            poi.name,
+            poi.category,
+            poi.unit,
+            COALESCE(poi.cost_price, 0)::numeric AS cost_price,
+            COALESCE(poi.selling_price, 0)::numeric AS selling_price,
+            COALESCE(poi.current_stock, 0)::numeric AS current_stock,
+            COALESCE(poi.track_stock, FALSE) AS track_stock,
+            'pos_outlet_items' AS source_table
+        FROM pos_outlet_items poi
+        JOIN pos_outlets po ON po.id = poi.outlet_id
+        WHERE ${filters.join(' AND ')}
+        ORDER BY po.outlet_type, poi.category NULLS LAST, poi.name
+    `;
+
+    try {
+        const { rows } = await db.query(outletItemsSql, params);
+        if (rows.length || options.itemIds?.length) return rows;
+    } catch (error: any) {
+        logger.warn(`Cashier POS outlet item lookup failed: ${error.message}`);
+    }
+
+    const menuParams: any[] = [branchId];
+    const menuFilters: string[] = ['rmi.is_available = TRUE', '(rmi.branch_id IS NULL OR rmi.branch_id = $1)'];
+
+    if (options.search) {
+        menuParams.push(`%${options.search.toLowerCase()}%`);
+        menuFilters.push(`(
+            LOWER(rmi.name) LIKE $${menuParams.length}
+            OR LOWER(COALESCE(rmi.category, '')) LIKE $${menuParams.length}
+        )`);
+    }
+
+    if (options.itemIds?.length) {
+        menuParams.push(options.itemIds);
+        menuFilters.push(`rmi.id = ANY($${menuParams.length}::uuid[])`);
+    }
+
+    const menuItemsSql = `
+        SELECT
+            rmi.id::text AS id,
+            rmi.id::text AS product_id,
+            NULL::text AS outlet_item_id,
+            NULL::text AS outlet_id,
+            'restaurant' AS outlet_type,
+            'Restaurant POS' AS outlet_name,
+            COALESCE(rmi.branch_id, $1) AS branch_id,
+            NULL::text AS sku,
+            rmi.name,
+            rmi.category,
+            'each' AS unit,
+            0::numeric AS cost_price,
+            COALESCE(rmi.price, 0)::numeric AS selling_price,
+            0::numeric AS current_stock,
+            FALSE AS track_stock,
+            'restaurant_menu_items' AS source_table
+        FROM restaurant_menu_items rmi
+        WHERE ${menuFilters.join(' AND ')}
+        ORDER BY rmi.category NULLS LAST, rmi.name
+    `;
+
+    const { rows } = await db.query(menuItemsSql, menuParams);
+    return rows;
+}
+
+function normalizeCashierPOSMethod(method?: string): string {
+    return String(method || '').trim().toUpperCase();
+}
+
 function isPublicShortCode(value: string): boolean {
     return PUBLIC_SHORT_CODE_PATTERN.test(value.toUpperCase());
 }
@@ -3954,20 +4095,100 @@ export const auditLogbook = async (req: Request, res: Response, next: NextFuncti
 };
 
 /**
+ * POS: Branch-scoped sellable item catalog for cashier station
+ */
+export const getCashierPOSItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const branchId = resolveCashierBranchId(req, req.query.branch_id);
+        const search = normalizeSearchTerm(req.query.search);
+        const rows = await loadCashierPOSItems(branchId, { search });
+
+        res.json({
+            success: true,
+            message: 'POS items retrieved successfully',
+            data: rows.map((item) => ({
+                ...item,
+                selling_price: Number(item.selling_price || 0),
+                cost_price: Number(item.cost_price || 0),
+                current_stock: Number(item.current_stock || 0)
+            }))
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * POS: Create a new transaction
  */
 export const createPOSTransaction = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { items, customer_name, customer_phone, branch_id, total_amount, tax_amount, discount_amount } = req.body;
+        const effectiveBranchId = resolveCashierBranchId(req, branch_id);
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             throw new AppError('Items are required', 400);
         }
 
+        const itemIds = normalizePOSItemIds(items);
+        if (itemIds.length !== items.length) {
+            throw new AppError('Every POS item must be selected from the branch POS catalog', 400);
+        }
+
+        const branchItems = await loadCashierPOSItems(effectiveBranchId, { itemIds });
+        const branchItemMap = new Map<string, any>();
+        for (const item of branchItems) {
+            branchItemMap.set(String(item.id), item);
+            branchItemMap.set(String(item.product_id), item);
+            if (item.outlet_item_id) branchItemMap.set(String(item.outlet_item_id), item);
+        }
+
+        const normalizedItems = items.map((item: any) => {
+            const productId = String(item.product_id || item.outlet_item_id || item.id || '').trim();
+            const branchItem = branchItemMap.get(productId);
+            if (!branchItem) {
+                throw new AppError('One or more POS items do not belong to this branch', 403);
+            }
+
+            const qty = Number(item.qty || item.quantity || 1);
+            if (!Number.isFinite(qty) || qty <= 0) {
+                throw new AppError(`Invalid quantity for ${branchItem.name}`, 400);
+            }
+
+            const unitPrice = Number(branchItem.selling_price || 0);
+            const itemDiscount = Number(item.discount_amount || 0);
+            const itemTax = Number(item.tax_amount || 0);
+
+            return {
+                product_id: branchItem.product_id,
+                outlet_item_id: branchItem.outlet_item_id,
+                outlet_id: branchItem.outlet_id,
+                name: branchItem.name,
+                qty,
+                unit_price: unitPrice,
+                discount_amount: itemDiscount,
+                tax_amount: itemTax,
+                line_total: Math.max(0, qty * unitPrice - itemDiscount + itemTax)
+            };
+        });
+
+        const serverTotal = normalizedItems.reduce((sum, item) => sum + item.line_total, 0);
+        const providedTotal = Number(total_amount || serverTotal);
+        if (Number.isFinite(providedTotal) && Math.abs(providedTotal - serverTotal) > 0.01) {
+            logger.warn('Cashier POS total corrected from client value', {
+                user_id: req.user?.id,
+                branch_id: effectiveBranchId,
+                provided_total: providedTotal,
+                server_total: serverTotal
+            });
+        }
+
+        const outletIds = Array.from(new Set(normalizedItems.map((item) => item.outlet_id).filter(Boolean)));
+
         // Generate unique transaction_ref: CS-{pos_id}-{ISOdate}-{random6}
         const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
         const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const transaction_ref = `CS-${branch_id || '01'}-${dateStr}-${randomStr}`;
+        const transaction_ref = `CS-${effectiveBranchId}-${dateStr}-${randomStr}`;
 
         // 1. Create transaction header
         const { data: transaction, error: txError } = await supabase
@@ -3975,8 +4196,9 @@ export const createPOSTransaction = async (req: Request, res: Response, next: Ne
             .insert({
                 transaction_ref,
                 cashier_id: req.user?.id,
-                branch_id: branch_id || req.user?.branch_id,
-                total_amount,
+                branch_id: effectiveBranchId,
+                outlet_id: outletIds.length === 1 ? outletIds[0] : null,
+                total_amount: serverTotal,
                 tax_amount: tax_amount || 0,
                 discount_amount: discount_amount || 0,
                 status: 'PENDING',
@@ -3989,7 +4211,7 @@ export const createPOSTransaction = async (req: Request, res: Response, next: Ne
         if (txError) throw txError;
 
         // 2. Create transaction items
-        const itemRecords = items.map((item: any) => ({
+        const itemRecords = normalizedItems.map((item: any) => ({
             transaction_id: transaction.id,
             product_id: item.product_id,
             qty: item.qty,
@@ -4010,7 +4232,8 @@ export const createPOSTransaction = async (req: Request, res: Response, next: Ne
             data: {
                 transaction_id: transaction.id,
                 transaction_ref: transaction.transaction_ref,
-                total_amount: transaction.total_amount
+                total_amount: transaction.total_amount,
+                branch_id: transaction.branch_id
             }
         });
     } catch (error) {
@@ -4024,7 +4247,8 @@ export const createPOSTransaction = async (req: Request, res: Response, next: Ne
 export const initiatePOSTransactionPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
-        const { method, phone_number } = req.body;
+        const { phone_number } = req.body;
+        const method = normalizeCashierPOSMethod(req.body.method);
 
         // 1. Fetch transaction
         const { data: transaction, error: txError } = await supabase
@@ -4036,6 +4260,8 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
         if (txError || !transaction) {
             throw new AppError('Transaction not found', 404);
         }
+
+        resolveCashierBranchId(req, transaction.branch_id);
 
         if (transaction.status === 'PAID') {
             throw new AppError('Transaction already paid', 400);
@@ -4178,6 +4404,7 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
         } else if (method === 'CARD' || method === 'CREDIT_BILL') {
             const { reference, credit_bill } = req.body;
             let creditBillId = credit_bill?.id || null;
+            let staffCreditBillId = credit_bill?.staff_credit_bill_id || null;
 
             if (method === 'CREDIT_BILL' && credit_bill && !creditBillId) {
                 const { data: creditNumberData } = await supabase.rpc('generate_credit_number');
@@ -4211,6 +4438,29 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 creditBillId = creditBill?.id || null;
             }
 
+            if (method === 'CREDIT_BILL' && credit_bill?.staff_id && !staffCreditBillId) {
+                const totalAmount = Number(credit_bill.total_amount || transaction.total_amount || 0);
+                const staffName = credit_bill.staff_name || credit_bill.name || transaction.customer_name || 'Staff';
+                const { data: staffCreditBill, error: staffCreditError } = await supabase
+                    .from('staff_credit_bills')
+                    .insert({
+                        staff_id: credit_bill.staff_id,
+                        amount: totalAmount,
+                        description: `Cashier POS Credit - ${transaction.transaction_ref} - ${staffName}`,
+                        bill_date: new Date().toISOString().split('T')[0],
+                        status: 'pending',
+                        branch_id: transaction.branch_id,
+                        source_cashier_credit_bill_id: creditBillId
+                    })
+                    .select('id')
+                    .single();
+
+                if (staffCreditError) {
+                    throw new AppError(`Payroll credit bill creation failed: ${staffCreditError.message}`, 500);
+                }
+                staffCreditBillId = staffCreditBill?.id || null;
+            }
+
             await supabase
                 .from('pos_transactions')
                 .update({
@@ -4235,6 +4485,7 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                     manual_entry: true,
                     transaction_ref: transaction.transaction_ref,
                     credit_bill_id: creditBillId,
+                    staff_credit_bill_id: staffCreditBillId,
                     verified_at: new Date().toISOString()
                 }
             });

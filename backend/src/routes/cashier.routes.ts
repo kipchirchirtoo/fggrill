@@ -24,6 +24,7 @@ import {
     submitLogbookForAudit,
     getLogbooksForAudit,
     auditLogbook,
+    getCashierPOSItems,
     createPOSTransaction,
     initiatePOSTransactionPayment,
     getPOSReconciliation,
@@ -105,6 +106,8 @@ router.post('/verify-payment/:paymentId', verifyPayment);
 // ============================================
 // POS TRANSACTIONS ROUTES
 // ============================================
+
+router.get('/pos/items', getCashierPOSItems);
 
 router.route('/pos/transactions')
     .post(createPOSTransaction);

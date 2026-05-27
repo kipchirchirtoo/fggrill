@@ -319,6 +319,82 @@ export const getShiftLog = async (
             }
         }
 
+        // Autopopulate staff credit bills that were cleared through the cashier
+        // during this open shift, so the close-shift logbook submits the same
+        // staff_profiles IDs to payroll staff_credit_bills.
+        try {
+            const shiftEnd = shift.shift_end || new Date().toISOString();
+            const { data: cashierCreditTxs, error: cashierCreditTxError } = await supabase
+                .from('cashier_transactions')
+                .select('id, amount, transaction_number, payment_reference, credit_bill_id, customer_name, created_at')
+                .eq('branch_id', shift.branch_id)
+                .eq('cashier_id', shift.cashier_id)
+                .or('payment_method.eq.credit_bill,payment_method.eq.CREDIT_BILL,payment_method.eq.credit_bill_manual,payment_method.eq.CREDIT_BILL_MANUAL')
+                .gte('created_at', shift.shift_start)
+                .lte('created_at', shiftEnd);
+
+            if (cashierCreditTxError) throw cashierCreditTxError;
+
+            const creditBillIds = Array.from(new Set((cashierCreditTxs || [])
+                .map((tx: any) => tx.credit_bill_id)
+                .filter(Boolean)));
+
+            let creditBillMap = new Map<string, any>();
+            if (creditBillIds.length > 0) {
+                const { data: creditBills, error: creditBillsError } = await supabase
+                    .from('credit_bills')
+                    .select('id, credit_number, staff_id, staff_name, employee_id, department, total_amount')
+                    .in('id', creditBillIds);
+
+                if (creditBillsError) throw creditBillsError;
+                creditBillMap = new Map((creditBills || []).map((bill: any) => [bill.id, bill]));
+            }
+
+            const existingCreditDetails = Array.isArray(enrichedShift.credit_bills_details)
+                ? enrichedShift.credit_bills_details
+                : [];
+            const mergedCreditDetails = [...existingCreditDetails];
+            const seenCreditDetails = new Set(existingCreditDetails.map((bill: any) =>
+                `${bill.staff_id || ''}|${Number(bill.amount || 0)}|${bill.reference || bill.credit_number || ''}`
+            ));
+
+            for (const tx of cashierCreditTxs || []) {
+                const bill = tx.credit_bill_id ? creditBillMap.get(tx.credit_bill_id) : null;
+                const staffId = bill?.staff_id;
+                const amount = Number(bill?.total_amount || tx.amount || 0);
+                if (!staffId || amount <= 0) continue;
+
+                const reference = bill?.credit_number || tx.payment_reference || tx.transaction_number;
+                const key = `${staffId}|${amount}|${reference || ''}`;
+                if (seenCreditDetails.has(key)) continue;
+                seenCreditDetails.add(key);
+
+                mergedCreditDetails.push({
+                    staff_id: staffId,
+                    name: bill?.staff_name || tx.customer_name || 'Staff',
+                    employee_id: bill?.employee_id,
+                    department: bill?.department,
+                    amount,
+                    reference,
+                    credit_bill_id: tx.credit_bill_id,
+                    source: 'cashier_credit_bill_payment'
+                });
+            }
+
+            if (mergedCreditDetails.length !== existingCreditDetails.length) {
+                const totalCreditBills = mergedCreditDetails
+                    .reduce((sum: number, bill: any) => sum + Number(bill.amount || 0), 0);
+                enrichedShift = {
+                    ...enrichedShift,
+                    credit_bills_details: mergedCreditDetails,
+                    credit_bills_count: mergedCreditDetails.length,
+                    credit_bills_taken: totalCreditBills
+                };
+            }
+        } catch (creditErr) {
+            logger.warn(`Cashier credit bill enrichment failed for shift ${shift.id}:`, creditErr);
+        }
+
         res.status(200).json({
             success: true,
             data: enrichedShift
@@ -583,6 +659,7 @@ export const closeShift = async (
                         description: `Shift Credit - Shift #${shift.shift_number} - ${bill.name}`,
                         bill_date: new Date().toISOString().split('T')[0],
                         status: 'pending',
+                        branch_id: shift.branch_id,
                         shift_id: shift.id
                     }));
 
@@ -612,6 +689,7 @@ export const closeShift = async (
                         description: `Shift Payment - Shift #${shift.shift_number} - ${bill.name}`,
                         bill_date: new Date().toISOString().split('T')[0],
                         status: 'paid_cash',
+                        branch_id: shift.branch_id,
                         paid_in_shift_id: shift.id
                     });
 

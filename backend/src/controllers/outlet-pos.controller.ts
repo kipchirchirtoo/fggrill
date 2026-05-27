@@ -3,7 +3,16 @@ import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
-type OutletType = 'restaurant' | 'main_bar' | 'executive_bar' | 'non_consumables' | 'cashier';
+type OutletType =
+  | 'restaurant'
+  | 'main_bar'
+  | 'executive_bar'
+  | 'non_consumables'
+  | 'cashier'
+  | 'kyogong_reception'
+  | 'kyogong_spa'
+  | 'kyogong_executive_bar'
+  | 'kyogong_sports_bar';
 type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'credit_bill';
 
 const GLOBAL_ROLES = new Set([
@@ -17,6 +26,17 @@ const GLOBAL_ROLES = new Set([
 ]);
 
 const REVIEW_ROLES = new Set([
+  'super_admin',
+  'general_manager',
+  'director',
+  'auditor',
+  'finance_manager',
+  'accountant',
+  'branch_accountant',
+  'branch_manager'
+]);
+
+const PROFIT_VIEW_ROLES = new Set([
   'super_admin',
   'general_manager',
   'director',
@@ -41,6 +61,8 @@ const branchIdFor = (req: Request): number | null => {
 const roleFor = (req: Request): string => String(req.user?.role ?? '').toLowerCase();
 
 const isGlobalUser = (req: Request): boolean => GLOBAL_ROLES.has(roleFor(req));
+
+const canViewProfit = (req: Request): boolean => PROFIT_VIEW_ROLES.has(roleFor(req));
 
 const assertUser = (req: Request): void => {
   if (!req.user?.id) {
@@ -75,17 +97,46 @@ const ensureShiftAccess = async (req: Request, shiftId: string) => {
   return shift;
 };
 
+const sanitizeSummary = (summary: Record<string, any>, includeProfit: boolean): Record<string, any> => {
+  if (includeProfit) return summary;
+  const {
+    total_cost_of_goods_sold,
+    gross_profit,
+    profit_margin,
+    stock_value_variance,
+    ...cashierSummary
+  } = summary;
+
+  if (Array.isArray(cashierSummary.item_sales)) {
+    cashierSummary.item_sales = cashierSummary.item_sales.map((item: Record<string, any>) => {
+      const { cost_price, cost_of_goods_sold, gross_profit: itemProfit, profit_margin: itemMargin, ...safeItem } = item;
+      return safeItem;
+    });
+  }
+
+  return cashierSummary;
+};
+
 const calculateShiftSummary = async (shiftId: string) => {
-  const [{ data: payments, error: paymentsError }, { data: counts, error: countsError }] = await Promise.all([
+  const [
+    { data: payments, error: paymentsError },
+    { data: counts, error: countsError },
+    { data: orders, error: ordersError },
+    shift
+  ] = await Promise.all([
     supabase.from('pos_shift_payments').select('*').eq('shift_id', shiftId),
-    supabase.from('pos_shift_stock_counts').select('*').eq('shift_id', shiftId)
+    supabase.from('pos_shift_stock_counts').select('*').eq('shift_id', shiftId),
+    supabase.from('pos_shift_orders').select('*').eq('shift_id', shiftId),
+    loadShift(shiftId)
   ]);
 
   if (paymentsError) throw paymentsError;
   if (countsError) throw countsError;
+  if (ordersError) throw ordersError;
 
   const paymentRows = (payments || []) as Array<Record<string, any>>;
   const countRows = (counts || []) as Array<Record<string, any>>;
+  const orderRows = (orders || []) as Array<Record<string, any>>;
   const salesByMethod = paymentRows.reduce<Record<PaymentMethod, number>>(
     (acc, row) => {
       const method = String(row.payment_method || 'cash').toLowerCase() as PaymentMethod;
@@ -104,16 +155,114 @@ const calculateShiftSummary = async (shiftId: string) => {
   );
   const grossProfit = totalSales - totalCogs;
   const profitMargin = totalSales > 0 ? (grossProfit / totalSales) * 100 : 0;
+  const itemSales = countRows.map((row) => {
+    const soldQuantity = numberValue(row.sold_quantity);
+    const sellingPrice = numberValue(row.selling_price);
+    const costPrice = numberValue(row.cost_price);
+    const salesTotal = soldQuantity * sellingPrice;
+    const costOfGoodsSold = soldQuantity * costPrice;
+    const itemProfit = salesTotal - costOfGoodsSold;
+    return {
+      outlet_item_id: row.outlet_item_id,
+      item_name: row.item_name,
+      sku: row.sku,
+      unit: row.unit,
+      quantity_sold: soldQuantity,
+      selling_price: sellingPrice,
+      sales_total: salesTotal,
+      cost_price: costPrice,
+      cost_of_goods_sold: costOfGoodsSold,
+      gross_profit: itemProfit,
+      profit_margin: salesTotal > 0 ? (itemProfit / salesTotal) * 100 : 0
+    };
+  });
+  const openingFloat = numberValue(shift.opening_float);
+  const cashSales = numberValue(salesByMethod.cash);
+  const expectedCash = openingFloat + cashSales;
+  const closingCashCounted =
+    shift.closing_cash_counted === null || shift.closing_cash_counted === undefined
+      ? null
+      : numberValue(shift.closing_cash_counted);
 
   return {
     total_sales: totalSales,
+    total_cash_sales: salesByMethod.cash,
+    total_mpesa_sales: salesByMethod.mpesa,
+    total_card_sales: salesByMethod.card,
+    total_credit_sales: salesByMethod.credit_bill,
     total_cost_of_goods_sold: totalCogs,
     gross_profit: grossProfit,
     profit_margin: profitMargin,
     sales_by_method: salesByMethod,
+    item_sales: itemSales,
     items_sold: countRows.reduce((sum, row) => sum + numberValue(row.sold_quantity), 0),
+    order_count: orderRows.length,
+    open_order_count: orderRows.filter((row) => ['unpaid', 'partial'].includes(String(row.payment_status))).length,
+    opening_float: openingFloat,
+    expected_cash: expectedCash,
+    closing_cash_counted: closingCashCounted,
+    cash_variance: closingCashCounted === null ? null : closingCashCounted - expectedCash,
     generated_at: new Date().toISOString()
   };
+};
+
+const createStaffCreditBill = async (
+  req: Request,
+  shift: Record<string, any>,
+  order: Record<string, any>,
+  amount: number,
+  creditBillPayload: Record<string, any>
+): Promise<string> => {
+  const staffId = String(
+    creditBillPayload.staff_id ||
+    creditBillPayload.staffId ||
+    creditBillPayload.employee_id ||
+    ''
+  ).trim();
+  if (!staffId) {
+    throw new AppError('Staff member is required for credit bill clearance', 400);
+  }
+
+  const { data: staff, error: staffError } = await supabase
+    .from('staff_profiles')
+    .select('id, first_name, last_name, branch_id')
+    .eq('id', staffId)
+    .maybeSingle();
+  if (staffError) throw staffError;
+  if (!staff) throw new AppError('Staff account not found for credit bill', 404);
+  if (!isGlobalUser(req) && Number(staff.branch_id) !== Number(shift.branch_id)) {
+    throw new AppError('Cannot allocate credit bill to staff from another branch', 403);
+  }
+
+  const creditNumber = creditBillPayload.credit_number || `SCB-${Date.now()}`;
+  const description = String(
+    creditBillPayload.description ||
+    creditBillPayload.reason ||
+    `POS credit bill for ${order.order_number || order.id}`
+  );
+
+  const { data: creditBill, error: creditError } = await supabase
+    .from('staff_credit_bills')
+    .insert({
+      staff_id: staffId,
+      amount,
+      description,
+      bill_date: creditBillPayload.bill_date || new Date().toISOString().slice(0, 10),
+      status: creditBillPayload.status || 'pending',
+      credit_number: creditNumber,
+      branch_id: shift.branch_id,
+      created_by: req.user?.id,
+      source_pos_shift_id: shift.id,
+      source_pos_order_id: order.id
+    })
+    .select('id')
+    .single();
+
+  if (creditError || !creditBill) {
+    throw new AppError(`Staff credit bill creation failed: ${creditError?.message || 'Unknown error'}`, 500);
+  }
+
+  return String(creditBill.id);
 };
 
 const updateStockForItems = async (
@@ -209,7 +358,8 @@ const seedOutletItemsFromExistingMenus = async (
     }));
   }
 
-  if (outletType === 'main_bar' || outletType === 'executive_bar') {
+  if (outletType === 'main_bar' || outletType === 'executive_bar' ||
+      outletType === 'kyogong_executive_bar' || outletType === 'kyogong_sports_bar') {
     let query = supabase
       .from('bar_drinks')
       .select('id, name, price, cost_price, unit, is_available, branch_id')
@@ -218,19 +368,75 @@ const seedOutletItemsFromExistingMenus = async (
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
     const { data, error } = await query;
     if (error) throw error;
+    const prefix =
+      outletType === 'main_bar' ? 'M' :
+      outletType === 'executive_bar' ? 'E' :
+      outletType === 'kyogong_executive_bar' ? 'KX' : 'KS';
     sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => ({
       outlet_id: outlet.id,
       source_table: 'bar_drinks',
       source_item_id: item.id,
-      sku: `${outletType === 'main_bar' ? 'M' : 'E'}-${item.id}`,
+      sku: `${prefix}-${item.id}`,
       name: item.name,
-      category: outletType === 'main_bar' ? 'Main Bar' : 'Executive Bar',
+      category: outletType.includes('executive') ? 'Executive Bar' : 'Main Bar',
       unit: item.unit || 'each',
       cost_price: item.cost_price || 0,
       selling_price: item.price || 0,
       opening_stock: 0,
       current_stock: 0,
       track_stock: true,
+      is_active: true
+    }));
+  }
+
+  if (outletType === 'kyogong_spa') {
+    let query = supabase
+      .from('spa_services')
+      .select('id, name, base_price, category, is_active, branch_id')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+    if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+    const { data, error } = await query;
+    if (error) throw error;
+    sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => ({
+      outlet_id: outlet.id,
+      source_table: 'spa_services',
+      source_item_id: null,
+      sku: `KSPA-${item.id}`,
+      name: item.name,
+      category: item.category || 'Spa',
+      unit: 'service',
+      cost_price: 0,
+      selling_price: item.base_price || 0,
+      opening_stock: 0,
+      current_stock: 0,
+      track_stock: false,
+      is_active: true
+    }));
+  }
+
+  if (outletType === 'kyogong_reception') {
+    let query = supabase
+      .from('dynamic_services')
+      .select('id, name, base_price, service_type, is_active, branch_id')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+    if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+    const { data, error } = await query;
+    if (error) throw error;
+    sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => ({
+      outlet_id: outlet.id,
+      source_table: 'dynamic_services',
+      source_item_id: null,
+      sku: `KREC-${item.id}`,
+      name: item.name,
+      category: item.service_type || 'Kyogong',
+      unit: 'service',
+      cost_price: 0,
+      selling_price: item.base_price || 0,
+      opening_stock: 0,
+      current_stock: 0,
+      track_stock: false,
       is_active: true
     }));
   }
@@ -309,6 +515,54 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+export const getOutletStaff = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = branchIdFor(req);
+    const search = String(req.query.search || '').trim().toLowerCase();
+
+    let query = supabase
+      .from('staff_profiles')
+      .select('id, first_name, last_name, id_number, role, department, branch_id')
+      .order('first_name', { ascending: true })
+      .limit(100);
+
+    if (!isGlobalUser(req) && branchId) {
+      query = query.eq('branch_id', branchId);
+    } else if (req.query.branch_id) {
+      query = query.eq('branch_id', Number(req.query.branch_id));
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = ((data || []) as Array<Record<string, any>>)
+      .filter((staff) => {
+        if (!search) return true;
+        const text = [
+          staff.first_name,
+          staff.last_name,
+          staff.id_number,
+          staff.role,
+          staff.department
+        ].join(' ').toLowerCase();
+        return text.includes(search);
+      })
+      .map((staff) => ({
+        id: staff.id,
+        name: `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || staff.id_number || staff.id,
+        id_number: staff.id_number,
+        role: staff.role,
+        department: staff.department,
+        branch_id: staff.branch_id
+      }));
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getActiveShift = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
@@ -330,7 +584,10 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    res.json({ success: true, data });
+    const responseData = data && data.summary
+      ? { ...data, summary: sanitizeSummary(data.summary, canViewProfit(req)) }
+      : data;
+    res.json({ success: true, data: responseData });
   } catch (error) {
     next(error);
   }
@@ -392,7 +649,8 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
       opening_stock: item.current_stock ?? item.opening_stock ?? 0,
       additions: 0,
       sold_quantity: 0,
-      system_closing_stock: item.current_stock ?? item.opening_stock ?? 0
+      system_closing_stock: item.current_stock ?? item.opening_stock ?? 0,
+      track_stock: item.track_stock !== false
     }));
 
     if (stockRows.length) {
@@ -457,9 +715,13 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
         source_id: req.body.source_id || null,
         order_number: req.body.order_number || `POS-${Date.now()}`,
         customer_name: req.body.customer_name || 'Walk-in',
+        waiter_id: req.body.waiter_id || req.user.id,
+        waiter_name: req.body.waiter_name || req.user.name || req.user.email || null,
         status: 'open',
         payment_status: 'unpaid',
         total_amount: totalAmount,
+        amount_paid: 0,
+        balance_amount: totalAmount,
         items: normalizedItems,
         created_by: req.user.id
       })
@@ -493,39 +755,21 @@ export const payShiftOrder = async (req: Request, res: Response, next: NextFunct
       .eq('shift_id', shiftId)
       .single();
     if (orderError || !order) throw new AppError('POS order not found', 404);
-    if (order.payment_status !== 'unpaid') throw new AppError('Order is already cleared', 409);
+    if (['paid', 'credit_bill', 'voided'].includes(String(order.payment_status))) {
+      throw new AppError('Order is already cleared', 409);
+    }
 
-    const amount = numberValue(req.body.amount) || numberValue(order.total_amount);
-    let creditBillId = req.body.credit_bill_id || null;
+    const currentPaid = numberValue(order.amount_paid);
+    const totalAmount = numberValue(order.total_amount);
+    const currentBalance = Math.max(0, numberValue(order.balance_amount) || totalAmount - currentPaid);
+    const requestedAmount = numberValue(req.body.amount);
+    const amount = requestedAmount > 0 ? requestedAmount : currentBalance;
+    if (amount <= 0) throw new AppError('Payment amount must be greater than zero', 400);
+    if (amount - currentBalance > 0.01) throw new AppError('Payment cannot exceed remaining bill balance', 400);
 
-    if (method === 'credit_bill' && !creditBillId) {
-      const creditBillPayload = req.body.credit_bill || {};
-      const totalAmount = amount || numberValue(order.total_amount);
-      const { data: creditBill, error: creditError } = await supabase
-        .from('credit_bills')
-        .insert({
-          ...creditBillPayload,
-          credit_number: creditBillPayload.credit_number || `CR${Date.now()}`,
-          branch_id: creditBillPayload.branch_id || shift.branch_id,
-          bill_type: creditBillPayload.bill_type || 'pos_sale',
-          reference_type: 'pos_shift_order',
-          reference_id: order.id,
-          total_amount: creditBillPayload.total_amount || totalAmount,
-          balance_amount: creditBillPayload.balance_amount || totalAmount,
-          amount: creditBillPayload.amount || totalAmount,
-          reason: creditBillPayload.reason || `Credit bill for POS order ${order.order_number || order.id}`,
-          payment_method: 'credit_bill',
-          deduction_months: creditBillPayload.deduction_months || 1,
-          monthly_deduction: totalAmount / (creditBillPayload.deduction_months || 1),
-          status: creditBillPayload.status || 'active',
-          approval_status: 'pending',
-          created_by: req.user.id
-        })
-        .select('id, credit_number')
-        .single();
-
-      if (creditError) throw new AppError(`Credit bill creation failed: ${creditError.message}`, 500);
-      creditBillId = creditBill?.id || null;
+    let staffCreditBillId = req.body.staff_credit_bill_id || null;
+    if (method === 'credit_bill' && !staffCreditBillId) {
+      staffCreditBillId = await createStaffCreditBill(req, shift, order, amount, req.body.credit_bill || {});
     }
 
     const { data: payment, error: paymentError } = await supabase
@@ -536,26 +780,55 @@ export const payShiftOrder = async (req: Request, res: Response, next: NextFunct
         order_id: orderId,
         payment_method: method,
         amount,
-        reference: req.body.reference || creditBillId || `POS-${method}-${Date.now()}`,
-        credit_bill_id: creditBillId,
+        reference: req.body.reference || staffCreditBillId || `POS-${method}-${Date.now()}`,
+        credit_bill_id: req.body.credit_bill_id || null,
+        staff_credit_bill_id: staffCreditBillId,
         received_by: req.user.id
       })
       .select('*')
       .single();
     if (paymentError || !payment) throw paymentError || new AppError('Failed to record payment', 500);
 
+    if (staffCreditBillId) {
+      await supabase
+        .from('staff_credit_bills')
+        .update({ source_pos_payment_id: payment.id, updated_at: new Date().toISOString() })
+        .eq('id', staffCreditBillId);
+    }
+
+    const newPaid = currentPaid + amount;
+    const newBalance = Math.max(0, totalAmount - newPaid);
+    const isCleared = newBalance <= 0.01;
+    const nextPaymentStatus = isCleared
+      ? method === 'credit_bill' ? 'credit_bill' : 'paid'
+      : 'partial';
+    const nextStatus = isCleared
+      ? method === 'credit_bill' ? 'credit_bill' : 'paid'
+      : 'open';
+
     const { error: updateError } = await supabase
       .from('pos_shift_orders')
       .update({
-        status: method === 'credit_bill' ? 'credit_bill' : 'paid',
-        payment_status: method === 'credit_bill' ? 'credit_bill' : 'paid',
-        credit_bill_id: creditBillId,
+        status: nextStatus,
+        payment_status: nextPaymentStatus,
+        amount_paid: newPaid,
+        balance_amount: newBalance,
+        staff_credit_bill_id: staffCreditBillId || order.staff_credit_bill_id || null,
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId);
     if (updateError) throw updateError;
 
-    res.json({ success: true, data: { payment, credit_bill_id: creditBillId } });
+    res.json({
+      success: true,
+      data: {
+        payment,
+        staff_credit_bill_id: staffCreditBillId,
+        amount_paid: newPaid,
+        balance_amount: newBalance,
+        payment_status: nextPaymentStatus
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -638,7 +911,7 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
       .from('pos_shift_orders')
       .select('id, order_number, total_amount')
       .eq('shift_id', shiftId)
-      .eq('payment_status', 'unpaid');
+      .in('payment_status', ['unpaid', 'partial']);
     if (ordersError) throw ordersError;
     if ((unclearedOrders || []).length) {
       throw new AppError('Clear all bills or record them as credit bills before closing the shift', 409);
@@ -650,34 +923,71 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
       .eq('shift_id', shiftId);
     if (stockError) throw stockError;
 
-    const missingCounts = (stockCounts || []).filter((row: Record<string, any>) =>
+    const trackedStockCounts = (stockCounts || []).filter((row: Record<string, any>) => row.track_stock !== false);
+    const missingCounts = trackedStockCounts.filter((row: Record<string, any>) =>
       row.physical_count === null || row.physical_count === undefined
     );
     if (missingCounts.length) {
       throw new AppError('Enter physical stock count for every sellable item before closing', 409);
     }
 
-    const unexplainedVariance = (stockCounts || []).filter((row: Record<string, any>) =>
+    const unexplainedVariance = trackedStockCounts.filter((row: Record<string, any>) =>
       numberValue(row.variance) !== 0 && !String(row.variance_reason || '').trim()
     );
     if (unexplainedVariance.length) {
       throw new AppError('Explain every stock variance before closing the shift', 409);
     }
 
+    for (const row of trackedStockCounts as Array<Record<string, any>>) {
+      await supabase
+        .from('pos_outlet_items')
+        .update({
+          current_stock: numberValue(row.physical_count),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', row.outlet_item_id)
+        .eq('outlet_id', shift.outlet_id);
+    }
+
+    const closingCashCounted = numberValue(req.body.closing_cash_counted ?? req.body.closingCashCounted);
+    if (!Number.isFinite(closingCashCounted) || closingCashCounted < 0) {
+      throw new AppError('Closing cash count is required before closing the shift', 400);
+    }
+
     const summary = await calculateShiftSummary(shiftId);
+    const expectedCash = numberValue(summary.expected_cash);
+    const cashVariance = closingCashCounted - expectedCash;
+    const varianceThreshold = Math.max(expectedCash * 0.05, 1000);
+    const cashVarianceReason = String(req.body.cash_variance_reason || req.body.variance_reason || '').trim();
+    if (Math.abs(cashVariance) > varianceThreshold && !cashVarianceReason) {
+      throw new AppError('Explain the cash variance before closing the shift', 409);
+    }
+
+    const finalSummary = {
+      ...summary,
+      closing_cash_counted: closingCashCounted,
+      cash_variance: cashVariance
+    };
     const { data, error } = await supabase
       .from('pos_outlet_shifts')
       .update({
         status: 'closed',
         closed_at: new Date().toISOString(),
-        summary,
+        closing_cash_counted: closingCashCounted,
+        expected_cash: expectedCash,
+        cash_variance: cashVariance,
+        cash_variance_reason: cashVarianceReason || null,
+        summary: finalSummary,
         updated_at: new Date().toISOString()
       })
       .eq('id', shiftId)
       .select('*')
       .single();
     if (error) throw error;
-    res.json({ success: true, data });
+    res.json({
+      success: true,
+      data: { ...data, summary: sanitizeSummary(data.summary || finalSummary, canViewProfit(req)) }
+    });
   } catch (error) {
     next(error);
   }
@@ -701,7 +1011,10 @@ export const submitShift = async (req: Request, res: Response, next: NextFunctio
       .select('*')
       .single();
     if (error) throw error;
-    res.json({ success: true, data });
+    res.json({
+      success: true,
+      data: { ...data, summary: sanitizeSummary(data.summary || {}, canViewProfit(req)) }
+    });
   } catch (error) {
     next(error);
   }
@@ -731,7 +1044,10 @@ export const reviewShift = async (req: Request, res: Response, next: NextFunctio
       .select('*')
       .single();
     if (error) throw error;
-    res.json({ success: true, data });
+    res.json({
+      success: true,
+      data: { ...data, summary: sanitizeSummary(data.summary || {}, canViewProfit(req)) }
+    });
   } catch (error) {
     next(error);
   }
@@ -743,7 +1059,7 @@ export const getShiftSummary = async (req: Request, res: Response, next: NextFun
     const { shiftId } = req.params;
     const shift = await ensureShiftAccess(req, shiftId);
     const summary = Object.keys(shift.summary || {}).length ? shift.summary : await calculateShiftSummary(shiftId);
-    res.json({ success: true, data: summary });
+    res.json({ success: true, data: sanitizeSummary(summary, canViewProfit(req)) });
   } catch (error) {
     logger.error('Failed to load outlet POS shift summary', error);
     next(error);
