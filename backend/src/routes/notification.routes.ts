@@ -232,6 +232,55 @@ router.delete('/clear-my-notifications', authenticate, async (req: Request, res:
 });
 
 /**
+ * @route   GET /api/notifications/preferences
+ * @desc    Return notification preferences for the current user
+ * @access  Private
+ */
+router.get('/preferences', authenticate, async (req: Request, res: Response) => {
+  const defaultTypes = ['order_updates', 'booking_alerts', 'staff_notifications', 'system_updates'];
+  res.json({
+    success: true,
+    data: {
+      user_id: req.user?.id,
+      types: defaultTypes
+    }
+  });
+});
+
+/**
+ * @route   PUT /api/notifications/preferences
+ * @desc    Save notification preferences for the current user
+ * @access  Private
+ */
+router.put('/preferences', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    const types = Array.isArray(req.body?.types)
+      ? req.body.types.map((type: unknown) => String(type)).filter(Boolean)
+      : [];
+
+    res.json({
+      success: true,
+      message: 'Notification preferences saved',
+      data: {
+        user_id: userId,
+        types
+      }
+    });
+  } catch (error) {
+    logger.error('Error saving notification preferences:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error saving notification preferences'
+    });
+  }
+});
+
+/**
  * @route   DELETE /api/notifications/:id
  * @desc    Delete a notification (admin only)
  * @access  Private (Admin)

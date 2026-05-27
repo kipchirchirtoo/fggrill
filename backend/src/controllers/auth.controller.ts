@@ -24,6 +24,35 @@ const getJwtSecrets = (): string[] => {
 // Roles that have universal access and skip the context selector
 const UNIVERSAL_ROLES = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor', 'hr_manager', 'director'];
 
+const enrichUserBranch = async (user: any): Promise<any> => {
+  const branchId = user?.branch_id ?? user?.branchId;
+  if (!branchId) return user;
+
+  try {
+    const { data: branch } = await supabase
+      .from('branches')
+      .select('id, name, code, location, address')
+      .eq('id', branchId)
+      .maybeSingle();
+
+    if (!branch) return user;
+
+    return {
+      ...user,
+      branch_name: branch.name || user.branch_name || user.branchName || null,
+      branchName: branch.name || user.branchName || user.branch_name || null,
+      branch
+    };
+  } catch (error) {
+    logger.warn('Failed to enrich user branch context', {
+      userId: user?.id,
+      branchId,
+      error
+    });
+    return user;
+  }
+};
+
 const issueLocalSession = (
   userId: string,
   email: string,
@@ -328,10 +357,12 @@ export const login = async (
     const isUniversal = UNIVERSAL_ROLES.includes(userProfile.role);
     const requiresContextSelection = !isUniversal && allRoles.length > 1;
 
+    const enrichedUserProfile = await enrichUserBranch(userProfile);
+
     res.status(200).json({
       success: true,
       data: {
-        user: { ...userProfile, all_roles: allRoles },
+        user: { ...enrichedUserProfile, all_roles: allRoles },
         session,
         requires_context_selection: requiresContextSelection
       }
@@ -594,10 +625,10 @@ export const getMe = async (
     }
 
     // Build response
-    const responseData = {
+    const responseData = await enrichUserBranch({
       ...profile,
       id_number: idNumber
-    };
+    });
 
     res.status(200).json({
       success: true,
@@ -1065,14 +1096,16 @@ export const posLogin = async (
       logger.error('Failed to auto clock-in during POS login:', attendanceError);
     }
 
+    const enrichedPosUser = await enrichUserBranch({
+      ...user,
+      outlet,
+      active_shift_id: activeShiftId
+    });
+
     res.status(200).json({
       success: true,
       data: {
-        user: {
-          ...user,
-          outlet,
-          active_shift_id: activeShiftId
-        },
+        user: enrichedPosUser,
         outlet,
         active_shift_id: activeShiftId,
         session: {
