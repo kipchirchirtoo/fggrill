@@ -669,17 +669,13 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
     try {
         const { status } = req.query;
 
-        // Fetch credit bills
+        // Fetch payroll items without embedded joins. Supabase schema cache
+        // relationships between payroll tables and staff_profiles are not
+        // reliable in production, so staff names are enriched separately.
         let creditBillsQuery = supabase
             .from('staff_credit_bills')
-            .select(`
-                *, 
-                staff:staff_profiles(
-                    id,
-                    role,
-                    user:users!user_id(id, first_name, last_name)
-                )
-            `)
+            .select('*')
+            .is('auditor_confirmed_at', null)
             .order('created_at', { ascending: false });
 
         creditBillsQuery = applyBranchFilter(creditBillsQuery, req);
@@ -688,19 +684,15 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             creditBillsQuery = creditBillsQuery.eq('status', 'pending');
         } else if (status === 'approved') {
             creditBillsQuery = creditBillsQuery.in('status', ['deducted', 'paid_cash']);
+        } else {
+            creditBillsQuery = creditBillsQuery.not('status', 'in', '("paid","paid_cash","deducted","cancelled")');
         }
 
         // Fetch advances
         let advancesQuery = supabase
             .from('staff_advances')
-            .select(`
-                *, 
-                staff:staff_profiles(
-                    id,
-                    role,
-                    user:users!user_id(id, first_name, last_name)
-                )
-            `)
+            .select('*')
+            .is('auditor_confirmed_at', null)
             .order('created_at', { ascending: false });
 
         advancesQuery = applyBranchFilter(advancesQuery, req);
@@ -711,19 +703,15 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             advancesQuery = advancesQuery.eq('status', 'pending');
         } else if (status === 'approved') {
             advancesQuery = advancesQuery.eq('status', 'approved');
+        } else {
+            advancesQuery = advancesQuery.in('status', ['pending', 'accountant_confirmed', 'pending_approval']);
         }
 
         // Fetch loans
         let loansQuery = supabase
             .from('staff_loans')
-            .select(`
-                *, 
-                staff:staff_profiles(
-                    id,
-                    role,
-                    user:users!user_id(id, first_name, last_name)
-                )
-            `)
+            .select('*')
+            .is('auditor_confirmed_at', null)
             .order('created_at', { ascending: false });
 
         loansQuery = applyBranchFilter(loansQuery, req);
@@ -734,6 +722,8 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             loansQuery = loansQuery.eq('status', 'pending_approval');
         } else if (status === 'approved') {
             loansQuery = loansQuery.eq('status', 'active');
+        } else {
+            loansQuery = loansQuery.in('status', ['pending', 'pending_approval', 'accountant_confirmed']);
         }
 
         const [creditBillsRes, advancesRes, loansRes] = await Promise.all([
@@ -746,33 +736,63 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         if (advancesRes.error) throw advancesRes.error;
         if (loansRes.error) throw loansRes.error;
 
+        const staffIds = [...new Set([
+            ...(creditBillsRes.data || []).map((item: any) => item.staff_id),
+            ...(advancesRes.data || []).map((item: any) => item.staff_id),
+            ...(loansRes.data || []).map((item: any) => item.staff_id),
+        ].filter(Boolean))];
+
+        const { data: staffProfiles, error: staffError } = staffIds.length
+            ? await supabase
+                .from('staff_profiles')
+                .select('id, first_name, last_name, user_id, role, position, employee_id, staff_code, branch_id')
+                .in('id', staffIds)
+            : { data: [], error: null };
+
+        if (staffError) throw staffError;
+
+        const userIds = [...new Set((staffProfiles || []).map((staff: any) => staff.user_id).filter(Boolean))];
+        const { data: users, error: usersError } = userIds.length
+            ? await supabase
+                .from('users')
+                .select('id, first_name, last_name, email')
+                .in('id', userIds)
+            : { data: [], error: null };
+
+        if (usersError) throw usersError;
+
+        const staffMap = new Map((staffProfiles || []).map((staff: any) => [staff.id, staff]));
+        const userMap = new Map((users || []).map((user: any) => [user.id, user]));
+
+        const enrich = (item: any, type: 'credit_bill' | 'advance' | 'loan') => {
+            const staff: any = staffMap.get(item.staff_id);
+            const user: any = staff?.user_id ? userMap.get(staff.user_id) : null;
+            const firstName = user?.first_name || staff?.first_name || '';
+            const lastName = user?.last_name || staff?.last_name || '';
+            const staffName = `${firstName} ${lastName}`.trim() || item.staff_name || 'Unknown Staff';
+            return {
+                ...item,
+                type,
+                staff_name: staffName,
+                employee_name: staffName,
+                amount: type === 'loan' ? Number(item.total_amount || item.amount || 0) : Number(item.amount || 0),
+                created_at: item.created_at || item.bill_date || item.request_date || item.start_date,
+                staff: staff ? {
+                    ...staff,
+                    first_name: firstName,
+                    last_name: lastName,
+                    email: user?.email,
+                    role: staff.role || staff.position,
+                } : null,
+            };
+        };
+
         res.status(200).json({
             success: true,
             data: {
-                credit_bills: (creditBillsRes.data || []).map((bill: any) => ({
-                    ...bill,
-                    staff: bill.staff ? {
-                        ...bill.staff,
-                        first_name: bill.staff.user?.first_name || '',
-                        last_name: bill.staff.user?.last_name || ''
-                    } : null
-                })),
-                advances: (advancesRes.data || []).map((advance: any) => ({
-                    ...advance,
-                    staff: advance.staff ? {
-                        ...advance.staff,
-                        first_name: advance.staff.user?.first_name || '',
-                        last_name: advance.staff.user?.last_name || ''
-                    } : null
-                })),
-                loans: (loansRes.data || []).map((loan: any) => ({
-                    ...loan,
-                    staff: loan.staff ? {
-                        ...loan.staff,
-                        first_name: loan.staff.user?.first_name || '',
-                        last_name: loan.staff.user?.last_name || ''
-                    } : null
-                }))
+                credit_bills: (creditBillsRes.data || []).map((bill: any) => enrich(bill, 'credit_bill')),
+                advances: (advancesRes.data || []).map((advance: any) => enrich(advance, 'advance')),
+                loans: (loansRes.data || []).map((loan: any) => enrich(loan, 'loan'))
             }
         });
     } catch (error) {
@@ -851,13 +871,11 @@ export const approvePayrollItem = async (req: Request, res: Response, next: Next
         // Update the record with auditor confirmation
         let updatePayload: Record<string, any>;
         if (type === 'advance') {
-            updatePayload = { status: 'approved', approved_by: auditorId };
+            updatePayload = { status: 'approved', approved_by: auditorId, auditor_confirmed_at: new Date().toISOString(), auditor_id: auditorId };
         } else if (type === 'loan') {
-            updatePayload = { status: 'active', approved_by: auditorId };
+            updatePayload = { status: 'active', approved_by: auditorId, auditor_confirmed_at: new Date().toISOString(), auditor_id: auditorId };
         } else {
-            // credit_bill: already 'pending', no status change needed — just confirm it's valid
-            // We don't change status here; payroll generation will set it to 'deducted'
-            updatePayload = {};
+            updatePayload = { auditor_confirmed_at: new Date().toISOString(), auditor_id: auditorId };
         }
 
         const { data, error } = await supabase

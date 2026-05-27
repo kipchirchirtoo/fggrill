@@ -11,7 +11,12 @@ const router = Router();
 
 // All routes require super_admin access
 router.use(protect);
-router.use(authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER]));
+router.use(authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.BRANCH_MANAGER,
+    UserRole.GENERAL_MANAGER,
+    UserRole.AUDITOR,
+]));
 
 /**
  * @desc Get summary statistics

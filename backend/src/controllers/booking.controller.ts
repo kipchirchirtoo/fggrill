@@ -21,9 +21,22 @@ export const getBookings = async (
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const startIndex = (page - 1) * limit;
+    const {
+      status,
+      search,
+      checkIn,
+      checkOut,
+      checkInFrom,
+      checkInTo,
+      checkOutFrom,
+      checkOutTo,
+      branchId: branchIdCamel,
+      branch_id: branchIdSnake,
+    } = req.query;
 
     const isGlobal = isGlobalRole(req.user?.role);
-    const branchId = isGlobal ? req.query.branch_id : req.user?.branch_id;
+    const requestedBranchId = branchIdSnake || branchIdCamel;
+    const branchId = isGlobal ? requestedBranchId : req.user?.branch_id;
 
     // Construct select string based on whether we need to filter by branch (which requires inner join on rooms)
     let selectString = '*, guest:guests!guest_id(*)';
@@ -40,14 +53,33 @@ export const getBookings = async (
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
 
-    if (req.query.status) {
-      query = query.eq('status', req.query.status);
+    if (status) {
+      query = query.eq('status', status);
     }
-    if (req.query.checkIn) {
-      query = query.gte('check_in_date', req.query.checkIn);
+    if (checkIn) {
+      query = query.eq('check_in_date', checkIn);
     }
-    if (req.query.checkOut) {
-      query = query.lte('check_out_date', req.query.checkOut);
+    if (checkOut) {
+      query = query.eq('check_out_date', checkOut);
+    }
+    if (checkInFrom) {
+      query = query.gte('check_in_date', checkInFrom);
+    }
+    if (checkInTo) {
+      query = query.lte('check_in_date', checkInTo);
+    }
+    if (checkOutFrom) {
+      query = query.gte('check_out_date', checkOutFrom);
+    }
+    if (checkOutTo) {
+      query = query.lte('check_out_date', checkOutTo);
+    }
+    if (search && String(search).trim()) {
+      const term = String(search).trim();
+      query = query.or([
+        `confirmation_number.ilike.%${term}%`,
+        `short_code.ilike.%${term}%`,
+      ].join(','));
     }
     if (branchId) {
       query = query.eq('room.branch_id', branchId);

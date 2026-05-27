@@ -329,11 +329,10 @@ export const terminateAllSessions = async (req: Request, res: Response, next: Ne
  */
 export const getActiveSessions = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Get recent successful logins (last 24 hours) from audit_logs
+    // Get recent successful logins (last 24 hours) from auth_logs
     const { data, error } = await supabase
-      .from('audit_logs')
-      .select('*, user:users(*)')
-      .eq('action', 'login')
+      .from('auth_logs')
+      .select('*, user:users!user_id(email, first_name, last_name)')
       .eq('status', 'success')
       .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false });

@@ -147,6 +147,10 @@ import {
   deletePurchaseOrder
 } from '../controllers/storekeeping/purchase-orders.controller';
 
+import {
+  exportStockLedger
+} from '../controllers/auditor.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -261,6 +265,7 @@ router.post('/branch-stock/out', authorize(branchRoles), recordStockOut);
 router.post('/branch-stock/adjustment', authorize(branchRoles), updateBranchStock);
 router.post('/branch-stock/receive-supplier', authorize(branchRoles), receiveFromSupplier);
 router.get('/stock-movements', authorize(branchRoles), getStockMovements);
+router.post('/stock-ledger/export', authorize(branchRoles), exportStockLedger);
 
 const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR];
 

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { UserRole } from '../models/User';
 
 // ============ NIGHT AUDIT ============
 
@@ -1536,11 +1537,28 @@ export const getStockLevelsVerification = async (req: Request, res: Response, ne
 export const exportStockLedger = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const ExcelJS = require('exceljs');
-    const { branch_id } = req.query;
+    const user = (req as any).user;
+    const requestedBranchId = (req.body?.branch_id ?? req.query.branch_id) as string | number | undefined;
+    const branchScopedRoles = [
+      UserRole.BRANCH_STOREKEEPER,
+      UserRole.BRANCH_MANAGER,
+      UserRole.BRANCH_ACCOUNTANT,
+    ];
+    const isBranchScoped = user?.role && branchScopedRoles.includes(user.role);
+    const userBranchId = user?.branch_id ?? user?.branchId;
+    const branch_id = isBranchScoped ? userBranchId : requestedBranchId;
+
+    if (isBranchScoped && !branch_id) {
+      res.status(403).json({
+        success: false,
+        message: 'Branch context is required to export the stock ledger',
+      });
+      return;
+    }
 
     // Fetch branch name
     let branchName = 'All Branches';
-    if (branch_id && branch_id !== '0') {
+    if (branch_id && `${branch_id}` !== '0') {
       const { data: branch , error } = await supabase.from('branches').select('name').eq('id', branch_id).single();
       if (error) {
         console.error('Database error:', error);
@@ -1551,7 +1569,7 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
 
     // Fetch stock
     let stockQuery = supabase.from('branch_stock').select('*');
-    if (branch_id && branch_id !== '0') stockQuery = stockQuery.eq('branch_id', branch_id);
+    if (branch_id && `${branch_id}` !== '0') stockQuery = stockQuery.eq('branch_id', branch_id);
     const { data: rawStock, error: stockError } = await stockQuery;
     if (stockError) throw stockError;
 
@@ -1570,7 +1588,7 @@ export const exportStockLedger = async (req: Request, res: Response, next: NextF
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     let movQuery = supabase.from('branch_stock_movements').select('*').gte('created_at', thirtyDaysAgo.toISOString());
-    if (branch_id && branch_id !== '0') movQuery = movQuery.eq('branch_id', branch_id);
+    if (branch_id && `${branch_id}` !== '0') movQuery = movQuery.eq('branch_id', branch_id);
     const { data: movements } = await movQuery;
 
     // Build workbook
@@ -2391,7 +2409,7 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
   try {
     // Support both route params (/anomalies/:id) and query params (/verify/details?id=...&type=...)
     const id = req.params.id || req.query.id;
-    const type = req.query.type;
+    const type = String(req.query.type || '');
 
     if (!id || !type) {
       throw new Error('Missing id or type parameter');
@@ -2472,8 +2490,68 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
         error = excError;
         break;
 
+      case 'delivery':
+        const { data: delivery, error: deliveryError } = await supabase
+          .from('dispatches')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        const { data: deliveryItems } = await supabase
+          .from('dispatch_items')
+          .select('*')
+          .eq('dispatch_id', id);
+        data = delivery ? { ...delivery, items: deliveryItems || [] } : null;
+        error = deliveryError;
+        break;
+
+      case 'stock_audit':
+      case 'bar_stock':
+        const { data: stockAudit, error: stockAuditError } = await supabase
+          .from('stock_counts')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        const { data: stockAuditItems } = await supabase
+          .from('stock_count_items')
+          .select('*')
+          .eq('stock_count_id', id);
+        data = stockAudit ? { ...stockAudit, items: stockAuditItems || [] } : null;
+        error = stockAuditError;
+        break;
+
+      case 'stock_request':
+      case 'approval':
+        const { data: stockRequest, error: stockRequestError } = await supabase
+          .from('stock_requests')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        const { data: stockRequestItems } = await supabase
+          .from('stock_request_items')
+          .select('*')
+          .eq('request_id', id);
+        data = stockRequest ? { ...stockRequest, items: stockRequestItems || [] } : null;
+        error = stockRequestError;
+        break;
+
+      case 'stock_item':
+        const stockItemId = String(id);
+        const stockItemQuery = supabase.from('simple_items').select('*');
+        const { data: inventoryItem, error: inventoryItemError } = /^\d+$/.test(stockItemId)
+          ? await stockItemQuery.or(`id.eq.${stockItemId},sku.eq.${stockItemId}`)
+          : await stockItemQuery.eq('sku', stockItemId).maybeSingle();
+        data = inventoryItem || { id, type, message: 'Stock movement row. Open the selected record for full ledger fields.' };
+        error = inventoryItemError && inventoryItemError.code !== 'PGRST116' ? inventoryItemError : null;
+        break;
+
+      case 'sold_item':
+        data = { id, type, message: 'Sold item analysis rows are aggregated from completed restaurant and bar orders.' };
+        error = null;
+        break;
+
       default:
-        throw new Error('Invalid entity type');
+        data = { id, type, message: 'No deep-detail route is configured for this audit entity type. Review the selected record fields.' };
+        error = null;
     }
 
     if (error) throw error;
@@ -2691,6 +2769,20 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       throw staffProfilesError;
     }
 
+    const branchIds = [...new Set((staffProfiles || [])
+      .map((staff: any) => staff.branch_id)
+      .filter(Boolean))];
+    const { data: branches, error: branchesError } = branchIds.length
+      ? await supabase.from('branches').select('id, name, code').in('id', branchIds)
+      : { data: [], error: null };
+
+    if (branchesError) {
+      logger.error('Error fetching branches for staff audit:', branchesError);
+      throw branchesError;
+    }
+
+    const branchMap = new Map((branches || []).map((branch: any) => [branch.id, branch]));
+
     const profileMap = new Map((staffProfiles || []).map((staff: any) => [staff.id, staff]));
     const profileByUserId = new Map(
       (staffProfiles || [])
@@ -2840,10 +2932,12 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       return {
         staff_name: staffName,
         staff_role: staffProfile?.role || staffProfile?.position || null,
+        role: staffProfile?.role || staffProfile?.position || null,
         staff_department: staffProfile?.department || null,
         staff_code: staffProfile?.employee_id || staffProfile?.staff_code || staffProfile?.id_number || staffProfile?.national_id || null,
         staff_phone: staffProfile?.phone || staffProfile?.phone_number || null,
-        branch_id: staffProfile?.branch_id || null
+        branch_id: staffProfile?.branch_id || null,
+        branch_name: staffProfile?.branch_id ? branchMap.get(staffProfile.branch_id)?.name || null : null
       };
     };
 
@@ -2887,8 +2981,10 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         amount: Number(bill.amount || 0),
         staff_id: bill.staff_id,
         description: bill.description || 'Staff credit bill',
+        action: 'Credit Bill',
         status: bill.status === 'pending' ? 'Unpaid' : bill.status === 'deducted' ? 'Deducted' : bill.status === 'paid_cash' ? 'Paid' : (bill.is_paid ? 'Paid' : 'Unpaid'),
         reference: (bill.id || '').substring(0, 8).toUpperCase(),
+        created_at: bill.created_at || bill.bill_date,
         outstanding_amount: bill.is_paid ? 0 : Number(bill.amount || 0),
         original_record: bill,
         ...buildStaffDetails(staffProfile)
@@ -2908,8 +3004,10 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         amount: Number(adv.amount || 0),
         staff_id: adv.staff_id,
         description: adv.reason || 'Salary advance',
+        action: 'Advance',
         status: adv.status,
         reference: (adv.id || '').substring(0, 8).toUpperCase(),
+        created_at: adv.created_at || adv.advance_date,
         auditor_id: adv.auditor_id,
         auditor_confirmed_at: adv.auditor_confirmed_at,
         outstanding_amount: 0,
@@ -2931,8 +3029,10 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         amount: Number(loan.total_amount || 0),
         staff_id: loan.staff_id,
         description: loan.reason || 'Staff loan',
+        action: 'Loan',
         status: loan.status,
         reference: (loan.id || '').substring(0, 8).toUpperCase(),
+        created_at: loan.created_at || loan.loan_date,
         auditor_id: loan.auditor_id,
         auditor_confirmed_at: loan.auditor_confirmed_at,
         outstanding_amount: Number(loan.remaining_balance || 0),
@@ -2973,8 +3073,10 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         amount: outstandingAmount,
         staff_id: associatedStaffId,
         description: `POS unpaid bill${bill.customer_name ? ` - ${bill.customer_name}` : ''}`,
+        action: 'Unpaid Bill',
         status: bill.status || 'unpaid',
         reference: bill.bill_number || (bill.id || '').substring(0, 8).toUpperCase(),
+        created_at: bill.created_at || bill.bill_date,
         auditor_id: bill.auditor_id,
         outstanding_amount: outstandingAmount,
         linked_party_name: bill.customer_name || null,
@@ -3001,6 +3103,7 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         role: staff.role || staff.position || null,
         phone: staff.phone || staff.phone_number || null,
         branch_id: staff.branch_id || null,
+        branch_name: staff.branch_id ? branchMap.get(staff.branch_id)?.name || null : null,
         total_credit_bills: 0,
         total_advances: 0,
         total_loans: 0,

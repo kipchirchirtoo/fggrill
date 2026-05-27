@@ -14,12 +14,13 @@ import {
 const router = express.Router();
 
 // Public routes
-router.get('/', getRooms);
 router.get('/types', getRoomTypes);
-router.get('/:id', getRoom);
 
 // Protected routes
 router.use(protect);
+
+router.get('/', getRooms);
+router.get('/:id', getRoom);
 
 // Admin and Manager routes
 router.post('/', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), createRoom);

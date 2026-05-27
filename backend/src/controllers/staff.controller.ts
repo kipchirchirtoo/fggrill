@@ -4,12 +4,23 @@ import { logger } from '../utils/logger';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { AttendanceService } from '../services/attendance.service';
-import { applyBranchFilter } from '../utils/branchIsolation';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 // Helper to sanitize UUID fields that might come as "null" string from frontend
 const sanitizeUUID = (val: any) => {
   if (val === 'null' || val === '' || val === 'undefined' || val === null) return null;
   return val;
+};
+
+const resolveProfilePhotoUrl = (photo?: string | null): string => {
+  if (!photo) return '';
+  if (/^https?:\/\//i.test(photo)) return photo;
+
+  const { data } = supabase.storage
+    .from('profile')
+    .getPublicUrl(photo.replace(/^\/+/, ''));
+
+  return data.publicUrl || '';
 };
 
 // Staff ID generation utility
@@ -172,13 +183,36 @@ export const getStaff = async (
     console.log('[GET STAFF CONTROLLER] Query:', req.query);
     
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 1000;
+    const limit = Math.min(parseInt(req.query.limit as string) || 1000, 5000);
     const startIndex = (page - 1) * limit;
 
     let query = supabase
       .from('staff_profiles')
       .select(`
-        *,
+        id,
+        user_id,
+        branch_id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        role,
+        department,
+        position,
+        status,
+        start_date,
+        created_at,
+        updated_at,
+        national_id,
+        id_number,
+        basic_salary,
+        shift,
+        employment_type,
+        bank_name,
+        bank_branch,
+        account_number,
+        profile_photo,
+        branch:branches(id, name, code),
         user:users!user_id(
           id,
           email,
@@ -206,11 +240,20 @@ export const getStaff = async (
       query = query.eq('status', req.query.status);
     }
     if (req.query.role) {
-      query = query.eq('user.role', req.query.role);
+      query = query.or(`role.eq.${req.query.role},position.eq.${req.query.role}`);
     }
     if (req.query.search) {
       const search = req.query.search as string;
-      query = query.or(`user.first_name.ilike.%${search}%,user.last_name.ilike.%${search}%,user.email.ilike.%${search}%`);
+      query = query.or([
+        `first_name.ilike.%${search}%`,
+        `last_name.ilike.%${search}%`,
+        `email.ilike.%${search}%`,
+        `phone.ilike.%${search}%`,
+        `role.ilike.%${search}%`,
+        `position.ilike.%${search}%`,
+        `department.ilike.%${search}%`,
+        `id_number.ilike.%${search}%`
+      ].join(','));
     }
 
     const { data: staff, error, count } = await query;
@@ -219,25 +262,113 @@ export const getStaff = async (
       throw error;
     }
 
-    const formattedData = staff.map((s: any) => ({
-      ...s,
-      first_name: s.first_name || s.user?.first_name || '',
-      last_name: s.last_name || s.user?.last_name || '',
-      email: s.email || s.user?.email || '',
-      phone_number: s.phone || s.user?.phone_number || '',
-      avatar: s.profile_photo || s.user?.avatar || '', // Prioritize staff_profiles.profile_photo
-      profile_photo: s.profile_photo || s.user?.avatar || '', // Prioritize staff_profiles.profile_photo
-      employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
-      id_number: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase()
-    }));
+    const formattedData = (staff || []).map((s: any) => {
+      const profilePhoto = s.profile_photo || s.user?.avatar || '';
+      const profilePhotoUrl = resolveProfilePhotoUrl(profilePhoto);
+      const branch = Array.isArray(s.branch) ? s.branch[0] : s.branch;
+      return {
+        ...s,
+        first_name: s.first_name || '',
+        last_name: s.last_name || '',
+        email: s.email || s.user?.email || '',
+        phone_number: s.phone || s.user?.phone_number || '',
+        avatar: profilePhotoUrl,
+        profile_photo: profilePhoto,
+        profile_photo_url: profilePhotoUrl,
+        branch_name: branch?.name || s.branch_name || '',
+        branch,
+        role: s.role || s.position || '',
+        employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
+        id_number: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase()
+      };
+    });
+
+    // ── Merge system users who are NOT already linked to a staff_profile ──
+    // Collect user_ids already covered by a staff_profile row
+    const linkedUserIds: string[] = (staff || [])
+      .filter((s: any) => s.user_id)
+      .map((s: any) => s.user_id as string);
+
+    // Build system-users query
+    let sysUsersQuery = supabase
+      .from('users')
+      .select('id, email, first_name, last_name, phone_number, role, avatar, status, branch_id, created_at, branches(id, name, code)')
+      .order('first_name', { ascending: true });
+
+    // Exclude users already in staff_profiles
+    if (linkedUserIds.length > 0) {
+      sysUsersQuery = sysUsersQuery.not('id', 'in', `(${linkedUserIds.join(',')})`);
+    }
+
+    // Apply search to system users too
+    if (req.query.search) {
+      const search = req.query.search as string;
+      sysUsersQuery = sysUsersQuery.or(
+        `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,role.ilike.%${search}%`
+      );
+    }
+
+    // Apply branch isolation to system users
+    if (!isGlobalRole(req.user?.role) && req.user?.branch_id) {
+      sysUsersQuery = sysUsersQuery.eq('branch_id', req.user.branch_id);
+    }
+
+    const { data: systemUsers } = await sysUsersQuery;
+
+    // Normalise system-user rows to match the staff_profiles shape
+    const normalizedSystemUsers = (systemUsers || []).map((u: any) => {
+      const branch = Array.isArray(u.branches) ? u.branches[0] : u.branches;
+      return {
+        id: u.id,
+        user_id: u.id,
+        branch_id: u.branch_id,
+        branch_name: branch?.name || '',
+        branch,
+        first_name: u.first_name || '',
+        last_name: u.last_name || '',
+        email: u.email || '',
+        phone: u.phone_number || '',
+        phone_number: u.phone_number || '',
+        role: u.role || '',
+        position: u.role || '',
+        department: null,
+        status: u.status || 'active',
+        start_date: null,
+        created_at: u.created_at,
+        updated_at: u.created_at,
+        national_id: null,
+        id_number: u.id.substring(0, 8).toUpperCase(),
+        employee_id: u.id.substring(0, 8).toUpperCase(),
+        basic_salary: null,
+        shift: null,
+        employment_type: null,
+        bank_name: null,
+        bank_branch: null,
+        account_number: null,
+        profile_photo: u.avatar || '',
+        avatar: u.avatar || '',
+        user: {
+          id: u.id,
+          email: u.email,
+          first_name: u.first_name,
+          last_name: u.last_name,
+          phone_number: u.phone_number,
+          role: u.role,
+          avatar: u.avatar,
+        },
+      };
+    });
+
+    const allStaff = [...formattedData, ...normalizedSystemUsers];
+    const totalCount = (count || 0) + (systemUsers?.length || 0);
 
     res.status(200).json({
       success: true,
-      count: staff.length,
-      total: count || 0,
+      count: allStaff.length,
+      total: totalCount,
       page,
-      pages: Math.ceil((count || 0) / limit),
-      data: formattedData
+      pages: Math.ceil(totalCount / limit),
+      data: allStaff
     });
   } catch (error) {
     next(error);
@@ -269,6 +400,7 @@ export const getStaffMember = async (
           role,
           avatar
         ),
+        branch:branches(id, name, code),
         schedules:staff_schedules(*)
       `);
 
@@ -338,6 +470,7 @@ export const getStaffMember = async (
               role: user.role,
               department: user.department,
               branch_id: user.branch_id,
+              branch_name: '',
               status: user.status || 'active',
               hire_date: user.created_at,
               photo_url: user.avatar,
@@ -357,6 +490,10 @@ export const getStaffMember = async (
       return;
     }
 
+    const profilePhoto = staff.profile_photo || staff.user?.avatar || '';
+    const profilePhotoUrl = resolveProfilePhotoUrl(profilePhoto);
+    const branch = Array.isArray((staff as any).branch) ? (staff as any).branch[0] : (staff as any).branch;
+
     res.status(200).json({
       success: true,
       data: {
@@ -365,8 +502,11 @@ export const getStaffMember = async (
         last_name: staff.last_name || staff.user?.last_name || '',
         email: staff.email || staff.user?.email || '',
         phone_number: staff.phone || staff.user?.phone_number || '',
-        avatar: staff.profile_photo || staff.user?.avatar || '', // Prioritize staff_profiles.profile_photo
-        profile_photo: staff.profile_photo || staff.user?.avatar || '', // Prioritize staff_profiles.profile_photo
+        avatar: profilePhotoUrl,
+        profile_photo: profilePhoto,
+        profile_photo_url: profilePhotoUrl,
+        branch_name: branch?.name || '',
+        branch,
         employee_id: staff.id_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase(),
         id_number: staff.id_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase()
       }

@@ -141,7 +141,7 @@ export const recordStockOut = async (
       const itemName = itemData?.description || 'Unknown Item';
       const itemUnit = itemData?.unit || 'Unit';
 
-      if (department === 'kitchen') {
+      if (department.includes('kitchen') || ['buffet', 'breakfast', 'outside catering'].includes(department)) {
         // Sync to kitchen stock ledger
         const { data: currentStock } = await supabase
           .from('kitchen_stock')
@@ -174,7 +174,7 @@ export const recordStockOut = async (
         syncMessage = ' and synced to Kitchen operations';
         logger.info(`[Stock Out] Auto-synced ${quantity} ${itemUnit} of ${itemName} to Kitchen`);
 
-      } else if (department === 'bar') {
+      } else if (department.includes('bar')) {
         // Sync to bar stock ledger
         const { data: currentStock } = await supabase
           .from('bar_stock')
@@ -207,7 +207,7 @@ export const recordStockOut = async (
         syncMessage = ' and synced to Bar operations';
         logger.info(`[Stock Out] Auto-synced ${quantity} ${itemUnit} of ${itemName} to Bar`);
 
-      } else if (department === 'housekeeping' || department === 'reception') {
+      } else if (department === 'housekeeping' || department === 'reception' || department === 'maintenance') {
         // For housekeeping/reception, just log - they may not have separate stock tables
         syncMessage = ` and issued to ${department.charAt(0).toUpperCase() + department.slice(1)}`;
         logger.info(`[Stock Out] Issued ${quantity} ${itemUnit} of ${itemName} to ${department}`);

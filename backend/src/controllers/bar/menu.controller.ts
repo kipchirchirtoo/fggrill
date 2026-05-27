@@ -14,11 +14,12 @@ const BAR_KEYWORDS = [
 
 export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    // Return all active categories — the is_bar column is optional/may not exist,
+    // so we avoid filtering on it to prevent 400 errors in the admin view.
     let query = supabase
       .from('restaurant_menu_categories')
       .select('*')
-      .eq('is_active', true)
-      .eq('is_bar', true);
+      .eq('is_active', true);
 
     const branchId = req.query.branch_id || req.user?.branch_id;
     if (branchId) {
@@ -68,48 +69,21 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
     const { category_id, search } = req.query;
     const branchId = req.query.branch_id || req.user?.branch_id;
 
-    // First, get valid bar category IDs
-    let catQuery = supabase
-      .from('restaurant_menu_categories')
-      .select('id')
-      .eq('is_active', true)
-      .eq('is_bar', true);
-
-    if (branchId) {
-      catQuery = catQuery.or(`branch_id.eq.${branchId},branch_id.is.null`);
-    }
-
-    const { data: categories } = await catQuery;
-    const barCategoryIds = (categories || []).map(cat => cat.id);
-
-    if (barCategoryIds.length === 0) {
-      res.status(200).json({ success: true, data: [] });
-      return;
-    }
-
+    // Build the items query — show ALL items for admin (no is_available filter)
+    // so admins can manage both active and inactive drinks.
     let query = supabase
       .from('restaurant_menu_items')
       .select(`
         *,
-        category:restaurant_menu_categories(name)
-      `)
-      .eq('is_available', true);
+        category:restaurant_menu_categories(id, name)
+      `);
 
     if (branchId) {
       query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
     }
 
     if (category_id) {
-      // Ensure the category is a bar category
-      if (barCategoryIds.includes(category_id as string)) {
-        query = query.eq('category_id', category_id);
-      } else {
-        res.status(200).json({ success: true, data: [] });
-        return;
-      }
-    } else {
-      // Filter by all bar categories
-      query = query.in('category_id', barCategoryIds);
+      query = query.eq('category_id', category_id);
     }
 
     if (search) {
@@ -120,7 +94,14 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
 
     if (error) throw error;
 
-    res.status(200).json({ success: true, data });
+    // Normalise: add category_name as a flat field for Flutter compatibility
+    const enriched = (data || []).map((item: any) => ({
+      ...item,
+      category_name: item.category?.name ?? '',
+      branch_name: item.branch_id ? String(item.branch_id) : 'All',
+    }));
+
+    res.status(200).json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }

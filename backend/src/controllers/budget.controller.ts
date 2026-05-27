@@ -20,30 +20,30 @@ export const getBranchBudgets = async (
     
     const { category, period, status, fiscal_year } = req.query;
     
-    // Build the query
+    // Build the query — use the `budgets` table (not the budget_analysis view which has no created_at)
     let query = supabase
-      .from('budget_analysis')
+      .from('budgets')
       .select('*')
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false });
-    
+
     // Apply filters if provided
     if (category) {
       query = query.eq('category', category);
     }
-    
+
     if (period) {
       query = query.eq('period', period);
     }
-    
+
     if (status) {
       query = query.eq('status', status);
     }
-    
+
     if (fiscal_year) {
       query = query.eq('fiscal_year', fiscal_year);
     }
-    
+
     const { data, error } = await query;
     
     if (error) {
@@ -73,9 +73,9 @@ export const getBudgetById = async (
     const { id } = req.params;
     const branchId = req.headers['x-branch-id'] || req.query.branch_id;
     
-    // Get budget details
+    // Get budget details from budgets table (not the view which lacks updated fields)
     const { data: budget, error: budgetError } = await supabase
-      .from('budget_analysis')
+      .from('budgets')
       .select('*')
       .eq('id', id)
       .eq('branch_id', branchId)
@@ -469,13 +469,12 @@ export const getBudgetSummary = async (
       return;
     }
     
-    // Get budget summary
+    // Get budget summary from the view — note: budget_analysis has no created_at column
     const { data, error } = await supabase
       .from('budget_analysis')
       .select('*')
       .eq('branch_id', branchId)
-      .eq('fiscal_year', fiscalYear)
-      .order('created_at', { ascending: false });
+      .eq('fiscal_year', fiscalYear);
     
     if (error) {
       res.status(500).json({ success: false, message: `Error fetching budget summary: ${error.message}` });
@@ -560,8 +559,9 @@ export const getBudgetAnalysis = async (
       query = query.eq('fiscal_month', fiscal_month);
     }
     
-    const { data, error } = await query.order('created_at', { ascending: false });
-    
+    // Note: budget_analysis view has no created_at column — order by name instead
+    const { data, error } = await query.order('name', { ascending: true });
+
     if (error) {
       res.status(500).json({ success: false, message: `Error fetching budget analysis: ${error.message}` });
       return;

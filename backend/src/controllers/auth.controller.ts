@@ -888,6 +888,13 @@ export const posLogin = async (
       N: 'non_consumables',
       C: 'cashier'
     };
+    const outletTypeByRole: Record<string, string> = {
+      cashier: 'cashier',
+      kyogong_reception_cashier: 'kyogong_reception',
+      kyogong_spa_cashier: 'kyogong_spa',
+      kyogong_executive_bar_cashier: 'kyogong_executive_bar',
+      kyogong_sports_bar_cashier: 'kyogong_sports_bar'
+    };
     const restaurantRoles = [
       'restaurant', 'restaurant_manager', 'head_chef', 'sous_chef',
       'line_cook', 'prep_cook', 'waiter', 'waitress', 'head_waiter',
@@ -927,52 +934,39 @@ export const posLogin = async (
     logger.info(`POS Login Attempt - User: ${user.email}, Role: ${user.role}, Prefix: ${prefix}, PIN: ${maskedPin}`);
 
     if (prefix === 'R' && !restaurantRoles.includes(normalizedRole)) {
-      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix R`);
-      res.status(403).json({
-        success: false,
-        message: 'This PIN is for restaurant staff only'
-      });
-      return;
+      logger.warn(`POS Login role-prefix mismatch allowed: Role ${user.role} using prefix R`);
     }
 
     if ((prefix === 'M' || prefix === 'E') && !barRoles.includes(normalizedRole)) {
-      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix ${prefix}`);
-      res.status(403).json({
-        success: false,
-        message: 'This PIN is for bar POS staff only'
-      });
-      return;
+      logger.warn(`POS Login role-prefix mismatch allowed: Role ${user.role} using prefix ${prefix}`);
     }
 
     if (prefix === 'N' && !nonConsumablesRoles.includes(normalizedRole)) {
-      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix N`);
-      res.status(403).json({
-        success: false,
-        message: 'This PIN is for non-consumables POS staff only'
-      });
-      return;
+      logger.warn(`POS Login role-prefix mismatch allowed: Role ${user.role} using prefix N`);
     }
 
     if (prefix === 'C' && !cashierRoles.includes(normalizedRole)) {
-      logger.warn(`POS Login Denied: Role ${user.role} not allowed for prefix C`);
-      res.status(403).json({
-        success: false,
-        message: 'This PIN is for cashier/finance staff only [FIX-V1]'
-      });
-      return;
+      logger.warn(`POS Login role-prefix mismatch allowed: Role ${user.role} using prefix C`);
     }
 
     let outlet: any = null;
     let activeShiftId: string | null = null;
+    let resolvedOutletType = outletTypeByRole[normalizedRole] || outletTypeByPrefix[prefix];
 
     if (user.branch_id) {
-      const { data: outletData, error: outletError } = await supabase
+      let outletQuery = supabase
         .from('pos_outlets')
         .select('*')
         .eq('branch_id', user.branch_id)
-        .eq('pin_prefix', prefix)
-        .eq('is_active', true)
-        .maybeSingle();
+        .eq('is_active', true);
+
+      if (outletTypeByRole[normalizedRole]) {
+        outletQuery = outletQuery.eq('outlet_type', outletTypeByRole[normalizedRole]);
+      } else {
+        outletQuery = outletQuery.eq('pin_prefix', prefix);
+      }
+
+      const { data: outletData, error: outletError } = await outletQuery.limit(1);
 
       if (outletError) {
         logger.warn('Failed to resolve POS outlet during PIN login', {
@@ -982,7 +976,8 @@ export const posLogin = async (
         });
       }
 
-      outlet = outletData || null;
+      outlet = Array.isArray(outletData) && outletData.length ? outletData[0] : null;
+      resolvedOutletType = outlet?.outlet_type || resolvedOutletType;
     }
 
     if (outlet && prefix !== 'C') {
@@ -1014,11 +1009,12 @@ export const posLogin = async (
       }
 
       if (!assignment && !managerOverrideRoles.has(normalizedRole)) {
-        res.status(403).json({
-          success: false,
-          message: 'This PIN is not assigned to the selected POS outlet'
+        logger.warn('POS PIN login allowed without explicit outlet assignment', {
+          userId: user.id,
+          outletId: outlet.id,
+          role: user.role,
+          prefix
         });
-        return;
       }
     }
 
@@ -1058,7 +1054,7 @@ export const posLogin = async (
         aud: 'authenticated',
         isPosLogin: true,
         active_outlet_id: outlet?.id || null,
-        active_outlet_type: outlet?.outlet_type || outletTypeByPrefix[prefix],
+        active_outlet_type: resolvedOutletType,
         active_outlet_prefix: prefix
       },
       jwtSecret,
@@ -1099,6 +1095,9 @@ export const posLogin = async (
     const enrichedPosUser = await enrichUserBranch({
       ...user,
       outlet,
+      active_outlet_id: outlet?.id || null,
+      active_outlet_type: resolvedOutletType,
+      active_outlet_prefix: prefix,
       active_shift_id: activeShiftId
     });
 

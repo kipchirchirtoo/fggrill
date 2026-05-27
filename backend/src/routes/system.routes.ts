@@ -6,7 +6,8 @@ import {
   createDepartment,
   getRoles,
   getRolePermissions,
-  getSystemUsers
+  getSystemUsers,
+  getSystemStatus
 } from '../controllers/system.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -18,6 +19,15 @@ router.get('/branches', getBranches);
 
 // Apply authentication to all other routes
 router.use(protect);
+
+// =====================================================
+// SYSTEM HEALTH / STATUS
+// =====================================================
+
+router.get('/status',
+  authorize([UserRole.SUPER_ADMIN]),
+  getSystemStatus
+);
 
 // =====================================================
 // USERS (SYSTEM-WIDE)

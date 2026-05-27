@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 
 /**
  * Confirm Credit Bill (Accountant or Auditor)
- * Handles both 'employee_credit_bills' and 'unpaid_bills' (guests)
+ * Handles both staff payroll credit bills and unpaid guest bills.
  */
 export const confirmCreditBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -16,7 +16,7 @@ export const confirmCreditBill = async (req: Request, res: Response, next: NextF
             throw new AppError('ID, type, and role are required', 400);
         }
 
-        const tableName = type === 'employee' ? 'employee_credit_bills' : 'unpaid_bills';
+        const tableName = type === 'employee' ? 'staff_credit_bills' : 'unpaid_bills';
         const userId = req.user?.id;
 
         // Verify permissions
@@ -93,14 +93,12 @@ export const getPendingConfirmations = async (req: Request, res: Response, next:
     try {
         const { role } = req.params; // 'accountant' or 'auditor'
 
-        // Fetch Employee Bills
+        // Fetch staff credit bills without embedded joins. The live Supabase
+        // schema cache does not expose a relationship here reliably.
         let empQuery = supabase
-            .from('employee_credit_bills')
-            .select(`
-                *,
-                employee:staff_profiles(first_name, last_name)
-            `)
-            .neq('status', 'paid');
+            .from('staff_credit_bills')
+            .select('*')
+            .not('status', 'in', '("paid","paid_cash","deducted","cancelled")');
 
         // Fetch Guest Bills
         let guestQuery = supabase
@@ -123,11 +121,73 @@ export const getPendingConfirmations = async (req: Request, res: Response, next:
         if (empRes.error) throw empRes.error;
         if (guestRes.error) throw guestRes.error;
 
+        const staffIds = [...new Set((empRes.data || [])
+            .map((bill: any) => bill.staff_id)
+            .filter(Boolean))];
+
+        const { data: staffProfiles, error: staffError } = staffIds.length
+            ? await supabase
+                .from('staff_profiles')
+                .select('id, first_name, last_name, user_id, id_number, position, branch_id')
+                .in('id', staffIds)
+            : { data: [], error: null };
+
+        if (staffError) throw staffError;
+
+        const userIds = [...new Set((staffProfiles || [])
+            .map((staff: any) => staff.user_id)
+            .filter(Boolean))];
+
+        const { data: users, error: usersError } = userIds.length
+            ? await supabase
+                .from('users')
+                .select('id, first_name, last_name, email')
+                .in('id', userIds)
+            : { data: [], error: null };
+
+        if (usersError) throw usersError;
+
+        const staffMap = new Map((staffProfiles || []).map((staff: any) => [staff.id, staff]));
+        const userMap = new Map((users || []).map((user: any) => [user.id, user]));
+
+        const employeeBills = (empRes.data || []).map((bill: any) => {
+            const staff: any = staffMap.get(bill.staff_id);
+            const user: any = staff?.user_id ? userMap.get(staff.user_id) : null;
+            const firstName = user?.first_name || staff?.first_name || '';
+            const lastName = user?.last_name || staff?.last_name || '';
+            const employeeName = `${firstName} ${lastName}`.trim() || bill.staff_name || 'Unknown Staff';
+
+            return {
+                ...bill,
+                type: 'employee',
+                employee_name: employeeName,
+                customer_name: employeeName,
+                employee: staff ? {
+                    ...staff,
+                    first_name: firstName,
+                    last_name: lastName,
+                    email: user?.email,
+                } : null,
+                staff: staff ? {
+                    ...staff,
+                    first_name: firstName,
+                    last_name: lastName,
+                    email: user?.email,
+                } : null,
+            };
+        });
+
+        const guestBills = (guestRes.data || []).map((bill: any) => ({
+            ...bill,
+            type: 'guest',
+            customer_name: bill.customer_name || bill.guest_name || bill.name || 'Guest Bill'
+        }));
+
         res.status(200).json({
             success: true,
             data: {
-                employee_bills: empRes.data,
-                guest_bills: guestRes.data
+                employee_bills: employeeBills,
+                guest_bills: guestBills
             }
         });
 

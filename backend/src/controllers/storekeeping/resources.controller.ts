@@ -683,10 +683,353 @@ export const deleteSupplier = async (req: Request, res: Response) => {
 // STOCK TAKES (Aligned with stock_counts schema)
 // =====================================================
 
+const toNumber = (value: any): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const resolveStockCountBranchId = async (stockCountId: string): Promise<number | null> => {
+  const { data, error } = await supabase
+    .from('stock_counts')
+    .select('branch_id')
+    .eq('id', stockCountId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.branch_id ? Number(data.branch_id) : null;
+};
+
+const normalizeStoreType = (value: any): string => {
+  const raw = `${value || 'foodstuffs'}`.toLowerCase();
+  if (['bar', 'bars', 'bar_store', 'executive_bar', 'main_bar', 'sports_bar'].includes(raw)) {
+    return 'bar_store';
+  }
+  if (['store', 'store_items', 'general_store'].includes(raw)) return 'store_items';
+  return 'foodstuffs';
+};
+
+const itemMatchesStoreType = (item: any, storeType: string): boolean => {
+  const rawStoreType = `${item?.store_type || item?.item?.store_type || ''}`.toLowerCase();
+  const category = `${item?.category || item?.item?.category || ''}`.toLowerCase();
+  const name = `${item?.item_name || item?.description || item?.item?.item_name || ''}`.toLowerCase();
+  const isBarItem =
+    rawStoreType === 'bar_store' ||
+    category.includes('bar') ||
+    category.includes('beverage') ||
+    category.includes('drink') ||
+    name.includes('beer') ||
+    name.includes('wine') ||
+    name.includes('whisky') ||
+    name.includes('vodka') ||
+    name.includes('gin') ||
+    name.includes('brandy');
+
+  if (storeType === 'bar_store') return isBarItem;
+  if (storeType === 'foodstuffs') return !isBarItem;
+  return true;
+};
+
+const getDayBounds = (date?: string) => {
+  const day = date || new Date().toISOString().split('T')[0];
+  return {
+    day,
+    start: `${day}T00:00:00.000Z`,
+    end: `${day}T23:59:59.999Z`
+  };
+};
+
+const seedStockCountItemsFromBranchStock = async (
+  stockCountId: string,
+  branchId: number,
+  storeType = 'foodstuffs',
+  countDate?: string
+): Promise<void> => {
+  const { data: existing, error: existingError } = await supabase
+    .from('stock_count_items')
+    .select('id')
+    .eq('stock_count_id', stockCountId)
+    .limit(1);
+
+  if (existingError) throw existingError;
+  if (existing && existing.length > 0) return;
+
+  const normalizedStoreType = normalizeStoreType(storeType);
+  const { day, start, end } = getDayBounds(countDate);
+
+  let { data: branchStock, error: stockError } = await supabase
+    .from('branch_stock')
+    .select('item_sku, quantity')
+    .eq('branch_id', branchId)
+    .order('item_sku');
+
+  if (stockError) throw stockError;
+  let stockRows = branchStock || [];
+
+  const initialSkus = stockRows.map((item: any) => item.item_sku).filter(Boolean);
+  const { data: simpleItems, error: itemsError } = await supabase
+    .from('simple_items')
+    .select('sku, item_name, name, category, unit_of_measure, cost_price, store_type')
+    .in('sku', initialSkus.length > 0 ? initialSkus : ['__none__']);
+
+  if (itemsError) throw itemsError;
+  let simpleRows = simpleItems || [];
+  let simpleBySku = new Map(simpleRows.map((item: any) => [item.sku, item]));
+
+  if (stockRows.length === 0) {
+    const { data: branchItems, error: branchItemsError } = await supabase
+      .from('simple_items')
+      .select('sku, item_name, name, category, unit_of_measure, cost_price, store_type')
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .order('sku');
+
+    if (branchItemsError) throw branchItemsError;
+    simpleRows = branchItems || [];
+    simpleBySku = new Map(simpleRows.map((item: any) => [item.sku, item]));
+    stockRows = simpleRows.map((item: any) => ({
+      item_sku: item.sku,
+      quantity: 0,
+    }));
+  }
+
+  if (stockRows.length === 0) return;
+
+  const skus = stockRows.map((item: any) => item.item_sku).filter(Boolean);
+
+  const { data: movements, error: movementError } = await supabase
+    .from('branch_stock_movements')
+    .select('item_sku, movement_type, quantity, previous_stock, new_stock, notes, created_at')
+    .eq('branch_id', branchId)
+    .gte('created_at', start)
+    .lte('created_at', end)
+    .in('item_sku', skus);
+
+  if (movementError) throw movementError;
+
+  const movementBySku = new Map<string, any[]>();
+  (movements || []).forEach((movement: any) => {
+    const list = movementBySku.get(movement.item_sku) || [];
+    list.push(movement);
+    movementBySku.set(movement.item_sku, list);
+  });
+
+  let rows = stockRows
+    .filter((item: any) => {
+      const detail = simpleBySku.get(item.item_sku);
+      return itemMatchesStoreType(detail || item, normalizedStoreType);
+    })
+    .map((item: any) => {
+      const detail = simpleBySku.get(item.item_sku);
+      const itemMovements = movementBySku.get(item.item_sku) || [];
+      const additions = itemMovements
+        .filter((movement: any) => toNumber(movement.new_stock) > toNumber(movement.previous_stock))
+        .reduce((sum: number, movement: any) => sum + toNumber(movement.quantity), 0);
+      const issued = itemMovements
+        .filter((movement: any) => toNumber(movement.new_stock) < toNumber(movement.previous_stock))
+        .reduce((sum: number, movement: any) => sum + toNumber(movement.quantity), 0);
+      const currentStock = toNumber(item.quantity);
+      const openingStock = currentStock - additions + issued;
+      const costPrice = toNumber(detail?.cost_price);
+
+      return {
+        stock_count_id: stockCountId,
+        item_sku: item.item_sku,
+        item_id: null,
+        store_type: normalizedStoreType,
+        opening_stock: openingStock,
+        additions,
+        issued_quantity: issued,
+        system_quantity: currentStock,
+        system_closing_stock: currentStock,
+        physical_quantity: null,
+        unit_cost: costPrice,
+        cost_price: costPrice,
+        reason: null,
+        variance_reason: null,
+      };
+    });
+
+  if (rows.length === 0 && normalizedStoreType !== 'store_items') {
+    rows = stockRows.map((item: any) => {
+      const detail = simpleBySku.get(item.item_sku);
+      const itemMovements = movementBySku.get(item.item_sku) || [];
+      const additions = itemMovements
+        .filter((movement: any) => toNumber(movement.new_stock) > toNumber(movement.previous_stock))
+        .reduce((sum: number, movement: any) => sum + toNumber(movement.quantity), 0);
+      const issued = itemMovements
+        .filter((movement: any) => toNumber(movement.new_stock) < toNumber(movement.previous_stock))
+        .reduce((sum: number, movement: any) => sum + toNumber(movement.quantity), 0);
+      const currentStock = toNumber(item.quantity);
+      const openingStock = currentStock - additions + issued;
+      const costPrice = toNumber(detail?.cost_price);
+
+      return {
+        stock_count_id: stockCountId,
+        item_sku: item.item_sku,
+        item_id: null,
+        store_type: normalizedStoreType,
+        opening_stock: openingStock,
+        additions,
+        issued_quantity: issued,
+        system_quantity: currentStock,
+        system_closing_stock: currentStock,
+        physical_quantity: null,
+        unit_cost: costPrice,
+        cost_price: costPrice,
+        reason: null,
+        variance_reason: null,
+      };
+    });
+  }
+
+  if (rows.length === 0) {
+    logger.info(`No ${normalizedStoreType} branch stock rows found for branch ${branchId} on ${day}`);
+    return;
+  }
+
+  const { error: insertError } = await supabase
+    .from('stock_count_items')
+    .insert(rows);
+
+  if (insertError) throw insertError;
+};
+
+const recalculateStockCountTotals = async (stockCountId: string): Promise<void> => {
+  const { data: items, error } = await supabase
+    .from('stock_count_items')
+    .select('physical_quantity, system_quantity, system_closing_stock, cost_price, unit_cost, issued_quantity')
+    .eq('stock_count_id', stockCountId);
+
+  if (error) throw error;
+
+  const totals = (items || []).reduce(
+    (acc: any, item: any) => {
+      const cost = toNumber(item.cost_price ?? item.unit_cost);
+      const systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
+      const physical = item.physical_quantity === null || item.physical_quantity === undefined
+        ? systemClosing
+        : toNumber(item.physical_quantity);
+      const variance = physical - systemClosing;
+      acc.total_stock_value += physical * cost;
+      acc.total_cogs_value += toNumber(item.issued_quantity) * cost;
+      acc.total_variance_value += variance * cost;
+      return acc;
+    },
+    { total_stock_value: 0, total_cogs_value: 0, total_variance_value: 0 }
+  );
+
+  const { error: updateError } = await supabase
+    .from('stock_counts')
+    .update(totals)
+    .eq('id', stockCountId);
+
+  if (updateError) throw updateError;
+};
+
+const getEnrichedStockCountItems = async (
+  stockCountId: string,
+  branchId?: number | null
+): Promise<any[]> => {
+  const itemResult = await supabase
+    .from('stock_count_items')
+    .select('*')
+    .eq('stock_count_id', stockCountId)
+    .order('created_at', { ascending: true });
+
+  if (itemResult.error) throw itemResult.error;
+  let items = itemResult.data;
+
+  if ((!items || items.length === 0) && branchId) {
+    const { data: count } = await supabase
+      .from('stock_counts')
+      .select('store_type, count_date')
+      .eq('id', stockCountId)
+      .maybeSingle();
+    await seedStockCountItemsFromBranchStock(
+      stockCountId,
+      branchId,
+      count?.store_type,
+      count?.count_date
+    );
+    const seeded = await supabase
+      .from('stock_count_items')
+      .select('*')
+      .eq('stock_count_id', stockCountId)
+      .order('created_at', { ascending: true });
+    if (seeded.error) throw seeded.error;
+    items = seeded.data || [];
+  }
+
+  if (!items || items.length === 0) return [];
+
+  const itemSkus = [...new Set(items.map((item: any) => item.item_sku).filter(Boolean))];
+  const itemIds = [...new Set(items.map((item: any) => item.item_id).filter(Boolean))];
+
+  const [{ data: simpleItems }, { data: storeItems }] = await Promise.all([
+    itemSkus.length > 0
+      ? supabase
+          .from('simple_items')
+          .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
+          .in('sku', itemSkus)
+      : Promise.resolve({ data: [] as any[] }),
+    itemIds.length > 0
+      ? supabase
+          .from('store_items')
+          .select('id, name, item_code, category, unit')
+          .in('id', itemIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  const simpleBySku = new Map((simpleItems || []).map((item: any) => [item.sku, item]));
+  const storeById = new Map((storeItems || []).map((item: any) => [item.id, item]));
+
+  return items.map((item: any) => {
+    const simple = item.item_sku ? simpleBySku.get(item.item_sku) : null;
+    const store = item.item_id ? storeById.get(item.item_id) : null;
+    const physical = item.physical_quantity;
+    const counted = physical === null || physical === undefined ? null : toNumber(physical);
+    const systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
+    const unitCost = toNumber(item.unit_cost ?? simple?.cost_price);
+    const itemSku = item.item_sku || store?.item_code || item.item_id;
+    const itemName = simple?.item_name || store?.name || itemSku || 'Unknown Item';
+
+    return {
+      ...item,
+      item_sku: itemSku,
+      item_name: itemName,
+      unit: simple?.unit_of_measure || store?.unit || 'pcs',
+      category: simple?.category || store?.category || null,
+      store_type: item.store_type || simple?.store_type || null,
+      opening_stock: toNumber(item.opening_stock),
+      additions: toNumber(item.additions),
+      issued_quantity: toNumber(item.issued_quantity),
+      system_closing_stock: systemClosing,
+      physical_quantity: counted,
+      counted_quantity: counted,
+      actual_quantity: counted,
+      variance: counted === null ? null : counted - systemClosing,
+      variance_value: counted === null ? null : (counted - systemClosing) * unitCost,
+      cost_price: unitCost,
+      cogs_value: toNumber(item.issued_quantity) * unitCost,
+      variance_reason: item.variance_reason || item.reason || null,
+      status: counted === null ? 'PENDING' : 'COUNTED',
+      item: {
+        id: item.item_id,
+        sku: itemSku,
+        item_code: itemSku,
+        name: itemName,
+        item_name: itemName,
+        category: simple?.category || store?.category || null,
+        unit: simple?.unit_of_measure || store?.unit || 'pcs',
+      },
+    };
+  });
+};
+
 export const getStockTakes = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const { branch_id: queryBranchId, status } = req.query;
+    const { branch_id: queryBranchId, status, store_type, date } = req.query;
 
     // Enforce branch filtering for non-admin roles
     let effectiveBranchId = queryBranchId;
@@ -704,6 +1047,8 @@ export const getStockTakes = async (req: Request, res: Response) => {
 
     if (effectiveBranchId) query = query.eq('branch_id', effectiveBranchId);
     if (status) query = query.eq('status', status);
+    if (store_type && store_type !== 'all') query = query.eq('store_type', normalizeStoreType(store_type));
+    if (date) query = query.eq('count_date', date);
 
     const { data, error } = await query;
 
@@ -748,6 +1093,8 @@ export const getStockTakes = async (req: Request, res: Response) => {
         ...item,
         take_number: item.count_number,
         take_type: item.count_type,
+        store_type: item.store_type || 'foodstuffs',
+        outlet_code: item.outlet_code,
         started_by: started_by_name,
         completed_by: completed_by_name,
         // Aligned with what frontend might expect
@@ -800,79 +1147,14 @@ export const getStockTake = async (req: Request, res: Response) => {
       }, {});
     }
 
-    let totalVarianceValue = 0;
-    let itemsWithVarianceCount = 0;
-
-    // 1. Try to fetch from new table (stock_count_items)
-    const { data: rawItems, error: itemsError } = await supabase
-      .from('stock_count_items')
-      .select('*')
-      .eq('stock_count_id', id);
-
-    let items = rawItems || [];
-    let isLegacy = false;
-
-    // 2. Fallback to legacy table (stock_take_items) if new table is empty
-    if (items.length === 0) {
-      const { data: legacyItems } = await supabase
-        .from('stock_take_items')
-        .select('*')
-        .eq('stock_take_id', id);
-
-      if (legacyItems && legacyItems.length > 0) {
-        items = legacyItems;
-        isLegacy = true;
-      }
-    }
-
-    // 3. Resolve item details manually if join is unreliable
-    let enrichedItems = [];
-    if (items.length > 0) {
-      const itemIds = items.map((i: any) => i.item_id).filter(id => id);
-      const itemSkus = items.map((i: any) => i.item_sku).filter(sku => sku);
-
-      const { data: itemDetails } = await supabase
-        .from(isLegacy ? 'inventory_items' : 'store_items')
-        .select('id, name, unit, item_code, category')
-        .in(isLegacy ? 'item_code' : 'id', isLegacy ? itemSkus : itemIds);
-
-      const detailsMap = (itemDetails || []).reduce((acc: any, curr: any) => {
-        const key = isLegacy ? curr.item_code : curr.id;
-        acc[key] = curr;
-        return acc;
-      }, {});
-
-      let totalVal = 0;
-      let varCount = 0;
-
-      enrichedItems = items.map((item: any) => {
-        const detailKey = isLegacy ? item.item_sku : item.item_id;
-        const detail = detailsMap[detailKey];
-
-        const physicalQty = isLegacy ? item.counted_quantity : item.physical_quantity;
-        const systemQty = item.system_quantity || 0;
-        const unitCost = item.unit_cost || 0;
-        const variance = (physicalQty || 0) - systemQty;
-        const varianceValue = variance * unitCost;
-
-        if (variance !== 0) varCount++;
-        totalVal += varianceValue;
-
-        return {
-          ...item,
-          physical_quantity: physicalQty,
-          counted_quantity: physicalQty, // Map for frontend
-          variance,
-          variance_value: varianceValue,
-          item_name: detail?.name || 'Unknown',
-          unit: detail?.unit || 'pcs',
-          item: detail || null
-        };
-      });
-
-      totalVarianceValue = totalVal;
-      itemsWithVarianceCount = varCount;
-    }
+    const enrichedItems = await getEnrichedStockCountItems(id, (data as any).branch_id);
+    const totalVarianceValue = enrichedItems.reduce(
+      (sum: number, item: any) => sum + toNumber(item.variance_value),
+      0
+    );
+    const itemsWithVarianceCount = enrichedItems.filter(
+      (item: any) => item.variance !== null && toNumber(item.variance) !== 0
+    ).length;
 
     // Resolve names robustly
     let started_by_name = 'System';
@@ -911,7 +1193,10 @@ export const getStockTake = async (req: Request, res: Response) => {
 export const createStockTake = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    let { branch_id, count_type, notes } = req.body;
+    let branch_id = req.body.branch_id;
+    const { count_type, notes, outlet_code } = req.body;
+    const storeType = normalizeStoreType(req.body.store_type);
+    const countDate = req.body.count_date || new Date().toISOString().split('T')[0];
     const userId = user?.id;
 
     // Enforce branch from user profile for non-admins
@@ -923,13 +1208,34 @@ export const createStockTake = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Branch is required' });
     }
 
+    const existingQuery = supabase
+      .from('stock_counts')
+      .select('*')
+      .eq('branch_id', branch_id)
+      .eq('count_date', countDate)
+      .eq('store_type', storeType)
+      .eq('count_type', count_type || 'daily')
+      .in('status', ['draft', 'submitted_to_accountant', 'submitted']);
+
+    const { data: existingCounts, error: existingError } = outlet_code
+      ? await existingQuery.eq('outlet_code', outlet_code)
+      : await existingQuery.is('outlet_code', null);
+
+    if (existingError) throw existingError;
+    if (existingCounts && existingCounts.length > 0) {
+      await getEnrichedStockCountItems(existingCounts[0].id, Number(branch_id));
+      return res.status(200).json({ success: true, data: existingCounts[0] });
+    }
+
     // Create stock count session
     const { data: count, error: countError } = await supabase
       .from('stock_counts')
       .insert([{
         branch_id,
-        count_date: new Date().toISOString().split('T')[0],
+        count_date: countDate,
         count_type: count_type || 'daily',
+        store_type: storeType,
+        outlet_code: outlet_code || null,
         status: 'draft',
         notes,
         created_by: userId // Ensure the person who starts the count is recorded
@@ -939,60 +1245,8 @@ export const createStockTake = async (req: Request, res: Response) => {
 
     if (countError) throw countError;
 
-    let countItems: any[] = [];
-
-    // 1. Try to get from branch stock
-    const { data: stockItems } = await supabase
-      .from('branch_stock')
-      .select('item_sku, quantity')
-      .eq('branch_id', branch_id);
-
-    if (stockItems && stockItems.length > 0) {
-      const skus = stockItems.map(i => i.item_sku);
-
-      // Resolve store_item IDs and unit costs
-      const { data: inventoryItems } = await supabase
-        .from('store_items')
-        .select('id, item_code, unit_cost')
-        .in('item_code', skus);
-
-      countItems = stockItems.map(stockItem => {
-        const invItem = inventoryItems?.find(i => i.item_code === stockItem.item_sku);
-        return {
-          stock_count_id: count.id,
-          item_id: invItem?.id,
-          system_quantity: stockItem.quantity || 0,
-          physical_quantity: stockItem.quantity || 0,
-          unit_cost: invItem?.unit_cost || 0
-        };
-      }).filter(item => item.item_id);
-    }
-
-    // 2. If no branch stock or countItems, fall back to general inventory_items/store_items
-    if (countItems.length === 0) {
-      const { data: allItems } = await supabase
-        .from('store_items')
-        .select('id, item_code, unit_cost')
-        .eq('is_active', true);
-
-      if (allItems && allItems.length > 0) {
-        countItems = allItems.map(item => ({
-          stock_count_id: count.id,
-          item_id: item.id,
-          system_quantity: 0,
-          physical_quantity: 0,
-          unit_cost: item.unit_cost || 0
-        }));
-      }
-    }
-
-    if (countItems.length > 0) {
-      const { error } = await supabase.from('stock_count_items').insert(countItems);
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
-    }
+    await seedStockCountItemsFromBranchStock(count.id, Number(branch_id), storeType, countDate);
+    await recalculateStockCountTotals(count.id);
 
     res.status(201).json({ success: true, data: count });
     logger.info(`Stock count session created: ${count.id} for branch ${branch_id}`);
@@ -1004,45 +1258,8 @@ export const createStockTake = async (req: Request, res: Response) => {
 export const getStockTakeItems = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
-    // 1. Fetch stock count items
-    const { data: items, error: itemsError } = await supabase
-      .from('stock_count_items')
-      .select('*')
-      .eq('stock_count_id', id);
-
-    if (itemsError) throw itemsError;
-    if (!items || items.length === 0) {
-      return res.json({ success: true, data: [] });
-    }
-
-    // 2. Fetch inventory items details
-    const itemIds = items.map(i => i.item_id).filter(id => id);
-    if (itemIds.length === 0) {
-      return res.json({ success: true, data: items });
-    }
-
-    const { data: inventoryItems, error: invError } = await supabase
-      .from('store_items')
-      .select('id, name, item_code, category, unit')
-      .in('id', itemIds);
-
-    if (invError) throw invError;
-
-    // 3. Manually merge and flatten for frontend
-    const mergedData = items.map(item => {
-      const invItem = inventoryItems?.find(inv => inv.id === item.item_id);
-      return {
-        ...item,
-        item_name: invItem?.name || 'Unknown Item',
-        item_sku: invItem?.item_code || 'N/A',
-        unit: invItem?.unit || 'pcs',
-        // Support frontend expectation of actual_quantity mapping to physical_quantity
-        actual_quantity: item.physical_quantity,
-        variance: (item.physical_quantity || 0) - (item.system_quantity || 0),
-        item: invItem || null
-      };
-    });
+    const branchId = await resolveStockCountBranchId(id);
+    const mergedData = await getEnrichedStockCountItems(id, branchId);
 
     res.json({ success: true, data: mergedData });
   } catch (error: any) {
@@ -1053,7 +1270,7 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
 export const updateStockTakeItem = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { physical_quantity, actual_quantity, reason } = req.body;
+    const { physical_quantity, actual_quantity, reason, variance_reason } = req.body;
 
     // Support both field names for flexibility
     const newQuantity = physical_quantity !== undefined ? physical_quantity : actual_quantity;
@@ -1062,14 +1279,16 @@ export const updateStockTakeItem = async (req: Request, res: Response) => {
       .from('stock_count_items')
       .update({
         physical_quantity: newQuantity,
-        reason,
-        created_at: new Date().toISOString()
+        reason: variance_reason || reason,
+        variance_reason: variance_reason || reason,
+        updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
+    if (data?.stock_count_id) await recalculateStockCountTotals(data.stock_count_id);
     res.json({ success: true, data });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -1106,33 +1325,91 @@ export const updateStockTake = async (req: Request, res: Response) => {
 
     const count = counts[0];
 
-    // 2. Update items in bulk
+    // 2. Update items in bulk. The branch store count sheet is keyed by item_sku,
+    // while older rows may still only have a stock_count_items id.
     if (items && items.length > 0) {
       for (const item of items) {
-        // Support both sub-table formats (stock_count_items vs stock_take_items)
-        const updatePayload: any = {
-          physical_quantity: item.counted_quantity,
-          counted_quantity: item.counted_quantity, // for stock_take_items
-          variance_reason: item.variance_reason,
-          reason: item.variance_reason, // for stock_count_items
-          notes: item.notes,
-          status: item.counted_quantity !== null ? 'COUNTED' : 'PENDING',
-          updated_at: new Date().toISOString()
+        const countedQuantity =
+          item.counted_quantity ?? item.physical_quantity ?? item.actual_quantity ?? null;
+        const reason = item.variance_reason ?? item.reason ?? item.notes ?? null;
+        const updatedAt = new Date().toISOString();
+        const hasCount = countedQuantity !== null && countedQuantity !== undefined;
+
+        const stockCountPayload: any = {
+          physical_quantity: countedQuantity,
+          reason,
+          variance_reason: reason,
+          updated_at: updatedAt
         };
 
-        // Try updating in stock_count_items
-        await supabase
+        if (item.item_sku && (!item.id || String(item.id).startsWith('manual:'))) {
+          const { data: existing, error: existingError } = await supabase
+            .from('stock_count_items')
+            .select('id')
+            .eq('stock_count_id', id)
+            .eq('item_sku', item.item_sku)
+            .maybeSingle();
+
+          if (existingError) throw existingError;
+
+          if (existing?.id) {
+            const { error: updateError } = await supabase
+              .from('stock_count_items')
+              .update(stockCountPayload)
+              .eq('id', existing.id);
+
+            if (updateError) throw updateError;
+          } else {
+            const { error: insertError } = await supabase
+              .from('stock_count_items')
+              .insert({
+                stock_count_id: id,
+                item_sku: item.item_sku,
+                item_id: item.item_id || null,
+                system_quantity: toNumber(item.system_quantity),
+                physical_quantity: countedQuantity,
+                unit_cost: toNumber(item.unit_cost),
+                cost_price: toNumber(item.cost_price ?? item.unit_cost),
+                reason
+              });
+
+            if (insertError) throw insertError;
+          }
+
+          continue;
+        }
+
+        if (!item.id) continue;
+
+        const { error: countItemError } = await supabase
           .from('stock_count_items')
-          .update(updatePayload)
+          .update(stockCountPayload)
           .eq('id', item.id);
-          
-        // Also try stock_take_items just in case of legacy mix
-        await supabase
+
+        if (countItemError) {
+          logger.warn(`Could not update stock_count_items row ${item.id}: ${countItemError.message}`);
+        }
+
+        const legacyPayload: any = {
+          counted_quantity: countedQuantity,
+          variance_reason: reason,
+          notes: item.notes,
+          status: hasCount ? 'COUNTED' : 'PENDING',
+          updated_at: updatedAt
+        };
+
+        const { error: legacyError } = await supabase
           .from('stock_take_items')
-          .update(updatePayload)
+          .update(legacyPayload)
           .eq('id', item.id);
+
+        if (legacyError) {
+          logger.warn(`Could not update stock_take_items row ${item.id}: ${legacyError.message}`);
+        }
       }
     }
+
+    await recalculateStockCountTotals(id);
 
     res.json({ success: true, data: count, message: 'Stock take updated successfully' });
   } catch (error: any) {
@@ -1260,7 +1537,8 @@ export const generateWorksheet = async (req: Request, res: Response) => {
 export const completeStockTake = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?.id;
+    const user = (req as any).user;
+    const userId = user?.id;
 
     // Get the stock count (without problematic joins)
     const { data: counts, error: countError } = await supabase
@@ -1272,29 +1550,62 @@ export const completeStockTake = async (req: Request, res: Response) => {
     if (!counts || counts.length === 0) return res.status(404).json({ success: false, message: 'Stock count not found' });
 
     const count = counts[0];
+    const items = await getEnrichedStockCountItems(id, count.branch_id);
+    const uncounted = items.filter((item: any) => item.counted_quantity === null || item.counted_quantity === undefined);
+    if (uncounted.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Complete physical counts for all items before submitting. Missing: ${uncounted.length}`,
+      });
+    }
 
-    // Transition to 'submitted' for auditor review
+    const unexplained = items.filter((item: any) =>
+      toNumber(item.variance) !== 0 && !(`${item.variance_reason || item.reason || ''}`.trim())
+    );
+    if (unexplained.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Explain all stock variances before submitting. Missing explanations: ${unexplained.length}`,
+      });
+    }
+
+    await recalculateStockCountTotals(id);
+
+    const isAccountant = user?.role === UserRole.BRANCH_ACCOUNTANT || user?.role === UserRole.ACCOUNTANT;
+    const nextStatus = isAccountant ? 'submitted' : 'submitted_to_accountant';
+    const updatePayload: any = {
+      status: nextStatus,
+      counted_by: userId,
+      updated_at: new Date().toISOString()
+    };
+
+    if (isAccountant) {
+      updatePayload.accountant_submitted_by = userId;
+      updatePayload.accountant_submitted_at = new Date().toISOString();
+    } else {
+      updatePayload.submitted_to_accountant_by = userId;
+      updatePayload.submitted_to_accountant_at = new Date().toISOString();
+    }
+
     const { data: updatedCounts, error: updateError } = await supabase
       .from('stock_counts')
-      .update({
-        status: 'submitted',
-        counted_by: userId,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select();
 
     if (updateError) throw updateError;
     const updatedCount = (updatedCounts && updatedCounts.length > 0) ? updatedCounts[0] : count;
 
-    // Create approval request for auditor
+    // Create approval request for the next review stage
     const { error } = await supabase.from('approval_requests').insert({
       request_type: 'stock_take',
       status: 'pending',
       branch_id: count.branch_id,
       requested_by: userId,
-      description: `Stock count submission review: ${count.count_number || id}`,
-      metadata: { stock_count_id: id }
+      description: isAccountant
+        ? `Auditor review required for ${count.store_type || 'branch'} stock take: ${count.count_number || id}`
+        : `Branch accountant review required for ${count.store_type || 'branch'} stock take: ${count.count_number || id}`,
+      metadata: { stock_count_id: id, review_stage: isAccountant ? 'auditor' : 'branch_accountant' }
     });
 
     if (error) {
@@ -1307,25 +1618,27 @@ export const completeStockTake = async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: 'Stock take submitted for auditor review',
+      message: isAccountant
+        ? 'Stock take submitted to auditor'
+        : 'Stock take submitted to branch accountant',
       data: updatedCount
     });
 
-    logger.info(`Stock count ${id} submitted for audit by ${userId}`);
+    logger.info(`Stock count ${id} submitted with status ${nextStatus} by ${userId}`);
 
-    // Notify Auditor
+    const notifyRole = isAccountant ? 'auditor' : 'branch_accountant';
     notificationService.notifyRole(
-      'auditor',
-      'Stock Take Submission',
-      `A new stock take (${count.count_number || id}) has been submitted for audit.`,
+      notifyRole,
+      isAccountant ? 'Stock Take Ready for Audit' : 'Stock Take Ready for Accounting Review',
+      `A ${count.store_type || 'branch'} stock take (${count.count_number || id}) has been submitted.`,
       {
         type: 'warning',
         category: 'audit',
         priority: 'medium',
         actionUrl: `/dashboard/branch-store/stock-takes/${id}`,
-        metadata: { stock_count_id: id, type: 'stock_take' }
+        metadata: { stock_count_id: id, type: 'stock_take', review_stage: isAccountant ? 'auditor' : 'branch_accountant' }
       }
-    ).catch(e => logger.error('Failed to notify auditor of stock take submission', e));
+    ).catch(e => logger.error('Failed to notify stock take reviewer', e));
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

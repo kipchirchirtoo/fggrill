@@ -32,15 +32,22 @@ export const getKitchenStock = async (req: Request, res: Response) => {
         // Fetch item names from inventory_items table
         if (data && data.length > 0) {
             const skus = data.map((item: any) => item.item_sku);
-            const { data: inventoryItems } = await supabase
-                .from('inventory_items')
-                .select('sku, item_name, description')
-                .in('sku', skus);
+            const [{ data: inventoryItems }, { data: simpleItems }, { data: storeItems }] = await Promise.all([
+                supabase.from('inventory_items').select('sku, item_name, description').in('sku', skus),
+                supabase.from('simple_items').select('sku, name, item_name, description').in('sku', skus),
+                supabase.from('store_items').select('sku, name, description').in('sku', skus),
+            ]);
 
             // Create a map of SKU to item name
             const itemNameMap = new Map();
             inventoryItems?.forEach((item: any) => {
                 itemNameMap.set(item.sku, item.item_name || item.description);
+            });
+            simpleItems?.forEach((item: any) => {
+                itemNameMap.set(item.sku, item.item_name || item.name || item.description);
+            });
+            storeItems?.forEach((item: any) => {
+                itemNameMap.set(item.sku, item.name || item.description);
             });
 
             // Update item names in kitchen stock data
@@ -102,15 +109,22 @@ export const getKitchenLedger = async (req: Request, res: Response) => {
         // Fetch item names from inventory_items table
         if (data && data.length > 0) {
             const skus = [...new Set(data.map((item: any) => item.item_sku))];
-            const { data: inventoryItems } = await supabase
-                .from('inventory_items')
-                .select('sku, item_name, description')
-                .in('sku', skus);
+            const [{ data: inventoryItems }, { data: simpleItems }, { data: storeItems }] = await Promise.all([
+                supabase.from('inventory_items').select('sku, item_name, description').in('sku', skus),
+                supabase.from('simple_items').select('sku, name, item_name, description').in('sku', skus),
+                supabase.from('store_items').select('sku, name, description').in('sku', skus),
+            ]);
 
             // Create a map of SKU to item name
             const itemNameMap = new Map();
             inventoryItems?.forEach((item: any) => {
                 itemNameMap.set(item.sku, item.item_name || item.description);
+            });
+            simpleItems?.forEach((item: any) => {
+                itemNameMap.set(item.sku, item.item_name || item.name || item.description);
+            });
+            storeItems?.forEach((item: any) => {
+                itemNameMap.set(item.sku, item.name || item.description);
             });
 
             // Update item names in ledger data

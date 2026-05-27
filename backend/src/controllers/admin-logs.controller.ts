@@ -90,10 +90,11 @@ export const getLogsOverview = async (req: Request, res: Response, next: NextFun
  */
 export const getUnifiedLogs = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { category, page = 1, limit = 20, search, startDate, endDate, severity } = req.query;
+    const { category, page = 1, limit = 20, search, startDate, endDate, severity, status, threatLevel, ipAddress } = req.query;
     
     let query: any;
     let orderBy = 'created_at';
+    let userIdField = 'user_id';
 
     const from = (Number(page) - 1) * Number(limit);
     const to = from + Number(limit) - 1;
@@ -101,18 +102,19 @@ export const getUnifiedLogs = async (req: Request, res: Response, next: NextFunc
     // Determine target table based on category
     switch (category) {
       case 'security':
-        query = supabase.from('auth_logs').select('*, user:users!user_id(email, first_name, last_name)', { count: 'exact' });
+        query = supabase.from('auth_logs').select('*', { count: 'exact' });
         break;
       case 'audit':
-        query = supabase.from('audit_trail').select('*, user:users!user_id(email, first_name, last_name)', { count: 'exact' });
+        query = supabase.from('audit_trail').select('*', { count: 'exact' });
         orderBy = 'performed_at';
         break;
       case 'finance':
-        query = supabase.from('audit_night_sessions').select('*, user:users!performed_by(email, first_name, last_name)', { count: 'exact' });
+        query = supabase.from('audit_night_sessions').select('*', { count: 'exact' });
         orderBy = 'audit_date';
+        userIdField = 'performed_by';
         break;
       case 'alerts':
-        query = supabase.from('security_events').select('*, user:users!user_id(email, first_name, last_name)', { count: 'exact' });
+        query = supabase.from('security_events').select('*', { count: 'exact' });
         break;
       default:
         return res.status(400).json({ success: false, message: 'Invalid category' });
@@ -124,11 +126,15 @@ export const getUnifiedLogs = async (req: Request, res: Response, next: NextFunc
     if (startDate) query = query.gte(orderBy, startDate);
     if (endDate) query = query.lte(orderBy, endDate);
     if (severity && category !== 'finance') query = query.eq('severity', severity);
+    if (status && category === 'security') query = query.eq('status', status);
+    if (threatLevel && category === 'alerts') query = query.eq('severity', threatLevel);
+    if (ipAddress && category === 'security') query = query.eq('ip_address', ipAddress);
     
     // Search 
     if (search) {
-        if (category === 'security') query = query.ilike('email', `%${search}%`);
+        if (category === 'security') query = query.or(`email.ilike.%${search}%,ip_address.ilike.%${search}%`);
         if (category === 'audit') query = query.ilike('action', `%${search}%`);
+        if (category === 'alerts') query = query.or(`event_type.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
     const { data, count, error } = await query
@@ -140,13 +146,28 @@ export const getUnifiedLogs = async (req: Request, res: Response, next: NextFunc
         throw error;
     }
 
+    const userIds = [...new Set((data || [])
+      .map((item: any) => item[userIdField] || item.user_id)
+      .filter(Boolean))];
+
+    const { data: users, error: usersError } = userIds.length
+      ? await supabase
+          .from('users')
+          .select('id, email, first_name, last_name')
+          .in('id', userIds)
+      : { data: [], error: null };
+
+    if (usersError) throw usersError;
+
+    const userMap = new Map((users || []).map((user: any) => [String(user.id), user]));
+
     // Normalize data for frontend consistency
     const normalizedData = (data || []).map((item: any) => ({
         ...item,
         category,
         // Ensure a consistent timestamp field for the frontend
         created_at: item.created_at || item.performed_at || item.audit_date || item.started_at,
-        actor: item.user || { email: item.email || 'System' }
+        actor: userMap.get(String(item[userIdField] || item.user_id)) || { email: item.email || 'System' }
     }));
 
     res.status(200).json({

@@ -6,6 +6,88 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 
+const keyBy = (rows: any[] = [], key: string) =>
+  rows.reduce((acc: Record<string, any>, row: any) => {
+    if (row?.[key] !== undefined && row?.[key] !== null) acc[String(row[key])] = row;
+    return acc;
+  }, {});
+
+const groupBy = (rows: any[] = [], key: string) =>
+  rows.reduce((acc: Record<string, any[]>, row: any) => {
+    const value = row?.[key];
+    if (value === undefined || value === null) return acc;
+    const groupKey = String(value);
+    if (!acc[groupKey]) acc[groupKey] = [];
+    acc[groupKey].push(row);
+    return acc;
+  }, {});
+
+const branchIdForDispatch = (dispatch: any) =>
+  dispatch.destination_branch ?? dispatch.to_branch_id ?? dispatch.branch_id ?? dispatch.destination_branch_id;
+
+const createdByForDispatch = (dispatch: any) =>
+  dispatch.created_by ?? dispatch.created_by_user_id ?? dispatch.user_id;
+
+const dispatchDateColumn = (dispatch: any) =>
+  dispatch.completed_at ?? dispatch.updated_at ?? dispatch.created_at;
+
+async function enrichDispatches(dispatches: any[] = []) {
+  if (!dispatches.length) return [];
+
+  const dispatchIds = dispatches.map((dispatch) => dispatch.id).filter(Boolean);
+  const branchIds = [...new Set(dispatches.map(branchIdForDispatch).filter(Boolean).map(String))];
+  const userIds = [...new Set(dispatches.map(createdByForDispatch).filter(Boolean).map(String))];
+
+  const [itemsRes, documentsRes, branchesRes, usersRes] = await Promise.all([
+    dispatchIds.length
+      ? supabase.from('dispatch_items').select('*').in('dispatch_id', dispatchIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    dispatchIds.length
+      ? supabase.from('dispatch_documents').select('*').in('dispatch_id', dispatchIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    branchIds.length
+      ? supabase.from('branches').select('id, name, code').in('id', branchIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    userIds.length
+      ? supabase.from('users').select('id, first_name, last_name, email').in('id', userIds)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
+
+  if (itemsRes.error) throw itemsRes.error;
+  if (documentsRes.error) throw documentsRes.error;
+  if (branchesRes.error) throw branchesRes.error;
+  if (usersRes.error) throw usersRes.error;
+
+  const itemsByDispatch = groupBy(itemsRes.data || [], 'dispatch_id');
+  const documentsByDispatch = groupBy(documentsRes.data || [], 'dispatch_id');
+  const branchMap = keyBy(branchesRes.data || [], 'id');
+  const userMap = keyBy(usersRes.data || [], 'id');
+
+  return dispatches.map((dispatch) => {
+    const branchId = branchIdForDispatch(dispatch);
+    const userId = createdByForDispatch(dispatch);
+    const branch = branchId ? branchMap[String(branchId)] : null;
+    const user = userId ? userMap[String(userId)] : null;
+    const items = itemsByDispatch[String(dispatch.id)] || [];
+    const documents = documentsByDispatch[String(dispatch.id)] || [];
+    const driverName = dispatch.driver_name || dispatch.driver || [user?.first_name, user?.last_name].filter(Boolean).join(' ');
+
+    return {
+      ...dispatch,
+      branch,
+      branch_name: branch?.name || dispatch.branch_name || dispatch.destination_branch_name || (branchId ? `Branch ${branchId}` : null),
+      driver_name: driverName || null,
+      dispatch_items: items,
+      dispatch_documents: documents,
+      items,
+      documents,
+      total_items: items.length,
+      documents_count: documents.length,
+      created_at: dispatch.created_at || dispatchDateColumn(dispatch),
+    };
+  });
+}
+
 /**
  * Get all deliveries for auditor review
  * GET /api/auditor/deliveries
@@ -16,13 +98,9 @@ export const getAuditorDeliveries = async (req: Request, res: Response) => {
 
     let query = supabase
       .from('dispatches')
-      .select(`
-        *,
-        dispatch_items(count),
-        dispatch_documents(count)
-      `)
+      .select('*')
       .in('status', ['completed', 'audited', 'flagged'])
-      .order('completed_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (status) {
       query = query.eq('status', status);
@@ -32,24 +110,21 @@ export const getAuditorDeliveries = async (req: Request, res: Response) => {
       query = query.eq('destination_branch', branch_id);
     }
 
-    if (date_from) {
-      query = query.gte('completed_at', date_from);
-    }
-
-    if (date_to) {
-      query = query.lte('completed_at', date_to);
-    }
+    if (date_from) query = query.gte('created_at', date_from);
+    if (date_to) query = query.lte('created_at', date_to);
 
     const { data, error } = await query;
 
     if (error) {
-      return res.status(400).json({ error: 'Failed to fetch deliveries', details: error.message });
+      return res.status(400).json({ success: false, error: 'Failed to fetch deliveries', details: error.message });
     }
 
-    return res.status(200).json({ data });
+    const enriched = await enrichDispatches(data || []);
+
+    return res.status(200).json({ success: true, count: enriched.length, data: enriched });
   } catch (error: any) {
     console.error('Error in getAuditorDeliveries:', error);
-    return res.status(500).json({ error: 'Internal server error', details: error.message });
+    return res.status(500).json({ success: false, error: 'Internal server error', details: error.message });
   }
 };
 
@@ -63,24 +138,34 @@ export const getAuditorDeliveryDetail = async (req: Request, res: Response) => {
 
     const { data, error } = await supabase
       .from('dispatches')
-      .select(`
-        *,
-        dispatch_items(*, inventory_items(*)),
-        dispatch_documents(*),
-        dispatch_audit_log(*),
-        auditor_reviews(*)
-      `)
+      .select('*')
       .eq('id', id)
       .single();
 
     if (error || !data) {
-      return res.status(404).json({ error: 'Delivery not found' });
+      return res.status(404).json({ success: false, error: 'Delivery not found' });
     }
 
-    return res.status(200).json({ data });
+    const [enriched] = await enrichDispatches([data]);
+    const [auditLogRes, reviewsRes] = await Promise.all([
+      supabase.from('dispatch_audit_log').select('*').eq('dispatch_id', id).order('created_at', { ascending: false }),
+      supabase.from('auditor_reviews').select('*').eq('dispatch_id', id).order('created_at', { ascending: false }),
+    ]);
+
+    if (auditLogRes.error) throw auditLogRes.error;
+    if (reviewsRes.error) throw reviewsRes.error;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...enriched,
+        dispatch_audit_log: auditLogRes.data || [],
+        auditor_reviews: reviewsRes.data || [],
+      },
+    });
   } catch (error: any) {
     console.error('Error in getAuditorDeliveryDetail:', error);
-    return res.status(500).json({ error: 'Internal server error', details: error.message });
+    return res.status(500).json({ success: false, error: 'Internal server error', details: error.message });
   }
 };
 

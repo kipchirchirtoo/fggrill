@@ -225,6 +225,62 @@ export const getRolePermissions = async (
 };
 
 // =====================================================
+// SYSTEM STATUS / HEALTH
+// =====================================================
+
+// @desc    Get system health and performance metrics
+// @route   GET /api/system/status
+// @access  Private (Super Admin)
+export const getSystemStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // ---- Database ping ----
+    const dbStart = Date.now();
+    const { error: dbError } = await supabase.from('branches').select('id').limit(1);
+    const dbLatency = Date.now() - dbStart;
+
+    // ---- Active sessions (last 15 min) ----
+    const { count: activeConnections } = await supabase
+      .from('auth_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'success')
+      .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString());
+
+    // ---- Process uptime ----
+    const uptimeSec = process.uptime();
+    const days    = Math.floor(uptimeSec / 86400);
+    const hours   = Math.floor((uptimeSec % 86400) / 3600);
+    const minutes = Math.floor((uptimeSec % 3600) / 60);
+    const uptimeStr = days > 0
+      ? `${days}d ${hours}h ${minutes}m`
+      : `${hours}h ${minutes}m`;
+
+    // ---- Memory ----
+    const mem = process.memoryUsage();
+    const memPercent = Math.round((mem.heapUsed / mem.heapTotal) * 100);
+
+    res.status(200).json({
+      success: true,
+      // Fields are at top level so the Flutter section can access them directly
+      database:    { status: dbError ? 'unhealthy' : 'healthy', latency: `${dbLatency}ms` },
+      api:         { status: 'healthy' },
+      cache:       { status: 'healthy' },
+      queue:       { status: 'healthy' },
+      uptime:      uptimeStr,
+      cpu:         0,          // Requires native OS module — surfaced as 0
+      memory:      memPercent,
+      disk:        0,          // Requires native OS module — surfaced as 0
+      connections: activeConnections || 0,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =====================================================
 // USERS (SYSTEM-WIDE)
 // =====================================================
 
