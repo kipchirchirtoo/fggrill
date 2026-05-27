@@ -1,0 +1,307 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/network/dio_client.dart';
+
+final cashierRepositoryProvider = Provider<CashierRepository>((ref) {
+  return CashierRepository(
+    ref.watch(dioProvider),
+    ref.watch(pythonDioProvider),
+  );
+});
+
+class CashierRepository {
+  CashierRepository(this._dio, this._pythonDio);
+
+  final Dio _dio;
+  final Dio _pythonDio;
+
+  Future<Map<String, dynamic>> getStats() => _getMap('/cashier/stats');
+
+  Future<Map<String, dynamic>> getBillDetails(String id) async {
+    final res = await _dio.get('/cashier/bill/${Uri.encodeComponent(id)}');
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> processPayment({
+    required String bookingId,
+    required num amount,
+    required String method,
+    String? reference,
+    Map<String, dynamic>? creditBill,
+  }) {
+    return _postMap('/cashier/pay', {
+      'bookingId': bookingId,
+      'amount': amount,
+      'method': method,
+      if (reference != null && reference.isNotEmpty) 'reference': reference,
+      if (creditBill != null) 'credit_bill': creditBill,
+    });
+  }
+
+  Future<Map<String, dynamic>> verifyPayment(String paymentId) =>
+      _postMap('/cashier/verify-payment/$paymentId', {});
+
+  Future<List<Map<String, dynamic>>> getUnpaidBills({
+    String? status,
+    String? billType,
+    String? search,
+    String? date,
+    int page = 1,
+    int limit = 25,
+  }) async {
+    final query = {
+      if (status != null && status != 'all') 'status': status,
+      if (billType != null && billType != 'all') 'bill_type': billType,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+      'page': page,
+      'limit': limit,
+    };
+
+    final results = await Future.wait([
+      _getList('/cashier/unpaid-orders', query: query).catchError(
+        (_) => <Map<String, dynamic>>[],
+      ),
+      _getList('/cashier/unpaid-bills', query: query).catchError(
+        (_) => <Map<String, dynamic>>[],
+      ),
+    ]);
+
+    final rows = [...results[0], ...results[1]];
+    rows.sort((a, b) {
+      final aDate = DateTime.tryParse(
+              '${a['bill_date'] ?? a['created_at'] ?? a['created_at']}') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = DateTime.tryParse(
+              '${b['bill_date'] ?? b['created_at'] ?? b['created_at']}') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+    return rows;
+  }
+
+  Future<Map<String, dynamic>> createUnpaidBill(Map<String, dynamic> body) =>
+      _postMap('/cashier/unpaid-bills', body);
+
+  Future<Map<String, dynamic>> recordUnpaidBillPayment(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _postMap('/cashier/unpaid-bills/$id/payment', body);
+
+  Future<Map<String, dynamic>> clearWaiterOrder(
+    String source,
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _patchMap('/cashier/unpaid-orders/$source/$id/pay', body);
+
+  Future<Map<String, dynamic>> confirmUnpaidBill(String id, String role) =>
+      _patchMap('/cashier/unpaid-bills/$id/confirm', {'role': role});
+
+  Future<List<Map<String, dynamic>>> getCreditBills({
+    String? status,
+    String? billType,
+    String? search,
+    int page = 1,
+    int limit = 25,
+  }) {
+    return _getList('/cashier/credit-bills', query: {
+      if (status != null && status != 'all') 'status': status,
+      if (billType != null && billType != 'all') 'bill_type': billType,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      'page': page,
+      'limit': limit,
+    });
+  }
+
+  Future<Map<String, dynamic>> createCreditBill(Map<String, dynamic> body) =>
+      _postMap('/cashier/credit-bills', body);
+
+  Future<Map<String, dynamic>> recordCreditPayment(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _postMap('/cashier/credit-bills/$id/payment', body);
+
+  Future<Map<String, dynamic>> confirmCreditBill(String id, String role) =>
+      _patchMap('/cashier/credit-bills/$id/confirm', {'role': role});
+
+  Future<List<Map<String, dynamic>>> getShifts({
+    String? status,
+    String? from,
+    String? to,
+    int page = 1,
+    int limit = 30,
+  }) {
+    return _getList('/cashier/shifts', query: {
+      if (status != null && status != 'all') 'status': status,
+      if (from != null) 'from_date': from,
+      if (to != null) 'to_date': to,
+      'page': page,
+      'limit': limit,
+    });
+  }
+
+  Future<Map<String, dynamic>> getShift(String id) =>
+      _getMap('/cashier/shifts/$id');
+
+  Future<Map<String, dynamic>> startShift(num openingFloat) =>
+      _postMap('/cashier/shifts/start', {'opening_float': openingFloat});
+
+  Future<Map<String, dynamic>> closeShift(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _putMap('/cashier/shifts/$id/close', body);
+
+  Future<Map<String, dynamic>> reconcileShift(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _putMap('/cashier/shifts/$id/reconcile', body);
+
+  Future<List<Map<String, dynamic>>> getBranchStaff({
+    String? search,
+    int limit = 500,
+  }) async {
+    try {
+      return await _getList('/staff', query: {
+        'limit': limit,
+        'status': 'active',
+        if (search != null && search.trim().isNotEmpty)
+          'search': search.trim(),
+      });
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404 ||
+          error.response?.statusCode == 403) {
+        return [];
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> createPOSTransaction(
+          Map<String, dynamic> body) =>
+      _postMap('/cashier/pos/transactions', body);
+
+  Future<List<Map<String, dynamic>>> getPOSItems({String? search}) async {
+    final res = await _dio.get(
+      '/cashier/pos/items',
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      },
+      options: Options(
+        validateStatus: (status) =>
+            status == 404 || (status != null && status >= 200 && status < 300),
+      ),
+    );
+    if (res.statusCode == 404) return [];
+    return _asList(res.data);
+  }
+
+  Future<Map<String, dynamic>> payPOSTransaction(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _postMap('/cashier/pos/transactions/$id/pay', body);
+
+  Future<Map<String, dynamic>> getPOSReconciliation({
+    String? date,
+    int? branchId,
+  }) {
+    return _getMap('/cashier/pos/reconciliation', query: {
+      if (date != null) 'date': date,
+      if (branchId != null) 'branch_id': branchId,
+    });
+  }
+
+  Future<Map<String, dynamic>> scanPOSBarcode(String barcode) =>
+      getBillDetails(barcode);
+
+  Future<List<Map<String, dynamic>>> searchMpesa({
+    num? amount,
+    String? phone,
+    int limit = 10,
+  }) {
+    return _getList('/payments/mpesa/search', query: {
+      if (amount != null) 'amount': amount,
+      if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+      'limit': limit,
+    });
+  }
+
+  Future<Map<String, dynamic>> initiateMpesa({
+    required String phone,
+    required num amount,
+    required String accountReference,
+  }) {
+    return _postMap('/payments/mpesa/initiate', {
+      'phoneNumber': phone,
+      'amount': amount,
+      'accountReference': accountReference,
+      'description': 'Cashier payment $accountReference',
+    });
+  }
+
+  Future<Map<String, dynamic>> getMpesaStatus(String checkoutRequestId) =>
+      _getMap('/payments/mpesa/status/$checkoutRequestId');
+
+  Future<Map<String, dynamic>> getPosInsights() async {
+    try {
+      final res = await _pythonDio.get('/api/analytics/pos/insights');
+      return _asMap(res.data);
+    } on DioException {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> _getMap(
+    String path, {
+    Map<String, dynamic>? query,
+  }) async {
+    final res = await _dio.get(path, queryParameters: query);
+    return _asMap(res.data);
+  }
+
+  Future<List<Map<String, dynamic>>> _getList(
+    String path, {
+    Map<String, dynamic>? query,
+  }) async {
+    final res = await _dio.get(path, queryParameters: query);
+    return _asList(res.data);
+  }
+
+  Future<Map<String, dynamic>> _postMap(String path, Object? body) async {
+    final res = await _dio.post(path, data: body);
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> _patchMap(String path, Object? body) async {
+    final res = await _dio.patch(path, data: body);
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> _putMap(String path, Object? body) async {
+    final res = await _dio.put(path, data: body);
+    return _asMap(res.data);
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return {};
+  }
+
+  List<Map<String, dynamic>> _asList(dynamic value) {
+    final data = value is Map ? value['data'] ?? value['items'] ?? [] : value;
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    return [];
+  }
+}

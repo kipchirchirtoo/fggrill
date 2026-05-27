@@ -1,0 +1,3193 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/widgets.dart';
+import '../data/cashier_repository.dart';
+import '../domain/providers.dart';
+
+enum CashierTab { station, pos, bills, credit, shifts, barcode, insights }
+
+class CashierDashboard extends ConsumerStatefulWidget {
+  const CashierDashboard({super.key, this.initialTab = CashierTab.station});
+
+  final CashierTab initialTab;
+
+  @override
+  ConsumerState<CashierDashboard> createState() => _CashierDashboardState();
+}
+
+class _CashierDashboardState extends ConsumerState<CashierDashboard> {
+  late int _tab = widget.initialTab.index;
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = [
+      const DashboardTab(
+        label: 'Station',
+        icon: Icons.point_of_sale,
+        content: _StationTab(),
+      ),
+      const DashboardTab(
+        label: 'POS Cart',
+        icon: Icons.shopping_cart,
+        content: _PosCartTab(),
+      ),
+      const DashboardTab(
+        label: 'Unpaid Bills',
+        icon: Icons.receipt_long,
+        content: _UnpaidBillsTab(),
+      ),
+      const DashboardTab(
+        label: 'Credit Bills',
+        icon: Icons.credit_score,
+        content: _CreditBillsTab(),
+      ),
+      const DashboardTab(
+        label: 'Shifts',
+        icon: Icons.access_time,
+        content: _ShiftsTab(),
+      ),
+      const DashboardTab(
+        label: 'Barcode',
+        icon: Icons.qr_code_scanner,
+        content: _BarcodeTab(),
+      ),
+      const DashboardTab(
+        label: 'Insights',
+        icon: Icons.insights,
+        content: _InsightsTab(),
+      ),
+    ];
+
+    return DashboardShell(
+      title: 'Cashier Station',
+      currentTab: _tab,
+      onTabChanged: (index) => setState(() => _tab = index),
+      tabs: tabs,
+      actions: [
+        OutlinedButton.icon(
+          onPressed: () {
+            ref.invalidate(cashierStatsProvider);
+            ref.invalidate(cashierReconciliationProvider);
+          },
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Refresh'),
+        ),
+      ],
+    );
+  }
+}
+
+class _StationTab extends ConsumerStatefulWidget {
+  const _StationTab();
+
+  @override
+  ConsumerState<_StationTab> createState() => _StationTabState();
+}
+
+class _StationTabState extends ConsumerState<_StationTab> {
+  final _lookupController = TextEditingController();
+  final _amountController = TextEditingController();
+  final _referenceController = TextEditingController();
+  final _mpesaPhoneController = TextEditingController();
+  String _method = 'cash';
+  bool _loading = false;
+  Map<String, dynamic>? _bill;
+  List<Map<String, dynamic>> _mpesaMatches = const [];
+
+  @override
+  void dispose() {
+    _lookupController.dispose();
+    _amountController.dispose();
+    _referenceController.dispose();
+    _mpesaPhoneController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = ref.watch(cashierStatsProvider);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          stats.when(
+            data: (data) {
+              final s = _payload(data);
+              return Row(
+                children: [
+                  Expanded(
+                    child: StatCard(
+                      label: 'Today Collections',
+                      value: _money(s['today_collections'] ??
+                          s['total_collections'] ??
+                          s['total_sales']),
+                      icon: Icons.payments,
+                      color: AppColors.kSuccess,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: StatCard(
+                      label: 'Pending Verification',
+                      value:
+                          '${s['pending_verification'] ?? s['pending'] ?? 0}',
+                      icon: Icons.verified,
+                      color: AppColors.kWarning,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: StatCard(
+                      label: 'Open Shifts',
+                      value: '${s['open_shifts'] ?? s['active_shifts'] ?? 0}',
+                      icon: Icons.access_time,
+                      color: AppColors.kPrimary,
+                    ),
+                  ),
+                ],
+              );
+            },
+            loading: () => const LoadingSkeleton(type: SkeletonType.card),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 2, child: _lookupPanel()),
+              const SizedBox(width: 16),
+              Expanded(child: _paymentPanel()),
+            ],
+          ),
+          if (_mpesaMatches.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _MpesaMatches(
+              matches: _mpesaMatches,
+              onUse: (match) {
+                setState(() {
+                  _referenceController.text = _text(match,
+                      ['receipt_number', 'mpesa_receipt_number', 'reference']);
+                  _method = 'mpesa_manual';
+                });
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _lookupPanel() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Bill Lookup',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _createDynamicBill,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('New Bill'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _lookupController,
+              onSubmitted: (_) => _lookupBill(),
+              decoration: const InputDecoration(
+                labelText:
+                    'Order number, short code, barcode, invoice, booking, POS ref',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _loading ? null : _lookupBill,
+                  icon: const Icon(Icons.search, size: 16),
+                  label: const Text('Lookup'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _bill = null;
+                      _lookupController.clear();
+                      _amountController.clear();
+                      _referenceController.clear();
+                      _mpesaMatches = const [];
+                    });
+                  },
+                  child: const Text('Clear'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (_loading)
+              const LoadingSkeleton(type: SkeletonType.list)
+            else if (_bill == null)
+              const EmptyState(message: 'No bill loaded')
+            else
+              _BillSummary(
+                bill: _bill!,
+                onCopyReference: () {
+                  Clipboard.setData(
+                      ClipboardData(text: _lookupController.text));
+                  _snack('Bill reference copied');
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _paymentPanel() {
+    final balance = _balanceFromBill(_bill);
+    if (_bill != null && _amountController.text.isEmpty) {
+      _amountController.text = balance.toStringAsFixed(0);
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Process Payment',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _methodChip('cash', 'Cash', Icons.money),
+                _methodChip('mpesa_manual', 'M-Pesa', Icons.phone_android),
+                _methodChip('card_manual', 'Card', Icons.credit_card),
+                _methodChip('credit_bill', 'Credit Bill', Icons.badge),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                helperText:
+                    _bill == null ? null : 'Balance: ${_money(balance)}',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _referenceController,
+              decoration: InputDecoration(
+                labelText:
+                    _method == 'cash' ? 'Reference (optional)' : 'Reference',
+              ),
+            ),
+            if (_method == 'mpesa_manual') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _mpesaPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration:
+                    const InputDecoration(labelText: 'M-Pesa phone search/STK'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _searchMpesa,
+                    icon: const Icon(Icons.manage_search, size: 16),
+                    label: const Text('Search Payments'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _initiateMpesa,
+                    icon: const Icon(Icons.send_to_mobile, size: 16),
+                    label: const Text('STK Push'),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _bill == null || _loading ? null : _processPayment,
+                icon: const Icon(Icons.check_circle, size: 16),
+                label: const Text('Process Payment'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _methodChip(String value, String label, IconData icon) {
+    return ChoiceChip(
+      selected: _method == value,
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
+      onSelected: (_) => setState(() => _method = value),
+    );
+  }
+
+  Future<void> _lookupBill() async {
+    final id = _lookupController.text.trim();
+    if (id.isEmpty) return _snack('Enter a bill reference');
+    setState(() => _loading = true);
+    try {
+      final bill = await ref.read(cashierRepositoryProvider).getBillDetails(id);
+      final data = _payload(bill);
+      setState(() {
+        _bill = data;
+        _amountController.text = _balanceFromBill(data).toStringAsFixed(0);
+      });
+    } catch (error) {
+      _snack('Bill lookup failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _processPayment() async {
+    final bill = _bill;
+    if (bill == null) return;
+    final amount = num.tryParse(_amountController.text.trim()) ?? 0;
+    if (amount <= 0) return _snack('Enter a valid amount');
+
+    Map<String, dynamic>? creditBill;
+    if (_method == 'credit_bill') {
+      creditBill = await _creditBillPayload(context, amount);
+      if (creditBill == null) return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      Map<String, dynamic>? createdCredit;
+      if (creditBill != null) {
+        createdCredit = await ref
+            .read(cashierRepositoryProvider)
+            .createCreditBill(creditBill);
+      }
+      await ref.read(cashierRepositoryProvider).processPayment(
+            bookingId: _lookupController.text.trim(),
+            amount: amount,
+            method: _method,
+            reference: createdCredit == null
+                ? _referenceController.text.trim()
+                : _text(_payload(createdCredit), ['credit_number', 'id']),
+            creditBill: creditBill,
+          );
+      _snack('Payment recorded');
+      ref.invalidate(cashierStatsProvider);
+      ref.invalidate(cashierUnpaidBillsProvider);
+      ref.invalidate(cashierCreditBillsProvider);
+      await _lookupBill();
+    } catch (error) {
+      _snack('Payment failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _searchMpesa() async {
+    final amount = num.tryParse(_amountController.text.trim());
+    setState(() => _loading = true);
+    try {
+      final matches = await ref.read(cashierRepositoryProvider).searchMpesa(
+            amount: amount,
+            phone: _mpesaPhoneController.text,
+          );
+      setState(() => _mpesaMatches = matches);
+      if (matches.isEmpty) _snack('No matching M-Pesa payment found');
+    } catch (error) {
+      _snack('M-Pesa search failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _initiateMpesa() async {
+    final phone = _mpesaPhoneController.text.trim();
+    final amount = num.tryParse(_amountController.text.trim()) ?? 0;
+    if (phone.isEmpty || amount <= 0) {
+      return _snack('Phone and amount required');
+    }
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(cashierRepositoryProvider).initiateMpesa(
+            phone: phone,
+            amount: amount,
+            accountReference: _lookupController.text.trim(),
+          );
+      final data = _payload(res);
+      _referenceController.text =
+          _text(data, ['checkoutRequestId', 'CheckoutRequestID', 'reference']);
+      _snack('M-Pesa STK push initiated');
+    } catch (error) {
+      _snack('STK push failed: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _createDynamicBill() async {
+    final body = await _unpaidBillPayload(context);
+    if (body == null) return;
+    try {
+      final res =
+          await ref.read(cashierRepositoryProvider).createUnpaidBill(body);
+      final data = _payload(res);
+      _lookupController.text =
+          _text(data, ['bill_number', 'invoice_number', 'id']);
+      ref.invalidate(cashierUnpaidBillsProvider);
+      _snack('Bill created');
+      await _lookupBill();
+    } catch (error) {
+      _snack('Bill creation failed: $error');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _PosCartTab extends ConsumerStatefulWidget {
+  const _PosCartTab();
+
+  @override
+  ConsumerState<_PosCartTab> createState() => _PosCartTabState();
+}
+
+class _PosCartTabState extends ConsumerState<_PosCartTab> {
+  final _customerController = TextEditingController(text: 'Walk-in Customer');
+  final _phoneController = TextEditingController();
+  final _catalogSearchController = TextEditingController();
+  String _method = 'CASH';
+  bool _saving = false;
+  final List<Map<String, dynamic>> _items = [];
+
+  @override
+  void dispose() {
+    _customerController.dispose();
+    _phoneController.dispose();
+    _catalogSearchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = ref.watch(cashierPOSItemsProvider);
+    final total =
+        _items.fold<num>(0, (sum, item) => sum + _num(item['line_total']));
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('POS Sale',
+                              style: Theme.of(context).textTheme.titleMedium),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              ref.invalidate(cashierPOSItemsProvider),
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Refresh Items'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _catalogSearchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        labelText: 'Search branch POS items',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildCatalog(catalog),
+                    const Divider(height: 32),
+                    Text('Cart', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    if (_items.isEmpty)
+                      const EmptyState(message: 'No cart items')
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, index) {
+                          final item = _items[index];
+                          return ListTile(
+                            title: Text(_text(item, ['name', 'product_name'])),
+                            subtitle: Text(
+                              '${_num(item['qty'])} x ${_money(item['unit_price'])}',
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_money(item['line_total'])),
+                                IconButton(
+                                  onPressed: () =>
+                                      setState(() => _items.removeAt(index)),
+                                  icon: const Icon(Icons.close, size: 16),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Checkout',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _customerController,
+                      decoration:
+                          const InputDecoration(labelText: 'Customer name'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _phoneController,
+                      decoration:
+                          const InputDecoration(labelText: 'Phone/reference'),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _chip('CASH', 'Cash'),
+                        _chip('MPESA', 'M-Pesa STK'),
+                        _chip('MPESA_MANUAL', 'M-Pesa Manual'),
+                        _chip('CARD', 'Card'),
+                        _chip('CREDIT_BILL', 'Credit Bill'),
+                      ],
+                    ),
+                    const Divider(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          _money(total),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _items.isEmpty || _saving ? null : _checkout,
+                        icon: const Icon(Icons.check_circle, size: 16),
+                        label: const Text('Create and Pay'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String value, String label) {
+    return ChoiceChip(
+      selected: _method == value,
+      label: Text(label),
+      onSelected: (_) => setState(() => _method = value),
+    );
+  }
+
+  Widget _buildCatalog(AsyncValue<List<Map<String, dynamic>>> catalog) {
+    return catalog.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => EmptyState(
+        message: 'Could not load branch POS items: $error',
+      ),
+      data: (rows) {
+        final search = _catalogSearchController.text.trim().toLowerCase();
+        final filtered = rows.where((item) {
+          if (search.isEmpty) return true;
+          return [
+            _text(item, ['name']),
+            _text(item, ['sku']),
+            _text(item, ['category']),
+            _text(item, ['outlet_name']),
+            _text(item, ['outlet_type']),
+          ].any((value) => value.toLowerCase().contains(search));
+        }).toList();
+
+        if (filtered.isEmpty) {
+          return const EmptyState(
+            message: 'No branch POS items configured for this cashier branch',
+          );
+        }
+
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, index) {
+              final item = filtered[index];
+              final price = _num(item['selling_price'] ?? item['price']);
+              final subtitle = [
+                _text(item, ['outlet_name', 'outlet_type']),
+                _text(item, ['category']),
+                _text(item, ['sku']),
+              ].where((value) => value.isNotEmpty && value != '-').join(' • ');
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(_text(item, ['name'])),
+                subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                trailing: Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      _money(price),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    IconButton.filledTonal(
+                      tooltip: 'Add item',
+                      onPressed: () => _addCatalogItem(item),
+                      icon: const Icon(Icons.add, size: 18),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _addCatalogItem(Map<String, dynamic> catalogItem) async {
+    final qty = await _quantityDialog(
+      context,
+      _text(catalogItem, ['name']),
+    );
+    if (qty == null || qty <= 0) return;
+
+    final productId = _text(catalogItem, ['product_id', 'id']);
+    final price = _num(catalogItem['selling_price'] ?? catalogItem['price']);
+    final existingIndex =
+        _items.indexWhere((item) => _text(item, ['product_id']) == productId);
+
+    setState(() {
+      if (existingIndex >= 0) {
+        final current = Map<String, dynamic>.from(_items[existingIndex]);
+        final nextQty = _num(current['qty']) + qty;
+        current['qty'] = nextQty;
+        current['line_total'] = nextQty * _num(current['unit_price']);
+        _items[existingIndex] = current;
+        return;
+      }
+
+      _items.add({
+        'product_id': productId,
+        'outlet_item_id': _text(catalogItem, ['outlet_item_id', 'id']),
+        'outlet_id': _text(catalogItem, ['outlet_id']),
+        'name': _text(catalogItem, ['name']),
+        'sku': _text(catalogItem, ['sku']),
+        'qty': qty,
+        'unit_price': price,
+        'discount_amount': 0,
+        'tax_amount': 0,
+        'line_total': qty * price,
+      });
+    });
+  }
+
+  Future<void> _checkout() async {
+    final total =
+        _items.fold<num>(0, (sum, item) => sum + _num(item['line_total']));
+    setState(() => _saving = true);
+    try {
+      Map<String, dynamic>? credit;
+      if (_method == 'CREDIT_BILL') {
+        credit = await _creditBillPayload(context, total);
+        if (credit == null) {
+          setState(() => _saving = false);
+          return;
+        }
+        await ref.read(cashierRepositoryProvider).createCreditBill(credit);
+      }
+      final created =
+          await ref.read(cashierRepositoryProvider).createPOSTransaction({
+        'customer_name': _customerController.text.trim(),
+        'customer_phone': _phoneController.text.trim(),
+        'total_amount': total,
+        'items': _items,
+      });
+      final data = _payload(created);
+      final id = _text(data, ['transaction_id', 'id']);
+      await ref.read(cashierRepositoryProvider).payPOSTransaction(id, {
+        'method': _method,
+        if (_method == 'MPESA') 'phone_number': _phoneController.text.trim(),
+        if (_method == 'MPESA_MANUAL')
+          'reference': _phoneController.text.trim(),
+        if (_method == 'CARD') 'reference': _phoneController.text.trim(),
+        if (_method == 'CREDIT_BILL') 'credit_bill': credit,
+      });
+      setState(() => _items.clear());
+      ref.invalidate(cashierStatsProvider);
+      ref.invalidate(cashierReconciliationProvider);
+      _snack('POS transaction completed');
+    } catch (error) {
+      _snack('Checkout failed: $error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _UnpaidBillsTab extends ConsumerStatefulWidget {
+  const _UnpaidBillsTab();
+
+  @override
+  ConsumerState<_UnpaidBillsTab> createState() => _UnpaidBillsTabState();
+}
+
+class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
+  String _status = 'all';
+  String _search = '';
+  String _date = _dateOnly(DateTime.now());
+
+  @override
+  Widget build(BuildContext context) {
+    final filters =
+        CashierBillFilters(status: _status, search: _search, date: _date);
+    final bills = ref.watch(cashierUnpaidBillsProvider(filters));
+    return _BillsScaffold(
+      title: 'Unpaid Bills - $_date',
+      status: _status,
+      onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
+      onSearch: (value) => setState(() => _search = value),
+      onCreate: _createBill,
+      onExport: () =>
+          _exportRows(bills.valueOrNull ?? const [], 'unpaid_bills'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  _date = _dateOnly(
+                    DateTime.parse(_date).subtract(const Duration(days: 1)),
+                  );
+                }),
+                icon: const Icon(Icons.chevron_left, size: 16),
+                label: const Text('Previous day'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _date = _dateOnly(DateTime.now())),
+                icon: const Icon(Icons.today, size: 16),
+                label: const Text('Today'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  _date = _dateOnly(
+                    DateTime.parse(_date).add(const Duration(days: 1)),
+                  );
+                }),
+                icon: const Icon(Icons.chevron_right, size: 16),
+                label: const Text('Next day'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          bills.when(
+            data: (rows) => _BillList(
+              rows: rows,
+              emptyMessage: 'No unpaid bills found for $_date',
+              onPay: (row) => _recordPayment(row),
+              onConfirm: (row, role) => _confirm(row, role),
+            ),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(message: '$error'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createBill() async {
+    final body = await _unpaidBillPayload(context);
+    if (body == null) return;
+    try {
+      await ref.read(cashierRepositoryProvider).createUnpaidBill(body);
+      ref.invalidate(cashierUnpaidBillsProvider);
+      _snack('Unpaid bill created');
+    } catch (error) {
+      _snack('Create failed: $error');
+    }
+  }
+
+  Future<void> _recordPayment(Map<String, dynamic> row) async {
+    final body = await _paymentPayload(
+        context, _num(row['balance_amount'] ?? row['balance']));
+    if (body == null) return;
+    try {
+      final source = _text(row, ['source']);
+      if (row['is_waiter_order'] == true &&
+          (source == 'restaurant' || source == 'bar')) {
+        await ref
+            .read(cashierRepositoryProvider)
+            .clearWaiterOrder(source, _text(row, ['id']), body);
+      } else {
+        await ref
+            .read(cashierRepositoryProvider)
+            .recordUnpaidBillPayment(_text(row, ['id']), body);
+      }
+      ref.invalidate(cashierUnpaidBillsProvider);
+      ref.invalidate(cashierStatsProvider);
+      _snack('Payment recorded');
+    } catch (error) {
+      _snack('Payment failed: $error');
+    }
+  }
+
+  Future<void> _confirm(Map<String, dynamic> row, String role) async {
+    try {
+      await ref
+          .read(cashierRepositoryProvider)
+          .confirmUnpaidBill(_text(row, ['id']), role);
+      ref.invalidate(cashierUnpaidBillsProvider);
+      _snack('Confirmed by $role');
+    } catch (error) {
+      _snack('Confirm failed: $error');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _CreditBillsTab extends ConsumerStatefulWidget {
+  const _CreditBillsTab();
+
+  @override
+  ConsumerState<_CreditBillsTab> createState() => _CreditBillsTabState();
+}
+
+class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
+  String _status = 'all';
+  String _search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filters = CashierBillFilters(status: _status, search: _search);
+    final bills = ref.watch(cashierCreditBillsProvider(filters));
+    return _BillsScaffold(
+      title: 'Credit Bills',
+      status: _status,
+      onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
+      onSearch: (value) => setState(() => _search = value),
+      onCreate: _createCredit,
+      onExport: () =>
+          _exportRows(bills.valueOrNull ?? const [], 'credit_bills'),
+      child: bills.when(
+        data: (rows) => _BillList(
+          rows: rows,
+          emptyMessage: 'No credit bills found',
+          onPay: (row) => _recordPayment(row),
+          onConfirm: (row, role) => _confirm(row, role),
+        ),
+        loading: () => const LoadingSkeleton(type: SkeletonType.list),
+        error: (error, _) => ErrorState(message: '$error'),
+      ),
+    );
+  }
+
+  Future<void> _createCredit() async {
+    final body = await _creditBillPayload(context, 0, allowAmountEdit: true);
+    if (body == null) return;
+    try {
+      await ref.read(cashierRepositoryProvider).createCreditBill(body);
+      ref.invalidate(cashierCreditBillsProvider);
+      _snack('Credit bill created');
+    } catch (error) {
+      _snack('Create failed: $error');
+    }
+  }
+
+  Future<void> _recordPayment(Map<String, dynamic> row) async {
+    final body = await _paymentPayload(
+        context, _num(row['balance_amount'] ?? row['balance']));
+    if (body == null) return;
+    try {
+      await ref
+          .read(cashierRepositoryProvider)
+          .recordCreditPayment(_text(row, ['id']), body);
+      ref.invalidate(cashierCreditBillsProvider);
+      ref.invalidate(cashierStatsProvider);
+      _snack('Credit payment recorded');
+    } catch (error) {
+      _snack('Payment failed: $error');
+    }
+  }
+
+  Future<void> _confirm(Map<String, dynamic> row, String role) async {
+    try {
+      await ref
+          .read(cashierRepositoryProvider)
+          .confirmCreditBill(_text(row, ['id']), role);
+      ref.invalidate(cashierCreditBillsProvider);
+      _snack('Confirmed by $role');
+    } catch (error) {
+      _snack('Confirm failed: $error');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _ShiftsTab extends ConsumerStatefulWidget {
+  const _ShiftsTab();
+
+  @override
+  ConsumerState<_ShiftsTab> createState() => _ShiftsTabState();
+}
+
+class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
+  String _status = 'all';
+
+  @override
+  Widget build(BuildContext context) {
+    final allShifts =
+        ref.watch(cashierShiftsProvider(const CashierShiftFilters()));
+    final visibleShifts =
+        ref.watch(cashierShiftsProvider(CashierShiftFilters(status: _status)));
+    final hasOpenShift = allShifts.maybeWhen(
+      data: (rows) => rows.any((row) => _shiftStatus(row) == 'open'),
+      orElse: () => true,
+    );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Shift Logbook',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              DropdownButton<String>(
+                value: _status,
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All')),
+                  DropdownMenuItem(value: 'open', child: Text('Open')),
+                  DropdownMenuItem(value: 'closed', child: Text('Closed')),
+                  DropdownMenuItem(
+                      value: 'reconciled', child: Text('Reconciled')),
+                ],
+                onChanged: (value) => setState(() => _status = value ?? 'all'),
+              ),
+              const SizedBox(width: 12),
+              Tooltip(
+                message: hasOpenShift
+                    ? 'Close the current open shift before starting another'
+                    : 'Start a new cashier shift',
+                child: ElevatedButton.icon(
+                  onPressed: hasOpenShift ? null : _startShift,
+                  icon: const Icon(Icons.play_arrow, size: 16),
+                  label: const Text('Start Shift'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          visibleShifts.when(
+            data: (rows) => rows.isEmpty
+                ? EmptyState(message: 'No ${_statusLabel(_status)} shifts found')
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_statusLabel(_status)} shift history',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Card(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: rows.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, index) {
+                            final row = rows[index];
+                            final status = _shiftStatus(row);
+                            return ExpansionTile(
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    _statusColor(status).withValues(alpha: 0.12),
+                                child: Icon(Icons.access_time,
+                                    color: _statusColor(status), size: 18),
+                              ),
+                              title: Text(_text(row, ['shift_number', 'id'])),
+                              subtitle: Text(
+                                  '${_date(row['shift_start'] ?? row['opened_at'] ?? row['start_time'])} - $status'),
+                              trailing: Text(_money(row['total_sales'] ??
+                                  row['total_collections'] ??
+                                  row['closing_float'] ??
+                                  row['closing_cash'])),
+                              childrenPadding:
+                                  const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              children: [
+                                _KeyValueGrid(values: {
+                                  'Opening float': _money(row['opening_float']),
+                                  'Cash': _money(row['total_cash_sales'] ??
+                                      row['total_cash']),
+                                  'M-Pesa': _money(row['total_mpesa_sales'] ??
+                                      row['total_mpesa']),
+                                  'Card': _money(row['total_card_sales'] ??
+                                      row['total_card']),
+                                  'Expected cash': _money(
+                                      row['expected_closing_float'] ??
+                                          row['expected_cash']),
+                                }),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: status == 'open'
+                                          ? () => _closeShift(row)
+                                          : null,
+                                      icon: const Icon(Icons.stop, size: 16),
+                                      label: const Text('Close'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: status == 'closed'
+                                          ? () => _reconcileShift(row)
+                                          : null,
+                                      icon: const Icon(Icons.fact_check, size: 16),
+                                      label: const Text('Reconcile'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(message: '$error'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startShift() async {
+    final opening =
+        await _numberDialog(context, 'Start Shift', 'Opening float');
+    if (opening == null) return;
+    try {
+      await ref.read(cashierRepositoryProvider).startShift(opening);
+      ref.invalidate(cashierShiftsProvider);
+      _snack('Shift started');
+    } catch (error) {
+      _snack('Start shift failed: $error');
+    }
+  }
+
+  Future<void> _closeShift(Map<String, dynamic> row) async {
+    try {
+      final repo = ref.read(cashierRepositoryProvider);
+      final shiftId = _text(row, ['id']);
+      final shift = await repo.getShift(shiftId);
+      final items = await repo.getPOSItems();
+      final staff = await repo.getBranchStaff().catchError(
+        (_) => <Map<String, dynamic>>[],
+      );
+      if (!mounted) return;
+      final payload = await _shiftCloseLogbookDialog(
+        context,
+        shift: _payload(shift).isEmpty ? row : _payload(shift),
+        stockItems: items,
+        staffMembers: staff,
+      );
+      if (payload == null) return;
+      await repo.closeShift(shiftId, payload);
+      ref.invalidate(cashierShiftsProvider);
+      _snack('Shift closed');
+    } catch (error) {
+      _snack('Close shift failed: $error');
+    }
+  }
+
+  Future<void> _reconcileShift(Map<String, dynamic> row) async {
+    final notes = await _textDialog(context, 'Reconcile Shift', 'Notes');
+    if (notes == null) return;
+    try {
+      await ref
+          .read(cashierRepositoryProvider)
+          .reconcileShift(_text(row, ['id']), {
+        'reconciliation_notes': notes,
+      });
+      ref.invalidate(cashierShiftsProvider);
+      _snack('Shift reconciled');
+    } catch (error) {
+      _snack('Reconcile failed: $error');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _ShiftCreditEntry {
+  const _ShiftCreditEntry({
+    required this.staffId,
+    required this.name,
+    required this.amount,
+    this.reference,
+  });
+
+  final String staffId;
+  final String name;
+  final num amount;
+  final String? reference;
+
+  Map<String, dynamic> toJson() => {
+        'staff_id': staffId.isEmpty ? null : staffId,
+        'name': name,
+        'amount': amount,
+        if (reference != null && reference!.isNotEmpty) 'reference': reference,
+        'time': DateTime.now().toIso8601String(),
+      };
+}
+
+class _ShiftStaffMember {
+  const _ShiftStaffMember({
+    required this.id,
+    required this.name,
+    required this.employeeId,
+    required this.department,
+  });
+
+  final String id;
+  final String name;
+  final String employeeId;
+  final String department;
+}
+
+class _ShiftStockEntry {
+  _ShiftStockEntry(Map<String, dynamic> item)
+      : itemName = _text(item, ['name', 'product_name', 'item_name']),
+        unit = _text(item, ['unit']),
+        opening = _num(item['current_stock'] ?? item['opening_stock']),
+        additions = 0,
+        sold = 0,
+        physical = null,
+        reason = '';
+
+  final String itemName;
+  final String unit;
+  final num opening;
+  num additions;
+  num sold;
+  num? physical;
+  String reason;
+
+  num get systemClosing => opening + additions - sold;
+  num get variance => physical == null ? 0 : physical! - systemClosing;
+
+  Map<String, dynamic> toJson() => {
+        'item_name': itemName,
+        'unit': unit,
+        'opening_stock': opening,
+        'additions': additions,
+        'sold_quantity': sold,
+        'system_closing_stock': systemClosing,
+        'physical_count': physical,
+        'variance': variance,
+        'variance_reason': reason,
+      };
+}
+
+Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
+  BuildContext context, {
+  required Map<String, dynamic> shift,
+  required List<Map<String, dynamic>> stockItems,
+  required List<Map<String, dynamic>> staffMembers,
+}) {
+  final closingCash = TextEditingController();
+  final cashAtHand = TextEditingController();
+  final cashDeposited = TextEditingController();
+  final bankRef = TextEditingController();
+  final handoverNotes = TextEditingController();
+  final stockNotes = TextEditingController();
+
+  final revenueControllers = <String, TextEditingController>{
+    'restaurant_revenue': TextEditingController(
+        text: _num(shift['restaurant_revenue']).toStringAsFixed(0)),
+    'bar_revenue': TextEditingController(
+        text: _num(shift['bar_revenue']).toStringAsFixed(0)),
+    'room_booking_revenue': TextEditingController(
+        text: _num(shift['room_booking_revenue']).toStringAsFixed(0)),
+    'conference_revenue': TextEditingController(
+        text: _num(shift['conference_revenue']).toStringAsFixed(0)),
+    'swimming_pool_revenue': TextEditingController(
+        text: _num(shift['swimming_pool_revenue']).toStringAsFixed(0)),
+    'pool_token_revenue': TextEditingController(
+        text: _num(shift['pool_token_revenue']).toStringAsFixed(0)),
+    'other_revenue': TextEditingController(
+        text: _num(shift['other_revenue']).toStringAsFixed(0)),
+  };
+
+  final creditStaffId = TextEditingController();
+  final creditName = TextEditingController();
+  final creditAmount = TextEditingController();
+  final paidStaffId = TextEditingController();
+  final paidName = TextEditingController();
+  final paidAmount = TextEditingController();
+  final staffOptions = _shiftStaffMembers(staffMembers);
+  final creditEntries = _shiftCreditEntries(
+    shift,
+    detailKeys: const ['credit_bills_details', 'credit_bills'],
+    staffMembers: staffOptions,
+  );
+  final paidEntries = _shiftCreditEntries(
+    shift,
+    detailKeys: const ['paid_bills_details', 'paid_bills'],
+    staffMembers: staffOptions,
+  );
+  final stockEntries = stockItems
+      .where((item) => _text(item, ['name', 'product_name']).isNotEmpty)
+      .take(40)
+      .map(_ShiftStockEntry.new)
+      .toList();
+
+  bool poolNa = shift['pool_na'] == true;
+  bool conferenceNa = shift['conference_na'] == true;
+  bool roomsNa = shift['rooms_na'] == true;
+
+  num controllerAmount(String key) =>
+      num.tryParse(revenueControllers[key]?.text.trim() ?? '') ?? 0;
+
+  void disposeAll() {
+    closingCash.dispose();
+    cashAtHand.dispose();
+    cashDeposited.dispose();
+    bankRef.dispose();
+    handoverNotes.dispose();
+    stockNotes.dispose();
+    creditStaffId.dispose();
+    creditName.dispose();
+    creditAmount.dispose();
+    paidStaffId.dispose();
+    paidName.dispose();
+    paidAmount.dispose();
+    for (final controller in revenueControllers.values) {
+      controller.dispose();
+    }
+  }
+
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        final openingFloat = _num(shift['opening_float']);
+        final cashSales =
+            _num(shift['total_cash_sales'] ?? shift['total_cash']);
+        final mpesaSales =
+            _num(shift['total_mpesa_sales'] ?? shift['total_mpesa']);
+        final cardSales =
+            _num(shift['total_card_sales'] ?? shift['total_card']);
+        final paidBillsTotal =
+            paidEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
+        final creditBillsTotal =
+            creditEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
+        final actualCash = num.tryParse(closingCash.text.trim()) ?? 0;
+        final expectedCash = openingFloat + cashSales + paidBillsTotal;
+        final variance = actualCash - expectedCash;
+
+        return Dialog(
+          insetPadding: const EdgeInsets.all(24),
+          child: SizedBox(
+            width: 1120,
+            height: 760,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Close Shift Logbook',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
+                      Text(_text(shift, ['shift_number', 'id'])),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _KeyValueGrid(values: {
+                          'Opening float': _money(openingFloat),
+                          'Cash sales': _money(cashSales),
+                          'M-Pesa sales': _money(mpesaSales),
+                          'Card sales': _money(cardSales),
+                          'Credit sales': _money(creditBillsTotal),
+                          'Expected cash': _money(expectedCash),
+                          'Variance': _money(variance),
+                        }),
+                        const SizedBox(height: 20),
+                        Text('Cash reconciliation',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _amountField(closingCash, 'Actual cash counted',
+                                onChanged: (_) => setDialogState(() {})),
+                            _amountField(cashAtHand, 'Cash at hand'),
+                            _amountField(cashDeposited, 'Cash deposited'),
+                            SizedBox(
+                              width: 260,
+                              child: TextField(
+                                controller: bankRef,
+                                decoration: const InputDecoration(
+                                    labelText: 'Bank deposit reference'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Text('Revenue sources',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _amountField(revenueControllers['restaurant_revenue']!,
+                                'Restaurant'),
+                            _amountField(
+                                revenueControllers['bar_revenue']!, 'Bar'),
+                            _amountField(
+                                revenueControllers['room_booking_revenue']!,
+                                'Rooms',
+                                enabled: !roomsNa),
+                            _amountField(
+                                revenueControllers['conference_revenue']!,
+                                'Conference',
+                                enabled: !conferenceNa),
+                            _amountField(
+                                revenueControllers['swimming_pool_revenue']!,
+                                'Swimming pool',
+                                enabled: !poolNa),
+                            _amountField(
+                                revenueControllers['pool_token_revenue']!,
+                                'Pool tokens',
+                                enabled: !poolNa),
+                            _amountField(revenueControllers['other_revenue']!,
+                                'Other'),
+                          ],
+                        ),
+                        Wrap(
+                          spacing: 16,
+                          children: [
+                            CheckboxListTile(
+                              value: roomsNa,
+                              title: const Text('Rooms N/A'),
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              onChanged: (value) =>
+                                  setDialogState(() => roomsNa = value ?? false),
+                            ),
+                            CheckboxListTile(
+                              value: conferenceNa,
+                              title: const Text('Conference N/A'),
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              onChanged: (value) => setDialogState(
+                                  () => conferenceNa = value ?? false),
+                            ),
+                            CheckboxListTile(
+                              value: poolNa,
+                              title: const Text('Pool N/A'),
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              onChanged: (value) =>
+                                  setDialogState(() => poolNa = value ?? false),
+                            ),
+                          ].map((child) => SizedBox(width: 190, child: child)).toList(),
+                        ),
+                        const SizedBox(height: 24),
+                        Text('Credit bills and paid bills',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _creditEntryPanel(
+                              context,
+                              title: 'Credit issued',
+                              staffMembers: staffOptions,
+                              staffId: creditStaffId,
+                              name: creditName,
+                              amount: creditAmount,
+                              entries: creditEntries,
+                              onAdd: () => setDialogState(() {
+                                final amount =
+                                    num.tryParse(creditAmount.text.trim()) ?? 0;
+                                if (amount <= 0) return;
+                                creditEntries.add(_ShiftCreditEntry(
+                                  staffId: creditStaffId.text.trim(),
+                                  name: creditName.text.trim(),
+                                  amount: amount,
+                                ));
+                                creditStaffId.clear();
+                                creditName.clear();
+                                creditAmount.clear();
+                              }),
+                              onRemove: (index) => setDialogState(
+                                  () => creditEntries.removeAt(index)),
+                            ),
+                            _creditEntryPanel(
+                              context,
+                              title: 'Debt receipts',
+                              staffMembers: staffOptions,
+                              staffId: paidStaffId,
+                              name: paidName,
+                              amount: paidAmount,
+                              entries: paidEntries,
+                              onAdd: () => setDialogState(() {
+                                final amount =
+                                    num.tryParse(paidAmount.text.trim()) ?? 0;
+                                if (amount <= 0) return;
+                                paidEntries.add(_ShiftCreditEntry(
+                                  staffId: paidStaffId.text.trim(),
+                                  name: paidName.text.trim(),
+                                  amount: amount,
+                                ));
+                                paidStaffId.clear();
+                                paidName.clear();
+                                paidAmount.clear();
+                              }),
+                              onRemove: (index) =>
+                                  setDialogState(() => paidEntries.removeAt(index)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Text('Cashier inventory stock take',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        if (stockEntries.isEmpty)
+                          const EmptyState(
+                              message: 'No cashier POS items found for stock take')
+                        else
+                          _stockTakeTable(stockEntries, setDialogState),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: stockNotes,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                              labelText: 'Stock take notes / variance summary'),
+                        ),
+                        const SizedBox(height: 24),
+                        TextField(
+                          controller: handoverNotes,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                              labelText: 'Handover / variance notes'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Text('Expected ${_money(expectedCash)}  •  Variance ${_money(variance)}'),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          if (closingCash.text.trim().isEmpty) return;
+                          final unexplainedStockVariance = stockEntries.any(
+                              (entry) =>
+                                  entry.variance != 0 &&
+                                  entry.reason.trim().isEmpty);
+                          if (unexplainedStockVariance) return;
+                          final stockJson = stockEntries
+                              .map((entry) => entry.toJson())
+                              .toList();
+                          final notes = [
+                            handoverNotes.text.trim(),
+                            if (stockNotes.text.trim().isNotEmpty)
+                              'Stock notes: ${stockNotes.text.trim()}',
+                            if (stockJson.isNotEmpty)
+                              'Stock take: $stockJson',
+                          ].where((line) => line.isNotEmpty).join('\n\n');
+                          Navigator.pop(context, {
+                            'closing_float':
+                                num.tryParse(closingCash.text.trim()) ?? 0,
+                            'notes': notes,
+                            for (final key in revenueControllers.keys)
+                              key: controllerAmount(key),
+                            'credit_bills_taken': creditBillsTotal,
+                            'credit_bills_count': creditEntries.length,
+                            'credit_bills_details': creditEntries
+                                .map((entry) => entry.toJson())
+                                .toList(),
+                            'paid_bills_value': paidBillsTotal,
+                            'paid_bills_count': paidEntries.length,
+                            'paid_bills_details': paidEntries
+                                .map((entry) => entry.toJson())
+                                .toList(),
+                            'unpaid_bills_value':
+                                (creditBillsTotal - paidBillsTotal)
+                                    .clamp(0, creditBillsTotal),
+                            'unpaid_bills_count': creditEntries.length,
+                            'cash_at_hand':
+                                num.tryParse(cashAtHand.text.trim()) ??
+                                    num.tryParse(closingCash.text.trim()) ??
+                                    0,
+                            'cash_deposited':
+                                num.tryParse(cashDeposited.text.trim()) ?? 0,
+                            'bank_deposit_ref': bankRef.text.trim(),
+                            'pool_na': poolNa,
+                            'conference_na': conferenceNa,
+                            'rooms_na': roomsNa,
+                          });
+                        },
+                        icon: const Icon(Icons.archive, size: 16),
+                        label: const Text('Archive Shift Log'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  ).whenComplete(disposeAll);
+}
+
+Widget _amountField(
+  TextEditingController controller,
+  String label, {
+  bool enabled = true,
+  ValueChanged<String>? onChanged,
+}) {
+  return SizedBox(
+    width: 220,
+    child: TextField(
+      controller: controller,
+      enabled: enabled,
+      onChanged: onChanged,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(labelText: label),
+    ),
+  );
+}
+
+List<_ShiftStaffMember> _shiftStaffMembers(
+  List<Map<String, dynamic>> rows,
+) {
+  final members = rows
+      .map((row) {
+        final user = _payload(row['user']);
+        final firstName = _text(row, ['first_name']).isNotEmpty
+            ? _text(row, ['first_name'])
+            : _text(user, ['first_name']);
+        final lastName = _text(row, ['last_name']).isNotEmpty
+            ? _text(row, ['last_name'])
+            : _text(user, ['last_name']);
+        final name = [firstName, lastName]
+            .where((part) => part.trim().isNotEmpty)
+            .join(' ')
+            .trim();
+        return _ShiftStaffMember(
+          id: _text(row, ['id']),
+          name: name.isEmpty
+              ? _text(row, ['name', 'full_name', 'email'])
+              : name,
+          employeeId: _text(row, ['employee_id', 'id_number']),
+          department: _text(row, ['department', 'role']),
+        );
+      })
+      .where((staff) => staff.id.isNotEmpty && staff.name.isNotEmpty)
+      .toList();
+  members.sort((a, b) => a.name.compareTo(b.name));
+  return members;
+}
+
+_ShiftStaffMember? _shiftStaffById(
+  List<_ShiftStaffMember> members,
+  String? id,
+) {
+  for (final member in members) {
+    if (member.id == id) return member;
+  }
+  return null;
+}
+
+List<_ShiftCreditEntry> _shiftCreditEntries(
+  Map<String, dynamic> shift, {
+  required List<String> detailKeys,
+  required List<_ShiftStaffMember> staffMembers,
+}) {
+  final entries = <_ShiftCreditEntry>[];
+  final seen = <String>{};
+
+  void addEntry(dynamic raw) {
+    final row = _payload(raw);
+    if (row.isEmpty) return;
+    final staffId = _text(row, [
+      'staff_id',
+      'staff_profile_id',
+      'employee_id',
+    ]);
+    final amount = _num(row['amount'] ?? row['total_amount']);
+    if (staffId.isEmpty || amount <= 0) return;
+    final name = _text(row, [
+      'name',
+      'staff_name',
+      'customer_name',
+      'payer_name',
+    ]);
+    final reference = _text(row, [
+      'reference',
+      'credit_number',
+      'transaction_ref',
+      'payment_reference',
+    ]);
+    final key = '$staffId|$amount|$reference';
+    if (!seen.add(key)) return;
+    final staff = _shiftStaffById(staffMembers, staffId);
+    entries.add(_ShiftCreditEntry(
+      staffId: staffId,
+      name: name.isEmpty ? staff?.name ?? '' : name,
+      amount: amount,
+      reference: reference.isEmpty ? null : reference,
+    ));
+  }
+
+  for (final key in detailKeys) {
+    final value = shift[key];
+    if (value is List) {
+      for (final row in value) {
+        addEntry(row);
+      }
+    }
+  }
+
+  final transactions = shift['transactions'];
+  if (transactions is List) {
+    for (final transaction in transactions) {
+      final row = _payload(transaction);
+      final method = _text(row, ['payment_method', 'method']).toLowerCase();
+      if (!method.contains('credit')) continue;
+      addEntry(row);
+    }
+  }
+
+  return entries;
+}
+
+Widget _creditEntryPanel(
+  BuildContext context, {
+  required String title,
+  required List<_ShiftStaffMember> staffMembers,
+  required TextEditingController staffId,
+  required TextEditingController name,
+  required TextEditingController amount,
+  required List<_ShiftCreditEntry> entries,
+  required VoidCallback onAdd,
+  required ValueChanged<int> onRemove,
+}) {
+  return SizedBox(
+    width: 500,
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (staffMembers.isEmpty)
+                  SizedBox(
+                    width: 150,
+                    child: TextField(
+                      controller: staffId,
+                      decoration:
+                          const InputDecoration(labelText: 'Staff profile ID'),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: 290,
+                    child: DropdownButtonFormField<String>(
+                      initialValue:
+                          staffMembers.any((staff) => staff.id == staffId.text)
+                              ? staffId.text
+                              : null,
+                      isExpanded: true,
+                      menuMaxHeight: 360,
+                      items: staffMembers
+                          .map(
+                            (staff) => DropdownMenuItem<String>(
+                              value: staff.id,
+                              child: Text(
+                                [
+                                  staff.name,
+                                  if (staff.employeeId.isNotEmpty)
+                                    staff.employeeId,
+                                  if (staff.department.isNotEmpty)
+                                    staff.department,
+                                ].join(' - '),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        final selected = _shiftStaffById(
+                          staffMembers,
+                          value,
+                        );
+                        staffId.text = selected?.id ?? '';
+                        name.text = selected?.name ?? '';
+                      },
+                      decoration:
+                          const InputDecoration(labelText: 'Staff member'),
+                    ),
+                  ),
+                SizedBox(
+                  width: 130,
+                  child: TextField(
+                    controller: name,
+                    readOnly: staffMembers.isNotEmpty,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                ),
+                SizedBox(
+                  width: 110,
+                  child: TextField(
+                    controller: amount,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Amount'),
+                  ),
+                ),
+                IconButton.filled(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.add, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (entries.isEmpty)
+              const Text('No entries',
+                  style: TextStyle(color: AppColors.kTextSecondary))
+            else
+              for (var i = 0; i < entries.length; i++)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(entries[i].name.isEmpty ? 'Staff' : entries[i].name),
+                  subtitle: Text(entries[i].staffId),
+                  trailing: Wrap(
+                    spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(_money(entries[i].amount)),
+                      IconButton(
+                        onPressed: () => onRemove(i),
+                        icon: const Icon(Icons.close, size: 16),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _stockTakeTable(
+  List<_ShiftStockEntry> rows,
+  void Function(void Function()) setDialogState,
+) {
+  const tableWidth = 1120.0;
+  return Card(
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: tableWidth,
+          child: Column(
+            children: [
+              const _StockHeaderRow(),
+              const Divider(height: 1),
+              for (final row in rows) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 200, child: Text(row.itemName)),
+                      SizedBox(width: 115, child: Text('${row.opening} ${row.unit}')),
+                      SizedBox(
+                        width: 115,
+                        child: _smallNumberCell(
+                          initial: row.additions,
+                          onChanged: (value) =>
+                              setDialogState(() => row.additions = value),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 100,
+                        child: _smallNumberCell(
+                          initial: row.sold,
+                          onChanged: (value) =>
+                              setDialogState(() => row.sold = value),
+                        ),
+                      ),
+                      SizedBox(
+                          width: 110,
+                          child: Text(row.systemClosing.toStringAsFixed(2))),
+                      SizedBox(
+                        width: 115,
+                        child: _smallNumberCell(
+                          initial: row.physical,
+                          onChanged: (value) =>
+                              setDialogState(() => row.physical = value),
+                        ),
+                      ),
+                      SizedBox(
+                          width: 100,
+                          child: Text(row.variance.toStringAsFixed(2))),
+                      SizedBox(
+                        width: 260,
+                        child: TextField(
+                          onChanged: (value) => row.reason = value,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            hintText: 'Required if variance',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _StockHeaderRow extends StatelessWidget {
+  const _StockHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(fontWeight: FontWeight.bold);
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(width: 200, child: Text('Item', style: style)),
+          SizedBox(width: 115, child: Text('Opening', style: style)),
+          SizedBox(width: 115, child: Text('Additions', style: style)),
+          SizedBox(width: 100, child: Text('Sold', style: style)),
+          SizedBox(width: 110, child: Text('System', style: style)),
+          SizedBox(width: 115, child: Text('Physical', style: style)),
+          SizedBox(width: 100, child: Text('Variance', style: style)),
+          SizedBox(width: 260, child: Text('Reason', style: style)),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _smallNumberCell({
+  required num? initial,
+  required ValueChanged<num> onChanged,
+}) {
+  final controller = TextEditingController(
+      text: initial == null ? '' : initial.toStringAsFixed(0));
+  return SizedBox(
+    width: 90,
+    child: TextField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      onChanged: (value) => onChanged(num.tryParse(value.trim()) ?? 0),
+      decoration: const InputDecoration(isDense: true),
+    ),
+  );
+}
+
+class _BarcodeTab extends ConsumerStatefulWidget {
+  const _BarcodeTab();
+
+  @override
+  ConsumerState<_BarcodeTab> createState() => _BarcodeTabState();
+}
+
+class _BarcodeTabState extends ConsumerState<_BarcodeTab> {
+  final _controller = TextEditingController();
+  bool _loading = false;
+  Map<String, dynamic>? _result;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Barcode Scan',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                onSubmitted: (_) => _scan(),
+                decoration: const InputDecoration(
+                  labelText: 'Scan barcode or enter short code / order number',
+                  prefixIcon: Icon(Icons.qr_code_scanner),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _loading ? null : _scan,
+                icon: const Icon(Icons.search, size: 16),
+                label: const Text('Scan'),
+              ),
+              const SizedBox(height: 20),
+              if (_loading)
+                const LoadingSkeleton(type: SkeletonType.list)
+              else if (_result == null)
+                const EmptyState(message: 'No scanned bill loaded')
+              else
+                _BillSummary(bill: _payload(_result!), onCopyReference: null),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _scan() async {
+    final code = _controller.text.trim();
+    if (code.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final result =
+          await ref.read(cashierRepositoryProvider).scanPOSBarcode(code);
+      setState(() => _result = result);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Scan failed: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+}
+
+class _InsightsTab extends ConsumerWidget {
+  const _InsightsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(cashierStatsProvider);
+    final reconciliation = ref.watch(cashierReconciliationProvider);
+    final insights = ref.watch(cashierInsightsProvider);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _AsyncStatCard(
+                  value: stats,
+                  label: 'Cash',
+                  keys: const ['total_cash', 'cash_total'],
+                  icon: Icons.money,
+                  color: AppColors.kSuccess,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AsyncStatCard(
+                  value: stats,
+                  label: 'M-Pesa',
+                  keys: const ['total_mpesa', 'mpesa_total'],
+                  icon: Icons.phone_android,
+                  color: AppColors.kPrimary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AsyncStatCard(
+                  value: stats,
+                  label: 'Card',
+                  keys: const ['total_card', 'card_total'],
+                  icon: Icons.credit_card,
+                  color: AppColors.kAccent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AsyncStatCard(
+                  value: stats,
+                  label: 'Credit Bills',
+                  keys: const ['total_credit_bill', 'credit_bill_total'],
+                  icon: Icons.credit_score,
+                  color: AppColors.kWarning,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('POS Reconciliation',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  reconciliation.when(
+                    data: (data) => _JsonSummary(data: _payload(data)),
+                    loading: () =>
+                        const LoadingSkeleton(type: SkeletonType.list),
+                    error: (error, _) => ErrorState(message: '$error'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Python POS Insights',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  insights.when(
+                    data: (data) => data.isEmpty
+                        ? const EmptyState(
+                            message: 'Insights service unavailable')
+                        : _JsonSummary(data: _payload(data)),
+                    loading: () =>
+                        const LoadingSkeleton(type: SkeletonType.list),
+                    error: (_, __) => const EmptyState(
+                        message: 'Insights service unavailable'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillsScaffold extends StatelessWidget {
+  const _BillsScaffold({
+    required this.title,
+    required this.status,
+    required this.onStatusChanged,
+    required this.onSearch,
+    required this.onCreate,
+    required this.onExport,
+    required this.child,
+  });
+
+  final String title;
+  final String status;
+  final ValueChanged<String?> onStatusChanged;
+  final ValueChanged<String> onSearch;
+  final VoidCallback onCreate;
+  final VoidCallback onExport;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                  child: Text(title,
+                      style: Theme.of(context).textTheme.titleLarge)),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  onChanged: onSearch,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    labelText: 'Search',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              DropdownButton<String>(
+                value: status,
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All')),
+                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                  DropdownMenuItem(value: 'partial', child: Text('Partial')),
+                  DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                  DropdownMenuItem(
+                      value: 'cancelled', child: Text('Cancelled')),
+                ],
+                onChanged: onStatusChanged,
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: onExport,
+                icon: const Icon(Icons.download, size: 16),
+                label: const Text('Export'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: onCreate,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Create'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _BillList extends StatelessWidget {
+  const _BillList({
+    required this.rows,
+    required this.emptyMessage,
+    required this.onPay,
+    required this.onConfirm,
+  });
+
+  final List<Map<String, dynamic>> rows;
+  final String emptyMessage;
+  final ValueChanged<Map<String, dynamic>> onPay;
+  final void Function(Map<String, dynamic>, String) onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) return EmptyState(message: emptyMessage);
+    return Card(
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: rows.length,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (_, index) {
+          final row = rows[index];
+          final status = _text(row, ['status', 'approval_status']);
+          final items = _billItems(row);
+          return ExpansionTile(
+            leading: CircleAvatar(
+              backgroundColor: _statusColor(status).withValues(alpha: 0.12),
+              child: Icon(Icons.receipt_long,
+                  color: _statusColor(status), size: 18),
+            ),
+            title: Text(_text(row, [
+              'order_number',
+              'bill_number',
+              'credit_number',
+              'invoice_number',
+              'id'
+            ])),
+            subtitle: Text(
+              [
+                if (_text(row, ['short_code', 'scan_reference']).isNotEmpty)
+                  'Code ${_text(row, ['short_code', 'scan_reference'])}',
+                if (_text(row, ['waiter_name']).isNotEmpty)
+                  'Waiter ${_text(row, ['waiter_name'])}',
+                if (_text(row, ['customer_name', 'guest_name']).isNotEmpty)
+                  _text(row, ['customer_name', 'guest_name']),
+                status,
+              ].join(' - '),
+            ),
+            trailing: Text(
+              _money(row['balance_amount'] ??
+                  row['balance'] ??
+                  row['total_amount']),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              _KeyValueGrid(values: {
+                'Type': _text(row, ['bill_type', 'reference_type']),
+                'Order': _text(row, ['order_number', 'bill_number']),
+                'Short code': _text(row, ['short_code', 'scan_reference']),
+                'Date': _date(row['bill_date'] ?? row['created_at']),
+                'Total': _money(row['total_amount'] ?? row['amount']),
+                'Paid': _money(row['paid_amount'] ?? row['amount_paid']),
+                'Balance': _money(row['balance_amount'] ?? row['balance']),
+                'Due': _date(row['due_date']),
+              }),
+              if (items.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Items',
+                      style: Theme.of(context).textTheme.titleSmall),
+                ),
+                const SizedBox(height: 6),
+                for (final item in items)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_text(item, [
+                      'item_name',
+                      'name',
+                      'description',
+                      'drink_name'
+                    ])),
+                    trailing: Text(
+                      '${_num(item['quantity'] ?? item['qty']).toStringAsFixed(0)} x ${_money(item['unit_price'] ?? item['price'])}',
+                    ),
+                    subtitle: Text(_money(
+                        item['total_price'] ?? item['line_total'] ?? item['total'])),
+                  ),
+              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => onPay(row),
+                    icon: const Icon(Icons.payments, size: 16),
+                    label: const Text('Record Payment'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => onConfirm(row, 'accountant'),
+                    icon: const Icon(Icons.account_balance, size: 16),
+                    label: const Text('Accountant Confirm'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => onConfirm(row, 'auditor'),
+                    icon: const Icon(Icons.verified_user, size: 16),
+                    label: const Text('Auditor Confirm'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BillSummary extends StatelessWidget {
+  const _BillSummary({required this.bill, required this.onCopyReference});
+
+  final Map<String, dynamic> bill;
+  final VoidCallback? onCopyReference;
+
+  @override
+  Widget build(BuildContext context) {
+    final financials = _asMap(bill['financials']);
+    final items = _billItems(bill);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _billTitle(bill),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (onCopyReference != null)
+              IconButton(
+                onPressed: onCopyReference,
+                icon: const Icon(Icons.copy, size: 18),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _KeyValueGrid(values: {
+          'Type': _text(bill, ['type', 'source']),
+          'Customer': _customerName(bill),
+          'Total': _money(financials['total_amount'] ?? bill['total_amount']),
+          'Paid': _money(financials['amount_paid'] ?? bill['amount_paid']),
+          'Balance': _money(financials['balance'] ?? bill['balance']),
+          'Status': _text(bill, ['payment_status', 'status']),
+        }),
+        if (items.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('Items', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, index) {
+              final item = items[index];
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(_text(item, ['name', 'description', 'item_name'])),
+                subtitle: Text('Qty ${_num(item['quantity'] ?? item['qty'])}'),
+                trailing: Text(_money(
+                    item['total'] ?? item['line_total'] ?? item['price'])),
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MpesaMatches extends StatelessWidget {
+  const _MpesaMatches({required this.matches, required this.onUse});
+
+  final List<Map<String, dynamic>> matches;
+  final ValueChanged<Map<String, dynamic>> onUse;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('M-Pesa Matches',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...matches.map(
+              (match) => ListTile(
+                dense: true,
+                title: Text(_text(match,
+                    ['receipt_number', 'mpesa_receipt_number', 'reference'])),
+                subtitle: Text('${_text(match, [
+                      'phone_number',
+                      'phone'
+                    ])} - ${_date(match['created_at'])}'),
+                trailing: TextButton(
+                  onPressed: () => onUse(match),
+                  child: const Text('Use'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KeyValueGrid extends StatelessWidget {
+  const _KeyValueGrid({required this.values});
+
+  final Map<String, String> values;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: values.entries
+          .map(
+            (entry) => Container(
+              width: 170,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.kSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.kDivider),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.key,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.kTextSecondary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    entry.value.isEmpty ? '-' : entry.value,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _AsyncStatCard extends StatelessWidget {
+  const _AsyncStatCard({
+    required this.value,
+    required this.label,
+    required this.keys,
+    required this.icon,
+    required this.color,
+  });
+
+  final AsyncValue<Map<String, dynamic>> value;
+  final String label;
+  final List<String> keys;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return value.when(
+      data: (data) {
+        final s = _payload(data);
+        final amount = keys.map((key) => s[key]).firstWhere(
+              (item) => item != null,
+              orElse: () => 0,
+            );
+        return StatCard(
+            label: label, value: _money(amount), icon: icon, color: color);
+      },
+      loading: () => const LoadingSkeleton(type: SkeletonType.card),
+      error: (_, __) =>
+          StatCard(label: label, value: '-', icon: icon, color: color),
+    );
+  }
+}
+
+class _JsonSummary extends StatelessWidget {
+  const _JsonSummary({required this.data});
+
+  final Map<String, dynamic> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = data.entries.take(20).toList();
+    if (entries.isEmpty) return const EmptyState(message: 'No data');
+    return _KeyValueGrid(
+      values: {
+        for (final entry in entries)
+          entry.key:
+              entry.value is num ? _money(entry.value) : entry.value.toString(),
+      },
+    );
+  }
+}
+
+Future<Map<String, dynamic>?> _paymentPayload(
+    BuildContext context, num amount) {
+  final amountController = TextEditingController(
+    text: amount > 0 ? amount.toStringAsFixed(0) : '',
+  );
+  final referenceController = TextEditingController();
+  String method = 'cash';
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Record Payment'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Payment amount'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: method,
+                decoration: const InputDecoration(labelText: 'Payment method'),
+                items: const [
+                  DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                  DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                  DropdownMenuItem(value: 'card', child: Text('Card')),
+                  DropdownMenuItem(
+                      value: 'credit_bill', child: Text('Credit Bill')),
+                ],
+                onChanged: (value) => setState(() => method = value ?? 'cash'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: referenceController,
+                decoration: const InputDecoration(labelText: 'Reference'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, {
+              'payment_amount': num.tryParse(amountController.text.trim()) ?? 0,
+              'payment_method': method,
+              'payment_reference': referenceController.text.trim(),
+            }),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ),
+  ).whenComplete(() {
+    amountController.dispose();
+    referenceController.dispose();
+  });
+}
+
+Future<Map<String, dynamic>?> _unpaidBillPayload(BuildContext context) {
+  final customerController = TextEditingController();
+  final roomController = TextEditingController();
+  final descriptionController = TextEditingController();
+  final amountController = TextEditingController();
+  final dueController = TextEditingController(
+      text: _dateOnly(DateTime.now().add(const Duration(days: 7))));
+  final remarksController = TextEditingController();
+  String billType = 'restaurant';
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Create Dynamic Bill'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: customerController,
+                    decoration:
+                        const InputDecoration(labelText: 'Customer name')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: roomController,
+                    decoration:
+                        const InputDecoration(labelText: 'Room number')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: billType,
+                  decoration: const InputDecoration(labelText: 'Bill type'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'restaurant', child: Text('Restaurant')),
+                    DropdownMenuItem(value: 'bar', child: Text('Bar')),
+                    DropdownMenuItem(value: 'hotel', child: Text('Hotel')),
+                    DropdownMenuItem(
+                        value: 'conference', child: Text('Conference')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => billType = value ?? 'restaurant'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: descriptionController,
+                    decoration:
+                        const InputDecoration(labelText: 'Description')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Total amount')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: dueController,
+                    decoration: const InputDecoration(
+                        labelText: 'Due date YYYY-MM-DD')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: remarksController,
+                    decoration: const InputDecoration(labelText: 'Remarks')),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final amount = num.tryParse(amountController.text.trim()) ?? 0;
+              Navigator.pop(context, {
+                'customer_name': customerController.text.trim(),
+                'room_number': roomController.text.trim(),
+                'bill_type': billType,
+                'customer_type': 'walk_in',
+                'total_amount': amount,
+                'due_date': dueController.text.trim(),
+                'remarks': remarksController.text.trim(),
+                'items': [
+                  {
+                    'description': descriptionController.text.trim().isEmpty
+                        ? billType
+                        : descriptionController.text.trim(),
+                    'quantity': 1,
+                    'unitPrice': amount,
+                  }
+                ],
+              });
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    ),
+  ).whenComplete(() {
+    customerController.dispose();
+    roomController.dispose();
+    descriptionController.dispose();
+    amountController.dispose();
+    dueController.dispose();
+    remarksController.dispose();
+  });
+}
+
+Future<Map<String, dynamic>?> _creditBillPayload(
+  BuildContext context,
+  num amount, {
+  bool allowAmountEdit = false,
+}) {
+  final staffIdController = TextEditingController();
+  final staffNameController = TextEditingController();
+  final employeeIdController = TextEditingController();
+  final departmentController = TextEditingController();
+  final amountController =
+      TextEditingController(text: amount > 0 ? amount.toStringAsFixed(0) : '');
+  final monthsController = TextEditingController(text: '1');
+  final remarksController = TextEditingController();
+  String billType = 'cashier_payment';
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Credit Bill'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: staffIdController,
+                    decoration:
+                        const InputDecoration(labelText: 'Staff profile ID')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: staffNameController,
+                    decoration: const InputDecoration(
+                        labelText: 'Staff/customer name')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: employeeIdController,
+                    decoration:
+                        const InputDecoration(labelText: 'Employee ID')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: departmentController,
+                    decoration: const InputDecoration(labelText: 'Department')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: billType,
+                  decoration: const InputDecoration(labelText: 'Bill type'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'cashier_payment',
+                        child: Text('Cashier Payment')),
+                    DropdownMenuItem(
+                        value: 'restaurant', child: Text('Restaurant')),
+                    DropdownMenuItem(value: 'bar', child: Text('Bar')),
+                    DropdownMenuItem(value: 'hotel', child: Text('Hotel')),
+                    DropdownMenuItem(
+                        value: 'conference', child: Text('Conference')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => billType = value ?? 'cashier_payment'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountController,
+                  enabled: allowAmountEdit || amount <= 0,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: monthsController,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Deduction months')),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: remarksController,
+                    decoration: const InputDecoration(labelText: 'Remarks')),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final total =
+                  num.tryParse(amountController.text.trim()) ?? amount;
+              Navigator.pop(context, {
+                'staff_id': staffIdController.text.trim().isEmpty
+                    ? null
+                    : staffIdController.text.trim(),
+                'staff_name': staffNameController.text.trim(),
+                'employee_id': employeeIdController.text.trim(),
+                'department': departmentController.text.trim(),
+                'bill_type': billType,
+                'reference_type': 'cashier_payment',
+                'total_amount': total,
+                'due_date':
+                    _dateOnly(DateTime.now().add(const Duration(days: 30))),
+                'payment_method': 'credit_bill',
+                'deduction_months':
+                    int.tryParse(monthsController.text.trim()) ?? 1,
+                'remarks': remarksController.text.trim(),
+              });
+            },
+            child: const Text('Create Credit'),
+          ),
+        ],
+      ),
+    ),
+  ).whenComplete(() {
+    staffIdController.dispose();
+    staffNameController.dispose();
+    employeeIdController.dispose();
+    departmentController.dispose();
+    amountController.dispose();
+    monthsController.dispose();
+    remarksController.dispose();
+  });
+}
+
+Future<num?> _quantityDialog(BuildContext context, String itemName) {
+  final qtyController = TextEditingController(text: '1');
+  return showDialog<num>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Add $itemName'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+                controller: qtyController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Quantity')),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () {
+            final qty = num.tryParse(qtyController.text.trim()) ?? 1;
+            Navigator.pop(context, qty);
+          },
+          child: const Text('Add'),
+        ),
+      ],
+    ),
+  ).whenComplete(() {
+    qtyController.dispose();
+  });
+}
+
+Future<num?> _numberDialog(BuildContext context, String title, String label) {
+  final controller = TextEditingController();
+  return showDialog<num>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(labelText: label),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () =>
+              Navigator.pop(context, num.tryParse(controller.text.trim()) ?? 0),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  ).whenComplete(controller.dispose);
+}
+
+Future<String?> _textDialog(BuildContext context, String title, String label) {
+  final controller = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        decoration: InputDecoration(labelText: label),
+        maxLines: 3,
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  ).whenComplete(controller.dispose);
+}
+
+void _exportRows(List<Map<String, dynamic>> rows, String name) {
+  final columns = rows.expand((row) => row.keys).toSet().take(24).toList();
+  final csv = [
+    columns.join(','),
+    for (final row in rows)
+      columns
+          .map((column) =>
+              '"${(row[column] ?? '').toString().replaceAll('"', '""')}"')
+          .join(','),
+  ].join('\n');
+  Clipboard.setData(ClipboardData(text: csv));
+}
+
+Map<String, dynamic> _payload(dynamic data) {
+  final map = _asMap(data);
+  final inner = map['data'];
+  if (inner is Map<String, dynamic>) return inner;
+  if (inner is Map) return Map<String, dynamic>.from(inner);
+  return map;
+}
+
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return {};
+}
+
+String _text(Map<String, dynamic> row, List<String> keys) {
+  for (final key in keys) {
+    final value = row[key];
+    if (value != null && value.toString().trim().isNotEmpty) {
+      return value.toString();
+    }
+  }
+  return '';
+}
+
+String _shiftStatus(Map<String, dynamic> row) =>
+    _text(row, ['status']).toLowerCase();
+
+String _statusLabel(String status) {
+  switch (status.toLowerCase()) {
+    case 'open':
+      return 'Open';
+    case 'closed':
+      return 'Closed';
+    case 'reconciled':
+      return 'Reconciled';
+    case 'verified':
+      return 'Verified';
+    default:
+      return 'Recent';
+  }
+}
+
+num _num(dynamic value) {
+  if (value is num) return value;
+  return num.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+String _money(dynamic value) {
+  final amount = _num(value);
+  return NumberFormat.currency(symbol: 'KES ', decimalDigits: 0).format(amount);
+}
+
+String _date(dynamic value) {
+  if (value == null || value.toString().isEmpty) return '-';
+  final parsed = DateTime.tryParse(value.toString());
+  if (parsed == null) return value.toString();
+  return DateFormat('MMM d, yyyy HH:mm').format(parsed.toLocal());
+}
+
+String _dateOnly(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+Color _statusColor(String status) {
+  switch (status.toLowerCase()) {
+    case 'paid':
+    case 'completed':
+    case 'reconciled':
+    case 'confirmed':
+      return AppColors.kSuccess;
+    case 'open':
+    case 'active':
+    case 'partial':
+      return AppColors.kPrimary;
+    case 'cancelled':
+    case 'failed':
+    case 'rejected':
+      return AppColors.kError;
+    default:
+      return AppColors.kWarning;
+  }
+}
+
+String _billTitle(Map<String, dynamic> bill) {
+  for (final key in [
+    'short_code',
+    'shortCode',
+    'booking_id',
+    'bookingId',
+    'order_number',
+    'invoice_number',
+    'transaction_ref',
+    'bill_number'
+  ]) {
+    final direct = bill[key];
+    if (direct != null) return direct.toString();
+  }
+  for (final nestedKey in [
+    'booking',
+    'order',
+    'invoice',
+    'transaction',
+    'bill'
+  ]) {
+    final nested = _asMap(bill[nestedKey]);
+    final value = _text(nested, [
+      'short_code',
+      'shortCode',
+      'booking_number',
+      'order_number',
+      'invoice_number',
+      'transaction_ref',
+      'bill_number',
+      'id'
+    ]);
+    if (value.isNotEmpty) return value;
+  }
+  return _text(bill, ['id', 'type']);
+}
+
+String _customerName(Map<String, dynamic> bill) {
+  final direct = _text(bill, ['customer_name', 'guest_name', 'staff_name']);
+  if (direct.isNotEmpty) return direct;
+  for (final nestedKey in [
+    'customer',
+    'guest',
+    'booking',
+    'order',
+    'invoice',
+    'bill'
+  ]) {
+    final nested = _asMap(bill[nestedKey]);
+    final value =
+        _text(nested, ['customer_name', 'guest_name', 'name', 'staff_name']);
+    if (value.isNotEmpty) return value;
+  }
+  return 'Walk-in';
+}
+
+double _balanceFromBill(Map<String, dynamic>? bill) {
+  if (bill == null) return 0;
+  final financials = _asMap(bill['financials']);
+  return _num(
+          financials['balance'] ?? bill['balance'] ?? bill['balance_amount'])
+      .toDouble();
+}
+
+List<Map<String, dynamic>> _billItems(Map<String, dynamic> bill) {
+  for (final key in ['items', 'line_items']) {
+    final direct = bill[key];
+    if (direct is List) {
+      return direct
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+  }
+  for (final nestedKey in [
+    'booking',
+    'order',
+    'invoice',
+    'bill',
+    'transaction'
+  ]) {
+    final nested = _asMap(bill[nestedKey]);
+    final nestedItems = nested['items'] ?? nested['line_items'];
+    if (nestedItems is List) {
+      return nestedItems
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+  }
+  return const [];
+}

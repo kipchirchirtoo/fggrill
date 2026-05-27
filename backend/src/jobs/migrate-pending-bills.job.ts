@@ -15,7 +15,7 @@ export const migratePendingBills = async (branchId?: number) => {
             {
                 table: 'restaurant_orders',
                 idField: 'id',
-                waiterField: 'waiter_id',
+                waiterField: 'created_by',
                 amountField: 'total_amount',
                 numberField: 'order_number',
                 locationFields: ['table_number', 'room_number'],
@@ -56,11 +56,10 @@ export const migratePendingBills = async (branchId?: number) => {
                     .from(target.table)
                     .select(`
                         *,
-                        waiter:staff_profiles!${target.waiterField}(
+                        waiter:users!${target.waiterField}(
                             id,
                             first_name,
-                            last_name,
-                            user:users!user_id(id)
+                            last_name
                         )
                     `) as any)
                     .eq('status', target.statusValue)
@@ -96,6 +95,22 @@ export const migratePendingBills = async (branchId?: number) => {
                 for (const item of pendingItems as any[]) {
                     try {
                         const itemWaiter = Array.isArray(item.waiter) ? item.waiter[0] : item.waiter;
+                        const waiterUserId = item[target.waiterField];
+                        const { data: staffProfile, error: staffError } = await supabase
+                            .from('staff_profiles')
+                            .select('id, first_name, last_name')
+                            .or(`user_id.eq.${waiterUserId},id.eq.${waiterUserId}`)
+                            .maybeSingle();
+
+                        if (staffError) {
+                            logger.error(`Error resolving staff profile for ${target.table} ${item[target.idField]}:`, staffError);
+                            continue;
+                        }
+                        if (!staffProfile?.id) {
+                            logger.warn(`No staff profile found for waiter/user ${waiterUserId}; skipping ${target.table} ${item[target.idField]}`);
+                            continue;
+                        }
+
                         const location = target.locationFields
                             .map(field => item[field] ? `${field.replace('_', ' ')} ${item[field]}` : null)
                             .filter(Boolean)
@@ -108,7 +123,7 @@ export const migratePendingBills = async (branchId?: number) => {
                         const { data: creditBill, error: creditError } = await supabase
                             .from('staff_credit_bills')
                             .insert({
-                                staff_id: item[target.waiterField],
+                                staff_id: staffProfile.id,
                                 amount: amount,
                                 description: `Unsettled ${target.typeLabel} - ${number} - ${location}`,
                                 bill_date: new Date().toISOString().split('T')[0],
@@ -122,6 +137,26 @@ export const migratePendingBills = async (branchId?: number) => {
                             logger.error(`Error creating credit bill for ${target.table} ${number}:`, creditError);
                             continue;
                         }
+
+                        await supabase
+                            .from('unpaid_bills')
+                            .insert({
+                                bill_type: target.table,
+                                reference_type: target.table,
+                                reference_id: item[target.idField],
+                                customer_type: 'staff',
+                                customer_name: `${staffProfile.first_name || itemWaiter?.first_name || ''} ${staffProfile.last_name || itemWaiter?.last_name || ''}`.trim() || 'Waiter',
+                                waiter_id: staffProfile.id,
+                                branch_id: item.branch_id,
+                                total_amount: amount,
+                                paid_amount: 0,
+                                balance_amount: amount,
+                                bill_date: new Date().toISOString(),
+                                payment_terms: 'Payroll deduction',
+                                remarks: `Auto-migrated uncleared ${target.typeLabel} ${number} (${location})`,
+                                items: [],
+                                status: 'unpaid'
+                            });
 
                         // Update item to mark as migrated
                         const { error: updateError } = await supabase
@@ -139,10 +174,9 @@ export const migratePendingBills = async (branchId?: number) => {
                         }
 
                         // Send notification
-                        const waiterUser = itemWaiter?.user ? (Array.isArray(itemWaiter.user) ? itemWaiter.user[0] : itemWaiter.user) : null;
-                        if (waiterUser?.id) {
+                        if (itemWaiter?.id) {
                             await supabase.from('notifications').insert({
-                                user_id: waiterUser.id,
+                                user_id: itemWaiter.id,
                                 type: 'pending_bill_migrated',
                                 title: 'Order Migrated to Unpaid Bills',
                                 message: `${target.typeLabel} ${number} (${location}) has been migrated to unpaid bills - KES ${amount?.toLocaleString()}`,
