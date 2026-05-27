@@ -396,23 +396,95 @@ export const deleteDepartment = async (
 // @desc    Get all roles
 // @route   GET /api/system/roles
 // @access  Private
+// NOTE: Roles are defined as a TypeScript enum (UserRole). The `roles` DB table
+// is intentionally empty; we build the response directly from the enum so the
+// frontend always gets the full, up-to-date list.
 export const getRoles = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { data, error } = await supabase
-      .from('roles')
-      .select('*')
-      .order('role_name', { ascending: true });
-
-    if (error) throw error;
+    const roles = [
+      // ── Management ──────────────────────────────────────────────────────
+      { id: 'super_admin',               name: 'super_admin',               display_name: 'Super Admin',                    category: 'Management' },
+      { id: 'general_manager',           name: 'general_manager',           display_name: 'General Manager',                category: 'Management' },
+      { id: 'branch_manager',            name: 'branch_manager',            display_name: 'Branch Manager',                 category: 'Management' },
+      { id: 'director',                  name: 'director',                  display_name: 'Director',                       category: 'Management' },
+      { id: 'branch_operations_manager', name: 'branch_operations_manager', display_name: 'Branch Operations Manager',      category: 'Management' },
+      { id: 'central_operations_manager',name: 'central_operations_manager',display_name: 'Central Operations Manager',     category: 'Management' },
+      { id: 'facilities_manager',        name: 'facilities_manager',        display_name: 'Facilities Manager',             category: 'Management' },
+      // ── Front Office ────────────────────────────────────────────────────
+      { id: 'receptionist',              name: 'receptionist',              display_name: 'Receptionist',                   category: 'Front Office' },
+      { id: 'front_desk_supervisor',     name: 'front_desk_supervisor',     display_name: 'Front Desk Supervisor',          category: 'Front Office' },
+      { id: 'concierge',                 name: 'concierge',                 display_name: 'Concierge',                      category: 'Front Office' },
+      { id: 'bell_captain',              name: 'bell_captain',              display_name: 'Bell Captain',                   category: 'Front Office' },
+      { id: 'bellhop',                   name: 'bellhop',                   display_name: 'Bellhop',                        category: 'Front Office' },
+      // ── Housekeeping ────────────────────────────────────────────────────
+      { id: 'housekeeping',              name: 'housekeeping',              display_name: 'Housekeeping',                   category: 'Housekeeping' },
+      { id: 'housekeeping_supervisor',   name: 'housekeeping_supervisor',   display_name: 'Housekeeping Supervisor',        category: 'Housekeeping' },
+      { id: 'room_attendant',            name: 'room_attendant',            display_name: 'Room Attendant',                 category: 'Housekeeping' },
+      { id: 'laundry_attendant',         name: 'laundry_attendant',         display_name: 'Laundry Attendant',              category: 'Housekeeping' },
+      // ── Restaurant & Food Service ────────────────────────────────────────
+      { id: 'restaurant',                name: 'restaurant',                display_name: 'Restaurant',                     category: 'Restaurant' },
+      { id: 'restaurant_manager',        name: 'restaurant_manager',        display_name: 'Restaurant Manager',             category: 'Restaurant' },
+      { id: 'head_chef',                 name: 'head_chef',                 display_name: 'Head Chef',                      category: 'Restaurant' },
+      { id: 'sous_chef',                 name: 'sous_chef',                 display_name: 'Sous Chef',                      category: 'Restaurant' },
+      { id: 'line_cook',                 name: 'line_cook',                 display_name: 'Line Cook',                      category: 'Restaurant' },
+      { id: 'prep_cook',                 name: 'prep_cook',                 display_name: 'Prep Cook',                      category: 'Restaurant' },
+      { id: 'waiter',                    name: 'waiter',                    display_name: 'Waiter',                         category: 'Restaurant' },
+      { id: 'waitress',                  name: 'waitress',                  display_name: 'Waitress',                       category: 'Restaurant' },
+      { id: 'head_waiter',               name: 'head_waiter',               display_name: 'Head Waiter',                    category: 'Restaurant' },
+      { id: 'bartender',                 name: 'bartender',                 display_name: 'Bartender',                      category: 'Restaurant' },
+      { id: 'barista',                   name: 'barista',                   display_name: 'Barista',                        category: 'Restaurant' },
+      { id: 'food_runner',               name: 'food_runner',               display_name: 'Food Runner',                    category: 'Restaurant' },
+      { id: 'busser',                    name: 'busser',                    display_name: 'Busser',                         category: 'Restaurant' },
+      { id: 'host_hostess',              name: 'host_hostess',              display_name: 'Host / Hostess',                 category: 'Restaurant' },
+      // ── Kitchen & POS ───────────────────────────────────────────────────
+      { id: 'pos_kitchen',               name: 'pos_kitchen',               display_name: 'POS Kitchen',                    category: 'Kitchen' },
+      { id: 'kitchen',                   name: 'kitchen',                   display_name: 'Kitchen',                        category: 'Kitchen' },
+      { id: 'kitchen_operations',        name: 'kitchen_operations',        display_name: 'Kitchen Operations',             category: 'Kitchen' },
+      { id: 'kitchen_helper',            name: 'kitchen_helper',            display_name: 'Kitchen Helper',                 category: 'Kitchen' },
+      { id: 'dishwasher',                name: 'dishwasher',                display_name: 'Dishwasher',                     category: 'Kitchen' },
+      // ── Maintenance ─────────────────────────────────────────────────────
+      { id: 'maintenance',               name: 'maintenance',               display_name: 'Maintenance',                    category: 'Maintenance' },
+      { id: 'maintenance_supervisor',    name: 'maintenance_supervisor',    display_name: 'Maintenance Supervisor',         category: 'Maintenance' },
+      { id: 'electrician',               name: 'electrician',               display_name: 'Electrician',                    category: 'Maintenance' },
+      { id: 'plumber',                   name: 'plumber',                   display_name: 'Plumber',                        category: 'Maintenance' },
+      { id: 'hvac_technician',           name: 'hvac_technician',           display_name: 'HVAC Technician',                category: 'Maintenance' },
+      { id: 'groundskeeper',             name: 'groundskeeper',             display_name: 'Groundskeeper',                  category: 'Maintenance' },
+      // ── Security ────────────────────────────────────────────────────────
+      { id: 'security_supervisor',       name: 'security_supervisor',       display_name: 'Security Supervisor',            category: 'Security' },
+      { id: 'security_guard',            name: 'security_guard',            display_name: 'Security Guard',                 category: 'Security' },
+      { id: 'night_auditor',             name: 'night_auditor',             display_name: 'Night Auditor',                  category: 'Security' },
+      // ── Finance & Administration ─────────────────────────────────────────
+      { id: 'accountant',                name: 'accountant',                display_name: 'Accountant',                     category: 'Finance' },
+      { id: 'branch_accountant',         name: 'branch_accountant',         display_name: 'Branch Accountant',              category: 'Finance' },
+      { id: 'auditor',                   name: 'auditor',                   display_name: 'Auditor',                        category: 'Finance' },
+      { id: 'finance_manager',           name: 'finance_manager',           display_name: 'Finance Manager',                category: 'Finance' },
+      { id: 'hr_manager',                name: 'hr_manager',                display_name: 'HR Manager',                     category: 'Finance' },
+      { id: 'payroll_clerk',             name: 'payroll_clerk',             display_name: 'Payroll Clerk',                  category: 'Finance' },
+      { id: 'cashier',                   name: 'cashier',                   display_name: 'Cashier',                        category: 'Finance' },
+      { id: 'kyogong_spa_cashier',       name: 'kyogong_spa_cashier',       display_name: 'Kyogong Spa Cashier',            category: 'Finance' },
+      { id: 'kyogong_executive_bar_cashier', name: 'kyogong_executive_bar_cashier', display_name: 'Kyogong Executive Bar Cashier', category: 'Finance' },
+      { id: 'kyogong_sports_bar_cashier',name: 'kyogong_sports_bar_cashier',display_name: 'Kyogong Sports Bar Cashier',    category: 'Finance' },
+      { id: 'kyogong_reception_cashier', name: 'kyogong_reception_cashier', display_name: 'Kyogong Reception Cashier',      category: 'Finance' },
+      // ── Store & Inventory ────────────────────────────────────────────────
+      { id: 'central_storekeeper',       name: 'central_storekeeper',       display_name: 'Central Storekeeper',            category: 'Store' },
+      { id: 'branch_storekeeper',        name: 'branch_storekeeper',        display_name: 'Branch Storekeeper',             category: 'Store' },
+      { id: 'inventory_clerk',           name: 'inventory_clerk',           display_name: 'Inventory Clerk',                category: 'Store' },
+      { id: 'purchasing_manager',        name: 'purchasing_manager',        display_name: 'Purchasing Manager',             category: 'Store' },
+      { id: 'procurement',               name: 'procurement',               display_name: 'Procurement',                    category: 'Store' },
+      { id: 'storekeeper',               name: 'storekeeper',               display_name: 'Storekeeper',                    category: 'Store' },
+      // ── General ──────────────────────────────────────────────────────────
+      { id: 'employee',                  name: 'employee',                  display_name: 'Employee',                       category: 'General' },
+      { id: 'driver',                    name: 'driver',                    display_name: 'Driver',                         category: 'General' },
+    ].sort((a, b) => a.display_name.localeCompare(b.display_name));
 
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
-      data
+      count: roles.length,
+      data: roles
     });
   } catch (error) {
     next(error);
