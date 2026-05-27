@@ -73,6 +73,7 @@ final cashierCreditBillsProvider = FutureProvider.autoDispose
         status: filters.status,
         billType: filters.billType,
         search: filters.search,
+        date: filters.date,
       );
 });
 

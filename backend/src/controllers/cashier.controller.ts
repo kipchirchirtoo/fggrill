@@ -2856,23 +2856,21 @@ export const downloadCustomerCreditInvoice = async (req: Request, res: Response,
 export const downloadCustomerCreditOutstandingReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { branch_id: branchIdParam, search: searchParam } = req.query;
-        const userBranchId = (req.user as any)?.branch_id;
-
-        let branchId: number | null = null;
-        if (branchIdParam) {
-            const parsed = parseInt(branchIdParam as string, 10);
-            if (!Number.isNaN(parsed)) {
-                branchId = parsed;
-            }
-        } else if (userBranchId) {
-            branchId = Number(userBranchId);
-        }
-
-        if (!branchId) {
-            throw new AppError('Branch id is required to generate the report', 400);
-        }
-
+        const branchId = resolveCashierBranchId(req, branchIdParam);
+        const status = String(req.query.status || 'all').toLowerCase();
         const searchTerm = (searchParam as string)?.trim().toLowerCase() || '';
+        const requestedDate = String(req.query.date || '').trim();
+        const date = requestedDate || new Date().toISOString().slice(0, 10);
+        const from = req.query.from_date
+            ? new Date(String(req.query.from_date))
+            : new Date(`${date}T00:00:00.000Z`);
+        const to = req.query.to_date
+            ? new Date(String(req.query.to_date))
+            : new Date(`${date}T23:59:59.999Z`);
+
+        if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+            throw new AppError('Invalid report date supplied', 400);
+        }
 
         const { data: branch } = await supabase
             .from('branches')
@@ -2880,35 +2878,64 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
             .eq('id', branchId)
             .maybeSingle();
 
-        const { data: billsData, error: billsError } = await supabase
+        let billsQuery = supabase
             .from('unpaid_bills')
             .select('*')
             .eq('branch_id', branchId)
             .neq('status', 'paid')
+            .gte('bill_date', from.toISOString().slice(0, 10))
+            .lte('bill_date', to.toISOString().slice(0, 10))
             .order('bill_date', { ascending: false });
 
+        if (status !== 'all') billsQuery = billsQuery.eq('status', status);
+
+        const { data: billsData, error: billsError } = await billsQuery;
         if (billsError) throw billsError;
 
-        const relevantBills = (billsData || []).filter((bill: any) => {
-            if (!bill) return false;
-            if (bill.source_type === 'KYOGONG') return false;
-            const refType = (bill.reference_type || '').toLowerCase();
-            const allowed = !refType || refType === 'branch_customer_credit';
-            if (!allowed) return false;
-            if (!searchTerm) return true;
-            const billNumber = (bill.bill_number || '').toLowerCase();
-            const customerName = (bill.customer_name || '').toLowerCase();
-            const referenceCode = (bill.scan_reference || '').toLowerCase();
-            return (
-                customerName.includes(searchTerm) ||
-                billNumber.includes(searchTerm) ||
-                referenceCode.includes(searchTerm)
-            );
-        });
+        let restaurantQuery = supabase
+            .from('restaurant_orders')
+            .select(`
+                id, order_number, short_code, status, payment_status,
+                table_number, room_number, guest_name,
+                total_amount, amount_paid, balance_amount, created_at, branch_id, created_by,
+                waiter:users!created_by(id, first_name, last_name),
+                items:restaurant_order_items(
+                    id, quantity, unit_price, total_price,
+                    menu_item:restaurant_menu_items(name)
+                )
+            `)
+            .eq('branch_id', branchId)
+            .neq('payment_status', 'paid')
+            .neq('status', 'cancelled')
+            .gte('created_at', from.toISOString())
+            .lte('created_at', to.toISOString())
+            .order('created_at', { ascending: false });
 
-        if (!relevantBills.length) {
-            throw new AppError('No outstanding customer credit bills found for the selected branch', 404);
-        }
+        if (status !== 'all') restaurantQuery = restaurantQuery.eq('payment_status', status);
+
+        const { data: restaurantOrders, error: restaurantError } = await restaurantQuery;
+        if (restaurantError && restaurantError.code !== '42703') throw restaurantError;
+
+        let barQuery = supabase
+            .from('bar_orders')
+            .select(`
+                id, order_number, short_code, status, payment_status,
+                seat_number, room_number, guest_name,
+                total, amount_paid, balance_amount, created_at, branch_id, created_by,
+                waiter:users!created_by(id, first_name, last_name),
+                items:bar_order_items(id, drink_name, quantity, unit_price, total_price)
+            `)
+            .eq('branch_id', branchId)
+            .neq('payment_status', 'paid')
+            .neq('status', 'cancelled')
+            .gte('created_at', from.toISOString())
+            .lte('created_at', to.toISOString())
+            .order('created_at', { ascending: false });
+
+        if (status !== 'all') barQuery = barQuery.eq('payment_status', status);
+
+        const { data: barOrders, error: barError } = await barQuery;
+        if (barError && barError.code !== '42703') throw barError;
 
         const formatDate = (value?: string | null) => {
             if (!value) return null;
@@ -2917,7 +2944,17 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
             return parsed.toISOString().split('T')[0];
         };
 
-        const normalizedBills = relevantBills.map((bill: any, index: number) => {
+        const waiterName = (row: any) => {
+            const waiter = Array.isArray(row?.waiter) ? row.waiter[0] : row?.waiter;
+            return waiter ? `${waiter.first_name || ''} ${waiter.last_name || ''}`.trim() : '';
+        };
+
+        const searchableText = (parts: unknown[]) => parts
+            .filter((part) => part !== null && part !== undefined)
+            .join(' ')
+            .toLowerCase();
+
+        const persistedBills = (billsData || []).map((bill: any) => {
             const itemsArray = Array.isArray(bill.items) ? bill.items : [];
             const normalizedItems = itemsArray.map((item: any, itemIndex: number) => {
                 const quantity = Number(item?.quantity ?? item?.qty ?? 0) || 0;
@@ -2938,10 +2975,18 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
             const balanceAmount = Number(bill.balance_amount ?? totalAmount - paidAmount);
 
             return {
-                position: index + 1,
+                sort_date: bill.bill_date || bill.created_at,
+                search_text: searchableText([
+                    bill.customer_name,
+                    bill.bill_number,
+                    bill.scan_reference,
+                    bill.short_code,
+                    bill.source_type,
+                    bill.remarks,
+                ]),
                 customer_name: bill.customer_name || 'Customer',
                 invoice_number: bill.bill_number || bill.id,
-                reference_code: bill.scan_reference || bill.bill_number || bill.id,
+                reference_code: bill.scan_reference || bill.short_code || bill.bill_number || bill.id,
                 status: (bill.status || 'pending').toUpperCase(),
                 bill_date: formatDate(bill.bill_date) || formatDate(bill.created_at),
                 due_date: formatDate(bill.due_date),
@@ -2950,13 +2995,114 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
                 total_amount: totalAmount,
                 paid_amount: paidAmount,
                 customer_phone: bill.customer_phone || null,
-                remarks: bill.remarks || null,
+                remarks: bill.remarks || bill.source_type || null,
                 items: normalizedItems,
             };
         });
 
-        const totalOutstanding = normalizedBills.reduce((sum, bill) => sum + (bill.outstanding_amount || 0), 0);
-        const totalAmount = normalizedBills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
+        const restaurantBills = (restaurantOrders || []).map((order: any) => {
+            const waiter = waiterName(order);
+            const totalAmount = Number(order.total_amount || 0);
+            const paidAmount = Number(order.amount_paid || 0);
+            const balanceAmount = Number(order.balance_amount ?? (totalAmount - paidAmount)) || 0;
+            const location = order.table_number ? `Table ${order.table_number}` : order.room_number ? `Room ${order.room_number}` : 'Restaurant';
+            return {
+                sort_date: order.created_at,
+                search_text: searchableText([
+                    order.order_number,
+                    order.short_code,
+                    order.guest_name,
+                    waiter,
+                    location,
+                    'restaurant',
+                ]),
+                customer_name: order.guest_name || 'Walk-in',
+                invoice_number: order.order_number || order.id,
+                reference_code: order.short_code || order.order_number || order.id,
+                status: (order.payment_status || 'unpaid').toUpperCase(),
+                bill_date: formatDate(order.created_at),
+                due_date: null,
+                payment_terms: 'Cashier clearance',
+                outstanding_amount: balanceAmount,
+                total_amount: totalAmount,
+                paid_amount: paidAmount,
+                customer_phone: null,
+                remarks: `Restaurant order${waiter ? ` | Waiter: ${waiter}` : ''} | ${location}`,
+                items: (order.items || []).map((item: any, itemIndex: number) => {
+                    const quantity = Number(item.quantity || 0) || 0;
+                    const unitPrice = Number(item.unit_price || 0) || 0;
+                    const total = Number(item.total_price ?? (quantity * unitPrice)) || 0;
+                    return {
+                        position: itemIndex + 1,
+                        description: item.menu_item?.name || 'Menu item',
+                        quantity,
+                        unit_price: unitPrice,
+                        total,
+                    };
+                }),
+            };
+        });
+
+        const barBills = (barOrders || []).map((order: any) => {
+            const waiter = waiterName(order);
+            const totalAmount = Number(order.total || 0);
+            const paidAmount = Number(order.amount_paid || 0);
+            const balanceAmount = Number(order.balance_amount ?? (totalAmount - paidAmount)) || 0;
+            const location = order.seat_number ? `Seat ${order.seat_number}` : order.room_number ? `Room ${order.room_number}` : 'Bar';
+            return {
+                sort_date: order.created_at,
+                search_text: searchableText([
+                    order.order_number,
+                    order.short_code,
+                    order.guest_name,
+                    waiter,
+                    location,
+                    'bar',
+                ]),
+                customer_name: order.guest_name || 'Bar Customer',
+                invoice_number: order.order_number || order.id,
+                reference_code: order.short_code || order.order_number || order.id,
+                status: (order.payment_status || 'unpaid').toUpperCase(),
+                bill_date: formatDate(order.created_at),
+                due_date: null,
+                payment_terms: 'Cashier clearance',
+                outstanding_amount: balanceAmount,
+                total_amount: totalAmount,
+                paid_amount: paidAmount,
+                customer_phone: null,
+                remarks: `Bar order${waiter ? ` | Waiter: ${waiter}` : ''} | ${location}`,
+                items: (order.items || []).map((item: any, itemIndex: number) => {
+                    const quantity = Number(item.quantity || 0) || 0;
+                    const unitPrice = Number(item.unit_price || 0) || 0;
+                    const total = Number(item.total_price ?? (quantity * unitPrice)) || 0;
+                    return {
+                        position: itemIndex + 1,
+                        description: item.drink_name || 'Bar item',
+                        quantity,
+                        unit_price: unitPrice,
+                        total,
+                    };
+                }),
+            };
+        });
+
+        const normalizedBills = [
+            ...persistedBills,
+            ...restaurantBills,
+            ...barBills,
+        ]
+            .filter((bill: any) => !searchTerm || bill.search_text.includes(searchTerm))
+            .sort((a: any, b: any) => new Date(b.sort_date || 0).getTime() - new Date(a.sort_date || 0).getTime())
+            .map((bill: any, index: number) => {
+                const { sort_date, search_text, ...reportBill } = bill;
+                return {
+                    position: index + 1,
+                    ...reportBill,
+                };
+            });
+
+        const totalOutstanding = normalizedBills.reduce((sum, bill) => sum + (Number(bill.outstanding_amount) || 0), 0);
+        const totalAmount = normalizedBills.reduce((sum, bill) => sum + (Number(bill.total_amount) || 0), 0);
         const uniqueCustomers = new Set(normalizedBills.map(bill => bill.customer_name || bill.invoice_number)).size;
 
         const payload = {
@@ -2977,19 +3123,26 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
         const pythonResponse = await axios.post(
             `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
             {
-                reportType: 'customer_credit_outstanding',
+                reportType: 'cashier_unpaid_bills',
                 data: payload,
                 filters: {
                     branch_id: branchId,
                     branch_name: branch?.name || undefined,
+                    date,
+                    status,
+                    search: searchTerm || undefined,
                     total_bills: payload.summary.total_bills,
+                    title: 'UNPAID BILLS',
+                    subtitle: 'Cashier Unpaid Bills',
+                    detail_title: 'UNPAID BILL DETAILS',
+                    empty_message: 'No unpaid bills found for the selected filters.',
                 },
                 useRealData: false,
             },
             { responseType: 'arraybuffer' }
         );
 
-        const filename = `Outstanding_Customer_Credits_${new Date().toISOString().split('T')[0]}.pdf`;
+        const filename = `Cashier_Unpaid_Bills_${date}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
         res.setHeader('Content-Length', Buffer.from(pythonResponse.data).length.toString());
@@ -2998,8 +3151,8 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
         res.send(Buffer.from(pythonResponse.data));
     } catch (error) {
         if (axios.isAxiosError(error)) {
-            logger.error('Failed to generate outstanding customer credit PDF', error);
-            return next(new AppError('Unable to generate outstanding credits PDF at this time', 502));
+            logger.error('Failed to generate cashier unpaid bills PDF', error);
+            return next(new AppError('Unable to generate unpaid bills PDF at this time', 502));
         }
         next(error);
     }
@@ -3072,7 +3225,18 @@ export const confirmUnpaidBill = async (req: Request, res: Response, next: NextF
  */
 export const getCreditBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { branch_id, staff_id, status, approval_status, bill_type } = req.query;
+        const { branch_id, staff_id, status, approval_status, bill_type, search } = req.query;
+        const requestedDate = String(req.query.date || '').trim();
+        const from = req.query.from_date
+            ? new Date(String(req.query.from_date))
+            : requestedDate
+                ? new Date(`${requestedDate}T00:00:00.000Z`)
+                : null;
+        const to = req.query.to_date
+            ? new Date(String(req.query.to_date))
+            : requestedDate
+                ? new Date(`${requestedDate}T23:59:59.999Z`)
+                : null;
         console.log('GET /api/cashier/credit-bills - Executing raw SQL fix');
 
         let queryStr = 'SELECT * FROM public.credit_bills WHERE 1=1';
@@ -3098,6 +3262,18 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             queryStr += ` AND status = $${params.length}`;
         }
 
+        if (from) {
+            if (Number.isNaN(from.getTime())) throw new AppError('Invalid from date', 400);
+            params.push(from.toISOString().slice(0, 10));
+            queryStr += ` AND credit_date >= $${params.length}`;
+        }
+
+        if (to) {
+            if (Number.isNaN(to.getTime())) throw new AppError('Invalid to date', 400);
+            params.push(to.toISOString().slice(0, 10));
+            queryStr += ` AND credit_date <= $${params.length}`;
+        }
+
         if (approval_status) {
             params.push(approval_status as string);
             queryStr += ` AND approval_status = $${params.length}`;
@@ -3106,6 +3282,17 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         if (bill_type) {
             params.push(bill_type as string);
             queryStr += ` AND bill_type = $${params.length}`;
+        }
+
+        if (search) {
+            params.push(`%${String(search).trim()}%`);
+            queryStr += ` AND (
+                staff_name ILIKE $${params.length}
+                OR employee_id ILIKE $${params.length}
+                OR department ILIKE $${params.length}
+                OR credit_number ILIKE $${params.length}
+                OR remarks ILIKE $${params.length}
+            )`;
         }
 
         queryStr += ' ORDER BY credit_date DESC';
@@ -3227,8 +3414,17 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             remarks
         } = req.body;
 
+        const effectiveBranchId = resolveCashierBranchId(req, branch_id);
+        const totalAmount = Number(total_amount || 0);
+        if (!staff_id) {
+            throw new AppError('Staff member is required for a credit bill', 400);
+        }
+        if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+            throw new AppError('Credit bill amount must be greater than zero', 400);
+        }
+
         // Calculate monthly deduction
-        const monthly_deduction = total_amount / (deduction_months || 1);
+        const monthly_deduction = totalAmount / (deduction_months || 1);
 
         // Generate credit number
         const { data: creditNumberData } = await supabase
@@ -3240,7 +3436,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             .from('credit_bills')
             .insert({
                 credit_number,
-                branch_id,
+                branch_id: effectiveBranchId,
                 staff_id,
                 staff_name,
                 employee_id,
@@ -3248,8 +3444,8 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 bill_type,
                 reference_type,
                 reference_id,
-                total_amount,
-                balance_amount: total_amount,
+                total_amount: totalAmount,
+                balance_amount: totalAmount,
                 due_date,
                 payment_method,
                 deduction_months: deduction_months || 1,
@@ -3264,10 +3460,34 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
 
         if (error) throw error;
 
+        const payrollPayload: any = {
+            staff_id,
+            amount: totalAmount,
+            description: `Cashier Credit Bill - ${credit_number}${staff_name ? ` - ${staff_name}` : ''}`,
+            bill_date: new Date().toISOString().slice(0, 10),
+            status: 'pending',
+            branch_id: effectiveBranchId,
+            balance: totalAmount,
+            source_cashier_credit_bill_id: data.id
+        };
+
+        const { data: staffCreditBill, error: staffCreditError } = await supabase
+            .from('staff_credit_bills')
+            .insert(payrollPayload)
+            .select('id')
+            .single();
+
+        if (staffCreditError) {
+            throw new AppError(`Payroll credit bill creation failed: ${staffCreditError.message}`, 500);
+        }
+
         res.status(201).json({
             success: true,
             message: 'Credit bill created successfully',
-            data
+            data: {
+                ...data,
+                staff_credit_bill_id: staffCreditBill?.id || null
+            }
         });
     } catch (error) {
         next(error);

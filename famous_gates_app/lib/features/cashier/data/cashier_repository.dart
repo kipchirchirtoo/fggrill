@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -100,10 +102,28 @@ class CashierRepository {
   Future<Map<String, dynamic>> confirmUnpaidBill(String id, String role) =>
       _patchMap('/cashier/unpaid-bills/$id/confirm', {'role': role});
 
+  Future<Uint8List> downloadUnpaidBillsPdf({
+    String? date,
+    String? status,
+    String? search,
+  }) async {
+    final res = await _dio.get<List<int>>(
+      '/cashier/unpaid-bills/outstanding/pdf',
+      queryParameters: {
+        if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+        if (status != null && status != 'all') 'status': status,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(res.data ?? const []);
+  }
+
   Future<List<Map<String, dynamic>>> getCreditBills({
     String? status,
     String? billType,
     String? search,
+    String? date,
     int page = 1,
     int limit = 25,
   }) {
@@ -111,6 +131,7 @@ class CashierRepository {
       if (status != null && status != 'all') 'status': status,
       if (billType != null && billType != 'all') 'bill_type': billType,
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
       'page': page,
       'limit': limit,
     });
@@ -170,8 +191,7 @@ class CashierRepository {
       return await _getList('/staff', query: {
         'limit': limit,
         'status': 'active',
-        if (search != null && search.trim().isNotEmpty)
-          'search': search.trim(),
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       });
     } on DioException catch (error) {
       if (error.response?.statusCode == 404 ||

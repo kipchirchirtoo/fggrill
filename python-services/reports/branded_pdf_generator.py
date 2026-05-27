@@ -307,6 +307,7 @@ class BrandedPDFGenerator:
             'ai_analysis': self._generate_ai_report,
             'invoice': self._generate_invoice,
             'customer_credit_outstanding': self._generate_customer_credit_outstanding,
+            'cashier_unpaid_bills': self._generate_customer_credit_outstanding,
             'stock_requests': self._generate_stock_requests_report,
             'stock_requests_history': self._generate_stock_requests_history_report,
         }
@@ -4127,6 +4128,7 @@ class BrandedPDFGenerator:
     def _generate_customer_credit_outstanding(self, data: Dict, filters: Dict) -> str:
         """Generate Outstanding Customer Credits Report"""
         elements = []
+        filters = filters or {}
         
         # Extract data
         branch_info = data.get('branch', {})
@@ -4135,6 +4137,10 @@ class BrandedPDFGenerator:
         summary = data.get('summary', {})
         bills = data.get('bills', [])
         generated_at = data.get('generated_at', datetime.now().isoformat())
+        report_title = filters.get('title', 'OUTSTANDING CREDITS')
+        report_subtitle = filters.get('subtitle', 'Outstanding Customer Credit Bills')
+        detail_title = filters.get('detail_title', 'OUTSTANDING BILLS DETAIL')
+        empty_message = filters.get('empty_message', 'No outstanding customer credit bills found.')
         
         # Parse generated_at
         try:
@@ -4148,12 +4154,12 @@ class BrandedPDFGenerator:
         
         header_info = [
             Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
-            Paragraph("Outstanding Customer Credit Bills", self.styles['SmallText']),
+            Paragraph(report_subtitle, self.styles['SmallText']),
             Paragraph(f"{branch_name}{' • ' + branch_location if branch_location else ''}", self.styles['SmallText']),
         ]
         
         title_block = [
-            Paragraph("<b>OUTSTANDING CREDITS</b>", ParagraphStyle('ReportTitle', parent=self.styles['Heading1'], fontSize=20, textColor=FG_BLUE, alignment=TA_RIGHT)),
+            Paragraph(f"<b>{report_title}</b>", ParagraphStyle('ReportTitle', parent=self.styles['Heading1'], fontSize=20, textColor=FG_BLUE, alignment=TA_RIGHT)),
             Paragraph(f"Generated: {date_str}", ParagraphStyle('ReportDate', parent=self.styles['SmallText'], alignment=TA_RIGHT)),
         ]
         
@@ -4192,11 +4198,11 @@ class BrandedPDFGenerator:
         elements.append(Spacer(1, 0.4*inch))
         
         # 3. Bills List
-        elements.append(Paragraph("<b>OUTSTANDING BILLS DETAIL</b>", self.styles['Heading3']))
+        elements.append(Paragraph(f"<b>{detail_title}</b>", self.styles['Heading3']))
         elements.append(Spacer(1, 0.2*inch))
         
         if not bills:
-            elements.append(Paragraph("No outstanding customer credit bills found.", self.styles['Normal']))
+            elements.append(Paragraph(empty_message, self.styles['Normal']))
         else:
             for bill in bills:
                 # Bill Header
@@ -4470,4 +4476,3 @@ class BrandedPDFGenerator:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
             tmp_file.write(pdf_bytes)
             return tmp_file.name
-

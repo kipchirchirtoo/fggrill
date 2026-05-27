@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../services/print_service.dart';
+import '../../pos/domain/models.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
 
@@ -374,27 +377,55 @@ class _StationTabState extends ConsumerState<_StationTab> {
 
     Map<String, dynamic>? creditBill;
     if (_method == 'credit_bill') {
-      creditBill = await _creditBillPayload(context, amount);
+      final staff = await ref
+          .read(cashierRepositoryProvider)
+          .getBranchStaff()
+          .catchError((_) => <Map<String, dynamic>>[]);
+      if (!mounted) return;
+      creditBill =
+          await _creditBillPayload(context, amount, staffMembers: staff);
       if (creditBill == null) return;
     }
 
     setState(() => _loading = true);
     try {
       Map<String, dynamic>? createdCredit;
+      Map<String, dynamic>? paymentCreditBill = creditBill;
       if (creditBill != null) {
         createdCredit = await ref
             .read(cashierRepositoryProvider)
             .createCreditBill(creditBill);
+        final createdCreditData = _payload(createdCredit);
+        paymentCreditBill = {
+          ...creditBill,
+          if (_text(createdCreditData, ['id']).isNotEmpty)
+            'id': _text(createdCreditData, ['id']),
+          if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
+            'staff_credit_bill_id':
+                _text(createdCreditData, ['staff_credit_bill_id']),
+          if (_text(createdCreditData, ['credit_number']).isNotEmpty)
+            'credit_number': _text(createdCreditData, ['credit_number']),
+        };
       }
-      await ref.read(cashierRepositoryProvider).processPayment(
-            bookingId: _lookupController.text.trim(),
-            amount: amount,
-            method: _method,
-            reference: createdCredit == null
-                ? _referenceController.text.trim()
-                : _text(_payload(createdCredit), ['credit_number', 'id']),
-            creditBill: creditBill,
-          );
+      final paymentResponse =
+          await ref.read(cashierRepositoryProvider).processPayment(
+                bookingId: _lookupController.text.trim(),
+                amount: amount,
+                method: _method,
+                reference: createdCredit == null
+                    ? _referenceController.text.trim()
+                    : _text(_payload(createdCredit), ['credit_number', 'id']),
+                creditBill: paymentCreditBill,
+              );
+      await _printStationReceipt(
+        bill: bill,
+        amount: amount,
+        method: _method,
+        response: paymentResponse,
+        fallbackReference: createdCredit == null
+            ? _referenceController.text.trim()
+            : _text(_payload(createdCredit), ['credit_number', 'id']),
+      );
       _snack('Payment recorded');
       ref.invalidate(cashierStatsProvider);
       ref.invalidate(cashierUnpaidBillsProvider);
@@ -421,6 +452,43 @@ class _StationTabState extends ConsumerState<_StationTab> {
       _snack('M-Pesa search failed: $error');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _printStationReceipt({
+    required Map<String, dynamic> bill,
+    required num amount,
+    required String method,
+    required Map<String, dynamic> response,
+    required String fallbackReference,
+  }) async {
+    try {
+      final payload = _payload(response);
+      final data = _payload(payload['data']);
+      final reference = _text(data, ['reference', 'id']).isNotEmpty
+          ? _text(data, ['reference', 'id'])
+          : fallbackReference;
+      final receiptItems = _receiptItemsFromBill(bill, amount);
+      final nav = ref.read(dashboardNavProvider);
+      final methodLabel = _receiptMethodLabel(method);
+      await PrintService().printReceipt(
+        SaleResult(
+          transactionId:
+              reference.isEmpty ? DateTime.now().toString() : reference,
+          createdAt: DateTime.now(),
+          receiptNumber: reference.isEmpty ? null : reference,
+          cashierName: nav.user?.name,
+          total: amount.toDouble(),
+          paymentMethod: methodLabel,
+        ),
+        receiptItems,
+        nav.branchName,
+        receiptType: '$methodLabel RECEIPT',
+        customerName: _customerName(bill),
+        publicCode: _lookupController.text.trim(),
+      );
+    } catch (error) {
+      _snack('Payment recorded, but receipt failed: $error');
     }
   }
 
@@ -765,12 +833,29 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
     try {
       Map<String, dynamic>? credit;
       if (_method == 'CREDIT_BILL') {
-        credit = await _creditBillPayload(context, total);
+        final staff = await ref
+            .read(cashierRepositoryProvider)
+            .getBranchStaff()
+            .catchError((_) => <Map<String, dynamic>>[]);
+        if (!mounted) return;
+        credit = await _creditBillPayload(context, total, staffMembers: staff);
         if (credit == null) {
           setState(() => _saving = false);
           return;
         }
-        await ref.read(cashierRepositoryProvider).createCreditBill(credit);
+        final createdCredit =
+            await ref.read(cashierRepositoryProvider).createCreditBill(credit);
+        final createdCreditData = _payload(createdCredit);
+        credit = {
+          ...credit,
+          if (_text(createdCreditData, ['id']).isNotEmpty)
+            'id': _text(createdCreditData, ['id']),
+          if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
+            'staff_credit_bill_id':
+                _text(createdCreditData, ['staff_credit_bill_id']),
+          if (_text(createdCreditData, ['credit_number']).isNotEmpty)
+            'credit_number': _text(createdCreditData, ['credit_number']),
+        };
       }
       final created =
           await ref.read(cashierRepositoryProvider).createPOSTransaction({
@@ -789,6 +874,12 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
         if (_method == 'CARD') 'reference': _phoneController.text.trim(),
         if (_method == 'CREDIT_BILL') 'credit_bill': credit,
       });
+      await _printPosReceipt(
+        transaction: data,
+        total: total,
+        method: _method,
+        items: _items,
+      );
       setState(() => _items.clear());
       ref.invalidate(cashierStatsProvider);
       ref.invalidate(cashierReconciliationProvider);
@@ -804,6 +895,52 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _printPosReceipt({
+    required Map<String, dynamic> transaction,
+    required num total,
+    required String method,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      final nav = ref.read(dashboardNavProvider);
+      final methodLabel = _receiptMethodLabel(method);
+      final reference = _text(transaction, [
+        'transaction_ref',
+        'transaction_number',
+        'short_code',
+        'id',
+      ]);
+      await PrintService().printReceipt(
+        SaleResult(
+          transactionId: _text(transaction, ['id', 'transaction_id']),
+          createdAt: DateTime.now(),
+          receiptNumber: reference.isEmpty ? null : reference,
+          cashierName: nav.user?.name,
+          total: total.toDouble(),
+          paymentMethod: methodLabel,
+        ),
+        items
+            .map(
+              (item) => CartItem(
+                productId: _text(item, ['product_id', 'id']),
+                name: _text(item, ['name', 'item_name']),
+                unitPrice: _num(item['unit_price']).toDouble(),
+                qty: (_num(item['qty'] ?? item['quantity'])).round(),
+              ),
+            )
+            .toList(),
+        nav.branchName,
+        receiptType: '$methodLabel RECEIPT',
+        customerName: _customerController.text.trim().isEmpty
+            ? null
+            : _customerController.text.trim(),
+        publicCode: _text(transaction, ['short_code']),
+      );
+    } catch (error) {
+      _snack('Transaction completed, but receipt failed: $error');
+    }
   }
 }
 
@@ -830,8 +967,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
       onSearch: (value) => setState(() => _search = value),
       onCreate: _createBill,
-      onExport: () =>
-          _exportRows(bills.valueOrNull ?? const [], 'unpaid_bills'),
+      onExport: _exportPdf,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -849,7 +985,8 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
                 label: const Text('Previous day'),
               ),
               OutlinedButton.icon(
-                onPressed: () => setState(() => _date = _dateOnly(DateTime.now())),
+                onPressed: () =>
+                    setState(() => _date = _dateOnly(DateTime.now())),
                 icon: const Icon(Icons.today, size: 16),
                 label: const Text('Today'),
               ),
@@ -889,6 +1026,27 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       _snack('Unpaid bill created');
     } catch (error) {
       _snack('Create failed: $error');
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    try {
+      final bytes =
+          await ref.read(cashierRepositoryProvider).downloadUnpaidBillsPdf(
+                date: _date,
+                status: _status,
+                search: _search,
+              );
+      if (bytes.isEmpty) {
+        _snack('Export failed: empty PDF response');
+        return;
+      }
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'FG_Unpaid_Bills_$_date.pdf',
+      );
+    } catch (error) {
+      _snack('Export failed: $error');
     }
   }
 
@@ -945,34 +1103,82 @@ class _CreditBillsTab extends ConsumerStatefulWidget {
 class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
   String _status = 'all';
   String _search = '';
+  String _date = _dateOnly(DateTime.now());
 
   @override
   Widget build(BuildContext context) {
-    final filters = CashierBillFilters(status: _status, search: _search);
+    final filters =
+        CashierBillFilters(status: _status, search: _search, date: _date);
     final bills = ref.watch(cashierCreditBillsProvider(filters));
     return _BillsScaffold(
-      title: 'Credit Bills',
+      title: 'Credit Bills - $_date',
       status: _status,
       onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
       onSearch: (value) => setState(() => _search = value),
       onCreate: _createCredit,
       onExport: () =>
           _exportRows(bills.valueOrNull ?? const [], 'credit_bills'),
-      child: bills.when(
-        data: (rows) => _BillList(
-          rows: rows,
-          emptyMessage: 'No credit bills found',
-          onPay: (row) => _recordPayment(row),
-          onConfirm: (row, role) => _confirm(row, role),
-        ),
-        loading: () => const LoadingSkeleton(type: SkeletonType.list),
-        error: (error, _) => ErrorState(message: '$error'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  _date = _dateOnly(
+                    DateTime.parse(_date).subtract(const Duration(days: 1)),
+                  );
+                }),
+                icon: const Icon(Icons.chevron_left, size: 16),
+                label: const Text('Previous day'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () =>
+                    setState(() => _date = _dateOnly(DateTime.now())),
+                icon: const Icon(Icons.today, size: 16),
+                label: const Text('Today'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  _date = _dateOnly(
+                    DateTime.parse(_date).add(const Duration(days: 1)),
+                  );
+                }),
+                icon: const Icon(Icons.chevron_right, size: 16),
+                label: const Text('Next day'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          bills.when(
+            data: (rows) => _BillList(
+              rows: rows,
+              emptyMessage: 'No credit bills found for $_date',
+              onPay: (row) => _recordPayment(row),
+              onConfirm: (row, role) => _confirm(row, role),
+            ),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(message: '$error'),
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _createCredit() async {
-    final body = await _creditBillPayload(context, 0, allowAmountEdit: true);
+    final staff = await ref
+        .read(cashierRepositoryProvider)
+        .getBranchStaff()
+        .catchError((_) => <Map<String, dynamic>>[]);
+    if (!mounted) return;
+    final body = await _creditBillPayload(
+      context,
+      0,
+      allowAmountEdit: true,
+      staffMembers: staff,
+    );
     if (body == null) return;
     try {
       await ref.read(cashierRepositoryProvider).createCreditBill(body);
@@ -1076,7 +1282,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
           const SizedBox(height: 16),
           visibleShifts.when(
             data: (rows) => rows.isEmpty
-                ? EmptyState(message: 'No ${_statusLabel(_status)} shifts found')
+                ? EmptyState(
+                    message: 'No ${_statusLabel(_status)} shifts found')
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1096,8 +1303,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                             final status = _shiftStatus(row);
                             return ExpansionTile(
                               leading: CircleAvatar(
-                                backgroundColor:
-                                    _statusColor(status).withValues(alpha: 0.12),
+                                backgroundColor: _statusColor(status)
+                                    .withValues(alpha: 0.12),
                                 child: Icon(Icons.access_time,
                                     color: _statusColor(status), size: 18),
                               ),
@@ -1138,7 +1345,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                       onPressed: status == 'closed'
                                           ? () => _reconcileShift(row)
                                           : null,
-                                      icon: const Icon(Icons.fact_check, size: 16),
+                                      icon: const Icon(Icons.fact_check,
+                                          size: 16),
                                       label: const Text('Reconcile'),
                                     ),
                                   ],
@@ -1178,8 +1386,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
       final shift = await repo.getShift(shiftId);
       final items = await repo.getPOSItems();
       final staff = await repo.getBranchStaff().catchError(
-        (_) => <Map<String, dynamic>>[],
-      );
+            (_) => <Map<String, dynamic>>[],
+          );
       if (!mounted) return;
       final payload = await _shiftCloseLogbookDialog(
         context,
@@ -1453,7 +1661,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           spacing: 12,
                           runSpacing: 12,
                           children: [
-                            _amountField(revenueControllers['restaurant_revenue']!,
+                            _amountField(
+                                revenueControllers['restaurant_revenue']!,
                                 'Restaurant'),
                             _amountField(
                                 revenueControllers['bar_revenue']!, 'Bar'),
@@ -1473,8 +1682,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                 revenueControllers['pool_token_revenue']!,
                                 'Pool tokens',
                                 enabled: !poolNa),
-                            _amountField(revenueControllers['other_revenue']!,
-                                'Other'),
+                            _amountField(
+                                revenueControllers['other_revenue']!, 'Other'),
                           ],
                         ),
                         Wrap(
@@ -1485,8 +1694,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                               title: const Text('Rooms N/A'),
                               dense: true,
                               controlAffinity: ListTileControlAffinity.leading,
-                              onChanged: (value) =>
-                                  setDialogState(() => roomsNa = value ?? false),
+                              onChanged: (value) => setDialogState(
+                                  () => roomsNa = value ?? false),
                             ),
                             CheckboxListTile(
                               value: conferenceNa,
@@ -1504,7 +1713,10 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                               onChanged: (value) =>
                                   setDialogState(() => poolNa = value ?? false),
                             ),
-                          ].map((child) => SizedBox(width: 190, child: child)).toList(),
+                          ]
+                              .map(
+                                  (child) => SizedBox(width: 190, child: child))
+                              .toList(),
                         ),
                         const SizedBox(height: 24),
                         Text('Credit bills and paid bills',
@@ -1559,8 +1771,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                 paidName.clear();
                                 paidAmount.clear();
                               }),
-                              onRemove: (index) =>
-                                  setDialogState(() => paidEntries.removeAt(index)),
+                              onRemove: (index) => setDialogState(
+                                  () => paidEntries.removeAt(index)),
                             ),
                           ],
                         ),
@@ -1570,7 +1782,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                         const SizedBox(height: 8),
                         if (stockEntries.isEmpty)
                           const EmptyState(
-                              message: 'No cashier POS items found for stock take')
+                              message:
+                                  'No cashier POS items found for stock take')
                         else
                           _stockTakeTable(stockEntries, setDialogState),
                         const SizedBox(height: 12),
@@ -1598,7 +1811,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Text('Expected ${_money(expectedCash)}  •  Variance ${_money(variance)}'),
+                      Text(
+                          'Expected ${_money(expectedCash)}  •  Variance ${_money(variance)}'),
                       const Spacer(),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
@@ -1620,8 +1834,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             handoverNotes.text.trim(),
                             if (stockNotes.text.trim().isNotEmpty)
                               'Stock notes: ${stockNotes.text.trim()}',
-                            if (stockJson.isNotEmpty)
-                              'Stock take: $stockJson',
+                            if (stockJson.isNotEmpty) 'Stock take: $stockJson',
                           ].where((line) => line.isNotEmpty).join('\n\n');
                           Navigator.pop(context, {
                             'closing_float':
@@ -1706,9 +1919,8 @@ List<_ShiftStaffMember> _shiftStaffMembers(
             .trim();
         return _ShiftStaffMember(
           id: _text(row, ['id']),
-          name: name.isEmpty
-              ? _text(row, ['name', 'full_name', 'email'])
-              : name,
+          name:
+              name.isEmpty ? _text(row, ['name', 'full_name', 'email']) : name,
           employeeId: _text(row, ['employee_id', 'id_number']),
           department: _text(row, ['department', 'role']),
         );
@@ -1897,7 +2109,8 @@ Widget _creditEntryPanel(
                 ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  title: Text(entries[i].name.isEmpty ? 'Staff' : entries[i].name),
+                  title:
+                      Text(entries[i].name.isEmpty ? 'Staff' : entries[i].name),
                   subtitle: Text(entries[i].staffId),
                   trailing: Wrap(
                     spacing: 8,
@@ -1940,7 +2153,9 @@ Widget _stockTakeTable(
                   child: Row(
                     children: [
                       SizedBox(width: 200, child: Text(row.itemName)),
-                      SizedBox(width: 115, child: Text('${row.opening} ${row.unit}')),
+                      SizedBox(
+                          width: 115,
+                          child: Text('${row.opening} ${row.unit}')),
                       SizedBox(
                         width: 115,
                         child: _smallNumberCell(
@@ -2377,17 +2592,14 @@ class _BillList extends StatelessWidget {
                   ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    title: Text(_text(item, [
-                      'item_name',
-                      'name',
-                      'description',
-                      'drink_name'
-                    ])),
+                    title: Text(_text(item,
+                        ['item_name', 'name', 'description', 'drink_name'])),
                     trailing: Text(
                       '${_num(item['quantity'] ?? item['qty']).toStringAsFixed(0)} x ${_money(item['unit_price'] ?? item['price'])}',
                     ),
-                    subtitle: Text(_money(
-                        item['total_price'] ?? item['line_total'] ?? item['total'])),
+                    subtitle: Text(_money(item['total_price'] ??
+                        item['line_total'] ??
+                        item['total'])),
                   ),
               ],
               const SizedBox(height: 8),
@@ -2799,6 +3011,7 @@ Future<Map<String, dynamic>?> _creditBillPayload(
   BuildContext context,
   num amount, {
   bool allowAmountEdit = false,
+  List<Map<String, dynamic>> staffMembers = const [],
 }) {
   final staffIdController = TextEditingController();
   final staffNameController = TextEditingController();
@@ -2808,7 +3021,9 @@ Future<Map<String, dynamic>?> _creditBillPayload(
       TextEditingController(text: amount > 0 ? amount.toStringAsFixed(0) : '');
   final monthsController = TextEditingController(text: '1');
   final remarksController = TextEditingController();
+  final staffOptions = _shiftStaffMembers(staffMembers);
   String billType = 'cashier_payment';
+  String? errorText;
   return showDialog<Map<String, dynamic>>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -2820,23 +3035,76 @@ Future<Map<String, dynamic>?> _creditBillPayload(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                    controller: staffIdController,
+                if (errorText != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.kError.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      errorText!,
+                      style: const TextStyle(color: AppColors.kError),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (staffOptions.isEmpty)
+                  TextField(
+                      controller: staffIdController,
+                      decoration:
+                          const InputDecoration(labelText: 'Staff profile ID'))
+                else
+                  DropdownButtonFormField<String>(
+                    initialValue: null,
+                    isExpanded: true,
+                    menuMaxHeight: 360,
                     decoration:
-                        const InputDecoration(labelText: 'Staff profile ID')),
+                        const InputDecoration(labelText: 'Branch staff member'),
+                    items: staffOptions
+                        .map(
+                          (staff) => DropdownMenuItem<String>(
+                            value: staff.id,
+                            child: Text(
+                              [
+                                staff.name,
+                                if (staff.employeeId.isNotEmpty)
+                                  staff.employeeId,
+                                if (staff.department.isNotEmpty)
+                                  staff.department,
+                              ].join(' - '),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      final selected = _shiftStaffById(staffOptions, value);
+                      setState(() {
+                        staffIdController.text = selected?.id ?? '';
+                        staffNameController.text = selected?.name ?? '';
+                        employeeIdController.text = selected?.employeeId ?? '';
+                        departmentController.text = selected?.department ?? '';
+                        errorText = null;
+                      });
+                    },
+                  ),
                 const SizedBox(height: 12),
                 TextField(
                     controller: staffNameController,
-                    decoration: const InputDecoration(
-                        labelText: 'Staff/customer name')),
+                    readOnly: staffOptions.isNotEmpty,
+                    decoration: const InputDecoration(labelText: 'Staff name')),
                 const SizedBox(height: 12),
                 TextField(
                     controller: employeeIdController,
+                    readOnly: staffOptions.isNotEmpty,
                     decoration:
                         const InputDecoration(labelText: 'Employee ID')),
                 const SizedBox(height: 12),
                 TextField(
                     controller: departmentController,
+                    readOnly: staffOptions.isNotEmpty,
                     decoration: const InputDecoration(labelText: 'Department')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -2885,10 +3153,22 @@ Future<Map<String, dynamic>?> _creditBillPayload(
             onPressed: () {
               final total =
                   num.tryParse(amountController.text.trim()) ?? amount;
+              if (staffIdController.text.trim().isEmpty) {
+                setState(() => errorText =
+                    'Select the staff member for this credit bill.');
+                return;
+              }
+              if (staffNameController.text.trim().isEmpty) {
+                setState(() => errorText = 'Staff name is required.');
+                return;
+              }
+              if (total <= 0) {
+                setState(() => errorText =
+                    'Credit bill amount must be greater than zero.');
+                return;
+              }
               Navigator.pop(context, {
-                'staff_id': staffIdController.text.trim().isEmpty
-                    ? null
-                    : staffIdController.text.trim(),
+                'staff_id': staffIdController.text.trim(),
                 'staff_name': staffNameController.text.trim(),
                 'employee_id': employeeIdController.text.trim(),
                 'department': departmentController.text.trim(),
@@ -3097,6 +3377,53 @@ Color _statusColor(String status) {
     default:
       return AppColors.kWarning;
   }
+}
+
+String _receiptMethodLabel(String method) {
+  final normalized = method.toUpperCase().replaceAll('-', '_');
+  if (normalized.contains('MPESA')) return 'M-PESA';
+  if (normalized.contains('CARD')) return 'CARD';
+  if (normalized.contains('CREDIT')) return 'CREDIT BILL';
+  if (normalized.contains('CASH')) return 'CASH';
+  return normalized;
+}
+
+List<CartItem> _receiptItemsFromBill(Map<String, dynamic> bill, num amount) {
+  final items = _billItems(bill)
+      .map((item) {
+        final quantity = (_num(item['quantity'] ?? item['qty'])).round();
+        final total = _num(item['total'] ??
+            item['total_price'] ??
+            item['line_total'] ??
+            item['amount']);
+        final unitPrice = _num(item['unit_price'] ?? item['price']);
+        final name = _text(
+          item,
+          ['name', 'description', 'item_name', 'drink_name'],
+        );
+        if (name.isEmpty) return null;
+        return CartItem(
+          productId: _text(item, ['product_id', 'id']),
+          name: name,
+          unitPrice: unitPrice > 0
+              ? unitPrice.toDouble()
+              : (quantity > 0
+                  ? (total / quantity).toDouble()
+                  : total.toDouble()),
+          qty: quantity > 0 ? quantity : 1,
+        );
+      })
+      .whereType<CartItem>()
+      .toList();
+  if (items.isNotEmpty) return items;
+  return [
+    CartItem(
+      productId: _text(bill, ['id']),
+      name: _billTitle(bill),
+      unitPrice: amount.toDouble(),
+      qty: 1,
+    ),
+  ];
 }
 
 String _billTitle(Map<String, dynamic> bill) {
