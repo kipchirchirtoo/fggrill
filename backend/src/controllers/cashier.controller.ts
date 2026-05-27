@@ -14,7 +14,18 @@ import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 function isImmediateCashierPaymentMethod(method?: string): boolean {
     const normalized = (method || '').toLowerCase();
-    return ['cash', 'credit_bill', 'credit_bill_manual'].includes(normalized);
+    return [
+        'cash',
+        'mpesa',
+        'mpesa_manual',
+        'm-pesa',
+        'card',
+        'card_manual',
+        'bank',
+        'bank_transfer',
+        'credit_bill',
+        'credit_bill_manual'
+    ].includes(normalized);
 }
 
 function normalizeRestaurantBillPaymentMethod(method?: string): string {

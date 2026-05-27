@@ -329,13 +329,26 @@ class _StationTabState extends ConsumerState<_StationTab> {
               ),
             ],
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _bill == null || _loading ? null : _processPayment,
-                icon: const Icon(Icons.check_circle, size: 16),
-                label: const Text('Process Payment'),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        _bill == null || _loading ? null : _processSplitPayment,
+                    icon: const Icon(Icons.call_split, size: 16),
+                    label: const Text('Split Payment'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _bill == null || _loading ? null : _processPayment,
+                    icon: const Icon(Icons.check_circle, size: 16),
+                    label: const Text('Process'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -412,7 +425,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           await ref.read(cashierRepositoryProvider).processPayment(
                 bookingId: _lookupController.text.trim(),
                 amount: amount,
-                method: _method,
+                method: _backendPaymentMethod(_method),
                 reference: createdCredit == null
                     ? _referenceController.text.trim()
                     : _text(_payload(createdCredit), ['credit_number', 'id']),
@@ -434,6 +447,107 @@ class _StationTabState extends ConsumerState<_StationTab> {
       await _lookupBill();
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _processSplitPayment() async {
+    final bill = _bill;
+    if (bill == null) return;
+    final balance = _balanceFromBill(bill);
+    if (balance <= 0) return _snack('This bill has no balance to clear');
+
+    final body = await _paymentPayload(
+      context,
+      balance,
+      title: 'Split Payment',
+    );
+    if (body == null) return;
+    final payments = _paymentLinesFromPayload(body);
+    if (payments.isEmpty) return _snack('Add at least one payment line');
+
+    final totalPaid = payments.fold<num>(
+      0,
+      (sum, payment) => sum + _num(payment['payment_amount']),
+    );
+    if (totalPaid <= 0) return _snack('Enter a valid payment amount');
+
+    setState(() => _loading = true);
+    try {
+      final responses = <Map<String, dynamic>>[];
+      final receiptRefs = <String>[];
+
+      for (final payment in payments) {
+        final amount = _num(payment['payment_amount']);
+        final method = _backendPaymentMethod(
+            _text(payment, ['payment_method']).isEmpty
+                ? 'cash'
+                : _text(payment, ['payment_method']));
+        var reference = _text(payment, ['payment_reference']);
+        Map<String, dynamic>? paymentCreditBill;
+
+        if (method == 'credit_bill') {
+          final staff = await ref
+              .read(cashierRepositoryProvider)
+              .getBranchStaff()
+              .catchError((_) => <Map<String, dynamic>>[]);
+          if (!mounted) return;
+          final creditBill =
+              await _creditBillPayload(context, amount, staffMembers: staff);
+          if (creditBill == null) return;
+          final createdCredit = await ref
+              .read(cashierRepositoryProvider)
+              .createCreditBill(creditBill);
+          final createdCreditData = _payload(createdCredit);
+          reference = _text(createdCreditData, ['credit_number', 'id']);
+          paymentCreditBill = {
+            ...creditBill,
+            if (_text(createdCreditData, ['id']).isNotEmpty)
+              'id': _text(createdCreditData, ['id']),
+            if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
+              'staff_credit_bill_id':
+                  _text(createdCreditData, ['staff_credit_bill_id']),
+            if (_text(createdCreditData, ['credit_number']).isNotEmpty)
+              'credit_number': _text(createdCreditData, ['credit_number']),
+          };
+        }
+
+        final response =
+            await ref.read(cashierRepositoryProvider).processPayment(
+                  bookingId: _lookupController.text.trim(),
+                  amount: amount,
+                  method: method,
+                  reference: reference,
+                  creditBill: paymentCreditBill,
+                );
+        responses.add(response);
+        receiptRefs.add(
+          '${_receiptMethodLabel(method)} ${_money(amount)}'
+          '${reference.isEmpty ? '' : ' ($reference)'}',
+        );
+      }
+
+      await _printStationReceipt(
+        bill: bill,
+        amount: totalPaid,
+        method: payments.length == 1
+            ? _text(payments.first, ['payment_method'])
+            : 'split',
+        response: responses.isEmpty ? const {} : responses.last,
+        fallbackReference: receiptRefs.join(' | '),
+      );
+      _snack(
+        totalPaid >= balance
+            ? 'Split payment recorded and bill cleared'
+            : 'Partial payment recorded. Remaining: ${_money(balance - totalPaid)}',
+      );
+      ref.invalidate(cashierStatsProvider);
+      ref.invalidate(cashierUnpaidBillsProvider);
+      ref.invalidate(cashierCreditBillsProvider);
+      await _lookupBill();
+    } catch (error) {
+      _snack('Split payment failed: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1055,21 +1169,27 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
     final body = await _paymentPayload(
         context, _num(row['balance_amount'] ?? row['balance']));
     if (body == null) return;
+    final payments = _paymentLinesFromPayload(body);
     try {
       final source = _text(row, ['source']);
       if (row['is_waiter_order'] == true &&
           (source == 'restaurant' || source == 'bar')) {
-        await ref
-            .read(cashierRepositoryProvider)
-            .clearWaiterOrder(source, _text(row, ['id']), body);
+        for (final payment in payments) {
+          await ref
+              .read(cashierRepositoryProvider)
+              .clearWaiterOrder(source, _text(row, ['id']), payment);
+        }
       } else {
-        await ref
-            .read(cashierRepositoryProvider)
-            .recordUnpaidBillPayment(_text(row, ['id']), body);
+        for (final payment in payments) {
+          await ref
+              .read(cashierRepositoryProvider)
+              .recordUnpaidBillPayment(_text(row, ['id']), payment);
+        }
       }
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierStatsProvider);
-      _snack('Payment recorded');
+      _snack(
+          payments.length > 1 ? 'Split payment recorded' : 'Payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
     }
@@ -1193,13 +1313,18 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
     final body = await _paymentPayload(
         context, _num(row['balance_amount'] ?? row['balance']));
     if (body == null) return;
+    final payments = _paymentLinesFromPayload(body);
     try {
-      await ref
-          .read(cashierRepositoryProvider)
-          .recordCreditPayment(_text(row, ['id']), body);
+      for (final payment in payments) {
+        await ref
+            .read(cashierRepositoryProvider)
+            .recordCreditPayment(_text(row, ['id']), payment);
+      }
       ref.invalidate(cashierCreditBillsProvider);
       ref.invalidate(cashierStatsProvider);
-      _snack('Credit payment recorded');
+      _snack(payments.length > 1
+          ? 'Split credit payment recorded'
+          : 'Credit payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
     }
@@ -2834,68 +2959,279 @@ class _JsonSummary extends StatelessWidget {
   }
 }
 
-Future<Map<String, dynamic>?> _paymentPayload(
-    BuildContext context, num amount) {
-  final amountController = TextEditingController(
-    text: amount > 0 ? amount.toStringAsFixed(0) : '',
-  );
-  final referenceController = TextEditingController();
+class _PaymentDraftLine {
+  _PaymentDraftLine({String? amount})
+      : amountController = TextEditingController(text: amount ?? '');
+
   String method = 'cash';
+  final TextEditingController amountController;
+  final TextEditingController referenceController = TextEditingController();
+
+  num get amount => _num(amountController.text);
+
+  Map<String, dynamic> toPayload() => {
+        'payment_amount': amount,
+        'payment_method': method,
+        'payment_reference': referenceController.text.trim(),
+      };
+
+  void dispose() {
+    amountController.dispose();
+    referenceController.dispose();
+  }
+}
+
+Future<Map<String, dynamic>?> _paymentPayload(
+  BuildContext context,
+  num amount, {
+  String title = 'Record Payment',
+}) {
+  final lines = <_PaymentDraftLine>[
+    _PaymentDraftLine(amount: amount > 0 ? amount.toStringAsFixed(0) : ''),
+  ];
   return showDialog<Map<String, dynamic>>(
     context: context,
     builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Record Payment'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Payment amount'),
+      builder: (context, setState) {
+        final allocated = lines.fold<num>(0, (sum, line) => sum + line.amount);
+        final remaining = amount - allocated;
+
+        void addLine() {
+          setState(() {
+            lines.add(_PaymentDraftLine(
+              amount: remaining > 0 ? remaining.toStringAsFixed(0) : '',
+            ));
+          });
+        }
+
+        Map<String, dynamic>? buildPayload() {
+          final payments = lines
+              .map((line) => line.toPayload())
+              .where((line) => _num(line['payment_amount']) > 0)
+              .toList();
+          final total = payments.fold<num>(
+            0,
+            (sum, payment) => sum + _num(payment['payment_amount']),
+          );
+          if (payments.isEmpty || total <= 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('Enter at least one payment amount')),
+            );
+            return null;
+          }
+          if (amount > 0 && total > amount) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Payment exceeds balance by ${_money(total - amount)}',
+                ),
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: method,
-                decoration: const InputDecoration(labelText: 'Payment method'),
-                items: const [
-                  DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                  DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-                  DropdownMenuItem(value: 'card', child: Text('Card')),
-                  DropdownMenuItem(
-                      value: 'credit_bill', child: Text('Credit Bill')),
+            );
+            return null;
+          }
+          if (payments.length == 1) return payments.first;
+          return {
+            'payment_amount': total,
+            'payment_method': 'split',
+            'payment_reference': payments
+                .map((payment) => _text(payment, ['payment_reference']))
+                .where((reference) => reference.isNotEmpty)
+                .join(' / '),
+            'payments': payments,
+          };
+        }
+
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 620,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.kSurface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.kDivider),
+                    ),
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: [
+                        Text('Outstanding: ${_money(amount)}'),
+                        Text('Allocated: ${_money(allocated)}'),
+                        Text(
+                          'Remaining: ${_money(remaining > 0 ? remaining : 0)}',
+                          style: TextStyle(
+                            color: remaining < 0
+                                ? AppColors.kError
+                                : AppColors.kTextSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  for (var index = 0; index < lines.length; index++) ...[
+                    _PaymentLineEditor(
+                      line: lines[index],
+                      canRemove: lines.length > 1,
+                      onChanged: () => setState(() {}),
+                      onRemove: () {
+                        setState(() {
+                          final removed = lines.removeAt(index);
+                          removed.dispose();
+                        });
+                      },
+                    ),
+                    if (index != lines.length - 1) const SizedBox(height: 10),
+                  ],
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: addLine,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add payment method'),
+                  ),
+                  if (amount > 0 && remaining > 0) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Saving less than the outstanding amount records a partial payment.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.kTextSecondary,
+                          ),
+                    ),
+                  ],
                 ],
-                onChanged: (value) => setState(() => method = value ?? 'cash'),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: referenceController,
-                decoration: const InputDecoration(labelText: 'Reference'),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final payload = buildPayload();
+                if (payload != null) Navigator.pop(context, payload);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    ),
+  ).whenComplete(() {
+    for (final line in lines) {
+      line.dispose();
+    }
+  });
+}
+
+class _PaymentLineEditor extends StatelessWidget {
+  const _PaymentLineEditor({
+    required this.line,
+    required this.canRemove,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final _PaymentDraftLine line;
+  final bool canRemove;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 5,
+                child: TextField(
+                  controller: line.amountController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => onChanged(),
+                  decoration: const InputDecoration(
+                    labelText: 'Amount',
+                    isDense: true,
+                  ),
+                ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 6,
+                child: DropdownButtonFormField<String>(
+                  initialValue: line.method,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Method',
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                    DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                    DropdownMenuItem(value: 'card', child: Text('Card')),
+                    DropdownMenuItem(
+                        value: 'credit_bill', child: Text('Credit Bill')),
+                  ],
+                  onChanged: (value) {
+                    line.method = value ?? 'cash';
+                    onChanged();
+                  },
+                ),
+              ),
+              if (canRemove) ...[
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: 'Remove payment line',
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.close),
+                ),
+              ],
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, {
-              'payment_amount': num.tryParse(amountController.text.trim()) ?? 0,
-              'payment_method': method,
-              'payment_reference': referenceController.text.trim(),
-            }),
-            child: const Text('Save'),
+          const SizedBox(height: 10),
+          TextField(
+            controller: line.referenceController,
+            onChanged: (_) => onChanged(),
+            decoration: InputDecoration(
+              labelText:
+                  line.method == 'cash' ? 'Reference (optional)' : 'Reference',
+              isDense: true,
+            ),
           ),
         ],
       ),
-    ),
-  ).whenComplete(() {
-    amountController.dispose();
-    referenceController.dispose();
-  });
+    );
+  }
+}
+
+List<Map<String, dynamic>> _paymentLinesFromPayload(
+    Map<String, dynamic> payload) {
+  final rawPayments = payload['payments'];
+  if (rawPayments is List) {
+    return rawPayments
+        .whereType<Map>()
+        .map((payment) => Map<String, dynamic>.from(payment))
+        .where((payment) => _num(payment['payment_amount']) > 0)
+        .toList();
+  }
+  return [payload]
+      .where((payment) => _num(payment['payment_amount']) > 0)
+      .toList();
 }
 
 Future<Map<String, dynamic>?> _unpaidBillPayload(BuildContext context) {
@@ -3382,11 +3718,20 @@ Color _statusColor(String status) {
 
 String _receiptMethodLabel(String method) {
   final normalized = method.toUpperCase().replaceAll('-', '_');
+  if (normalized.contains('SPLIT')) return 'SPLIT PAYMENT';
   if (normalized.contains('MPESA')) return 'M-PESA';
   if (normalized.contains('CARD')) return 'CARD';
   if (normalized.contains('CREDIT')) return 'CREDIT BILL';
   if (normalized.contains('CASH')) return 'CASH';
   return normalized;
+}
+
+String _backendPaymentMethod(String method) {
+  final normalized = method.toLowerCase().replaceAll('-', '_');
+  if (normalized.contains('mpesa')) return 'mpesa';
+  if (normalized.contains('card')) return 'card';
+  if (normalized.contains('credit')) return 'credit_bill';
+  return normalized.isEmpty ? 'cash' : normalized;
 }
 
 List<CartItem> _receiptItemsFromBill(Map<String, dynamic> bill, num amount) {
