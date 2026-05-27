@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/domain/auth_notifier.dart';
 
@@ -35,9 +36,8 @@ class SuperAdminTopBar extends ConsumerWidget {
               onPressed: onMenuTap,
               icon: Icon(_menuIcon, color: Colors.grey.shade700),
             ),
-          if (onMenuTap != null)
-            const SizedBox(width: 16),
-          
+          if (onMenuTap != null) const SizedBox(width: 16),
+
           // Breadcrumb
           Row(
             children: [
@@ -66,13 +66,18 @@ class SuperAdminTopBar extends ConsumerWidget {
               ),
             ],
           ),
-          
+
           const Spacer(),
-          
-          // Actions
-          _buildSearchField(),
+
+          // Actions — wrap search in Flexible so it shrinks before overflowing
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 280, minWidth: 80),
+              child: _buildSearchField(),
+            ),
+          ),
           const SizedBox(width: 16),
-          _buildNotificationButton(),
+          _buildNotificationButton(context),
           const SizedBox(width: 16),
           _buildProfileMenu(context, ref),
         ],
@@ -86,7 +91,6 @@ class SuperAdminTopBar extends ConsumerWidget {
 
   Widget _buildSearchField() {
     return Container(
-      width: 280,
       height: 40,
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
@@ -115,11 +119,12 @@ class SuperAdminTopBar extends ConsumerWidget {
     );
   }
 
-  Widget _buildNotificationButton() {
+  Widget _buildNotificationButton(BuildContext context) {
     return Stack(
       children: [
         IconButton(
-          onPressed: () {},
+          onPressed: () => AppNotifier.showSnackBar(
+              context, const SnackBar(content: Text('No new notifications'))),
           icon: Icon(
             PhosphorIcons.bell(),
             color: Colors.grey.shade700,
@@ -146,61 +151,74 @@ class SuperAdminTopBar extends ConsumerWidget {
       offset: const Offset(0, 40),
       onSelected: (value) {
         if (value == 'logout') {
-          Navigator.of(context).pop();
           _handleLogout(ref);
         }
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade200),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
-              child: Text(
-                'S',
-                style: TextStyle(
-                  color: AppColors.kPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+      child: Builder(builder: (context) {
+        final user = ref.watch(authNotifierProvider).valueOrNull;
+        final displayName = user?.name ?? 'Super Admin';
+        final displayEmail = user?.email ?? '';
+        final initials =
+            displayName.isNotEmpty ? displayName[0].toUpperCase() : 'S';
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                child: Text(
+                  initials,
+                  style: const TextStyle(
+                    color: AppColors.kPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Super Admin',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+              const SizedBox(width: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 130),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      displayEmail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  'superadmin@famousgates.com',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.expand_more,
-              size: 16,
-              color: Colors.grey.shade500,
-            ),
-          ],
-        ),
-      ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.expand_more,
+                size: 16,
+                color: Colors.grey.shade500,
+              ),
+            ],
+          ),
+        );
+      }),
       itemBuilder: (context) => [
         PopupMenuItem(
           value: 'profile',

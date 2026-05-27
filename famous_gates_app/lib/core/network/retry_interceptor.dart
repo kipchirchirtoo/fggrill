@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
 
 class RetryInterceptor extends Interceptor {
+  final Dio dio;
   final int maxRetries;
   final int initialDelayMs;
 
-  RetryInterceptor({this.maxRetries = 3, this.initialDelayMs = 1000});
+  RetryInterceptor(this.dio, {this.maxRetries = 3, this.initialDelayMs = 1000});
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
@@ -14,12 +15,12 @@ class RetryInterceptor extends Interceptor {
     if (_shouldRetry(err) && attempt < maxRetries) {
       attempt++;
       requestOptions.extra['retry_attempt'] = attempt;
-      
+
       final delay = initialDelayMs * attempt; // Simple backoff
       await Future.delayed(Duration(milliseconds: delay));
 
       try {
-        final response = await Dio().fetch(requestOptions);
+        final response = await dio.fetch(requestOptions);
         return handler.resolve(response);
       } on DioException catch (e) {
         return handler.next(e);

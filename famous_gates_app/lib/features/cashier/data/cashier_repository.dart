@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/utils/api_error_message.dart';
 
 final cashierRepositoryProvider = Provider<CashierRepository>((ref) {
   return CashierRepository(
@@ -20,10 +21,8 @@ class CashierRepository {
 
   Future<Map<String, dynamic>> getStats() => _getMap('/cashier/stats');
 
-  Future<Map<String, dynamic>> getBillDetails(String id) async {
-    final res = await _dio.get('/cashier/bill/${Uri.encodeComponent(id)}');
-    return _asMap(res.data);
-  }
+  Future<Map<String, dynamic>> getBillDetails(String id) =>
+      _getMap('/cashier/bill/${Uri.encodeComponent(id)}');
 
   Future<Map<String, dynamic>> processPayment({
     required String bookingId,
@@ -107,16 +106,21 @@ class CashierRepository {
     String? status,
     String? search,
   }) async {
-    final res = await _dio.get<List<int>>(
-      '/cashier/unpaid-bills/outstanding/pdf',
-      queryParameters: {
-        if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
-        if (status != null && status != 'all') 'status': status,
-        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
-      },
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return Uint8List.fromList(res.data ?? const []);
+    try {
+      final res = await _dio.get<List<int>>(
+        '/cashier/unpaid-bills/outstanding/pdf',
+        queryParameters: {
+          if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+          if (status != null && status != 'all') 'status': status,
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
+        },
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return Uint8List.fromList(res.data ?? const []);
+    } on DioException catch (error) {
+      throw Exception(apiErrorMessage(error));
+    }
   }
 
   Future<List<Map<String, dynamic>>> getCreditBills({
@@ -281,31 +285,51 @@ class CashierRepository {
     String path, {
     Map<String, dynamic>? query,
   }) async {
-    final res = await _dio.get(path, queryParameters: query);
-    return _asMap(res.data);
+    try {
+      final res = await _dio.get(path, queryParameters: query);
+      return _asMap(res.data);
+    } on DioException catch (error) {
+      throw Exception(apiErrorMessage(error));
+    }
   }
 
   Future<List<Map<String, dynamic>>> _getList(
     String path, {
     Map<String, dynamic>? query,
   }) async {
-    final res = await _dio.get(path, queryParameters: query);
-    return _asList(res.data);
+    try {
+      final res = await _dio.get(path, queryParameters: query);
+      return _asList(res.data);
+    } on DioException catch (error) {
+      throw Exception(apiErrorMessage(error));
+    }
   }
 
   Future<Map<String, dynamic>> _postMap(String path, Object? body) async {
-    final res = await _dio.post(path, data: body);
-    return _asMap(res.data);
+    try {
+      final res = await _dio.post(path, data: body);
+      return _asMap(res.data);
+    } on DioException catch (error) {
+      throw Exception(apiErrorMessage(error));
+    }
   }
 
   Future<Map<String, dynamic>> _patchMap(String path, Object? body) async {
-    final res = await _dio.patch(path, data: body);
-    return _asMap(res.data);
+    try {
+      final res = await _dio.patch(path, data: body);
+      return _asMap(res.data);
+    } on DioException catch (error) {
+      throw Exception(apiErrorMessage(error));
+    }
   }
 
   Future<Map<String, dynamic>> _putMap(String path, Object? body) async {
-    final res = await _dio.put(path, data: body);
-    return _asMap(res.data);
+    try {
+      final res = await _dio.put(path, data: body);
+      return _asMap(res.data);
+    } on DioException catch (error) {
+      throw Exception(apiErrorMessage(error));
+    }
   }
 
   Map<String, dynamic> _asMap(dynamic value) {

@@ -1,31 +1,40 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../storage/secure_storage_provider.dart';
+import '../../features/auth/data/auth_repository.dart';
 
 class AuthInterceptor extends Interceptor {
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  AuthInterceptor(this._ref);
+
+  final Ref _ref;
 
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
-    final jwt = await _storage.read(key: 'jwt');
-    final branchId = await _storage.read(key: 'branch_id');
+  void onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
+    final storage = _ref.read(secureStorageProvider);
+    final jwt = await storage.read(key: AuthRepository.jwtKey);
+    final branchId = await storage.read(key: AuthRepository.branchIdKey);
 
     if (jwt != null) {
       options.headers['Authorization'] = 'Bearer $jwt';
     }
-    if (branchId != null) {
-      options.headers['X-Branch-ID'] = branchId;
+    final normalizedBranchId = branchId?.trim() ?? '';
+    final normalizedBranchIdLower = normalizedBranchId.toLowerCase();
+    if (normalizedBranchId.isNotEmpty &&
+        normalizedBranchIdLower != 'null' &&
+        normalizedBranchIdLower != 'nan') {
+      options.headers['X-Branch-ID'] = normalizedBranchId;
     }
-    
+
     return handler.next(options);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (err.response?.statusCode == 401) {
-      // Handle unauthorized
-      await _storage.delete(key: 'jwt');
-      await _storage.delete(key: 'refresh_token');
-      // Redirect to login logic would go here or be handled by a listener
+      final storage = _ref.read(secureStorageProvider);
+      await storage.delete(key: AuthRepository.jwtKey);
+      await storage.delete(key: AuthRepository.refreshKey);
     }
     return handler.next(err);
   }

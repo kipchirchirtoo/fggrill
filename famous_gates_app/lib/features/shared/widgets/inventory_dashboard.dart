@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -22,13 +23,17 @@ class InventoryDashboard extends StatelessWidget {
           children: [
             Row(
               children: [
-                _buildInventoryStat('Total Items', '1,240', PhosphorIcons.package()),
+                _buildInventoryStat(
+                    'Total Items', '1,240', PhosphorIcons.package()),
                 const SizedBox(width: 16),
-                _buildInventoryStat('Low Stock', '12', PhosphorIcons.warning(), AppColors.kError),
+                _buildInventoryStat('Low Stock', '12', PhosphorIcons.warning(),
+                    AppColors.kError),
                 const SizedBox(width: 16),
-                _buildInventoryStat('Pending Requests', '4', PhosphorIcons.gitPullRequest(), AppColors.kWarning),
+                _buildInventoryStat('Pending Requests', '4',
+                    PhosphorIcons.gitPullRequest(), AppColors.kWarning),
                 const SizedBox(width: 16),
-                _buildInventoryStat('In Transit', '2', PhosphorIcons.truck(), AppColors.kPrimary),
+                _buildInventoryStat('In Transit', '2', PhosphorIcons.truck(),
+                    AppColors.kPrimary),
               ],
             ),
             const SizedBox(height: 32),
@@ -42,14 +47,17 @@ class InventoryDashboard extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
-                          const Text('Inventory List', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const Text('Inventory List',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
                           const Spacer(),
                           SizedBox(
                             width: 300,
                             child: TextField(
                               decoration: InputDecoration(
                                 hintText: 'Search items...',
-                                prefixIcon: Icon(PhosphorIcons.magnifyingGlass()),
+                                prefixIcon:
+                                    Icon(PhosphorIcons.magnifyingGlass()),
                                 contentPadding: EdgeInsets.zero,
                               ),
                             ),
@@ -63,15 +71,21 @@ class InventoryDashboard extends StatelessWidget {
                         separatorBuilder: (context, index) => const Divider(),
                         itemBuilder: (context, index) {
                           return ListTile(
-                            leading: const CircleAvatar(child: Icon(Icons.inventory_2)),
+                            leading: const CircleAvatar(
+                                child: Icon(Icons.inventory_2)),
                             title: Text('Item Name $index'),
                             subtitle: const Text('Category: General'),
-                            trailing: Column(
+                            trailing: const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                const Text('Stock: 45', style: TextStyle(fontWeight: FontWeight.bold)),
-                                const Text('Unit: PCS', style: TextStyle(color: AppColors.kTextSecondary, fontSize: 10)),
+                                Text('Stock: 45',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
+                                Text('Unit: PCS',
+                                    style: TextStyle(
+                                        color: AppColors.kTextSecondary,
+                                        fontSize: 10)),
                               ],
                             ),
                           );
@@ -86,7 +100,13 @@ class InventoryDashboard extends StatelessWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
+        onPressed: () => AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+              content: Text(isCentral
+                  ? 'Add new item — use admin panel'
+                  : 'Create stock request — use admin panel')),
+        ),
         label: Text(isCentral ? 'Add New Item' : 'Create Stock Request'),
         icon: const Icon(Icons.add),
         backgroundColor: AppColors.kPrimary,
@@ -95,7 +115,8 @@ class InventoryDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildInventoryStat(String label, String value, IconData icon, [Color? color]) {
+  Widget _buildInventoryStat(String label, String value, IconData icon,
+      [Color? color]) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(20),
@@ -111,8 +132,12 @@ class InventoryDashboard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                Text(label, style: const TextStyle(color: AppColors.kTextSecondary, fontSize: 11)),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(label,
+                    style: const TextStyle(
+                        color: AppColors.kTextSecondary, fontSize: 11)),
               ],
             ),
           ],

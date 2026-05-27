@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   static const kPrimary = Color(0xFF1A3C5E); // Deep navy
@@ -26,27 +25,32 @@ class AppTheme {
         error: AppColors.kError,
       ),
       scaffoldBackgroundColor: AppColors.kSurface,
-      textTheme: GoogleFonts.dmSansTextTheme().copyWith(
-        displayLarge: GoogleFonts.playfairDisplay(
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(
+          fontFamily: 'SF Pro Display',
           fontSize: 32,
           fontWeight: FontWeight.bold,
           color: AppColors.kTextPrimary,
         ),
-        displayMedium: GoogleFonts.playfairDisplay(
+        displayMedium: TextStyle(
+          fontFamily: 'SF Pro Display',
           fontSize: 28,
           fontWeight: FontWeight.bold,
           color: AppColors.kTextPrimary,
         ),
-        displaySmall: GoogleFonts.playfairDisplay(
+        displaySmall: TextStyle(
+          fontFamily: 'SF Pro Display',
           fontSize: 24,
           fontWeight: FontWeight.bold,
           color: AppColors.kTextPrimary,
         ),
-        bodyLarge: GoogleFonts.dmSans(
+        bodyLarge: TextStyle(
+          fontFamily: 'SF Pro Display',
           fontSize: 16,
           color: AppColors.kTextPrimary,
         ),
-        bodyMedium: GoogleFonts.dmSans(
+        bodyMedium: TextStyle(
+          fontFamily: 'SF Pro Display',
           fontSize: 14,
           color: AppColors.kTextPrimary,
         ),
@@ -62,7 +66,7 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.kPrimary,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 48),
+          minimumSize: const Size(0, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),

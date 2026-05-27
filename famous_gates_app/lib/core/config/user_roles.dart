@@ -211,98 +211,98 @@ enum UserRole {
 
   // Role categories for route access
   static Set<String> get adminRoles => {
-    superAdmin.value,
-    generalManager.value,
-  };
+        superAdmin.value,
+        generalManager.value,
+      };
 
   static Set<String> get cashierRoles => {
-    cashier.value,
-    kyogongReceptionCashier.value,
-  };
+        cashier.value,
+        kyogongReceptionCashier.value,
+      };
 
   static Set<String> get barRoles => {
-    bartender.value,
-    barManager.value,
-    barman.value,
-    barmaid.value,
-    kyogongExecutiveBarCashier.value,
-    kyogongSportsBarCashier.value,
-  };
+        bartender.value,
+        barManager.value,
+        barman.value,
+        barmaid.value,
+        kyogongExecutiveBarCashier.value,
+        kyogongSportsBarCashier.value,
+      };
 
   static Set<String> get restaurantRoles => {
-    waiter.value,
-    waitress.value,
-    headWaiter.value,
-    foodRunner.value,
-    hostHostess.value,
-    restaurant.value,
-  };
+        waiter.value,
+        waitress.value,
+        headWaiter.value,
+        foodRunner.value,
+        hostHostess.value,
+        restaurant.value,
+      };
 
   static Set<String> get kitchenRoles => {
-    kitchen.value,
-    headChef.value,
-    sousChef.value,
-    chef.value,
-    cook.value,
-    posKitchen.value,
-  };
+        kitchen.value,
+        headChef.value,
+        sousChef.value,
+        chef.value,
+        cook.value,
+        posKitchen.value,
+      };
 
   static Set<String> get receptionRoles => {
-    receptionist.value,
-    branchReceptionist.value,
-    frontDeskSupervisor.value,
-    concierge.value,
-  };
+        receptionist.value,
+        branchReceptionist.value,
+        frontDeskSupervisor.value,
+        concierge.value,
+      };
 
   static Set<String> get storeRoles => {
-    branchStorekeeper.value,
-    storekeeper.value,
-    inventoryClerk.value,
-  };
+        branchStorekeeper.value,
+        storekeeper.value,
+        inventoryClerk.value,
+      };
 
   static Set<String> get centralStoreRoles => {
-    centralStorekeeper.value,
-    centralOperationsManager.value,
-  };
+        centralStorekeeper.value,
+        centralOperationsManager.value,
+      };
 
   static Set<String> get accountingRoles => {
-    financeManager.value,
-    branchAccountant.value,
-    accountant.value,
-  };
+        financeManager.value,
+        branchAccountant.value,
+        accountant.value,
+      };
 
   static Set<String> get housekeepingRoles => {
-    housekeeping.value,
-    housekeepingSupervisor.value,
-    roomAttendant.value,
-    laundryAttendant.value,
-  };
+        housekeeping.value,
+        housekeepingSupervisor.value,
+        roomAttendant.value,
+        laundryAttendant.value,
+      };
 
   static Set<String> get maintenanceRoles => {
-    maintenance.value,
-    maintenanceSupervisor.value,
-    electrician.value,
-    plumber.value,
-  };
+        maintenance.value,
+        maintenanceSupervisor.value,
+        electrician.value,
+        plumber.value,
+      };
 
   static Set<String> get allAuthenticatedRoles => {
-    ...cashierRoles,
-    ...barRoles,
-    ...restaurantRoles,
-    ...kitchenRoles,
-    ...receptionRoles,
-    ...storeRoles,
-    ...centralStoreRoles,
-    ...accountingRoles,
-    ...housekeepingRoles,
-    ...maintenanceRoles,
-    ...adminRoles,
-    director.value,
-    auditor.value,
-    nightAuditor.value,
-    hrManager.value,
-    branchManager.value,
-  };
+        ...cashierRoles,
+        ...barRoles,
+        ...restaurantRoles,
+        ...kitchenRoles,
+        ...receptionRoles,
+        ...storeRoles,
+        ...centralStoreRoles,
+        ...accountingRoles,
+        ...housekeepingRoles,
+        ...maintenanceRoles,
+        ...adminRoles,
+        director.value,
+        auditor.value,
+        nightAuditor.value,
+        hrManager.value,
+        branchManager.value,
+      };
 
   // Dashboard routes for each role
   String get dashboardRoute {

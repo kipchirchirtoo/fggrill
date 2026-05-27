@@ -278,6 +278,9 @@ export default function POSKitchenDashboard() {
       const receiptData = {
         receipt_type: 'sale',
         receipt_number: order.order_number,
+        short_code: order.short_code || order.shortCode,
+        public_code: order.short_code || order.shortCode,
+        barcode_value: order.short_code || order.shortCode || order.order_number,
         date: new Date().toLocaleString(),
         table_number: order.table_number,
         room_number: order.room_number,

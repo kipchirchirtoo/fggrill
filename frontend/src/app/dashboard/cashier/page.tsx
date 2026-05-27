@@ -1084,10 +1084,13 @@ function CashierPageContent() {
             const vatAmount = totalAmount - subtotal;
 
             if (billData.type === 'restaurant' || billData.type === 'bar' || billData.type === 'pos') {
-                receiptData = {
-                    receipt_type: 'sale' as const,
-                    receipt_number: billData.order.order_number,
-                    date: billData.order.created_at || new Date().toISOString(),
+	                receiptData = {
+	                    receipt_type: 'sale' as const,
+	                    receipt_number: billData.order.order_number,
+	                    short_code: billData.order.short_code || billData.order.shortCode,
+	                    public_code: billData.order.short_code || billData.order.shortCode,
+	                    barcode_value: billData.order.short_code || billData.order.shortCode || billData.order.order_number,
+	                    date: billData.order.created_at || new Date().toISOString(),
                     table_number: billData.order.table_number,
                     room_number: billData.order.room_number,
                     customer_name: billData.order.guest_name || (billData.order.table_number ? `Table ${billData.order.table_number}` : 'Walk-in'),
@@ -1109,10 +1112,13 @@ function CashierPageContent() {
                 };
             } else if (billData.type === 'hotel' && billData.booking) {
                 // Hotel bill
-                receiptData = {
-                    receipt_type: 'invoice' as const,
-                    invoice_number: billData.booking.id?.slice(0, 8).toUpperCase() || 'N/A',
-                    date: new Date().toISOString(),
+	                receiptData = {
+	                    receipt_type: 'invoice' as const,
+	                    invoice_number: billData.booking.id?.slice(0, 8).toUpperCase() || 'N/A',
+	                    short_code: billData.booking.short_code || billData.booking.shortCode,
+	                    public_code: billData.booking.short_code || billData.booking.shortCode,
+	                    barcode_value: billData.booking.short_code || billData.booking.shortCode || billData.booking.id,
+	                    date: new Date().toISOString(),
                     customer_name: billData.booking.guest_name,
                     room_number: billData.booking.room_number,
                     items: [
@@ -1128,10 +1134,13 @@ function CashierPageContent() {
                     notes: `Stay from ${billData.booking.check_in ? new Date(billData.booking.check_in).toLocaleDateString() : 'N/A'} to ${billData.booking.check_out ? new Date(billData.booking.check_out).toLocaleDateString() : 'N/A'}`
                 };
             } else if (billData.type === 'invoice') {
-                receiptData = {
-                    receipt_type: 'invoice' as const,
-                    invoice_number: billData.invoice.invoice_number,
-                    date: new Date().toISOString(),
+	                receiptData = {
+	                    receipt_type: 'invoice' as const,
+	                    invoice_number: billData.invoice.invoice_number,
+	                    short_code: billData.invoice.short_code || billData.invoice.shortCode,
+	                    public_code: billData.invoice.short_code || billData.invoice.shortCode,
+	                    barcode_value: billData.invoice.short_code || billData.invoice.shortCode || billData.invoice.invoice_number,
+	                    date: new Date().toISOString(),
                     customer_name: billData.invoice.customer_name,
                     items: (billData.invoice.items || []).map((item: any) => ({
                         description: item.name,

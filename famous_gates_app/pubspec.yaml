@@ -33,10 +33,10 @@ dependencies:
   local_auth: ^2.2.0
 
   # UI
-  google_fonts: ^6.2.1
   phosphor_flutter: ^2.1.0
   shimmer: ^3.0.0
   fl_chart: ^0.68.0
+  audioplayers: ^6.1.0
 
   # Printing
   printing: ^5.13.1
@@ -44,10 +44,15 @@ dependencies:
   esc_pos_utils_plus: ^2.0.2
 
   # Utils
+  url_launcher: ^6.3.0
   intl: ^0.19.0
   uuid: ^4.4.0
   freezed_annotation: ^2.4.4
   json_annotation: ^4.9.0
+
+dependency_overrides:
+  phosphor_flutter:
+    path: packages/phosphor_flutter_compat
 
 dev_dependencies:
   flutter_test:
@@ -61,3 +66,15 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/frontend_public/
+    - assets/frontend_public/fggallery/
+    - assets/sounds/
+  fonts:
+    - family: SF Pro Display
+      fonts:
+        - asset: assets/fonts/sf_pro_display/SFPRODISPLAYREGULAR.OTF
+        - asset: assets/fonts/sf_pro_display/SFPRODISPLAYMEDIUM.OTF
+          weight: 500
+        - asset: assets/fonts/sf_pro_display/SFPRODISPLAYBOLD.OTF
+          weight: 700

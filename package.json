@@ -105,6 +105,7 @@
     "release:electron:hold": "electron-builder -p always",
     "release:electron:all:hold": "electron-builder --win --linux -p always",
     "release:electron:win:hold": "electron-builder --win -p always",
+    "migrate:unapplied": "node scripts/run-unapplied-migrations.js",
     "electron:dev": "set ELECTRON_IS_DEV=1 && set NODE_ENV=development && electron .",
     "electron:start": "set NODE_ENV=production && electron .",
     "postinstall": "electron-builder install-app-deps"

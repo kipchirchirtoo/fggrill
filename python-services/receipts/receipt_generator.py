@@ -19,6 +19,22 @@ from reportlab.graphics.barcode import code128
 import base64
 
 
+def _receipt_lookup_code(receipt_data: Dict[str, Any]) -> str:
+    for key in ('short_code', 'shortCode', 'public_code', 'publicCode', 'lookup_code', 'lookupCode'):
+        value = receipt_data.get(key)
+        if value:
+            return str(value).strip().upper()
+    return ''
+
+
+def _receipt_barcode_value(receipt_data: Dict[str, Any], fallback: str = 'N/A') -> str:
+    for key in ('barcode_value', 'barcodeValue', 'barcode', 'short_code', 'shortCode', 'public_code', 'publicCode'):
+        value = receipt_data.get(key)
+        if value:
+            return str(value).strip().upper()
+    return fallback
+
+
 class ReceiptGenerator:
     """Generates thermal-style receipts (FamousGate Hotels style)"""
     
@@ -28,6 +44,12 @@ class ReceiptGenerator:
         self.company_address = "Bomet, Kenya"
         self.company_phone = "+254 706 782 828"
         self.company_email = "info@famousgatehotels.com"
+
+    def _lookup_code(self, receipt_data: Dict[str, Any]) -> str:
+        return _receipt_lookup_code(receipt_data)
+
+    def _barcode_value(self, receipt_data: Dict[str, Any], fallback: str = 'N/A') -> str:
+        return _receipt_barcode_value(receipt_data, fallback)
         
     def generate_receipt(self, receipt_data: Dict[str, Any], vat_inclusive: bool = True) -> bytes:
         """Generate a thermal-style receipt PDF"""
@@ -70,7 +92,20 @@ class ReceiptGenerator:
         c.setFont("Helvetica-Bold", 11)
         receipt_type = receipt_data.get('receipt_type', 'CASH RECEIPT').upper()
         c.drawCentredString(center_x, y, receipt_type)
-        y -= 8 * mm
+        y -= 6 * mm
+
+        lookup_code = _receipt_lookup_code(receipt_data)
+        if lookup_code:
+            c.setStrokeColor(colors.black)
+            c.setLineWidth(0.8)
+            c.rect(8*mm, y - 13*mm, width - 16*mm, 11*mm, stroke=1, fill=0)
+            c.setFont("Helvetica-Bold", 7)
+            c.drawCentredString(center_x, y - 5*mm, "PAYMENT LOOKUP CODE")
+            c.setFont("Helvetica-Bold", 18)
+            c.drawCentredString(center_x, y - 11*mm, lookup_code)
+            y -= 17 * mm
+        else:
+            y -= 2 * mm
         
         # Dashed line
         c.setDash(2, 2)
@@ -246,7 +281,7 @@ class ReceiptGenerator:
         y -= 15 * mm
         
         # === BARCODE ===
-        barcode_value = receipt_data.get('receipt_number', 'N/A')
+        barcode_value = self._barcode_value(receipt_data, receipt_data.get('receipt_number', 'N/A'))
         if barcode_value != 'N/A':
             try:
                 barcode = code128.Code128(barcode_value, barHeight=10*mm, barWidth=0.3*mm)
@@ -549,10 +584,12 @@ class InventoryReceiptGenerator:
         """
         
         receipt_no = receipt_data.get('receipt_number', 'N/A')
+        lookup_code = self._lookup_code(receipt_data)
         receipt_date = receipt_data.get('date', datetime.now().strftime('%Y-%m-%d'))
         
         header_right = f"""
         <b>Receipt #:</b> {receipt_no}<br/>
+        {f"<b>Lookup Code:</b> {lookup_code}<br/>" if lookup_code else ""}
         <b>Date:</b> {receipt_date}
         """
         

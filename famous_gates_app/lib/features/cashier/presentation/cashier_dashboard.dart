@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/api_error_message.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../services/print_service.dart';
 import '../../pos/domain/models.dart';
@@ -363,7 +364,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         _amountController.text = _balanceFromBill(data).toStringAsFixed(0);
       });
     } catch (error) {
-      _snack('Bill lookup failed: $error');
+      _snack('Bill lookup failed: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -432,7 +433,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       ref.invalidate(cashierCreditBillsProvider);
       await _lookupBill();
     } catch (error) {
-      _snack('Payment failed: $error');
+      _snack('Payment failed: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -449,7 +450,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       setState(() => _mpesaMatches = matches);
       if (matches.isEmpty) _snack('No matching M-Pesa payment found');
     } catch (error) {
-      _snack('M-Pesa search failed: $error');
+      _snack('M-Pesa search failed: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -488,7 +489,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         publicCode: _lookupController.text.trim(),
       );
     } catch (error) {
-      _snack('Payment recorded, but receipt failed: $error');
+      _snack('Payment recorded, but receipt failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -510,7 +511,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           _text(data, ['checkoutRequestId', 'CheckoutRequestID', 'reference']);
       _snack('M-Pesa STK push initiated');
     } catch (error) {
-      _snack('STK push failed: $error');
+      _snack('STK push failed: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -529,14 +530,13 @@ class _StationTabState extends ConsumerState<_StationTab> {
       _snack('Bill created');
       await _lookupBill();
     } catch (error) {
-      _snack('Bill creation failed: $error');
+      _snack('Bill creation failed: ${apiErrorMessage(error)}');
     }
   }
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    AppNotifier.show(context, message);
   }
 }
 
@@ -726,7 +726,7 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (error, _) => EmptyState(
-        message: 'Could not load branch POS items: $error',
+        message: 'Could not load branch POS items: ${apiErrorMessage(error)}',
       ),
       data: (rows) {
         final search = _catalogSearchController.text.trim().toLowerCase();
@@ -885,7 +885,7 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
       ref.invalidate(cashierReconciliationProvider);
       _snack('POS transaction completed');
     } catch (error) {
-      _snack('Checkout failed: $error');
+      _snack('Checkout failed: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -893,8 +893,7 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    AppNotifier.show(context, message);
   }
 
   Future<void> _printPosReceipt({
@@ -939,7 +938,9 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
         publicCode: _text(transaction, ['short_code']),
       );
     } catch (error) {
-      _snack('Transaction completed, but receipt failed: $error');
+      _snack(
+        'Transaction completed, but receipt failed: ${apiErrorMessage(error)}',
+      );
     }
   }
 }
@@ -1010,7 +1011,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
               onConfirm: (row, role) => _confirm(row, role),
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
-            error: (error, _) => ErrorState(message: '$error'),
+            error: (error, _) => ErrorState(message: apiErrorMessage(error)),
           ),
         ],
       ),
@@ -1025,7 +1026,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       ref.invalidate(cashierUnpaidBillsProvider);
       _snack('Unpaid bill created');
     } catch (error) {
-      _snack('Create failed: $error');
+      _snack('Create failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1046,7 +1047,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
         filename: 'FG_Unpaid_Bills_$_date.pdf',
       );
     } catch (error) {
-      _snack('Export failed: $error');
+      _snack('Export failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1070,7 +1071,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       ref.invalidate(cashierStatsProvider);
       _snack('Payment recorded');
     } catch (error) {
-      _snack('Payment failed: $error');
+      _snack('Payment failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1082,14 +1083,13 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       ref.invalidate(cashierUnpaidBillsProvider);
       _snack('Confirmed by $role');
     } catch (error) {
-      _snack('Confirm failed: $error');
+      _snack('Confirm failed: ${apiErrorMessage(error)}');
     }
   }
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    AppNotifier.show(context, message);
   }
 }
 
@@ -1160,7 +1160,7 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
               onConfirm: (row, role) => _confirm(row, role),
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
-            error: (error, _) => ErrorState(message: '$error'),
+            error: (error, _) => ErrorState(message: apiErrorMessage(error)),
           ),
         ],
       ),
@@ -1185,7 +1185,7 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
       ref.invalidate(cashierCreditBillsProvider);
       _snack('Credit bill created');
     } catch (error) {
-      _snack('Create failed: $error');
+      _snack('Create failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1201,7 +1201,7 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
       ref.invalidate(cashierStatsProvider);
       _snack('Credit payment recorded');
     } catch (error) {
-      _snack('Payment failed: $error');
+      _snack('Payment failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1213,14 +1213,13 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
       ref.invalidate(cashierCreditBillsProvider);
       _snack('Confirmed by $role');
     } catch (error) {
-      _snack('Confirm failed: $error');
+      _snack('Confirm failed: ${apiErrorMessage(error)}');
     }
   }
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    AppNotifier.show(context, message);
   }
 }
 
@@ -1359,7 +1358,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                     ],
                   ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
-            error: (error, _) => ErrorState(message: '$error'),
+            error: (error, _) => ErrorState(message: apiErrorMessage(error)),
           ),
         ],
       ),
@@ -1375,7 +1374,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
       ref.invalidate(cashierShiftsProvider);
       _snack('Shift started');
     } catch (error) {
-      _snack('Start shift failed: $error');
+      _snack('Start shift failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1400,7 +1399,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
       ref.invalidate(cashierShiftsProvider);
       _snack('Shift closed');
     } catch (error) {
-      _snack('Close shift failed: $error');
+      _snack('Close shift failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1416,14 +1415,13 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
       ref.invalidate(cashierShiftsProvider);
       _snack('Shift reconciled');
     } catch (error) {
-      _snack('Reconcile failed: $error');
+      _snack('Reconcile failed: ${apiErrorMessage(error)}');
     }
   }
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    AppNotifier.show(context, message);
   }
 }
 
@@ -2320,8 +2318,11 @@ class _BarcodeTabState extends ConsumerState<_BarcodeTab> {
       setState(() => _result = result);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Scan failed: $error')));
+        AppNotifier.show(
+          context,
+          'Scan failed: ${apiErrorMessage(error)}',
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);

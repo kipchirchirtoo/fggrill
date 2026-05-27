@@ -713,4 +713,3 @@ export const branchManagerAPI = {
       body: JSON.stringify(data)
     }, null, false)
 };
-

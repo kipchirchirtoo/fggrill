@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../domain/auth_notifier.dart';
+import '../domain/role_routes.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -10,7 +12,8 @@ class SplashScreen extends ConsumerStatefulWidget {
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends ConsumerState<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -28,10 +31,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
   }
 
   Future<void> _checkInitialStatus() async {
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) {
-      context.go('/license');
+    final minimumSplash = Future<void>.delayed(const Duration(seconds: 2));
+    final userFuture = ref.read(authNotifierProvider.future);
+    await minimumSplash;
+    final user = await userFuture;
+    if (!mounted) return;
+
+    if (user != null) {
+      context.go(getRoleRoute(user.role));
+      return;
     }
+
+    final hasLicense = await ref.read(hasStoredLicenseProvider.future);
+    if (!mounted) return;
+    context.go(hasLicense ? '/login' : '/license');
   }
 
   @override
@@ -63,9 +76,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
               Text(
                 'FAMOUS GATES',
                 style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  color: Colors.white,
-                  letterSpacing: 4,
-                ),
+                      color: Colors.white,
+                      letterSpacing: 4,
+                    ),
               ),
               const SizedBox(height: 8),
               const Text(

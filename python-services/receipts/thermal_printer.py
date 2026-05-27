@@ -128,8 +128,24 @@ class ThermalPrinter:
             
             # === ORDER INFO ===
             receipt_no = receipt_data.get('receipt_number', f"ORD-{datetime.now().strftime('%H%M%S')}")
+            public_code = (
+                receipt_data.get('short_code')
+                or receipt_data.get('shortCode')
+                or receipt_data.get('public_code')
+                or receipt_data.get('publicCode')
+                or receipt_data.get('lookup_code')
+                or receipt_data.get('lookupCode')
+                or ''
+            )
+            public_code = str(public_code).strip().upper()
             date_str = receipt_data.get('date', datetime.now().strftime('%m/%d/%Y'))
             time_str = receipt_data.get('time', datetime.now().strftime('%I:%M %p'))
+
+            if public_code:
+                p.set(align='center', font='a', bold=True, double_height=True)
+                p.text(f"{public_code}\n")
+                p.set(align='center', font='a', bold=True, double_height=False)
+                p.text("PAYMENT LOOKUP CODE\n\n")
             
             p.set(align='left', font='a')
             p.text(f"ORDER # {receipt_no.split('-')[-1] if '-' in str(receipt_no) else receipt_no}\n")

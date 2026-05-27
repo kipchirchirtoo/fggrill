@@ -377,6 +377,9 @@ export function POSTab({ onOrderCreated }: POSTabProps) {
       const receiptData = {
         receipt_type: "sale" as const,
         receipt_number: order.order_number,
+        short_code: order.short_code || order.shortCode,
+        public_code: order.short_code || order.shortCode,
+        barcode_value: order.short_code || order.shortCode || order.order_number,
         date: new Date(order.created_at).toLocaleString(),
         table_number: order.table_number,
         room_number: order.room_number,
