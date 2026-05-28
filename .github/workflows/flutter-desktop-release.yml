@@ -47,13 +47,57 @@ jobs:
           flutter config --enable-linux-desktop
           flutter pub get
           flutter build linux --release
-          tar -czf famous-gates-linux-x64.tar.gz -C build/linux/x64/release/bundle .
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ] || [ -z "${VERSION}" ]; then
+            VERSION="${{ inputs.release_tag }}"
+            VERSION="${VERSION#v}"
+          fi
+          VERSION="${VERSION:-1.0.0}"
+          PACKAGE_ROOT="dist/linux/famous-gates_${VERSION}_amd64"
+          mkdir -p "${PACKAGE_ROOT}/DEBIAN"
+          mkdir -p "${PACKAGE_ROOT}/opt/famous-gates"
+          mkdir -p "${PACKAGE_ROOT}/usr/bin"
+          mkdir -p "${PACKAGE_ROOT}/usr/share/applications"
+          mkdir -p "${PACKAGE_ROOT}/usr/share/icons/hicolor/256x256/apps"
+
+          cp -a build/linux/x64/release/bundle/. "${PACKAGE_ROOT}/opt/famous-gates/"
+          cp assets/frontend_public/fglogo.png "${PACKAGE_ROOT}/usr/share/icons/hicolor/256x256/apps/famous-gates.png"
+          ln -s /opt/famous-gates/famous_gates_app "${PACKAGE_ROOT}/usr/bin/famous-gates"
+
+          cat > "${PACKAGE_ROOT}/DEBIAN/control" <<EOF
+          Package: famous-gates
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Famous Gates Hotels <support@famousgates.com>
+          Depends: libgtk-3-0, libstdc++6, libsqlite3-0, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0
+          Description: Famous Gates Hotels Management System
+           Desktop client for the Famous Gates hotel management platform.
+          EOF
+
+          cat > "${PACKAGE_ROOT}/usr/share/applications/famous-gates.desktop" <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Famous Gates
+          Comment=Famous Gates Hotels Management System
+          Exec=/opt/famous-gates/famous_gates_app
+          Icon=famous-gates
+          Terminal=false
+          Categories=Office;Finance;
+          EOF
+
+          chmod 755 "${PACKAGE_ROOT}/opt/famous-gates/famous_gates_app"
+          dpkg-deb --build --root-owner-group "${PACKAGE_ROOT}" "dist/FamousGates-${VERSION}-linux-x64.deb"
+          tar -czf "dist/FamousGates-${VERSION}-linux-x64.tar.gz" -C build/linux/x64/release/bundle .
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: famous-gates-linux-x64
-          path: famous_gates_app/famous-gates-linux-x64.tar.gz
+          path: |
+            famous_gates_app/dist/FamousGates-*-linux-x64.deb
+            famous_gates_app/dist/FamousGates-*-linux-x64.tar.gz
           if-no-files-found: error
 
   build-windows:
@@ -76,13 +120,39 @@ jobs:
           flutter config --enable-windows-desktop
           flutter pub get
           flutter build windows --release
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath famous-gates-windows-x64.zip -Force
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          if ("${env:GITHUB_REF_TYPE}" -ne "tag" -or [string]::IsNullOrWhiteSpace($version)) {
+            $version = "${{ inputs.release_tag }}".TrimStart("v")
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "dist\FamousGates-$version-windows-x64-portable.zip" -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          if ("${env:GITHUB_REF_TYPE}" -ne "tag" -or [string]::IsNullOrWhiteSpace($version)) {
+            $version = "${{ inputs.release_tag }}".TrimStart("v")
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$version" `
+            "/DMyAppSource=${env:GITHUB_WORKSPACE}\famous_gates_app\build\windows\x64\runner\Release" `
+            "/DMyAppOutput=${env:GITHUB_WORKSPACE}\famous_gates_app\dist" `
+            "${env:GITHUB_WORKSPACE}\.github\installers\famous-gates-windows.iss"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: famous-gates-windows-x64
-          path: famous_gates_app/famous-gates-windows-x64.zip
+          path: |
+            famous_gates_app/dist/FamousGates-Setup-*-x64.exe
+            famous_gates_app/dist/FamousGates-*-windows-x64-portable.zip
           if-no-files-found: error
 
   publish-release:
@@ -131,18 +201,24 @@ jobs:
           NOTES="Famous Gates Flutter desktop release.
 
 Included builds:
-- Linux x64
-- Windows x64"
+- Linux x64 .deb installer
+- Linux x64 portable tar.gz
+- Windows x64 setup .exe installer
+- Windows x64 portable zip"
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" \
-              release-artifacts/famous-gates-linux-x64/famous-gates-linux-x64.tar.gz \
-              release-artifacts/famous-gates-windows-x64/famous-gates-windows-x64.zip \
+              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.deb \
+              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.tar.gz \
+              release-artifacts/famous-gates-windows-x64/FamousGates-Setup-*-x64.exe \
+              release-artifacts/famous-gates-windows-x64/FamousGates-*-windows-x64-portable.zip \
               --clobber
           else
             gh release create "${TAG}" \
-              release-artifacts/famous-gates-linux-x64/famous-gates-linux-x64.tar.gz \
-              release-artifacts/famous-gates-windows-x64/famous-gates-windows-x64.zip \
+              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.deb \
+              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.tar.gz \
+              release-artifacts/famous-gates-windows-x64/FamousGates-Setup-*-x64.exe \
+              release-artifacts/famous-gates-windows-x64/FamousGates-*-windows-x64-portable.zip \
               --title "Famous Gates Desktop ${TAG}" \
               --notes "${NOTES}"
           fi
