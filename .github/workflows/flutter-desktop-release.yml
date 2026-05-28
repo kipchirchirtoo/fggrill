@@ -83,6 +83,7 @@ jobs:
           Name=Famous Gates
           Comment=Famous Gates Hotels Management System
           Exec=/opt/famous-gates/famous_gates_app
+          Path=/opt/famous-gates
           Icon=famous-gates
           Terminal=false
           Categories=Office;Finance;
