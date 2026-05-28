@@ -198,13 +198,7 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
-          NOTES="Famous Gates Flutter desktop release.
-
-Included builds:
-- Linux x64 .deb installer
-- Linux x64 portable tar.gz
-- Windows x64 setup .exe installer
-- Windows x64 portable zip"
+          NOTES=$'Famous Gates Flutter desktop release.\n\nIncluded builds:\n- Linux x64 .deb installer\n- Linux x64 portable tar.gz\n- Windows x64 setup .exe installer\n- Windows x64 portable zip'
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" \
