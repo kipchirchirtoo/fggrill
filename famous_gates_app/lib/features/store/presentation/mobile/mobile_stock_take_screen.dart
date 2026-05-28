@@ -88,8 +88,7 @@ class MobileStockTakeScreen extends ConsumerStatefulWidget {
       _MobileStockTakeScreenState();
 }
 
-class _MobileStockTakeScreenState
-    extends ConsumerState<MobileStockTakeScreen> {
+class _MobileStockTakeScreenState extends ConsumerState<MobileStockTakeScreen> {
   bool _submitting = false;
 
   static const _categories = [
@@ -114,8 +113,8 @@ class _MobileStockTakeScreenState
     if (idx >= 0) {
       // Already counted — bump count by 1
       final updated = List<_StockTakeLine>.from(lines);
-      updated[idx] = lines[idx]
-          .copyWith(physicalCount: lines[idx].physicalCount + 1);
+      updated[idx] =
+          lines[idx].copyWith(physicalCount: lines[idx].physicalCount + 1);
       ref.read(_stockTakeLinesProvider.notifier).state = updated;
       HapticFeedback.mediumImpact();
       return;
@@ -162,7 +161,11 @@ class _MobileStockTakeScreenState
   Future<void> _submitStockTake() async {
     final lines = ref.read(_stockTakeLinesProvider);
     if (lines.isEmpty) {
-      if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Scan items before finalising stock take.'), backgroundColor: AppColors.kError)); }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Scan items before finalising stock take.'),
+            backgroundColor: AppColors.kError));
+      }
       return;
     }
 
@@ -182,10 +185,10 @@ class _MobileStockTakeScreenState
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.kPrimary),
-            child: const Text('Finalise',
-                style: TextStyle(color: Colors.white)),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppColors.kPrimary),
+            child:
+                const Text('Finalise', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -223,16 +226,23 @@ class _MobileStockTakeScreenState
 
       // Reset session
       ref.read(_stockTakeLinesProvider.notifier).state = [];
-      ref.read(_stockTakeSessionIdProvider.notifier).state =
-          const Uuid().v4();
+      ref.read(_stockTakeSessionIdProvider.notifier).state = const Uuid().v4();
 
       if (mounted) {
-        if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Stock take submitted!'), backgroundColor: AppColors.kSuccess)); }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Stock take submitted!'),
+              backgroundColor: AppColors.kSuccess));
+        }
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Submission failed: $e'), backgroundColor: AppColors.kError)); }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Submission failed: $e'),
+              backgroundColor: AppColors.kError));
+        }
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -247,13 +257,11 @@ class _MobileStockTakeScreenState
     final filtered = category == 'All'
         ? lines
         : lines
-            .where((l) =>
-                l.category.toLowerCase() == category.toLowerCase())
+            .where((l) => l.category.toLowerCase() == category.toLowerCase())
             .toList();
 
     final totalLines = lines.length;
-    final discrepancies =
-        lines.where((l) => l.isLow || l.isExcess).length;
+    final discrepancies = lines.where((l) => l.isLow || l.isExcess).length;
 
     return Scaffold(
       backgroundColor: AppColors.kSurface,
@@ -326,8 +334,7 @@ class _MobileStockTakeScreenState
                         child: ChoiceChip(
                           label: Text(c,
                               style: const TextStyle(
-                                  fontFamily: 'SF Pro Display',
-                                  fontSize: 12)),
+                                  fontFamily: 'SF Pro Display', fontSize: 12)),
                           selected: category == c,
                           selectedColor: AppColors.kPrimary,
                           labelStyle: TextStyle(
@@ -355,9 +362,8 @@ class _MobileStockTakeScreenState
                     subtitle: lines.isEmpty
                         ? 'Tap the scan button to start counting inventory'
                         : 'Scan items in this category or switch to "All"',
-                    action: lines.isEmpty
-                        ? _ScanFab(onTap: _openScanner)
-                        : null,
+                    action:
+                        lines.isEmpty ? _ScanFab(onTap: _openScanner) : null,
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
@@ -372,18 +378,16 @@ class _MobileStockTakeScreenState
                           if (globalIdx >= 0) {
                             final list = List<_StockTakeLine>.from(lines);
                             list[globalIdx] = updated;
-                            ref
-                                .read(_stockTakeLinesProvider.notifier)
-                                .state = list;
+                            ref.read(_stockTakeLinesProvider.notifier).state =
+                                list;
                           }
                         },
                         onRemove: () {
                           if (globalIdx >= 0) {
                             final list = List<_StockTakeLine>.from(lines)
                               ..removeAt(globalIdx);
-                            ref
-                                .read(_stockTakeLinesProvider.notifier)
-                                .state = list;
+                            ref.read(_stockTakeLinesProvider.notifier).state =
+                                list;
                           }
                         },
                       );
@@ -563,9 +567,8 @@ class _StockTakeLineCardState extends State<_StockTakeLineCard> {
                         width: 80,
                         child: TextField(
                           controller: _ctrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           textAlign: TextAlign.center,
                           onChanged: (v) {
                             final count = double.tryParse(v) ?? 0;

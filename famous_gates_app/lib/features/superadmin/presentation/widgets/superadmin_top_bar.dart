@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/domain/auth_notifier.dart';
+import '../../domain/superadmin_providers.dart';
 
 // Valid phosphor icons for this file
 final _menuIcon = PhosphorIcons.listBullets();
@@ -21,67 +22,105 @@ class SuperAdminTopBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade200),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (onMenuTap != null)
-            IconButton(
-              onPressed: onMenuTap,
-              icon: Icon(_menuIcon, color: Colors.grey.shade700),
-            ),
-          if (onMenuTap != null) const SizedBox(width: 16),
+    final impersonationSession = ref.watch(impersonationSessionProvider);
 
-          // Breadcrumb
-          Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (impersonationSession != null)
+          Container(
+            width: double.infinity,
+            color: Colors.orange.shade700,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  'IMPERSONATING: ${impersonationSession['impersonated_user']?['email'] ?? 'Unknown User'} (${impersonationSession['impersonated_user']?['role'] ?? ''})',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    ref.read(impersonationSessionProvider.notifier).state =
+                        null;
+                  },
+                  child: const Text('End Session',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.shade200),
+            ),
+          ),
+          child: Row(
             children: [
-              Text(
-                'SuperAdmin',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade500,
+              if (onMenuTap != null)
+                IconButton(
+                  onPressed: onMenuTap,
+                  icon: Icon(_menuIcon, color: Colors.grey.shade700),
+                ),
+              if (onMenuTap != null) const SizedBox(width: 16),
+
+              // Breadcrumb
+              Row(
+                children: [
+                  Text(
+                    'SuperAdmin',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+                  Text(
+                    'Dashboard',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ],
+              ),
+
+              const Spacer(),
+
+              // Actions — wrap search in Flexible so it shrinks before overflowing
+              Flexible(
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxWidth: 280, minWidth: 80),
+                  child: _buildSearchField(),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(
-                  Icons.chevron_right,
-                  size: 14,
-                  color: Colors.grey.shade400,
-                ),
-              ),
-              Text(
-                'Dashboard',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                ),
-              ),
+              const SizedBox(width: 16),
+              _buildNotificationButton(context),
+              const SizedBox(width: 16),
+              _buildProfileMenu(context, ref),
             ],
           ),
-
-          const Spacer(),
-
-          // Actions — wrap search in Flexible so it shrinks before overflowing
-          Flexible(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280, minWidth: 80),
-              child: _buildSearchField(),
-            ),
-          ),
-          const SizedBox(width: 16),
-          _buildNotificationButton(context),
-          const SizedBox(width: 16),
-          _buildProfileMenu(context, ref),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

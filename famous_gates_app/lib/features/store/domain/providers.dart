@@ -8,6 +8,12 @@ final storeDashboardProvider =
   return repo.getDashboard();
 });
 
+final centralStoreDashboardProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(storeRepositoryProvider);
+  return repo.getDashboard(central: true);
+});
+
 final inventoryItemsProvider =
     FutureProvider.family<List<InventoryItem>, String?>((ref, search) async {
   final repo = ref.read(storeRepositoryProvider);
@@ -63,11 +69,6 @@ final fleetVehiclesProvider =
 final fleetDriversProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.read(storeRepositoryProvider).getFleetDrivers();
-});
-
-final fleetTripsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(storeRepositoryProvider).getFleetTrips();
 });
 
 final storeResourceProvider = FutureProvider.autoDispose

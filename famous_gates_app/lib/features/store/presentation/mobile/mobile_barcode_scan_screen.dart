@@ -284,8 +284,7 @@ class _ScanOverlayPainter extends CustomPainter {
       ..drawLine(r.bottomLeft, r.bottomLeft.translate(0, -cs), bracketPaint)
       // BR
       ..drawLine(r.bottomRight, r.bottomRight.translate(-cs, 0), bracketPaint)
-      ..drawLine(
-          r.bottomRight, r.bottomRight.translate(0, -cs), bracketPaint);
+      ..drawLine(r.bottomRight, r.bottomRight.translate(0, -cs), bracketPaint);
   }
 
   @override
@@ -565,8 +564,7 @@ class _NotFoundSheet extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
                 textStyle: const TextStyle(
-                    fontFamily: 'SF Pro Display',
-                    fontWeight: FontWeight.w600),
+                    fontFamily: 'SF Pro Display', fontWeight: FontWeight.w600),
               ),
             ),
           ),

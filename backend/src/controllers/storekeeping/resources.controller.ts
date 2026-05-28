@@ -785,6 +785,24 @@ const seedStockCountItemsFromBranchStock = async (
 
     if (branchItemsError) throw branchItemsError;
     simpleRows = branchItems || [];
+
+    // Some deployed branches keep inventory in the shared central catalog and
+    // only materialize branch_stock rows after the first receipt/dispatch. A
+    // new daily stock count must still open with countable rows instead of a
+    // blank sheet, so fall back to active shared catalog items when the branch
+    // has neither branch_stock nor branch-scoped simple_items rows.
+    if (simpleRows.length === 0) {
+      const { data: sharedItems, error: sharedItemsError } = await supabase
+        .from('simple_items')
+        .select('sku, item_name, name, category, unit_of_measure, cost_price, store_type')
+        .is('branch_id', null)
+        .eq('is_active', true)
+        .order('sku');
+
+      if (sharedItemsError) throw sharedItemsError;
+      simpleRows = sharedItems || [];
+    }
+
     simpleBySku = new Map(simpleRows.map((item: any) => [item.sku, item]));
     stockRows = simpleRows.map((item: any) => ({
       item_sku: item.sku,

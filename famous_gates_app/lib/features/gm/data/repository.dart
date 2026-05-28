@@ -43,7 +43,7 @@ class GMRepository {
   }
 
   Future<List<Map<String, dynamic>>> getBranches() =>
-      _getList('/branches');
+      _getList('/system/branches');
 
   Future<List<Map<String, dynamic>>> getStaff() => _getList('/staff');
 
@@ -59,13 +59,13 @@ class GMRepository {
   // ---------------------------------------------------------------------------
 
   Future<void> approveLeave(String id, {String? notes}) async {
-    await _dio.put('/staff/leave-requests/$id/approve', data: {
+    await _dio.put('/staff/leave/$id/approve', data: {
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
     });
   }
 
   Future<void> rejectLeave(String id, {String? reason}) async {
-    await _dio.put('/staff/leave-requests/$id/reject', data: {
+    await _dio.put('/staff/leave/$id/reject', data: {
       if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
     });
   }

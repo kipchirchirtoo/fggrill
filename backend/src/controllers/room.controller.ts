@@ -106,6 +106,50 @@ export const getRoom = async (
   }
 };
 
+// @desc    Get bookings for a room
+// @route   GET /api/rooms/:id/bookings
+// @access  Private
+export const getRoomBookings = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    let roomQuery = supabase
+      .from('rooms')
+      .select('id, branch_id')
+      .eq('id', req.params.id);
+
+    if (!isGlobalRole(req.user?.role) && req.user?.branch_id) {
+      roomQuery = roomQuery.eq('branch_id', req.user.branch_id);
+    }
+
+    const { data: room, error: roomError } = await roomQuery.single();
+    if (roomError || !room) {
+      res.status(404).json({
+        success: false,
+        message: 'Room not found'
+      });
+      return;
+    }
+
+    const { data: bookings, error } = await supabase
+      .from('reservations')
+      .select('*, guest:guests!guest_id(*), room:rooms!room_id(id, room_number, room_type, branch_id, status)')
+      .eq('room_id', req.params.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data: bookings || []
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Create room
 // @route   POST /api/rooms
 // @access  Private (Admin, Manager)

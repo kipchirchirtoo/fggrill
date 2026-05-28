@@ -22,7 +22,9 @@ final _managerClearancesProvider =
 
 final _managerLeaveProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(branchManagerRepositoryProvider).leaveRequests(status: 'pending');
+  return ref
+      .read(branchManagerRepositoryProvider)
+      .leaveRequests(status: 'pending');
 });
 
 final _managerAttendanceProvider =
@@ -49,9 +51,9 @@ class MobileManagerScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return MobileShell(
+    return const MobileShell(
       title: 'Branch Manager',
-      tabs: const [
+      tabs: [
         MobileTab(
           label: 'Overview',
           icon: Icons.dashboard_outlined,
@@ -112,18 +114,26 @@ class _OverviewTab extends ConsumerWidget {
         return MobileTabBody(
           child: AdaptiveStatGrid(
             stats: [
-              statDef(label: 'Occupancy',
+              statDef(
+                  label: 'Occupancy',
                   value: '${stats.occupancyRate.toStringAsFixed(0)}%',
-                  icon: Icons.hotel, color: AppColors.kAccent),
-              statDef(label: 'Today Revenue',
+                  icon: Icons.hotel,
+                  color: AppColors.kAccent),
+              statDef(
+                  label: 'Today Revenue',
                   value: _fmt(stats.todayRevenue),
-                  icon: Icons.attach_money, color: AppColors.kSuccess),
-              statDef(label: 'Active Orders',
+                  icon: Icons.attach_money,
+                  color: AppColors.kSuccess),
+              statDef(
+                  label: 'Active Orders',
                   value: '${stats.activeOrders}',
-                  icon: Icons.receipt_long, color: AppColors.kPrimary),
-              statDef(label: 'Low Stock Items',
+                  icon: Icons.receipt_long,
+                  color: AppColors.kPrimary),
+              statDef(
+                  label: 'Low Stock Items',
                   value: '${stats.lowStockItems}',
-                  icon: Icons.inventory_2, color: AppColors.kWarning),
+                  icon: Icons.inventory_2,
+                  color: AppColors.kWarning),
             ],
           ),
         );
@@ -149,8 +159,7 @@ class _ClearancesTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_managerClearancesProvider);
     return async.when(
-      loading: () =>
-          const MobileLoadingView(message: 'Loading clearances…'),
+      loading: () => const MobileLoadingView(message: 'Loading clearances…'),
       error: (e, _) => MobileEmptyState(
         icon: Icons.error_outline,
         title: 'Could not load clearances',
@@ -181,22 +190,17 @@ class _ClearancesTab extends ConsumerWidget {
 }
 
 class _ClearanceTile extends StatelessWidget {
-  const _ClearanceTile(
-      {required this.clearance, required this.ref});
+  const _ClearanceTile({required this.clearance, required this.ref});
 
   final Map<String, dynamic> clearance;
   final WidgetRef ref;
 
   @override
   Widget build(BuildContext context) {
-    final cashier = clearance['cashier_name'] ??
-        clearance['staff_name'] ?? '—';
-    final shift = clearance['shift'] ??
-        clearance['shift_name'] ?? '—';
-    final cash = clearance['cash_collected'] ??
-        clearance['amount'] ?? 0;
-    final status =
-        (clearance['status'] ?? 'PENDING').toString().toUpperCase();
+    final cashier = clearance['cashier_name'] ?? clearance['staff_name'] ?? '—';
+    final shift = clearance['shift'] ?? clearance['shift_name'] ?? '—';
+    final cash = clearance['cash_collected'] ?? clearance['amount'] ?? 0;
+    final status = (clearance['status'] ?? 'PENDING').toString().toUpperCase();
     final isPending = status == 'PENDING';
 
     return Container(
@@ -206,7 +210,7 @@ class _ClearanceTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -242,21 +246,16 @@ class _ClearanceTile extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: (isPending
-                          ? AppColors.kWarning
-                          : AppColors.kSuccess)
-                      .withOpacity(0.12),
+                  color: (isPending ? AppColors.kWarning : AppColors.kSuccess)
+                      .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   status,
                   style: TextStyle(
-                    color: isPending
-                        ? AppColors.kWarning
-                        : AppColors.kSuccess,
+                    color: isPending ? AppColors.kWarning : AppColors.kSuccess,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     fontFamily: 'SF Pro Display',
@@ -298,9 +297,7 @@ class _ClearanceTile extends StatelessWidget {
   Future<void> _approve(BuildContext context) async {
     final id = '${clearance['id']}';
     try {
-      await ref
-          .read(branchManagerRepositoryProvider)
-          .approveClearance(id);
+      await ref.read(branchManagerRepositoryProvider).approveClearance(id);
       ref.invalidate(_managerClearancesProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -461,8 +458,7 @@ class _LeaveList extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           itemCount: items.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) =>
-              _LeaveTile(leave: items[i], ref: ref),
+          itemBuilder: (context, i) => _LeaveTile(leave: items[i], ref: ref),
         );
       },
     );
@@ -490,7 +486,7 @@ class _LeaveTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -515,10 +511,9 @@ class _LeaveTile extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.kPrimary.withOpacity(0.1),
+                  color: AppColors.kPrimary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -587,9 +582,7 @@ class _LeaveTile extends StatelessWidget {
   Future<void> _approve(BuildContext context) async {
     final id = '${leave['id']}';
     try {
-      await ref
-          .read(branchManagerRepositoryProvider)
-          .approveLeave(id);
+      await ref.read(branchManagerRepositoryProvider).approveLeave(id);
       ref.invalidate(_managerLeaveProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -603,8 +596,7 @@ class _LeaveTile extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: AppColors.kError),
+              content: Text(e.toString()), backgroundColor: AppColors.kError),
         );
       }
     }
@@ -654,8 +646,7 @@ class _LeaveTile extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: AppColors.kError),
+              content: Text(e.toString()), backgroundColor: AppColors.kError),
         );
       }
     }
@@ -669,8 +660,7 @@ class _AttendanceList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_managerAttendanceProvider);
     return async.when(
-      loading: () =>
-          const MobileLoadingView(message: 'Loading attendance…'),
+      loading: () => const MobileLoadingView(message: 'Loading attendance…'),
       error: (e, _) => MobileEmptyState(
         icon: Icons.error_outline,
         title: 'Could not load',
@@ -694,17 +684,13 @@ class _AttendanceList extends ConsumerWidget {
           separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (context, i) {
             final a = items[i];
-            final name =
-                a['staff_name'] ?? a['employee_name'] ?? '—';
-            final status =
-                (a['status'] ?? 'ABSENT').toString().toUpperCase();
+            final name = a['staff_name'] ?? a['employee_name'] ?? '—';
+            final status = (a['status'] ?? 'ABSENT').toString().toUpperCase();
             final time = a['clock_in'] ?? a['check_in'] ?? '';
-            final isPresent =
-                status == 'PRESENT' || status == 'CLOCKED_IN';
+            final isPresent = status == 'PRESENT' || status == 'CLOCKED_IN';
 
             return Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppColors.kCardBg,
                 borderRadius: BorderRadius.circular(10),
@@ -715,9 +701,7 @@ class _AttendanceList extends ConsumerWidget {
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: isPresent
-                          ? AppColors.kSuccess
-                          : AppColors.kError,
+                      color: isPresent ? AppColors.kSuccess : AppColors.kError,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -763,8 +747,7 @@ class _StockTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_managerStockProvider);
     return async.when(
-      loading: () =>
-          const MobileLoadingView(message: 'Loading stock…'),
+      loading: () => const MobileLoadingView(message: 'Loading stock…'),
       error: (e, _) => MobileEmptyState(
         icon: Icons.error_outline,
         title: 'Could not load stock',
@@ -820,7 +803,7 @@ class _ManagerStockTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -900,8 +883,7 @@ class _ReservationsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_managerBookingsProvider);
     return async.when(
-      loading: () =>
-          const MobileLoadingView(message: 'Loading reservations…'),
+      loading: () => const MobileLoadingView(message: 'Loading reservations…'),
       error: (e, _) => MobileEmptyState(
         icon: Icons.error_outline,
         title: 'Could not load',
@@ -937,20 +919,12 @@ class _BookingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final guest =
-        booking['guest_name'] ?? booking['customer_name'] ?? '—';
-    final room = booking['room_number'] ??
-        booking['room'] ??
-        booking['room_id'] ??
-        '—';
-    final checkIn = booking['check_in_date'] ??
-        booking['check_in'] ??
-        '';
-    final checkOut = booking['check_out_date'] ??
-        booking['check_out'] ??
-        '';
-    final status =
-        (booking['status'] ?? 'ACTIVE').toString().toUpperCase();
+    final guest = booking['guest_name'] ?? booking['customer_name'] ?? '—';
+    final room =
+        booking['room_number'] ?? booking['room'] ?? booking['room_id'] ?? '—';
+    final checkIn = booking['check_in_date'] ?? booking['check_in'] ?? '';
+    final checkOut = booking['check_out_date'] ?? booking['check_out'] ?? '';
+    final status = (booking['status'] ?? 'ACTIVE').toString().toUpperCase();
 
     final statusColor = status == 'CHECKED_IN'
         ? AppColors.kSuccess
@@ -965,7 +939,7 @@ class _BookingTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -977,11 +951,10 @@ class _BookingTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.kPrimary.withOpacity(0.1),
+              color: AppColors.kPrimary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.bed,
-                color: AppColors.kPrimary, size: 22),
+            child: const Icon(Icons.bed, color: AppColors.kPrimary, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1009,10 +982,9 @@ class _BookingTile extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.12),
+              color: statusColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(

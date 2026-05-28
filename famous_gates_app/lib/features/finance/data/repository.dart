@@ -120,14 +120,14 @@ class FinanceRepository {
 
   Future<List<BankingRecord>> getBankingRecords() async {
     final branchId = await _branchId;
-    final response = await _dio.get('/banking', queryParameters: {
+    final response = await _dio.get('/banking/transactions', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
     });
     return _parseList(response.data, BankingRecord.fromJson);
   }
 
   Future<void> createBankingRecord(Map<String, dynamic> data) async {
-    await _dio.post('/banking', data: data);
+    await _dio.post('/banking/transactions', data: data);
   }
 
   Future<List<Map<String, dynamic>>> getDailyLogs() async {
@@ -162,14 +162,15 @@ class FinanceRepository {
 
   Future<List<CreditBill>> getCreditBills() async {
     final branchId = await _branchId;
-    final response = await _dio.get('/credit', queryParameters: {
+    final response =
+        await _dio.get('/payroll/simple/credit-bills', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
     });
     return _parseList(response.data, CreditBill.fromJson);
   }
 
   Future<void> createCreditBill(Map<String, dynamic> data) async {
-    await _dio.post('/credit', data: data);
+    await _dio.post('/payroll/simple/credit-bills', data: data);
   }
 
   Future<List<Buffet>> getBuffets() async {
@@ -210,38 +211,44 @@ class FinanceRepository {
 
   Future<List<Purchase>> getPurchases() async {
     final branchId = await _branchId;
-    final response = await _dio.get('/procurement', queryParameters: {
+    final response =
+        await _dio.get('/procurement/purchase-orders', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
     });
     return _parseList(response.data, Purchase.fromJson);
   }
 
   Future<void> createPurchase(Map<String, dynamic> data) async {
-    await _dio.post('/procurement', data: data);
+    await _dio.post('/procurement/purchase-orders', data: data);
   }
 
   Future<Map<String, dynamic>> getFoodControlConfig() async {
     final branchId = await _branchId;
-    final response = await _dio.get('/food-control', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
+    final path = branchId.isNotEmpty
+        ? '/branch-food-control-config/$branchId'
+        : '/branch-food-control-config';
+    final response = await _dio.get(path);
     return _unwrap(response.data);
   }
 
   Future<void> updateFoodControlConfig(Map<String, dynamic> data) async {
-    await _dio.put('/food-control', data: data);
+    final branchId = await _branchId;
+    if (branchId.isEmpty) {
+      throw StateError('Branch is required to update food control settings');
+    }
+    await _dio.put('/branch-food-control-config/$branchId', data: data);
   }
 
   Future<List<CashierClearance>> getCashierClearances() async {
     final branchId = await _branchId;
-    final response = await _dio.get('/cashier/clearance', queryParameters: {
+    final response = await _dio.get('/cashier/clearances', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
     });
     return _parseList(response.data, CashierClearance.fromJson);
   }
 
   Future<void> approveCashierClearance(String id) async {
-    await _dio.post('/cashier/clearance/$id/approve');
+    await _dio.post('/cashier/clearances/$id/approve');
   }
 
   Future<Map<String, dynamic>> getVarianceReport() async {
@@ -262,8 +269,9 @@ class FinanceRepository {
   }
 
   Future<void> rejectPayment(String id, {String? notes}) async {
-    await _dio.put('/payments-verification/$id/reject', data: {
-      if (notes != null) 'notes': notes,
+    await _dio.put('/payments-verification/$id/verify-auditor', data: {
+      'auditor_status': 'flagged',
+      if (notes != null) 'auditor_notes': notes,
     });
   }
 }

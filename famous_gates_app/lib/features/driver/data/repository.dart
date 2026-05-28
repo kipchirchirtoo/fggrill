@@ -17,7 +17,9 @@ class DriverRepository {
   List<Map<String, dynamic>> _list(dynamic data) {
     final list = data is List
         ? data
-        : (data is Map ? (data['data'] ?? data['items'] ?? data['rows'] ?? []) : []);
+        : (data is Map
+            ? (data['data'] ?? data['items'] ?? data['rows'] ?? [])
+            : []);
     return (list as List)
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
@@ -81,7 +83,7 @@ class DriverRepository {
   Future<Map<String, dynamic>> verifyDriverOtp(
       String dispatchId, String otp) async {
     final res = await _dio.post(
-      '/store/dispatches/$dispatchId/verify-driver-otp',
+      '/dispatch/dispatches/$dispatchId/verify-driver-otp',
       data: {'driver_otp': otp.trim().toUpperCase()},
     );
     return _map(res.data);

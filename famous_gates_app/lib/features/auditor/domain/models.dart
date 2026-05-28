@@ -93,8 +93,12 @@ class StockRequestItem {
       itemName: '${json['item_name'] ?? json['name'] ?? ''}',
       itemUnit: '${json['item_unit'] ?? json['unit'] ?? 'units'}',
       itemCategory: '${json['item_category'] ?? json['category'] ?? ''}',
-      requestedQuantity: _int(json['quantity_requested'] ?? json['requested_quantity'] ?? json['quantity'] ?? 0),
-      approvedQuantity: _int(json['quantity_approved'] ?? json['approved_quantity'] ?? 0),
+      requestedQuantity: _int(json['quantity_requested'] ??
+          json['requested_quantity'] ??
+          json['quantity'] ??
+          0),
+      approvedQuantity:
+          _int(json['quantity_approved'] ?? json['approved_quantity'] ?? 0),
       currentBranchStock: _int(json['current_branch_stock'] ?? 0),
       status: '${json['status'] ?? 'PENDING_AUDIT'}',
       rejectionReason: json['rejection_reason'] as String?,
@@ -146,7 +150,9 @@ class StockRequest {
   });
 
   bool get isPendingAudit =>
-      status == 'PENDING_AUDIT' || status == 'PENDING' || status == 'UNDER_REVIEW';
+      status == 'PENDING_AUDIT' ||
+      status == 'PENDING' ||
+      status == 'UNDER_REVIEW';
   bool get isApproved => status == 'APPROVED' || status == 'PARTIALLY_APPROVED';
   bool get isRejected => status == 'REJECTED';
   bool get isDispatched =>
@@ -175,7 +181,8 @@ class StockRequest {
     return StockRequest(
       id: '${json['id']}',
       requestNumber: '${json['request_number'] ?? ''}',
-      requestingBranchId: _int(json['requesting_branch_id'] ?? (branch is Map ? branch['id'] : 0)),
+      requestingBranchId: _int(
+          json['requesting_branch_id'] ?? (branch is Map ? branch['id'] : 0)),
       requestingBranchName: branchName,
       requestType: '${json['request_type'] ?? 'ROUTINE'}',
       priority: '${json['priority'] ?? 'NORMAL'}',
@@ -185,7 +192,8 @@ class StockRequest {
       reviewedByName: reviewedByName,
       reviewedAt: DateTime.tryParse('${json['reviewed_at'] ?? ''}'),
       reviewNotes: json['review_notes'] as String?,
-      createdAt: DateTime.tryParse('${json['created_at'] ?? ''}') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse('${json['created_at'] ?? ''}') ?? DateTime.now(),
       neededByDate: DateTime.tryParse('${json['needed_by_date'] ?? ''}'),
       auditorId: json['auditor_id'] as String?,
       auditedAt: DateTime.tryParse('${json['audited_at'] ?? ''}'),
@@ -258,7 +266,8 @@ class BranchOrdersSummary {
     final summaries = (list is List)
         ? list
             .whereType<Map>()
-            .map((e) => BranchOrderBranchSummary.fromJson(Map<String, dynamic>.from(e)))
+            .map((e) =>
+                BranchOrderBranchSummary.fromJson(Map<String, dynamic>.from(e)))
             .toList()
         : <BranchOrderBranchSummary>[];
     return BranchOrdersSummary(

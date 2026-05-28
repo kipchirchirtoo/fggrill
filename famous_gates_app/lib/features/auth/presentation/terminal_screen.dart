@@ -79,26 +79,41 @@ class TerminalScreen extends ConsumerWidget {
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 20),
+                    horizontal: 24, vertical: 4),
                 child: Column(
                   children: [
                     const _TopBar(),
-                    const Spacer(),
-                    _BrandClock(now: now),
-                    const SizedBox(height: 12),
-                    _PinDots(
-                        pinLength: pin.length, isLoading: isLoading),
-                    const SizedBox(height: 12),
-                    _PinPad(
-                      selectedPrefix: selectedPrefix,
-                      onKey: (v) => _appendPin(ref, v, context),
-                      onDelete: () => _deletePin(ref),
-                      onStaff: () => context.go('/hr-terminal'),
-                      disabled: isLoading,
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => SingleChildScrollView(
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _BrandClock(now: now),
+                                const SizedBox(height: 8),
+                                _PinDots(
+                                    pinLength: pin.length,
+                                    isLoading: isLoading),
+                                const SizedBox(height: 8),
+                                _PinPad(
+                                  selectedPrefix: selectedPrefix,
+                                  onKey: (v) => _appendPin(ref, v, context),
+                                  onDelete: () => _deletePin(ref),
+                                  onStaff: () => context.go('/hr-terminal'),
+                                  disabled: isLoading,
+                                ),
+                                const SizedBox(height: 8),
+                                const _FooterBranding(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    const _FooterBranding(),
-                    const Spacer(),
                   ],
                 ),
               ),

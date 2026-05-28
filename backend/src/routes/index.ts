@@ -93,8 +93,14 @@ import shiftPnLRoutes from './shiftPnL.routes';
 import branchFoodControlConfigRoutes from './branchFoodControlConfig.routes';
 import securityRoutes from './security.routes';
 import communicationsRoutes from './communications.routes';
+import superadminRoutes from './superadmin.routes';
+import linaRoutes from './lina.routes';
+import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
+
+// Maintenance mode gate — checks req.user?.role (safe even before protect() runs, uses optional chaining)
+router.use(maintenanceMode);
 
 // Health check
 router.get('/health', (req, res) => {
@@ -205,6 +211,8 @@ router.use('/search', searchRoutes);
 router.use('/analytics', branchAnalyticsRoutes);
 router.use('/dispatch', dispatchRoutes);
 router.use('/security', securityRoutes);
+router.use('/superadmin', superadminRoutes);
+router.use('/lina', linaRoutes);
 
 // Food Control System routes
 router.use('/buffet', buffetRoutes);

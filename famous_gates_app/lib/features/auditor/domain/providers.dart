@@ -47,7 +47,8 @@ final branchOrdersFiltersProvider = StateProvider<Map<String, String?>>((ref) {
 });
 
 final branchOrdersProvider =
-    FutureProvider.family<BranchOrdersData, Map<String, String?>>((ref, filters) {
+    FutureProvider.family<BranchOrdersData, Map<String, String?>>(
+        (ref, filters) {
   return ref.read(auditorRepositoryProvider).getBranchOrders(
         startDate: filters['start_date'],
         endDate: filters['end_date'],

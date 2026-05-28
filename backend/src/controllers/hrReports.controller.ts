@@ -6,6 +6,53 @@ import * as XLSX from 'xlsx';
 /**
  * Controller for generating Kenyan statutory compliance reports
  */
+export const getHRReportsIndex = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const reports = [
+            {
+                id: 'kra-p10',
+                name: 'KRA P10 Return',
+                title: 'KRA P10 Return',
+                type: 'statutory',
+                format: 'xlsx',
+                endpoint: '/api/hr-reports/kra-p10'
+            },
+            {
+                id: 'nssf',
+                name: 'NSSF Return',
+                title: 'NSSF Return',
+                type: 'statutory',
+                format: 'xlsx',
+                endpoint: '/api/hr-reports/nssf'
+            },
+            {
+                id: 'shif',
+                name: 'SHIF Return',
+                title: 'SHIF Return',
+                type: 'statutory',
+                format: 'xlsx',
+                endpoint: '/api/hr-reports/shif'
+            },
+            {
+                id: 'housing-levy',
+                name: 'Housing Levy Return',
+                title: 'Housing Levy Return',
+                type: 'statutory',
+                format: 'xlsx',
+                endpoint: '/api/hr-reports/housing-levy'
+            }
+        ];
+
+        res.json({
+            success: true,
+            count: reports.length,
+            data: reports
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const generateKRAP10 = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { month, year } = req.query;

@@ -146,6 +146,7 @@ class _SessionsTab extends ConsumerWidget {
                         s['created_at'] ??
                         '—';
                     final sessionId = s['id'] ?? s['session_id'] ?? '';
+                    final userId = s['user_id'] ?? s['userId'] ?? '';
 
                     return [
                       Column(
@@ -183,8 +184,9 @@ class _SessionsTab extends ConsumerWidget {
                               fontSize: 12, color: AppColors.kTextSecondary)),
                       if (isCurrent != true && sessionId.toString().isNotEmpty)
                         TextButton.icon(
-                          onPressed: () => _terminateSession(context, ref,
-                              user.toString(), sessionId.toString()),
+                          onPressed: () => _terminateSession(
+                              context, ref, user.toString(), userId.toString(),
+                              sessionId: sessionId.toString()),
                           icon: Icon(PhosphorIcons.x(),
                               size: 16, color: AppColors.kError),
                           label: const Text('Terminate',
@@ -229,7 +231,12 @@ class _SessionsTab extends ConsumerWidget {
   }
 
   void _terminateSession(
-      BuildContext context, WidgetRef ref, String user, String sessionId) {
+    BuildContext context,
+    WidgetRef ref,
+    String user,
+    String userId, {
+    String? sessionId,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -244,7 +251,7 @@ class _SessionsTab extends ConsumerWidget {
               try {
                 await ref
                     .read(adminRepositoryProvider)
-                    .logoutSession(sessionId);
+                    .logoutSession(userId, sessionId: sessionId);
                 ref.invalidate(adminActiveSessionsProvider);
                 if (context.mounted) {
                   AppNotifier.showSnackBar(

@@ -12,8 +12,7 @@ import '../domain/providers.dart';
 final _statusFilterProvider = StateProvider<String?>((ref) => null);
 
 // ─── Selected IDs for bulk actions ───────────────────────────────────────────
-final _selectedRequestsProvider =
-    StateProvider<Set<String>>((ref) => const {});
+final _selectedRequestsProvider = StateProvider<Set<String>>((ref) => const {});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main tab
@@ -58,8 +57,7 @@ class BranchOrdersTab extends ConsumerWidget {
               // Refresh
               IconButton.outlined(
                 tooltip: 'Refresh',
-                onPressed: () =>
-                    ref.invalidate(branchOrdersProvider(filters)),
+                onPressed: () => ref.invalidate(branchOrdersProvider(filters)),
                 icon: const Icon(Icons.refresh_rounded, size: 18),
               ),
             ],
@@ -72,8 +70,7 @@ class BranchOrdersTab extends ConsumerWidget {
             loading: () => const LoadingSkeleton(type: SkeletonType.card),
             error: (e, _) => ErrorState(
                 message: '$e',
-                onRetry: () =>
-                    ref.invalidate(branchOrdersProvider(filters))),
+                onRetry: () => ref.invalidate(branchOrdersProvider(filters))),
             data: (data) => _SummarySection(summary: data.summary),
           ),
 
@@ -98,12 +95,10 @@ class BranchOrdersTab extends ConsumerWidget {
           // ── Requests list ──────────────────────────────────────────────
           Expanded(
             child: dataAsync.when(
-              loading: () =>
-                  const LoadingSkeleton(type: SkeletonType.list),
+              loading: () => const LoadingSkeleton(type: SkeletonType.list),
               error: (e, _) => ErrorState(
                   message: '$e',
-                  onRetry: () =>
-                      ref.invalidate(branchOrdersProvider(filters))),
+                  onRetry: () => ref.invalidate(branchOrdersProvider(filters))),
               data: (data) {
                 var requests = data.requests;
                 if (statusFilter != null) {
@@ -368,17 +363,15 @@ class _BranchChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: hasPending
-                    ? AppColors.kWarning
-                    : AppColors.kTextSecondary,
+                color:
+                    hasPending ? AppColors.kWarning : AppColors.kTextSecondary,
               )),
           const SizedBox(width: 5),
           Text('${branch.totalRequests}',
               style: TextStyle(
                 fontSize: 11,
-                color: hasPending
-                    ? AppColors.kWarning
-                    : AppColors.kTextSecondary,
+                color:
+                    hasPending ? AppColors.kWarning : AppColors.kTextSecondary,
               )),
         ],
       ),
@@ -417,16 +410,12 @@ class _StatusFilterRow extends ConsumerWidget {
               selected: isActive,
               onSelected: (_) {
                 ref.read(_statusFilterProvider.notifier).state = f.$1;
-                ref.read(_selectedRequestsProvider.notifier).state =
-                    const {};
+                ref.read(_selectedRequestsProvider.notifier).state = const {};
               },
               labelStyle: TextStyle(
                 fontSize: 12,
-                fontWeight:
-                    isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive
-                    ? AppColors.kPrimary
-                    : AppColors.kTextSecondary,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: isActive ? AppColors.kPrimary : AppColors.kTextSecondary,
               ),
               backgroundColor: Colors.transparent,
               selectedColor: AppColors.kPrimary.withValues(alpha: 0.10),
@@ -435,8 +424,7 @@ class _StatusFilterRow extends ConsumerWidget {
                     ? AppColors.kPrimary
                     : Colors.grey.withValues(alpha: 0.25),
               ),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
             ),
           );
         }).toList(),
@@ -470,30 +458,27 @@ class _BulkActionBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Icon(PhosphorIcons.listChecks(),
-              color: AppColors.kPrimary, size: 18),
+          Icon(PhosphorIcons.listChecks(), color: AppColors.kPrimary, size: 18),
           const SizedBox(width: 8),
           Text('${selectedIds.length} selected',
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, fontSize: 13)),
+              style:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
           const Spacer(),
           TextButton(
-            onPressed: () => ref
-                .read(_selectedRequestsProvider.notifier)
-                .state = const {},
+            onPressed: () =>
+                ref.read(_selectedRequestsProvider.notifier).state = const {},
             child: const Text('Clear'),
           ),
           const SizedBox(width: 8),
           ElevatedButton.icon(
-            onPressed: () =>
-                _bulkApprove(context, ref, selectedIds.toList()),
+            onPressed: () => _bulkApprove(context, ref, selectedIds.toList()),
             icon: const Icon(Icons.done_all_rounded, size: 16),
             label: Text('Approve All (${selectedIds.length})'),
             style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.kSuccess,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
           ),
         ],
       ),
@@ -514,8 +499,8 @@ class _BulkActionBar extends ConsumerWidget {
               child: const Text('Cancel')),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.kSuccess),
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: AppColors.kSuccess),
               child: const Text('Approve All')),
         ],
       ),
@@ -523,24 +508,20 @@ class _BulkActionBar extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
-      await ref
-          .read(auditorRepositoryProvider)
-          .bulkApproveStockRequests(ids);
+      await ref.read(auditorRepositoryProvider).bulkApproveStockRequests(ids);
       ref.read(_selectedRequestsProvider.notifier).state = const {};
       ref.invalidate(branchOrdersProvider(filters));
       if (context.mounted) {
         AppNotifier.showSnackBar(
           context,
           SnackBar(
-              content:
-                  Text('${ids.length} requisitions approved successfully'),
+              content: Text('${ids.length} requisitions approved successfully'),
               backgroundColor: AppColors.kSuccess),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('Error: $e')));
+        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -576,8 +557,8 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
     final r = widget.request;
     final statusColor = _statusColor(r.status);
     final statusLabel = _statusLabel(r.status);
-    final isUrgent =
-        r.priority.toLowerCase() == 'urgent' || r.priority.toLowerCase() == 'high';
+    final isUrgent = r.priority.toLowerCase() == 'urgent' ||
+        r.priority.toLowerCase() == 'high';
     final canAct = r.isPendingAudit;
 
     return Card(
@@ -632,16 +613,15 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
                           children: [
                             Text(r.requestNumber,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13)),
+                                    fontWeight: FontWeight.w700, fontSize: 13)),
                             const SizedBox(width: 8),
                             if (isUrgent)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: AppColors.kError
-                                      .withValues(alpha: 0.10),
+                                  color:
+                                      AppColors.kError.withValues(alpha: 0.10),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
@@ -659,8 +639,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
                         Text(
                           '${r.requestingBranchName}  •  ${r.requestType}  •  ${_dateShort(r.createdAt)}',
                           style: const TextStyle(
-                              color: AppColors.kTextSecondary,
-                              fontSize: 12),
+                              color: AppColors.kTextSecondary, fontSize: 12),
                         ),
                         if (r.reason.isNotEmpty) ...[
                           const SizedBox(height: 2),
@@ -748,8 +727,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
       }
     } catch (e) {
       if (mounted) {
-        AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('Error: $e')));
+        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -767,8 +745,8 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Rejecting: ${widget.request.requestNumber}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 13)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
@@ -782,8 +760,7 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -866,8 +843,18 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
   }
 
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 }
 
@@ -1009,10 +996,8 @@ class _ExpandedBody extends StatelessWidget {
               if (request.reviewNotes != null &&
                   request.reviewNotes!.isNotEmpty)
                 _MetaChip(
-                    icon: PhosphorIcons.note(),
-                    label: request.reviewNotes!),
-              if (request.auditNotes != null &&
-                  request.auditNotes!.isNotEmpty)
+                    icon: PhosphorIcons.note(), label: request.reviewNotes!),
+              if (request.auditNotes != null && request.auditNotes!.isNotEmpty)
                 _MetaChip(
                     icon: PhosphorIcons.shieldCheck(),
                     label: request.auditNotes!),
@@ -1037,8 +1022,8 @@ class _ExpandedBody extends StatelessWidget {
             ),
             children: [
               TableRow(
-                decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.05)),
+                decoration:
+                    BoxDecoration(color: Colors.grey.withValues(alpha: 0.05)),
                 children: const [
                   _TH('Item'),
                   _TH('Category'),
@@ -1217,8 +1202,8 @@ class _MetaChip extends StatelessWidget {
         Icon(icon, size: 13, color: AppColors.kTextSecondary),
         const SizedBox(width: 4),
         Text(label,
-            style: const TextStyle(
-                color: AppColors.kTextSecondary, fontSize: 12)),
+            style:
+                const TextStyle(color: AppColors.kTextSecondary, fontSize: 12)),
       ],
     );
   }

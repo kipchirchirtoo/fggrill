@@ -4,6 +4,7 @@ import { UserRole } from '../models/User';
 import {
   getRooms,
   getRoom,
+  getRoomBookings,
   createRoom,
   updateRoom,
   deleteRoom,
@@ -20,17 +21,18 @@ router.get('/types', getRoomTypes);
 router.use(protect);
 
 router.get('/', getRooms);
+router.get('/:id/bookings', getRoomBookings);
 router.get('/:id', getRoom);
 
 // Admin and Manager routes
-router.post('/', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), createRoom);
-router.put('/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), updateRoom);
+router.post('/', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), createRoom);
+router.put('/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), updateRoom);
 router.delete('/:id', authorize([UserRole.SUPER_ADMIN]), deleteRoom);
 
 // Admin, Manager, and Housekeeping routes
 router.patch(
   '/:id/status',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.HOUSEKEEPING, UserRole.RECEPTIONIST]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HOUSEKEEPING, UserRole.RECEPTIONIST]),
   updateRoomStatus
 );
 

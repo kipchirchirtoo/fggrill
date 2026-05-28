@@ -241,11 +241,9 @@ class SettingsScreen extends ConsumerWidget {
               if (!formKey.currentState!.validate()) return;
               Navigator.of(ctx).pop();
               try {
-                await ref
-                    .read(dioProvider)
-                    .post('/auth/change-password', data: {
-                  'current_password': currentCtrl.text,
-                  'new_password': newCtrl.text,
+                await ref.read(dioProvider).put('/auth/updatepassword', data: {
+                  'currentPassword': currentCtrl.text,
+                  'newPassword': newCtrl.text,
                 });
                 if (context.mounted) {
                   AppNotifier.showSnackBar(

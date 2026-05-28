@@ -69,8 +69,11 @@ class KitchenRepository {
 
   Future<void> updateOrderStatus(String orderId, String status) async {
     if (orderId.startsWith('pos:')) {
-      // Outlet POS captain orders are payment-controlled in pos_shift_orders.
-      // KDS can view them immediately, but serving them must not clear payment.
+      // Captain orders stay unpaid/partial until cashier clearance, but the
+      // kitchen still needs a prep lifecycle for display and waiter callbacks.
+      await _dio.put('/restaurant/kitchen/orders/$orderId/status', data: {
+        'status': status,
+      });
       return;
     }
     await _dio.put('/restaurant/orders/$orderId/status', data: {

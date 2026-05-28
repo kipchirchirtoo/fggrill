@@ -32,9 +32,9 @@ class SuperAdminNavItem {
                 label: 'Dashboard',
                 icon: PhosphorIcons.house()),
             SuperAdminNavItem(
-                section: SuperAdminSection.behavioralIntelligence,
-                label: 'AI Intelligence',
-                icon: PhosphorIcons.cube()),
+                section: SuperAdminSection.lina,
+                label: 'Lina(Ai Service)',
+                icon: PhosphorIcons.sparkle()),
             SuperAdminNavItem(
                 section: SuperAdminSection.securityCenter,
                 label: 'Security Center',
@@ -181,6 +181,31 @@ class SuperAdminNavItem {
                 section: SuperAdminSection.settings,
                 label: 'Settings',
                 icon: PhosphorIcons.gear()),
+          ],
+        ),
+        SuperAdminNavGroup(
+          label: 'God Controls',
+          items: [
+            SuperAdminNavItem(
+                section: SuperAdminSection.impersonation,
+                label: 'Impersonation',
+                icon: PhosphorIcons.userGear()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.featureFlags,
+                label: 'Feature Flags',
+                icon: PhosphorIcons.slidersHorizontal()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.announcements,
+                label: 'Announcements',
+                icon: PhosphorIcons.megaphone()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.emergencyControls,
+                label: 'Emergency Controls',
+                icon: PhosphorIcons.warning()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.dataOverrides,
+                label: 'Data Overrides',
+                icon: PhosphorIcons.pencilLine()),
           ],
         ),
       ];

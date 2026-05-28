@@ -52,6 +52,7 @@ dependencies:
   uuid: ^4.4.0
   freezed_annotation: ^2.4.4
   json_annotation: ^4.9.0
+  drift_flutter: ^0.2.7
 
 dependency_overrides:
   phosphor_flutter:

@@ -30,14 +30,9 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
           icon: PhosphorIcons.warehouse(),
           content: const _CentralStoreOverviewTab()),
       DashboardTab(
-          label: 'Goods Receiving',
-          icon: PhosphorIcons.packageArrowUp(),
-          content: const _StoreResourceTab(
-            title: 'Goods Receiving',
-            endpoint: '/storekeeping/receive',
-            actionLabel: 'Record Goods',
-            fields: ['item_name', 'quantity', 'supplier_name', 'notes'],
-          )),
+          label: 'Master Inventory',
+          icon: PhosphorIcons.package(),
+          content: const _InventoryTab()),
       DashboardTab(
           label: 'Foodstuffs',
           icon: PhosphorIcons.cookingPot(),
@@ -48,39 +43,30 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
             fields: ['name', 'sku', 'category', 'quantity', 'unit'],
           )),
       DashboardTab(
-          label: 'Bar & Beverages',
+          label: 'Bar Store',
           icon: PhosphorIcons.wine(),
           content: const _StoreResourceTab(
-            title: 'Bar & Beverages',
+            title: 'Bar Store',
             endpoint: '/store/items',
             queryStoreType: 'bar_store',
             fields: ['name', 'sku', 'category', 'quantity', 'unit'],
           )),
       DashboardTab(
-          label: 'Stationery Items',
-          icon: PhosphorIcons.pencil(),
-          content: const _StoreResourceTab(
-            title: 'Stationery Items',
-            endpoint: '/store/items',
-            queryCategory: 'stationery',
-            fields: ['name', 'sku', 'category', 'quantity', 'unit'],
-          )),
+          label: 'Stock Takes',
+          icon: PhosphorIcons.clipboardText(),
+          content: const _CentralStockTakesTab()),
       DashboardTab(
-          label: 'Master Inventory',
-          icon: PhosphorIcons.package(),
-          content: const _InventoryTab()),
+          label: 'Spoilage Log',
+          icon: PhosphorIcons.trash(),
+          content: const _SpoilageTab()),
       DashboardTab(
           label: 'Requisitions',
-          icon: PhosphorIcons.clipboardText(),
+          icon: PhosphorIcons.gitPullRequest(),
           content: const _StockRequestsTab()),
       DashboardTab(
           label: 'Packing',
           icon: PhosphorIcons.package(),
-          content: const _StoreResourceTab(
-            title: 'Packing',
-            endpoint: '/storekeeping/packing',
-            fields: ['stock_request_id', 'item_name', 'quantity', 'notes'],
-          )),
+          content: const _PackingTab()),
       DashboardTab(
           label: 'Dispatch & Notes',
           icon: PhosphorIcons.truck(),
@@ -90,7 +76,7 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
           icon: PhosphorIcons.fileText(),
           content: const _StoreResourceTab(
             title: 'Purchase Orders',
-            endpoint: '/procurement/purchase-orders',
+            endpoint: '/store/purchase-orders',
             fields: ['supplier_id', 'po_number', 'status', 'notes'],
           )),
       DashboardTab(
@@ -103,7 +89,7 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
             fields: ['po_id', 'supplier_id', 'grn_number', 'status', 'notes'],
           )),
       DashboardTab(
-          label: 'Supplier Database',
+          label: 'Suppliers',
           icon: PhosphorIcons.users(),
           content: const _SuppliersTab()),
       DashboardTab(
@@ -111,7 +97,7 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
           icon: PhosphorIcons.truck(),
           content: const _StoreResourceTab(
             title: 'Vehicles',
-            endpoint: '/fleet/vehicles',
+            endpoint: '/store/vehicles',
             fields: ['registration_number', 'make', 'model', 'status'],
           )),
       DashboardTab(
@@ -119,25 +105,8 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
           icon: PhosphorIcons.user(),
           content: const _StoreResourceTab(
             title: 'Drivers',
-            endpoint: '/fleet/drivers',
+            endpoint: '/store/drivers',
             fields: ['name', 'phone', 'license_number', 'status'],
-          )),
-      DashboardTab(
-          label: 'Central Reports',
-          icon: PhosphorIcons.chartBar(),
-          content: const _StoreResourceTab(
-            title: 'Central Reports',
-            endpoint: '/reports',
-            createEnabled: false,
-          )),
-      DashboardTab(
-          label: 'Communications',
-          icon: PhosphorIcons.chatCircle(),
-          content: const _StoreResourceTab(
-            title: 'Communications',
-            endpoint: '/communications',
-            actionLabel: 'New Message',
-            fields: ['title', 'message', 'priority'],
           )),
     ];
 
@@ -169,15 +138,15 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
                   icon: PhosphorIcons.clipboardText(),
                   content: const _StoreResourceTab(
                     title: 'Stock Takes',
-                    endpoint: '/branch-operations/inventory/stock-takes',
-                    fields: ['name', 'status', 'notes'],
+                    endpoint: '/stock-takes',
+                    fields: ['count_type', 'store_type', 'notes'],
                   )),
               DashboardTab(
                   label: 'Purchase Orders',
                   icon: PhosphorIcons.fileText(),
                   content: const _StoreResourceTab(
                     title: 'Purchase Orders',
-                    endpoint: '/procurement/purchase-orders',
+                    endpoint: '/store/purchase-orders',
                     fields: ['supplier_id', 'po_number', 'status', 'notes'],
                   )),
               DashboardTab(
@@ -189,7 +158,7 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
                   icon: PhosphorIcons.cookingPot(),
                   content: const _StoreResourceTab(
                     title: 'Kitchen Usage',
-                    endpoint: '/kitchen/usage',
+                    endpoint: '/store/kitchen-usage',
                     fields: ['sku', 'quantity', 'unit', 'notes'],
                   )),
               DashboardTab(
@@ -197,17 +166,8 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
                   icon: PhosphorIcons.arrowUpRight(),
                   content: const _StoreResourceTab(
                     title: 'Stock Out',
-                    endpoint: '/inventory/stock-out',
-                    fields: ['item_id', 'quantity', 'reason', 'notes'],
-                  )),
-              DashboardTab(
-                  label: 'Communications',
-                  icon: PhosphorIcons.chatCircle(),
-                  content: const _StoreResourceTab(
-                    title: 'Communications',
-                    endpoint: '/communications',
-                    actionLabel: 'New Message',
-                    fields: ['title', 'message', 'priority'],
+                    endpoint: '/store/branch-stock/out',
+                    fields: ['item_sku', 'quantity', 'reason', 'notes'],
                   )),
             ],
     );
@@ -411,70 +371,110 @@ class _CentralStoreOverviewTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final dashAsync = ref.watch(centralStoreDashboardProvider);
     final items = ref.watch(inventoryItemsProvider(null));
     final requests = ref.watch(stockRequestsProvider(null));
-    final receiving = ref.watch(receivingRecordsProvider);
     final dispatch = ref.watch(dispatchOrdersProvider(null));
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Central Store',
-              style: Theme.of(context).textTheme.displaySmall),
-          const SizedBox(height: 4),
-          const Text(
-            'Central inventory, receiving, requisitions, dispatch, purchasing, fleet, and reports',
-            style: TextStyle(color: AppColors.kTextSecondary),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Central Store',
+                    style: Theme.of(context).textTheme.displaySmall),
+                const SizedBox(height: 4),
+                const Text(
+                  'Inventory, receiving, requisitions, dispatch, procurement, fleet',
+                  style: TextStyle(color: AppColors.kTextSecondary),
+                ),
+              ]),
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+                onPressed: () {
+                  ref.invalidate(centralStoreDashboardProvider);
+                  ref.invalidate(inventoryItemsProvider(null));
+                  ref.invalidate(stockRequestsProvider(null));
+                  ref.invalidate(dispatchOrdersProvider(null));
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              _InventoryStatCard(
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _InventoryStatCard(
                   label: 'Master Items',
-                  value: items.maybeWhen(
-                      data: (d) => '${d.length}', orElse: () => '-'),
-                  icon: PhosphorIcons.package()),
-              const SizedBox(width: 16),
-              _InventoryStatCard(
-                  label: 'Requisitions',
+                  value: dashAsync.maybeWhen(
+                    data: (d) =>
+                        '${d['totalItems'] ?? items.maybeWhen(data: (list) => list.length, orElse: () => '-')}',
+                    orElse: () => items.maybeWhen(
+                        data: (list) => '${list.length}', orElse: () => '-'),
+                  ),
+                  icon: PhosphorIcons.package(),
+                ),
+                const SizedBox(width: 16),
+                _InventoryStatCard(
+                  label: 'Low Stock',
+                  value: dashAsync.maybeWhen(
+                    data: (d) => '${d['lowStock'] ?? d['lowStockItems'] ?? 0}',
+                    orElse: () => '-',
+                  ),
+                  icon: PhosphorIcons.warning(),
+                  color: AppColors.kError,
+                ),
+                const SizedBox(width: 16),
+                _InventoryStatCard(
+                  label: 'Pending Requests',
                   value: requests.maybeWhen(
-                      data: (d) => '${d.length}', orElse: () => '-'),
+                    data: (d) => '${d.length}',
+                    orElse: () => dashAsync.maybeWhen(
+                        data: (d) => '${d['pendingRequests'] ?? '-'}',
+                        orElse: () => '-'),
+                  ),
                   icon: PhosphorIcons.gitPullRequest(),
-                  color: AppColors.kWarning),
-              const SizedBox(width: 16),
-              _InventoryStatCard(
-                  label: 'Goods Received',
-                  value: receiving.maybeWhen(
-                      data: (d) => '${d.length}', orElse: () => '-'),
-                  icon: PhosphorIcons.packageArrowUp(),
-                  color: AppColors.kSuccess),
-              const SizedBox(width: 16),
-              _InventoryStatCard(
-                  label: 'Dispatch Notes',
-                  value: dispatch.maybeWhen(
-                      data: (d) => '${d.length}', orElse: () => '-'),
+                  color: AppColors.kWarning,
+                ),
+                const SizedBox(width: 16),
+                _InventoryStatCard(
+                  label: 'In Transit',
+                  value: dashAsync.maybeWhen(
+                    data: (d) => '${d['inTransit'] ?? d['dispatched'] ?? '-'}',
+                    orElse: () => dispatch.maybeWhen(
+                        data: (d) =>
+                            '${d.where((o) => '${o['status']}'.toLowerCase() == 'in_transit' || '${o['status']}'.toLowerCase() == 'dispatched').length}',
+                        orElse: () => '-'),
+                  ),
                   icon: PhosphorIcons.truck(),
-                  color: AppColors.kPrimary),
-            ],
+                  color: AppColors.kPrimary,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           const Wrap(
             spacing: 12,
             runSpacing: 12,
             children: [
-              _StoreShortcut('Goods Receiving', Icons.inventory_2_outlined),
               _StoreShortcut('Master Inventory', Icons.warehouse_outlined),
+              _StoreShortcut('Foodstuffs', Icons.kitchen_outlined),
+              _StoreShortcut('Bar Store', Icons.local_bar_outlined),
+              _StoreShortcut('Stock Takes', Icons.fact_check_outlined),
+              _StoreShortcut('Spoilage Log', Icons.delete_outline),
               _StoreShortcut('Requisitions', Icons.assignment_outlined),
               _StoreShortcut('Packing', Icons.inventory_outlined),
               _StoreShortcut('Dispatch & Notes', Icons.local_shipping_outlined),
               _StoreShortcut('Purchase Orders', Icons.receipt_long_outlined),
               _StoreShortcut('Goods Receipt (GRN)', Icons.fact_check_outlined),
-              _StoreShortcut('Supplier Database', Icons.people_outline),
+              _StoreShortcut('Suppliers', Icons.people_outline),
               _StoreShortcut('Vehicles', Icons.fire_truck_outlined),
               _StoreShortcut('Drivers', Icons.badge_outlined),
-              _StoreShortcut('Central Reports', Icons.bar_chart_outlined),
-              _StoreShortcut('Communications', Icons.chat_bubble_outline),
             ],
           ),
         ],
@@ -517,8 +517,6 @@ class _StoreResourceTab extends ConsumerWidget {
     required this.endpoint,
     this.fields = const ['name', 'description'],
     this.actionLabel,
-    this.createEnabled = true,
-    this.queryCategory,
     this.queryStoreType,
   });
 
@@ -526,14 +524,11 @@ class _StoreResourceTab extends ConsumerWidget {
   final String endpoint;
   final List<String> fields;
   final String? actionLabel;
-  final bool createEnabled;
-  final String? queryCategory;
   final String? queryStoreType;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final query = <String, String>{
-      if (queryCategory != null) 'category': queryCategory!,
       if (queryStoreType != null) 'store_type': queryStoreType!,
     };
     final resourceKey = query.isEmpty
@@ -556,16 +551,14 @@ class _StoreResourceTab extends ConsumerWidget {
                     ref.invalidate(storeResourceProvider(resourceKey)),
                 icon: const Icon(Icons.refresh),
               ),
-              if (createEnabled) ...[
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(132, 42)),
-                  onPressed: () => _showCreateDialog(context, ref, resourceKey),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(actionLabel ?? 'New'),
-                ),
-              ],
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style:
+                    ElevatedButton.styleFrom(minimumSize: const Size(132, 42)),
+                onPressed: () => _showCreateDialog(context, ref, resourceKey),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(actionLabel ?? 'New'),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -650,7 +643,6 @@ class _StoreResourceTab extends ConsumerWidget {
             onPressed: () => Navigator.pop(ctx, {
               for (final entry in controllers.entries)
                 entry.key: entry.value.text.trim(),
-              if (queryCategory != null) 'category': queryCategory,
               if (queryStoreType != null) 'store_type': queryStoreType,
             }),
             child: const Text('Save'),
@@ -1419,191 +1411,162 @@ class _SpoilageTabState extends ConsumerState<_SpoilageTab> {
   }
 }
 
-// ─── Fleet ─────────────────────────────────────────────────────────────────────
+// ─── Packing Tab ───────────────────────────────────────────────────────────────
 
-class _FleetTab extends ConsumerStatefulWidget {
-  const _FleetTab();
-  @override
-  ConsumerState<_FleetTab> createState() => _FleetTabState();
-}
-
-class _FleetTabState extends ConsumerState<_FleetTab> {
-  int _subTab = 0;
+class _PackingTab extends ConsumerWidget {
+  const _PackingTab();
 
   @override
-  Widget build(BuildContext context) {
-    return Column(children: [
-      Row(children: [
-        _sub('Vehicles', 0),
-        _sub('Drivers', 1),
-        _sub('Trips', 2),
-      ]),
-      Expanded(
-          child: IndexedStack(
-        index: _subTab,
-        children: [_buildVehicles(), _buildDrivers(), _buildTrips()],
-      )),
-    ]);
-  }
-
-  Widget _sub(String label, int idx) => Expanded(
-        child: InkWell(
-          onTap: () => setState(() => _subTab = idx),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              border: Border(
-                  bottom: BorderSide(
-                color: _subTab == idx ? AppColors.kPrimary : Colors.transparent,
-                width: 2,
-              )),
-            ),
-            child: Text(label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontWeight:
-                        _subTab == idx ? FontWeight.bold : FontWeight.normal,
-                    color: _subTab == idx
-                        ? AppColors.kPrimary
-                        : AppColors.kTextSecondary)),
-          ),
-        ),
-      );
-
-  Widget _buildVehicles() {
-    final vAsync = ref.watch(fleetVehiclesProvider);
-    return AsyncValueWidget(
-      value: vAsync,
-      data: (vehicles) {
-        if (vehicles.isEmpty) {
-          return const EmptyState(message: 'No vehicles registered');
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: vehicles.length,
-          itemBuilder: (_, i) {
-            final v = vehicles[i];
-            final status = (v['status'] ?? 'active').toString();
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: Icon(PhosphorIcons.truck(), color: AppColors.kPrimary),
-                title: Text(
-                    '${v['registration'] ?? v['plate'] ?? 'N/A'}  —  ${v['make'] ?? v['model'] ?? ''}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                    'Type: ${v['type'] ?? '—'}  •  Capacity: ${v['capacity'] ?? '—'}'),
-                trailing: Chip(
-                  label: Text(status.toUpperCase(),
-                      style: const TextStyle(fontSize: 10)),
-                  backgroundColor: status == 'active'
-                      ? AppColors.kSuccess.withValues(alpha: 0.1)
-                      : AppColors.kError.withValues(alpha: 0.1),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildDrivers() {
-    final dAsync = ref.watch(fleetDriversProvider);
-    return AsyncValueWidget(
-      value: dAsync,
-      data: (drivers) {
-        if (drivers.isEmpty) {
-          return const EmptyState(message: 'No drivers registered');
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: drivers.length,
-          itemBuilder: (_, i) {
-            final d = drivers[i];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
-                  child: Text(
-                      (d['name'] ?? 'D')
-                          .toString()
-                          .substring(0, 1)
-                          .toUpperCase(),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.kPrimary)),
-                ),
-                title: Text(
-                    (d['name'] ?? d['full_name'] ?? 'Driver').toString(),
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                    'License: ${d['license_number'] ?? '—'}  •  Phone: ${d['phone'] ?? '—'}'),
-                trailing: Icon(
-                  Icons.circle,
-                  size: 10,
-                  color: (d['status'] ?? 'active') == 'active'
-                      ? AppColors.kSuccess
-                      : AppColors.kError,
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildTrips() {
-    final tAsync = ref.watch(fleetTripsProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Fetch stock requests that are APPROVED (ready to be packed by central store)
+    const resourceKey = '/store/stock-requests/approved';
+    final packsAsync = ref.watch(storeResourceProvider(resourceKey));
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Trip Logs',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          PermissionGuard(
-            permission: Permission.canManageFleet,
-            child: ElevatedButton.icon(
-              onPressed: () => _showNewTripDialog(context),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Log Trip'),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.kPrimary,
-                  foregroundColor: Colors.white),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Packing Station',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+              onPressed: () =>
+                  ref.invalidate(storeResourceProvider(resourceKey)),
             ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: AsyncValueWidget(
+            value: packsAsync,
+            data: (requests) {
+              if (requests.isEmpty) {
+                return const EmptyState(
+                    message: 'No approved requests awaiting packing');
+              }
+              return ListView.builder(
+                itemCount: requests.length,
+                itemBuilder: (_, i) {
+                  final r = requests[i];
+                  final status = '${r['status'] ?? 'APPROVED'}';
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: Icon(PhosphorIcons.package(),
+                          color: AppColors.kPrimary),
+                      title: Text(
+                        '${r['request_number'] ?? r['id']}  —  ${r['branch_name'] ?? r['requesting_branch'] ?? '—'}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                          'Items: ${(r['items'] as List?)?.length ?? r['items_count'] ?? '—'}  •  ${(r['created_at'] ?? '').toString().split('T').first}'),
+                      trailing: Chip(
+                        label: Text(status.toUpperCase(),
+                            style: const TextStyle(fontSize: 10)),
+                        backgroundColor:
+                            AppColors.kSuccess.withValues(alpha: 0.1),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ─── Central Stock Takes ───────────────────────────────────────────────────────
+
+class _CentralStockTakesTab extends ConsumerStatefulWidget {
+  const _CentralStockTakesTab();
+  @override
+  ConsumerState<_CentralStockTakesTab> createState() =>
+      _CentralStockTakesTabState();
+}
+
+class _CentralStockTakesTabState extends ConsumerState<_CentralStockTakesTab> {
+  String? _statusFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final filter = _statusFilter;
+    final resourceKey = filter == null
+        ? '/store/central-stock-takes'
+        : '/store/central-stock-takes?status=$filter';
+    final takesAsync = ref.watch(storeResourceProvider(resourceKey));
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(children: [
+        Row(children: [
+          DropdownButton<String?>(
+            value: _statusFilter,
+            hint: const Text('All Statuses'),
+            items: const [
+              DropdownMenuItem(value: null, child: Text('All')),
+              DropdownMenuItem(value: 'draft', child: Text('Draft')),
+              DropdownMenuItem(
+                  value: 'in_progress', child: Text('In Progress')),
+              DropdownMenuItem(value: 'submitted', child: Text('Submitted')),
+              DropdownMenuItem(value: 'approved', child: Text('Approved')),
+              DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+            ],
+            onChanged: (v) => setState(() => _statusFilter = v),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.invalidate(storeResourceProvider(resourceKey)),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: () => _startStockTake(context, resourceKey),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Start Count'),
           ),
         ]),
         const SizedBox(height: 12),
         Expanded(
           child: AsyncValueWidget(
-            value: tAsync,
-            data: (trips) {
-              if (trips.isEmpty) {
-                return const EmptyState(message: 'No trip records');
+            value: takesAsync,
+            data: (takes) {
+              if (takes.isEmpty) {
+                return const EmptyState(
+                    message: 'No central stock takes found');
               }
               return ListView.builder(
-                itemCount: trips.length,
+                itemCount: takes.length,
                 itemBuilder: (_, i) {
-                  final t = trips[i];
+                  final t = takes[i];
+                  final status = '${t['status'] ?? 'draft'}';
+                  final color = status == 'approved'
+                      ? AppColors.kSuccess
+                      : status == 'submitted'
+                          ? AppColors.kPrimary
+                          : status == 'rejected'
+                              ? AppColors.kError
+                              : AppColors.kWarning;
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
-                      leading: Icon(PhosphorIcons.mapPin(),
-                          color: AppColors.kPrimary),
+                      leading:
+                          Icon(PhosphorIcons.clipboardText(), color: color),
                       title: Text(
-                          '${t['origin'] ?? '—'} → ${t['destination'] ?? '—'}',
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                        '${t['take_number'] ?? t['id']}  —  ${t['store_type'] ?? ''}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       subtitle: Text(
-                          'Driver: ${t['driver_name'] ?? t['driver'] ?? '—'}  •  Vehicle: ${t['registration'] ?? t['vehicle'] ?? '—'}'),
-                      trailing: Text(
-                          (t['created_at'] ?? t['date'] ?? '')
-                              .toString()
-                              .split('T')
-                              .first,
-                          style: const TextStyle(
-                              fontSize: 11, color: AppColors.kTextSecondary)),
+                          '${(t['created_at'] ?? '').toString().split('T').first}  •  ${t['count_type'] ?? ''}'),
+                      trailing: Chip(
+                        label: Text(status.toUpperCase(),
+                            style: const TextStyle(fontSize: 10)),
+                        backgroundColor: color.withValues(alpha: 0.1),
+                      ),
                     ),
                   );
                 },
@@ -1615,61 +1578,55 @@ class _FleetTabState extends ConsumerState<_FleetTab> {
     );
   }
 
-  void _showNewTripDialog(BuildContext context) {
-    final originCtrl = TextEditingController();
-    final destCtrl = TextEditingController();
-    final driverCtrl = TextEditingController();
+  void _startStockTake(BuildContext context, String resourceKey) {
+    String storeType = 'foodstuffs';
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Log New Trip'),
-        content: SizedBox(
-          width: 320,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-                controller: originCtrl,
-                decoration: const InputDecoration(labelText: 'Origin')),
-            const SizedBox(height: 12),
-            TextField(
-                controller: destCtrl,
-                decoration: const InputDecoration(labelText: 'Destination')),
-            const SizedBox(height: 12),
-            TextField(
-                controller: driverCtrl,
-                decoration: const InputDecoration(labelText: 'Driver Name')),
-          ]),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (originCtrl.text.trim().isEmpty ||
-                  destCtrl.text.trim().isEmpty) {
-                return;
-              }
-              Navigator.pop(ctx);
-              try {
-                await ref.read(storeRepositoryProvider).createFleetTrip({
-                  'origin': originCtrl.text.trim(),
-                  'destination': destCtrl.text.trim(),
-                  'driver_name': driverCtrl.text.trim(),
-                });
-                ref.invalidate(fleetTripsProvider);
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(
-                      context, const SnackBar(content: Text('Trip logged')));
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(
-                      context, SnackBar(content: Text('Error: $e')));
-                }
-              }
-            },
-            child: const Text('Log'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Start Central Stock Take'),
+          content: SizedBox(
+            width: 380,
+            child: DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: storeType,
+              decoration: const InputDecoration(labelText: 'Store Type'),
+              items: const [
+                DropdownMenuItem(
+                    value: 'foodstuffs', child: Text('Foodstuffs')),
+                DropdownMenuItem(value: 'bar_store', child: Text('Bar Store')),
+              ],
+              onChanged: (v) => setDialogState(() => storeType = v!),
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await ref.read(storeRepositoryProvider).createResource(
+                    '/store/central-stock-takes',
+                    {'store_type': storeType, 'count_type': 'daily'},
+                  );
+                  ref.invalidate(storeResourceProvider(resourceKey));
+                  if (context.mounted) {
+                    AppNotifier.showSnackBar(context,
+                        const SnackBar(content: Text('Stock take started')));
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    AppNotifier.showSnackBar(
+                        context, SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              child: const Text('Start'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -37,10 +37,11 @@ class StoreRepository {
         .toList();
   }
 
-  Future<Map<String, dynamic>> getDashboard() async {
+  Future<Map<String, dynamic>> getDashboard({bool central = false}) async {
     final branchId = await _branchId;
-    final response =
-        await _dio.get('/store/dashboard/branch', queryParameters: {
+    final endpoint =
+        central ? '/store/dashboard/central' : '/store/dashboard/branch';
+    final response = await _dio.get(endpoint, queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
     });
     return _unwrap(response.data);
@@ -118,8 +119,8 @@ class StoreRepository {
       await _dio.put('/store/dispatch-notes/$id/dispatch');
       return;
     }
-    await _dio
-        .put('/store/dispatch-notes/$id/status', data: {'status': status});
+    await _dio.put('/storekeeping/dispatch-notes/$id/status',
+        data: {'status': status});
   }
 
   // Receiving
@@ -183,18 +184,6 @@ class StoreRepository {
     return _parseList(response.data, (j) => j);
   }
 
-  Future<List<Map<String, dynamic>>> getFleetTrips() async {
-    final branchId = await _branchId;
-    final response = await _dio.get('/fleet/trips', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
-    return _parseList(response.data, (j) => j);
-  }
-
-  Future<void> createFleetTrip(Map<String, dynamic> data) async {
-    await _dio.post('/fleet/trips', data: data);
-  }
-
   Future<List<Map<String, dynamic>>> getResource(String path,
       {Map<String, dynamic>? queryParameters}) async {
     final parsed = Uri.tryParse(path);
@@ -247,8 +236,7 @@ class StoreRepository {
         (item) =>
             (item['barcode'] ?? '').toString().toLowerCase() ==
                 code.toLowerCase() ||
-            (item['sku'] ?? '').toString().toLowerCase() ==
-                code.toLowerCase(),
+            (item['sku'] ?? '').toString().toLowerCase() == code.toLowerCase(),
         orElse: () => list.first,
       );
       return exact;
@@ -259,12 +247,11 @@ class StoreRepository {
   }
 
   /// List purchase orders (for selecting which PO to GRN against).
-  Future<List<Map<String, dynamic>>> getPurchaseOrders(
-      {String? status}) async {
-    final response = await _dio.get('/procurement/purchase-orders',
-        queryParameters: {
-          if (status != null) 'status': status,
-        });
+  Future<List<Map<String, dynamic>>> getPurchaseOrders({String? status}) async {
+    final response =
+        await _dio.get('/procurement/purchase-orders', queryParameters: {
+      if (status != null) 'status': status,
+    });
     return _parseList(response.data, (j) => j);
   }
 
@@ -296,7 +283,7 @@ class StoreRepository {
   /// or branch receiving from central store).
   Future<void> confirmDispatchNote(
       String id, Map<String, dynamic> items) async {
-    await _dio.put('/storekeeping/dispatch-notes/$id/confirm', data: items);
+    await _dio.put('/store/dispatch-notes/$id/confirm', data: items);
   }
 
   /// Branch storekeeper verifies B-XXXX OTP to confirm goods arrival.
@@ -304,7 +291,7 @@ class StoreRepository {
   Future<Map<String, dynamic>> verifyBranchOtp(
       String dispatchId, String otp) async {
     final response = await _dio.post(
-      '/store/dispatches/$dispatchId/verify-branch-otp',
+      '/dispatch/dispatches/$dispatchId/verify-branch-otp',
       data: {'branch_otp': otp.trim().toUpperCase()},
     );
     return _unwrap(response.data);

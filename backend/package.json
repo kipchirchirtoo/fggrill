@@ -23,6 +23,7 @@
     "schema:inspect": "node scripts/inspect-live-schema.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.99.0",
     "@getbrevo/brevo": "^4.0.1",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.84.0",
@@ -39,6 +40,7 @@
     "exceljs": "^4.4.0",
     "express": "^4.18.2",
     "express-rate-limit": "^6.7.0",
+    "groq-sdk": "^1.2.1",
     "helmet": "^7.0.0",
     "hpp": "^0.2.3",
     "json2csv": "^6.0.0-alpha.2",

@@ -1,0 +1,3713 @@
+{
+  "generated_at": "2026-05-28T18:02:16.480Z",
+  "backend": {
+    "mount_count": 95,
+    "root_route_count": 6,
+    "route_count": 1452,
+    "mounted_route_count": 1483,
+    "mounts": [
+      {
+        "path": "/api/verify",
+        "router": "verifyRoutes",
+        "file": "backend/src/routes/verify.routes.ts"
+      },
+      {
+        "path": "/api/staff/performance",
+        "router": "staffPerformanceRoutes",
+        "file": "backend/src/routes/staff-performance.routes.ts"
+      },
+      {
+        "path": "/api/staff/simple-payroll",
+        "router": "payrollSimpleRoutes",
+        "file": "backend/src/routes/payroll-simple.routes.ts"
+      },
+      {
+        "path": "/api/staff",
+        "router": "staffAuditRoutes",
+        "file": "backend/src/routes/staff-audit.routes.ts"
+      },
+      {
+        "path": "/api/staff",
+        "router": "staffRoutes",
+        "file": "backend/src/routes/staff.routes.ts"
+      },
+      {
+        "path": "/api/auth",
+        "router": "authRoutes",
+        "file": "backend/src/routes/auth.routes.ts"
+      },
+      {
+        "path": "/api/users",
+        "router": "userRoutes",
+        "file": "backend/src/routes/user.routes.ts"
+      },
+      {
+        "path": "/api/bookings",
+        "router": "bookingRoutes",
+        "file": "backend/src/routes/booking.routes.ts"
+      },
+      {
+        "path": "/api/rate-plans",
+        "router": "ratePlanRoutes",
+        "file": "backend/src/routes/ratePlan.routes.ts"
+      },
+      {
+        "path": "/api/pricing",
+        "router": "pricingRoutes",
+        "file": "backend/src/routes/pricing.routes.ts"
+      },
+      {
+        "path": "/api/documents",
+        "router": "documentRoutes",
+        "file": "backend/src/routes/document.routes.ts"
+      },
+      {
+        "path": "/api/rooms",
+        "router": "roomRoutes",
+        "file": "backend/src/routes/room.routes.ts"
+      },
+      {
+        "path": "/api/guests",
+        "router": "guestRoutes",
+        "file": "backend/src/routes/guest.routes.ts"
+      },
+      {
+        "path": "/api/inventory",
+        "router": "inventoryRoutes",
+        "file": "backend/src/routes/inventory.routes.ts"
+      },
+      {
+        "path": "/api/housekeeping",
+        "router": "housekeepingRoutes",
+        "file": "backend/src/routes/housekeeping.routes.ts"
+      },
+      {
+        "path": "/api/maintenance",
+        "router": "maintenanceRoutes",
+        "file": "backend/src/routes/maintenance.routes.ts"
+      },
+      {
+        "path": "/api/reports",
+        "router": "reportRoutes",
+        "file": "backend/src/routes/report.routes.ts"
+      },
+      {
+        "path": "/api/store",
+        "router": "storekeepingRoutes",
+        "file": "backend/src/routes/storekeeping.routes.ts"
+      },
+      {
+        "path": "/api/store",
+        "router": "stockAnalyticsRoutes",
+        "file": "backend/src/routes/stock-analytics.routes.ts"
+      },
+      {
+        "path": "/api/finance",
+        "router": "financeRoutes",
+        "file": "backend/src/routes/finance.routes.ts"
+      },
+      {
+        "path": "/api/finance",
+        "router": "revenueOversightRoutes",
+        "file": "backend/src/routes/revenue-oversight.routes.ts"
+      },
+      {
+        "path": "/api/finance",
+        "router": "profitLossRoutes",
+        "file": "backend/src/routes/profit-loss.routes.ts"
+      },
+      {
+        "path": "/api/system",
+        "router": "systemRoutes",
+        "file": "backend/src/routes/system.routes.ts"
+      },
+      {
+        "path": "/api/fleet",
+        "router": "fleetRoutes",
+        "file": "backend/src/routes/fleet.routes.ts"
+      },
+      {
+        "path": "/api/bar",
+        "router": "barRoutes",
+        "file": "backend/src/routes/bar.routes.ts"
+      },
+      {
+        "path": "/api/restaurant",
+        "router": "restaurantRoutes",
+        "file": "backend/src/routes/restaurant.routes.ts"
+      },
+      {
+        "path": "/api/restaurant",
+        "router": "waiterSalesRoutes",
+        "file": "backend/src/routes/waiter-sales.routes.ts"
+      },
+      {
+        "path": "/api/restaurant/reservations",
+        "router": "restaurantReservationRoutes",
+        "file": "backend/src/routes/restaurant.reservation.routes.ts"
+      },
+      {
+        "path": "/api/restaurant/tables",
+        "router": "restaurantTableRoutes",
+        "file": "backend/src/routes/restaurant.table.routes.ts"
+      },
+      {
+        "path": "/api/payments",
+        "router": "paymentRoutes",
+        "file": "backend/src/routes/payment.routes.ts"
+      },
+      {
+        "path": "/api/notifications",
+        "router": "notificationRoutes",
+        "file": "backend/src/routes/notification.routes.ts"
+      },
+      {
+        "path": "/api/folios",
+        "router": "folioRoutes",
+        "file": "backend/src/routes/folio.routes.ts"
+      },
+      {
+        "path": "/api/audit",
+        "router": "auditRoutes",
+        "file": "backend/src/routes/audit.routes.ts"
+      },
+      {
+        "path": "/api/maintenance-enhanced",
+        "router": "maintenanceEnhancedRoutes",
+        "file": "backend/src/routes/maintenance.enhanced.routes.ts"
+      },
+      {
+        "path": "/api/auditor",
+        "router": "auditorRoutes",
+        "file": "backend/src/routes/auditor.routes.ts"
+      },
+      {
+        "path": "/api/auditor",
+        "router": "auditorVoidBillsRoutes",
+        "file": "backend/src/routes/auditor-void-bills.routes.ts"
+      },
+      {
+        "path": "/api/accounting",
+        "router": "accountingRoutes",
+        "file": "backend/src/routes/accounting.routes.ts"
+      },
+      {
+        "path": "/api/receipts",
+        "router": "receiptsRoutes",
+        "file": "backend/src/routes/receipts.routes.ts"
+      },
+      {
+        "path": "/api/branch-operations",
+        "router": "branchOperationsRoutes",
+        "file": "backend/src/routes/branch-operations.routes.ts"
+      },
+      {
+        "path": "/api/automation",
+        "router": "automationRoutes",
+        "file": "backend/src/routes/automation.routes.ts"
+      },
+      {
+        "path": "/api/forecasting",
+        "router": "mlForecastingRoutes",
+        "file": "backend/src/routes/ml-forecasting.routes.ts"
+      },
+      {
+        "path": "/api/vendors",
+        "router": "vendorPerformanceRoutes",
+        "file": "backend/src/routes/vendor-performance.routes.ts"
+      },
+      {
+        "path": "/api/facilities",
+        "router": "facilitiesRoutes",
+        "file": "backend/src/routes/facilities.routes.ts"
+      },
+      {
+        "path": "/api/admin",
+        "router": "adminRoutes",
+        "file": "backend/src/routes/admin.routes.ts"
+      },
+      {
+        "path": "/api/communications",
+        "router": "communicationsRoutes",
+        "file": "backend/src/routes/communications.routes.ts"
+      },
+      {
+        "path": "/api/channel-manager",
+        "router": "channelManagerRoutes",
+        "file": "backend/src/routes/channelManager.routes.ts"
+      },
+      {
+        "path": "/api/employee-portal",
+        "router": "employeePortalRoutes",
+        "file": "backend/src/routes/employee-portal.routes.ts"
+      },
+      {
+        "path": "/api/guest-portal",
+        "router": "guestPortalRoutes",
+        "file": "backend/src/routes/guest-portal.routes.ts"
+      },
+      {
+        "path": "/api/payroll",
+        "router": "payrollRoutes",
+        "file": "backend/src/routes/payroll.routes.ts"
+      },
+      {
+        "path": "/api/payroll/simple",
+        "router": "payrollSimpleRoutes",
+        "file": "backend/src/routes/payroll-simple.routes.ts"
+      },
+      {
+        "path": "/api/email",
+        "router": "emailRoutes",
+        "file": "backend/src/routes/email.routes.ts"
+      },
+      {
+        "path": "/api/landing-email",
+        "router": "landingEmailRoutes",
+        "file": "backend/src/routes/landing-email.routes.ts"
+      },
+      {
+        "path": "/api/barcode",
+        "router": "barcodeRoutes",
+        "file": "backend/src/routes/barcode.routes.ts"
+      },
+      {
+        "path": "/api/storekeeping",
+        "router": "storekeepingEnhancedRoutes",
+        "file": "backend/src/routes/storekeeping/index.ts"
+      },
+      {
+        "path": "/api/cashier",
+        "router": "cashierRoutes",
+        "file": "backend/src/routes/cashier.routes.ts"
+      },
+      {
+        "path": "/api/cashier",
+        "router": "cashierClearanceRoutes",
+        "file": "backend/src/routes/cashier-clearance.routes.ts"
+      },
+      {
+        "path": "/api/pos",
+        "router": "outletPosRoutes",
+        "file": "backend/src/routes/outlet-pos.routes.ts"
+      },
+      {
+        "path": "/api/wastage",
+        "router": "wastageRoutes",
+        "file": "backend/src/routes/wastage.routes.ts"
+      },
+      {
+        "path": "/api/kitchen-ledger",
+        "router": "kitchenLedgerRoutes",
+        "file": "backend/src/routes/kitchen-ledger.routes.ts"
+      },
+      {
+        "path": "/api/additional-services",
+        "router": "additionalServicesRoutes",
+        "file": "backend/src/routes/additional-services.routes.ts"
+      },
+      {
+        "path": "/api/reports/auditor",
+        "router": "auditorReportsRoutes",
+        "file": "backend/src/routes/auditor-reports.routes.ts"
+      },
+      {
+        "path": "/api/auditor-reports",
+        "router": "auditorReportsRoutes",
+        "file": "backend/src/routes/auditor-reports.routes.ts"
+      },
+      {
+        "path": "/api/conference",
+        "router": "conferenceRoutes",
+        "file": "backend/src/routes/conference.routes.ts"
+      },
+      {
+        "path": "/api/catering",
+        "router": "cateringRoutes",
+        "file": "backend/src/routes/catering.routes.ts"
+      },
+      {
+        "path": "/api/attendance",
+        "router": "attendanceRoutes",
+        "file": "backend/src/routes/attendance.routes.ts"
+      },
+      {
+        "path": "/api/petty-cash",
+        "router": "pettyCashRoutes",
+        "file": "backend/src/routes/petty-cash.routes.ts"
+      },
+      {
+        "path": "/api/credit",
+        "router": "creditRoutes",
+        "file": "backend/src/routes/credit.routes.ts"
+      },
+      {
+        "path": "/api/kitchen",
+        "router": "kitchenRoutes",
+        "file": "backend/src/routes/kitchen.routes.ts"
+      },
+      {
+        "path": "/api/procurement",
+        "router": "procurementRoutes",
+        "file": "backend/src/routes/procurement.routes.ts"
+      },
+      {
+        "path": "/api/hr-reports",
+        "router": "hrReportRoutes",
+        "file": "backend/src/routes/hr-reports.routes.ts"
+      },
+      {
+        "path": "/api/stock-takes",
+        "router": "stockTakeRoutes",
+        "file": "backend/src/routes/stock-take.routes.ts"
+      },
+      {
+        "path": "/api/kyogong",
+        "router": "kyogongRoutes",
+        "file": "backend/src/routes/kyogong.routes.ts"
+      },
+      {
+        "path": "/api/banking",
+        "router": "bankingRoutes",
+        "file": "backend/src/routes/banking.routes.ts"
+      },
+      {
+        "path": "/api/suppliers",
+        "router": "suppliersRoutes",
+        "file": "backend/src/routes/suppliers.routes.ts"
+      },
+      {
+        "path": "/api/shifts",
+        "router": "shiftsRoutes",
+        "file": "backend/src/routes/shifts.routes.ts"
+      },
+      {
+        "path": "/api/payroll-enhanced",
+        "router": "payrollEnhancedRoutes",
+        "file": "backend/src/routes/payroll-enhanced.routes.ts"
+      },
+      {
+        "path": "/api/catering-bookings",
+        "router": "cateringBookingsRoutes",
+        "file": "backend/src/routes/catering-bookings.routes.ts"
+      },
+      {
+        "path": "/api/payroll-adjustments",
+        "router": "payrollAdjustmentsRoutes",
+        "file": "backend/src/routes/payroll-adjustments.routes.ts"
+      },
+      {
+        "path": "/api/payroll-statutory",
+        "router": "statutoryDeductionsRoutes",
+        "file": "backend/src/routes/statutory-deductions.routes.ts"
+      },
+      {
+        "path": "/api/performance",
+        "router": "performanceRoutes",
+        "file": "backend/src/routes/performance.routes.ts"
+      },
+      {
+        "path": "/api/payments-verification",
+        "router": "paymentsRoutes",
+        "file": "backend/src/routes/payments.routes.ts"
+      },
+      {
+        "path": "/api/payroll-policies",
+        "router": "payrollPoliciesRoutes",
+        "file": "backend/src/routes/payroll-policies.routes.ts"
+      },
+      {
+        "path": "/api/admin-logs",
+        "router": "adminLogsRoutes",
+        "file": "backend/src/routes/admin-logs.routes.ts"
+      },
+      {
+        "path": "/api/admin-ai",
+        "router": "adminAiRoutes",
+        "file": "backend/src/routes/admin-ai.route.ts"
+      },
+      {
+        "path": "/api/search",
+        "router": "searchRoutes",
+        "file": "backend/src/routes/search.routes.ts"
+      },
+      {
+        "path": "/api/analytics",
+        "router": "branchAnalyticsRoutes",
+        "file": "backend/src/routes/branch-analytics.routes.ts"
+      },
+      {
+        "path": "/api/dispatch",
+        "router": "dispatchRoutes",
+        "file": "backend/src/routes/dispatch.routes.ts"
+      },
+      {
+        "path": "/api/security",
+        "router": "securityRoutes",
+        "file": "backend/src/routes/security.routes.ts"
+      },
+      {
+        "path": "/api/superadmin",
+        "router": "superadminRoutes",
+        "file": "backend/src/routes/superadmin.routes.ts"
+      },
+      {
+        "path": "/api/lina",
+        "router": "linaRoutes",
+        "file": "backend/src/routes/lina.routes.ts"
+      },
+      {
+        "path": "/api/buffet",
+        "router": "buffetRoutes",
+        "file": "backend/src/routes/buffet.routes.ts"
+      },
+      {
+        "path": "/api/catering-food-control",
+        "router": "cateringFoodControlRoutes",
+        "file": "backend/src/routes/catering.routes.ts"
+      },
+      {
+        "path": "/api/food-control",
+        "router": "foodControlRoutes",
+        "file": "backend/src/routes/foodControl.routes.ts"
+      },
+      {
+        "path": "/api/finance/shift-pnl",
+        "router": "shiftPnLRoutes",
+        "file": "backend/src/routes/shiftPnL.routes.ts"
+      },
+      {
+        "path": "/api/branch-food-control-config",
+        "router": "branchFoodControlConfigRoutes",
+        "file": "backend/src/routes/branchFoodControlConfig.routes.ts"
+      }
+    ],
+    "root_routes": [
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "file": "backend/src/routes/index.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/email/send-booking/:bookingId",
+        "file": "backend/src/routes/index.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/email/send-all-bookings",
+        "file": "backend/src/routes/index.ts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/email/test-connection",
+        "file": "backend/src/routes/index.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/mpesa/initiate",
+        "file": "backend/src/routes/index.ts"
+      },
+      {
+        "method": "POST",
+        "path": "/api/mpesa/callback",
+        "file": "backend/src/routes/index.ts"
+      }
+    ],
+    "mounted_routes_sample": [
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "file": "backend/src/routes/index.ts",
+        "mount": "/api"
+      },
+      {
+        "method": "POST",
+        "path": "/api/email/send-booking/:bookingId",
+        "file": "backend/src/routes/index.ts",
+        "mount": "/api"
+      },
+      {
+        "method": "POST",
+        "path": "/api/email/send-all-bookings",
+        "file": "backend/src/routes/index.ts",
+        "mount": "/api"
+      },
+      {
+        "method": "GET",
+        "path": "/api/email/test-connection",
+        "file": "backend/src/routes/index.ts",
+        "mount": "/api"
+      },
+      {
+        "method": "POST",
+        "path": "/api/mpesa/initiate",
+        "file": "backend/src/routes/index.ts",
+        "mount": "/api"
+      },
+      {
+        "method": "POST",
+        "path": "/api/mpesa/callback",
+        "file": "backend/src/routes/index.ts",
+        "mount": "/api"
+      },
+      {
+        "method": "POST",
+        "path": "/verify",
+        "file": "backend/src/routes/verify.routes.ts",
+        "mount": "/verify"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/performance",
+        "file": "backend/src/routes/staff-performance.routes.ts",
+        "mount": "/staff/performance"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/performance/leaderboard",
+        "file": "backend/src/routes/staff-performance.routes.ts",
+        "mount": "/staff/performance"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/credit-bills/migrate-pending",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/credit-bills",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/simple-payroll/credit-bills",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "PATCH",
+        "path": "/staff/simple-payroll/credit-bills/:id",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/credit-bills/:id/partial-payment",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/simple-payroll/credit-bills/:id/payments",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/advances",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/simple-payroll/advances",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "PATCH",
+        "path": "/staff/simple-payroll/advances/:id/approve",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/loans",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/simple-payroll/loans",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "PATCH",
+        "path": "/staff/simple-payroll/loans/:id/approve",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/generate",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/simple-payroll/history",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/simple-payroll/summary",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/email-all",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/download-zip",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/simple-payroll/pending-approvals",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/approve-batch",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/:type/:id/approve",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/simple-payroll/:type/:id/reject",
+        "file": "backend/src/routes/payroll-simple.routes.ts",
+        "mount": "/staff/simple-payroll"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/audit",
+        "file": "backend/src/routes/staff-audit.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/audit/critical",
+        "file": "backend/src/routes/staff-audit.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/:id/audit-summary",
+        "file": "backend/src/routes/staff-audit.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/roles",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/by-identifier/:identifier",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/attendance/clock-in",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/attendance/clock-out",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/schedule",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/schedules",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/schedules",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/performance",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/payroll",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/attendance",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/attendance/summary",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/attendance/confirm",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "PUT",
+        "path": "/staff/attendance/:id",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "PUT",
+        "path": "/staff/attendance/:id/approve",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/leave/lock",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/attendance/reports",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/:id/photo",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/:id",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "PUT",
+        "path": "/staff/:id",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "DELETE",
+        "path": "/staff/:id",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/:id/archive",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/:id/history",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/:id/documents",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/:id/documents",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "PUT",
+        "path": "/staff/leave/:id",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "PUT",
+        "path": "/staff/leave/:id/approve",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "PUT",
+        "path": "/staff/leave/:id/reject",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "PUT",
+        "path": "/staff/leave/:id/report-to-duty",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "GET",
+        "path": "/staff/leave",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/staff/leave",
+        "file": "backend/src/routes/staff.routes.ts",
+        "mount": "/staff"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/register",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/login",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/license/validate",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/pos-login",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/refresh-token",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/logout",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "GET",
+        "path": "/auth/me",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "GET",
+        "path": "/auth/user-roles/:userId",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "PUT",
+        "path": "/auth/updatedetails",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "PUT",
+        "path": "/auth/updatepassword",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/forgotpassword",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/switch-context",
+        "file": "backend/src/routes/auth.routes.ts",
+        "mount": "/auth"
+      },
+      {
+        "method": "GET",
+        "path": "/users/profile",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "PUT",
+        "path": "/users/profile",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "PUT",
+        "path": "/users/password",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "POST",
+        "path": "/users/profile/photo",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "POST",
+        "path": "/users/:id/photo",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "POST",
+        "path": "/users/test",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "GET",
+        "path": "/users",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "POST",
+        "path": "/users",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "GET",
+        "path": "/users/:id",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "PUT",
+        "path": "/users/:id",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "DELETE",
+        "path": "/users/:id",
+        "file": "backend/src/routes/user.routes.ts",
+        "mount": "/users"
+      },
+      {
+        "method": "GET",
+        "path": "/bookings/available",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "GET",
+        "path": "/bookings/check-availability",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "POST",
+        "path": "/bookings/quote",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "GET",
+        "path": "/bookings/confirmation/:confirmationNumber",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "POST",
+        "path": "/bookings",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "GET",
+        "path": "/bookings",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "GET",
+        "path": "/bookings/:id",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "PUT",
+        "path": "/bookings/:id",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "PUT",
+        "path": "/bookings/:id/check-in",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "PUT",
+        "path": "/bookings/:id/check-out",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "PUT",
+        "path": "/bookings/:id/cancel",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "PUT",
+        "path": "/bookings/:id/modify",
+        "file": "backend/src/routes/booking.routes.ts",
+        "mount": "/bookings"
+      },
+      {
+        "method": "GET",
+        "path": "/rate-plans",
+        "file": "backend/src/routes/ratePlan.routes.ts",
+        "mount": "/rate-plans"
+      },
+      {
+        "method": "GET",
+        "path": "/rate-plans/:id",
+        "file": "backend/src/routes/ratePlan.routes.ts",
+        "mount": "/rate-plans"
+      },
+      {
+        "method": "POST",
+        "path": "/rate-plans",
+        "file": "backend/src/routes/ratePlan.routes.ts",
+        "mount": "/rate-plans"
+      },
+      {
+        "method": "PUT",
+        "path": "/rate-plans/:id",
+        "file": "backend/src/routes/ratePlan.routes.ts",
+        "mount": "/rate-plans"
+      },
+      {
+        "method": "DELETE",
+        "path": "/rate-plans/:id",
+        "file": "backend/src/routes/ratePlan.routes.ts",
+        "mount": "/rate-plans"
+      },
+      {
+        "method": "POST",
+        "path": "/pricing/quote",
+        "file": "backend/src/routes/pricing.routes.ts",
+        "mount": "/pricing"
+      },
+      {
+        "method": "POST",
+        "path": "/documents/upload",
+        "file": "backend/src/routes/document.routes.ts",
+        "mount": "/documents"
+      },
+      {
+        "method": "GET",
+        "path": "/documents/guest/:guestId",
+        "file": "backend/src/routes/document.routes.ts",
+        "mount": "/documents"
+      },
+      {
+        "method": "DELETE",
+        "path": "/documents/:id",
+        "file": "backend/src/routes/document.routes.ts",
+        "mount": "/documents"
+      },
+      {
+        "method": "GET",
+        "path": "/rooms/types",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "GET",
+        "path": "/rooms",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "GET",
+        "path": "/rooms/:id/bookings",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "GET",
+        "path": "/rooms/:id",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "POST",
+        "path": "/rooms",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "PUT",
+        "path": "/rooms/:id",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "DELETE",
+        "path": "/rooms/:id",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "PATCH",
+        "path": "/rooms/:id/status",
+        "file": "backend/src/routes/room.routes.ts",
+        "mount": "/rooms"
+      },
+      {
+        "method": "GET",
+        "path": "/guests",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "GET",
+        "path": "/guests/:id",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "POST",
+        "path": "/guests",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "PUT",
+        "path": "/guests/:id",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "PUT",
+        "path": "/guests/:id/preferences",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "DELETE",
+        "path": "/guests/:id",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "GET",
+        "path": "/guests/vip/list",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "GET",
+        "path": "/guests/:id/history",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "GET",
+        "path": "/guests/:id/loyalty",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "POST",
+        "path": "/guests/:id/loyalty/points",
+        "file": "backend/src/routes/guest.routes.ts",
+        "mount": "/guests"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/items/:id/movement",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/items/:id/movements",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/items/:id/photos",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/purchase-orders/:id/approve",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/purchase-orders/:id/receive",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/low-stock",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/stats/overview",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/items",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/items",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/items/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/items/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "DELETE",
+        "path": "/inventory/items/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/purchase-orders",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/purchase-orders",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/purchase-orders/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/purchase-orders/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "DELETE",
+        "path": "/inventory/purchase-orders/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/suppliers",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/suppliers",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/suppliers/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/suppliers/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "DELETE",
+        "path": "/inventory/suppliers/:id",
+        "file": "backend/src/routes/inventory.routes.ts",
+        "mount": "/inventory"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/dashboard",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/dashboard/room-grid",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/dashboard/stats",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/dashboard/workload",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/tasks",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/tasks/my-tasks",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/tasks/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/tasks",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/tasks/:id/status",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/tasks/:id/assign",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/tasks/:id/checklist",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/tasks/bulk-assign",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/tasks/auto-assign",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "DELETE",
+        "path": "/housekeeping/tasks/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/rooms",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/rooms/by-floor",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/rooms/for-inspection",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/rooms/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/rooms/:id/history",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/rooms/:id/status",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/rooms/:id/dnd",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/rooms/:id/assign",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/rooms/bulk-status",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/inspections",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/inspections/queue",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/inspections/stats",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/inspections/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/inspections",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/staff",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/staff/workload",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/staff/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/staff/:id/performance",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/staff",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/staff/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/staff/:id/availability",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/staff/:id/check-in",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/staff/:id/check-out",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/linen/types",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/linen/inventory",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/linen/transactions",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/linen/par-levels",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/linen/transactions",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/linen/issue",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/linen/return",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/lost-found",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/lost-found/expiring",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/lost-found/stats",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/lost-found/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/lost-found",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/lost-found/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/lost-found/:id/status",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/lost-found/:id/contact",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/maintenance",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/maintenance/stats",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/maintenance/room/:roomId",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/maintenance/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/maintenance",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/maintenance/:id/status",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/maintenance/:id/verify",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/guest-requests",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/guest-requests/types-summary",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/guest-requests/room/:roomId",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/guest-requests/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/guest-requests",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/guest-requests/:id/assign",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/guest-requests/:id/complete",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/guest-requests/:id/feedback",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/scheduling/shifts",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/scheduling/schedules",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/scheduling/today-roster",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/scheduling/leave-requests",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/scheduling/shift-swaps",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/scheduling/schedules",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/scheduling/schedules/bulk",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/scheduling/schedules/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "DELETE",
+        "path": "/housekeeping/scheduling/schedules/:id",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/scheduling/leave-requests",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/scheduling/leave-requests/:id/review",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/scheduling/shift-swaps",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/scheduling/shift-swaps/:id/respond",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "PUT",
+        "path": "/housekeeping/scheduling/shift-swaps/:id/approve",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/supplies",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/supplies/request",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/reports/daily",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/reports/staff-performance",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/reports/productivity",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/reports/turnaround",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/reports/supply-usage",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/reports/export",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/smart-assign/task/:taskId",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/smart-assign/batch",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/smart-assign/recommendations/:taskId",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/gamification/leaderboard",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/gamification/staff/:staffId/stats",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/gamification/achievements",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/gamification/staff/:staffId/achievements",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/gamification/challenges",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/gamification/award-bonus",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/guest-portal/request",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "GET",
+        "path": "/housekeeping/guest-portal/request/:requestId/status",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      },
+      {
+        "method": "POST",
+        "path": "/housekeeping/guest-portal/clean-now",
+        "file": "backend/src/routes/housekeeping.routes.ts",
+        "mount": "/housekeeping"
+      }
+    ],
+    "routes_by_prefix": [
+      {
+        "prefix": "/:id",
+        "count": 131
+      },
+      {
+        "prefix": "/",
+        "count": 66
+      },
+      {
+        "prefix": "/shifts",
+        "count": 32
+      },
+      {
+        "prefix": "/tasks",
+        "count": 28
+      },
+      {
+        "prefix": "/purchase-orders",
+        "count": 26
+      },
+      {
+        "prefix": "/staff",
+        "count": 25
+      },
+      {
+        "prefix": "/bookings",
+        "count": 21
+      },
+      {
+        "prefix": "/dashboard",
+        "count": 19
+      },
+      {
+        "prefix": "/credit-bills",
+        "count": 18
+      },
+      {
+        "prefix": "/items",
+        "count": 17
+      },
+      {
+        "prefix": "/reports",
+        "count": 17
+      },
+      {
+        "prefix": "/rooms",
+        "count": 17
+      },
+      {
+        "prefix": "/stock-requests",
+        "count": 17
+      },
+      {
+        "prefix": "/maintenance",
+        "count": 16
+      },
+      {
+        "prefix": "/suppliers",
+        "count": 15
+      },
+      {
+        "prefix": "/director",
+        "count": 14
+      },
+      {
+        "prefix": "/scheduling",
+        "count": 14
+      },
+      {
+        "prefix": "/invoices",
+        "count": 13
+      },
+      {
+        "prefix": "/dispatches",
+        "count": 12
+      },
+      {
+        "prefix": "/export",
+        "count": 12
+      },
+      {
+        "prefix": "/verify",
+        "count": 12
+      },
+      {
+        "prefix": "/wastage",
+        "count": 12
+      },
+      {
+        "prefix": "/orders",
+        "count": 11
+      },
+      {
+        "prefix": "/stats",
+        "count": 11
+      },
+      {
+        "prefix": "/vehicles",
+        "count": 11
+      },
+      {
+        "prefix": "/inventory",
+        "count": 10
+      },
+      {
+        "prefix": "/leave",
+        "count": 10
+      },
+      {
+        "prefix": "/variance",
+        "count": 10
+      },
+      {
+        "prefix": "/assets",
+        "count": 9
+      },
+      {
+        "prefix": "/budgets",
+        "count": 9
+      },
+      {
+        "prefix": "/central-stock-takes",
+        "count": 9
+      },
+      {
+        "prefix": "/communications",
+        "count": 9
+      },
+      {
+        "prefix": "/events",
+        "count": 9
+      },
+      {
+        "prefix": "/finances",
+        "count": 9
+      },
+      {
+        "prefix": "/housekeeping",
+        "count": 9
+      },
+      {
+        "prefix": "/kitchen-usage",
+        "count": 9
+      },
+      {
+        "prefix": "/menu",
+        "count": 9
+      },
+      {
+        "prefix": "/outlets",
+        "count": 9
+      },
+      {
+        "prefix": "/recipes",
+        "count": 9
+      },
+      {
+        "prefix": "/stock",
+        "count": 9
+      },
+      {
+        "prefix": "/attendance",
+        "count": 8
+      },
+      {
+        "prefix": "/branches",
+        "count": 8
+      },
+      {
+        "prefix": "/drivers",
+        "count": 8
+      },
+      {
+        "prefix": "/guest-requests",
+        "count": 8
+      },
+      {
+        "prefix": "/lost-found",
+        "count": 8
+      },
+      {
+        "prefix": "/mpesa",
+        "count": 8
+      },
+      {
+        "prefix": "/templates",
+        "count": 8
+      },
+      {
+        "prefix": "/advances",
+        "count": 7
+      },
+      {
+        "prefix": "/branch-stock",
+        "count": 7
+      },
+      {
+        "prefix": "/channels",
+        "count": 7
+      },
+      {
+        "prefix": "/drinks",
+        "count": 7
+      },
+      {
+        "prefix": "/guest-portal",
+        "count": 7
+      },
+      {
+        "prefix": "/linen",
+        "count": 7
+      },
+      {
+        "prefix": "/loans",
+        "count": 7
+      },
+      {
+        "prefix": "/profile",
+        "count": 7
+      },
+      {
+        "prefix": "/run",
+        "count": 7
+      },
+      {
+        "prefix": "/sustainability",
+        "count": 7
+      },
+      {
+        "prefix": "/transactions",
+        "count": 7
+      },
+      {
+        "prefix": "/approvals",
+        "count": 6
+      },
+      {
+        "prefix": "/central-spoilage",
+        "count": 6
+      },
+      {
+        "prefix": "/config",
+        "count": 6
+      },
+      {
+        "prefix": "/gamification",
+        "count": 6
+      },
+      {
+        "prefix": "/performance",
+        "count": 6
+      },
+      {
+        "prefix": "/pms",
+        "count": 6
+      },
+      {
+        "prefix": "/pos",
+        "count": 6
+      },
+      {
+        "prefix": "/requisitions",
+        "count": 6
+      },
+      {
+        "prefix": "/summary",
+        "count": 6
+      },
+      {
+        "prefix": "/tabs",
+        "count": 6
+      },
+      {
+        "prefix": "/unpaid-bills",
+        "count": 6
+      },
+      {
+        "prefix": "/workspace",
+        "count": 6
+      },
+      {
+        "prefix": "/:channelId",
+        "count": 5
+      },
+      {
+        "prefix": "/analytics",
+        "count": 5
+      },
+      {
+        "prefix": "/daily-logs",
+        "count": 5
+      },
+      {
+        "prefix": "/departments",
+        "count": 5
+      },
+      {
+        "prefix": "/discrepancies",
+        "count": 5
+      },
+      {
+        "prefix": "/dispatch-notes",
+        "count": 5
+      },
+      {
+        "prefix": "/expected-portions",
+        "count": 5
+      },
+      {
+        "prefix": "/food-controls",
+        "count": 5
+      },
+      {
+        "prefix": "/generate",
+        "count": 5
+      },
+      {
+        "prefix": "/grn",
+        "count": 5
+      },
+      {
+        "prefix": "/halls",
+        "count": 5
+      },
+      {
+        "prefix": "/inspections",
+        "count": 5
+      },
+      {
+        "prefix": "/journal-entries",
+        "count": 5
+      },
+      {
+        "prefix": "/ledger",
+        "count": 5
+      },
+      {
+        "prefix": "/logbook",
+        "count": 5
+      },
+      {
+        "prefix": "/messages",
+        "count": 5
+      },
+      {
+        "prefix": "/payments",
+        "count": 5
+      },
+      {
+        "prefix": "/reservations",
+        "count": 5
+      },
+      {
+        "prefix": "/services",
+        "count": 5
+      },
+      {
+        "prefix": "/status",
+        "count": 5
+      },
+      {
+        "prefix": "/stock-takes",
+        "count": 5
+      },
+      {
+        "prefix": "/:shiftId",
+        "count": 4
+      },
+      {
+        "prefix": "/accounts",
+        "count": 4
+      },
+      {
+        "prefix": "/announcements",
+        "count": 4
+      },
+      {
+        "prefix": "/bills",
+        "count": 4
+      },
+      {
+        "prefix": "/branch-sales",
+        "count": 4
+      },
+      {
+        "prefix": "/bulk",
+        "count": 4
+      },
+      {
+        "prefix": "/categories",
+        "count": 4
+      },
+      {
+        "prefix": "/email",
+        "count": 4
+      },
+      {
+        "prefix": "/emergency",
+        "count": 4
+      },
+      {
+        "prefix": "/feature-flags",
+        "count": 4
+      },
+      {
+        "prefix": "/kitchen",
+        "count": 4
+      },
+      {
+        "prefix": "/paystack",
+        "count": 4
+      },
+      {
+        "prefix": "/petty-cash",
+        "count": 4
+      },
+      {
+        "prefix": "/preferences",
+        "count": 4
+      },
+      {
+        "prefix": "/requests",
+        "count": 4
+      },
+      {
+        "prefix": "/role-migrations",
+        "count": 4
+      },
+      {
+        "prefix": "/spa-services",
+        "count": 4
+      },
+      {
+        "prefix": "/usage",
+        "count": 4
+      },
+      {
+        "prefix": "/:supplierId",
+        "count": 3
+      },
+      {
+        "prefix": "/:type",
+        "count": 3
+      },
+      {
+        "prefix": "/anomalies",
+        "count": 3
+      },
+      {
+        "prefix": "/auditor",
+        "count": 3
+      },
+      {
+        "prefix": "/barcodes",
+        "count": 3
+      },
+      {
+        "prefix": "/clearances",
+        "count": 3
+      },
+      {
+        "prefix": "/consumption",
+        "count": 3
+      },
+      {
+        "prefix": "/dynamic-services",
+        "count": 3
+      },
+      {
+        "prefix": "/exceptions",
+        "count": 3
+      },
+      {
+        "prefix": "/expenses",
+        "count": 3
+      },
+      {
+        "prefix": "/health",
+        "count": 3
+      },
+      {
+        "prefix": "/night-audit",
+        "count": 3
+      },
+      {
+        "prefix": "/portion-tracking",
+        "count": 3
+      },
+      {
+        "prefix": "/receipts",
+        "count": 3
+      },
+      {
+        "prefix": "/remediations",
+        "count": 3
+      },
+      {
+        "prefix": "/reservation",
+        "count": 3
+      },
+      {
+        "prefix": "/roles",
+        "count": 3
+      },
+      {
+        "prefix": "/room-service",
+        "count": 3
+      },
+      {
+        "prefix": "/schedules",
+        "count": 3
+      },
+      {
+        "prefix": "/service-requests",
+        "count": 3
+      },
+      {
+        "prefix": "/smart-assign",
+        "count": 3
+      },
+      {
+        "prefix": "/supplies",
+        "count": 3
+      },
+      {
+        "prefix": "/swaps",
+        "count": 3
+      },
+      {
+        "prefix": "/variance-logs",
+        "count": 3
+      },
+      {
+        "prefix": "/watchlist",
+        "count": 3
+      },
+      {
+        "prefix": "/:branchId",
+        "count": 2
+      },
+      {
+        "prefix": "/adjustments",
+        "count": 2
+      },
+      {
+        "prefix": "/amenities",
+        "count": 2
+      },
+      {
+        "prefix": "/amenity-bookings",
+        "count": 2
+      },
+      {
+        "prefix": "/audit",
+        "count": 2
+      },
+      {
+        "prefix": "/backup",
+        "count": 2
+      },
+      {
+        "prefix": "/bank-transactions",
+        "count": 2
+      },
+      {
+        "prefix": "/bar",
+        "count": 2
+      },
+      {
+        "prefix": "/booking-confirmation",
+        "count": 2
+      },
+      {
+        "prefix": "/budget-analysis",
+        "count": 2
+      },
+      {
+        "prefix": "/confirmation",
+        "count": 2
+      },
+      {
+        "prefix": "/deduction-rates",
+        "count": 2
+      },
+      {
+        "prefix": "/deposits",
+        "count": 2
+      },
+      {
+        "prefix": "/expense-breakdown",
+        "count": 2
+      },
+      {
+        "prefix": "/findings",
+        "count": 2
+      },
+      {
+        "prefix": "/floor-plan",
+        "count": 2
+      },
+      {
+        "prefix": "/generate-barcode",
+        "count": 2
+      },
+      {
+        "prefix": "/history",
+        "count": 2
+      },
+      {
+        "prefix": "/impersonate",
+        "count": 2
+      },
+      {
+        "prefix": "/logs",
+        "count": 2
+      },
+      {
+        "prefix": "/low-stock",
+        "count": 2
+      },
+      {
+        "prefix": "/occupancy",
+        "count": 2
+      },
+      {
+        "prefix": "/override",
+        "count": 2
+      },
+      {
+        "prefix": "/overview",
+        "count": 2
+      },
+      {
+        "prefix": "/payroll",
+        "count": 2
+      },
+      {
+        "prefix": "/pool-table",
+        "count": 2
+      },
+      {
+        "prefix": "/preventive",
+        "count": 2
+      },
+      {
+        "prefix": "/products",
+        "count": 2
+      },
+      {
+        "prefix": "/profit-loss",
+        "count": 2
+      },
+      {
+        "prefix": "/quote",
+        "count": 2
+      },
+      {
+        "prefix": "/reconciliation",
+        "count": 2
+      },
+      {
+        "prefix": "/reconciliations",
+        "count": 2
+      },
+      {
+        "prefix": "/revenue",
+        "count": 2
+      },
+      {
+        "prefix": "/sales-points",
+        "count": 2
+      },
+      {
+        "prefix": "/schedule",
+        "count": 2
+      },
+      {
+        "prefix": "/sms",
+        "count": 2
+      },
+      {
+        "prefix": "/spare-parts",
+        "count": 2
+      },
+      {
+        "prefix": "/statistics",
+        "count": 2
+      },
+      {
+        "prefix": "/test",
+        "count": 2
+      },
+      {
+        "prefix": "/unpaid-orders",
+        "count": 2
+      },
+      {
+        "prefix": "/upload",
+        "count": 2
+      },
+      {
+        "prefix": "/users",
+        "count": 2
+      },
+      {
+        "prefix": "/void-bills",
+        "count": 2
+      },
+      {
+        "prefix": "/void-requests",
+        "count": 2
+      },
+      {
+        "prefix": "/active-sessions",
+        "count": 1
+      },
+      {
+        "prefix": "/aging-report",
+        "count": 1
+      },
+      {
+        "prefix": "/anomaly-report",
+        "count": 1
+      },
+      {
+        "prefix": "/api-metrics",
+        "count": 1
+      },
+      {
+        "prefix": "/app_config",
+        "count": 1
+      },
+      {
+        "prefix": "/approve",
+        "count": 1
+      },
+      {
+        "prefix": "/approve-batch",
+        "count": 1
+      },
+      {
+        "prefix": "/ar-ap",
+        "count": 1
+      },
+      {
+        "prefix": "/assignments",
+        "count": 1
+      },
+      {
+        "prefix": "/attachments",
+        "count": 1
+      },
+      {
+        "prefix": "/audit-log",
+        "count": 1
+      },
+      {
+        "prefix": "/availability",
+        "count": 1
+      },
+      {
+        "prefix": "/available",
+        "count": 1
+      },
+      {
+        "prefix": "/balance-sheet",
+        "count": 1
+      },
+      {
+        "prefix": "/bank-accounts",
+        "count": 1
+      },
+      {
+        "prefix": "/bill",
+        "count": 1
+      },
+      {
+        "prefix": "/block-ip",
+        "count": 1
+      },
+      {
+        "prefix": "/blocked-ips",
+        "count": 1
+      },
+      {
+        "prefix": "/booking",
+        "count": 1
+      },
+      {
+        "prefix": "/branch-financials",
+        "count": 1
+      },
+      {
+        "prefix": "/branch-performance",
+        "count": 1
+      },
+      {
+        "prefix": "/branches-stock",
+        "count": 1
+      },
+      {
+        "prefix": "/budget",
+        "count": 1
+      },
+      {
+        "prefix": "/budget-summary",
+        "count": 1
+      },
+      {
+        "prefix": "/bulk-approve",
+        "count": 1
+      },
+      {
+        "prefix": "/by-identifier",
+        "count": 1
+      },
+      {
+        "prefix": "/calculate",
+        "count": 1
+      },
+      {
+        "prefix": "/calendar",
+        "count": 1
+      },
+      {
+        "prefix": "/cancel",
+        "count": 1
+      },
+      {
+        "prefix": "/cashflow",
+        "count": 1
+      },
+      {
+        "prefix": "/chat",
+        "count": 1
+      },
+      {
+        "prefix": "/check-availability",
+        "count": 1
+      },
+      {
+        "prefix": "/check-in-reminder",
+        "count": 1
+      },
+      {
+        "prefix": "/cleanup",
+        "count": 1
+      },
+      {
+        "prefix": "/clear-my-notifications",
+        "count": 1
+      },
+      {
+        "prefix": "/clock",
+        "count": 1
+      },
+      {
+        "prefix": "/clock-in",
+        "count": 1
+      },
+      {
+        "prefix": "/clock-out",
+        "count": 1
+      },
+      {
+        "prefix": "/comparative-analysis",
+        "count": 1
+      },
+      {
+        "prefix": "/complete-transfer",
+        "count": 1
+      },
+      {
+        "prefix": "/conference",
+        "count": 1
+      },
+      {
+        "prefix": "/confirm",
+        "count": 1
+      },
+      {
+        "prefix": "/consumption-trends",
+        "count": 1
+      },
+      {
+        "prefix": "/context",
+        "count": 1
+      },
+      {
+        "prefix": "/contractors",
+        "count": 1
+      },
+      {
+        "prefix": "/conversions",
+        "count": 1
+      },
+      {
+        "prefix": "/deliveries",
+        "count": 1
+      },
+      {
+        "prefix": "/documents",
+        "count": 1
+      },
+      {
+        "prefix": "/download-zip",
+        "count": 1
+      },
+      {
+        "prefix": "/draft",
+        "count": 1
+      },
+      {
+        "prefix": "/email-all",
+        "count": 1
+      },
+      {
+        "prefix": "/employee-credit",
+        "count": 1
+      },
+      {
+        "prefix": "/employee-intelligence",
+        "count": 1
+      },
+      {
+        "prefix": "/energy-consumption",
+        "count": 1
+      },
+      {
+        "prefix": "/equipment",
+        "count": 1
+      },
+      {
+        "prefix": "/executive-summary",
+        "count": 1
+      },
+      {
+        "prefix": "/export_data",
+        "count": 1
+      },
+      {
+        "prefix": "/feedback",
+        "count": 1
+      },
+      {
+        "prefix": "/financial-intelligence",
+        "count": 1
+      },
+      {
+        "prefix": "/financial-ratios",
+        "count": 1
+      },
+      {
+        "prefix": "/folio",
+        "count": 1
+      },
+      {
+        "prefix": "/food-cost-trend",
+        "count": 1
+      },
+      {
+        "prefix": "/forecast",
+        "count": 1
+      },
+      {
+        "prefix": "/forgotpassword",
+        "count": 1
+      },
+      {
+        "prefix": "/generate-card",
+        "count": 1
+      },
+      {
+        "prefix": "/generate-qr",
+        "count": 1
+      },
+      {
+        "prefix": "/generate-sku",
+        "count": 1
+      },
+      {
+        "prefix": "/get_edit_lock_status",
+        "count": 1
+      },
+      {
+        "prefix": "/guest",
+        "count": 1
+      },
+      {
+        "prefix": "/housing-levy",
+        "count": 1
+      },
+      {
+        "prefix": "/image-url",
+        "count": 1
+      },
+      {
+        "prefix": "/import_data",
+        "count": 1
+      },
+      {
+        "prefix": "/import-booking",
+        "count": 1
+      },
+      {
+        "prefix": "/incident-timeline",
+        "count": 1
+      },
+      {
+        "prefix": "/incoming",
+        "count": 1
+      },
+      {
+        "prefix": "/incoming-dispatches",
+        "count": 1
+      },
+      {
+        "prefix": "/insights",
+        "count": 1
+      },
+      {
+        "prefix": "/intent",
+        "count": 1
+      },
+      {
+        "prefix": "/inventory-alert",
+        "count": 1
+      },
+      {
+        "prefix": "/invoice",
+        "count": 1
+      },
+      {
+        "prefix": "/jobs",
+        "count": 1
+      },
+      {
+        "prefix": "/kpis",
+        "count": 1
+      },
+      {
+        "prefix": "/kra-p10",
+        "count": 1
+      },
+      {
+        "prefix": "/leaderboard",
+        "count": 1
+      },
+      {
+        "prefix": "/license",
+        "count": 1
+      },
+      {
+        "prefix": "/log",
+        "count": 1
+      },
+      {
+        "prefix": "/login",
+        "count": 1
+      },
+      {
+        "prefix": "/logout",
+        "count": 1
+      },
+      {
+        "prefix": "/loyalty",
+        "count": 1
+      },
+      {
+        "prefix": "/maintenance-alert",
+        "count": 1
+      },
+      {
+        "prefix": "/mark-all-read",
+        "count": 1
+      },
+      {
+        "prefix": "/master-catalog",
+        "count": 1
+      },
+      {
+        "prefix": "/me",
+        "count": 1
+      },
+      {
+        "prefix": "/merge",
+        "count": 1
+      },
+      {
+        "prefix": "/meter-reading",
+        "count": 1
+      },
+      {
+        "prefix": "/monitoring",
+        "count": 1
+      },
+      {
+        "prefix": "/newsletter",
+        "count": 1
+      },
+      {
+        "prefix": "/notify-branch",
+        "count": 1
+      },
+      {
+        "prefix": "/notify-role",
+        "count": 1
+      },
+      {
+        "prefix": "/notify-user",
+        "count": 1
+      },
+      {
+        "prefix": "/nssf",
+        "count": 1
+      },
+      {
+        "prefix": "/open",
+        "count": 1
+      },
+      {
+        "prefix": "/otps",
+        "count": 1
+      },
+      {
+        "prefix": "/password",
+        "count": 1
+      },
+      {
+        "prefix": "/password-reset",
+        "count": 1
+      },
+      {
+        "prefix": "/pay",
+        "count": 1
+      },
+      {
+        "prefix": "/payslips",
+        "count": 1
+      },
+      {
+        "prefix": "/pending",
+        "count": 1
+      },
+      {
+        "prefix": "/pending-approvals",
+        "count": 1
+      },
+      {
+        "prefix": "/plans",
+        "count": 1
+      },
+      {
+        "prefix": "/pool-tokens",
+        "count": 1
+      },
+      {
+        "prefix": "/portion-ledger",
+        "count": 1
+      },
+      {
+        "prefix": "/portion-output",
+        "count": 1
+      },
+      {
+        "prefix": "/portion-stock",
+        "count": 1
+      },
+      {
+        "prefix": "/pos-login",
+        "count": 1
+      },
+      {
+        "prefix": "/preview-sku",
+        "count": 1
+      },
+      {
+        "prefix": "/promotion",
+        "count": 1
+      },
+      {
+        "prefix": "/quality-compliance",
+        "count": 1
+      },
+      {
+        "prefix": "/rankings",
+        "count": 1
+      },
+      {
+        "prefix": "/ratings",
+        "count": 1
+      },
+      {
+        "prefix": "/recommendations",
+        "count": 1
+      },
+      {
+        "prefix": "/refresh-token",
+        "count": 1
+      },
+      {
+        "prefix": "/register",
+        "count": 1
+      },
+      {
+        "prefix": "/remediate",
+        "count": 1
+      },
+      {
+        "prefix": "/reorder-suggestions",
+        "count": 1
+      },
+      {
+        "prefix": "/report",
+        "count": 1
+      },
+      {
+        "prefix": "/retrain",
+        "count": 1
+      },
+      {
+        "prefix": "/revenue-analysis",
+        "count": 1
+      },
+      {
+        "prefix": "/revenue-by-branch",
+        "count": 1
+      },
+      {
+        "prefix": "/revenue-oversight",
+        "count": 1
+      },
+      {
+        "prefix": "/revenue-overview",
+        "count": 1
+      },
+      {
+        "prefix": "/rls-policies",
+        "count": 1
+      },
+      {
+        "prefix": "/sales",
+        "count": 1
+      },
+      {
+        "prefix": "/search",
+        "count": 1
+      },
+      {
+        "prefix": "/set_edit_lock_status",
+        "count": 1
+      },
+      {
+        "prefix": "/shif",
+        "count": 1
+      },
+      {
+        "prefix": "/shop_items",
+        "count": 1
+      },
+      {
+        "prefix": "/staff-audit",
+        "count": 1
+      },
+      {
+        "prefix": "/staff-metrics",
+        "count": 1
+      },
+      {
+        "prefix": "/start",
+        "count": 1
+      },
+      {
+        "prefix": "/stock-ledger",
+        "count": 1
+      },
+      {
+        "prefix": "/stock-movement",
+        "count": 1
+      },
+      {
+        "prefix": "/stock-movements",
+        "count": 1
+      },
+      {
+        "prefix": "/stock-take-items",
+        "count": 1
+      },
+      {
+        "prefix": "/stock-usage",
+        "count": 1
+      },
+      {
+        "prefix": "/stop",
+        "count": 1
+      },
+      {
+        "prefix": "/stream",
+        "count": 1
+      },
+      {
+        "prefix": "/submit-transfer-request",
+        "count": 1
+      },
+      {
+        "prefix": "/suggest",
+        "count": 1
+      },
+      {
+        "prefix": "/switch-context",
+        "count": 1
+      },
+      {
+        "prefix": "/sync-all",
+        "count": 1
+      },
+      {
+        "prefix": "/system",
+        "count": 1
+      },
+      {
+        "prefix": "/targets",
+        "count": 1
+      },
+      {
+        "prefix": "/tax-summary",
+        "count": 1
+      },
+      {
+        "prefix": "/terminate-all-sessions",
+        "count": 1
+      },
+      {
+        "prefix": "/terminate-session",
+        "count": 1
+      },
+      {
+        "prefix": "/test-notification",
+        "count": 1
+      },
+      {
+        "prefix": "/time-clock",
+        "count": 1
+      },
+      {
+        "prefix": "/tracking",
+        "count": 1
+      },
+      {
+        "prefix": "/trail",
+        "count": 1
+      },
+      {
+        "prefix": "/training",
+        "count": 1
+      },
+      {
+        "prefix": "/transfer",
+        "count": 1
+      },
+      {
+        "prefix": "/transfer_items",
+        "count": 1
+      },
+      {
+        "prefix": "/trial-balance",
+        "count": 1
+      },
+      {
+        "prefix": "/trigger-migration",
+        "count": 1
+      },
+      {
+        "prefix": "/types",
+        "count": 1
+      },
+      {
+        "prefix": "/unblock-ip",
+        "count": 1
+      },
+      {
+        "prefix": "/unread-count",
+        "count": 1
+      },
+      {
+        "prefix": "/updatedetails",
+        "count": 1
+      },
+      {
+        "prefix": "/updatepassword",
+        "count": 1
+      },
+      {
+        "prefix": "/user-roles",
+        "count": 1
+      },
+      {
+        "prefix": "/valuation",
+        "count": 1
+      },
+      {
+        "prefix": "/variance-reasons",
+        "count": 1
+      },
+      {
+        "prefix": "/verify-payment",
+        "count": 1
+      },
+      {
+        "prefix": "/verify-strict",
+        "count": 1
+      },
+      {
+        "prefix": "/vip",
+        "count": 1
+      },
+      {
+        "prefix": "/waiter",
+        "count": 1
+      },
+      {
+        "prefix": "/waiter-sales",
+        "count": 1
+      },
+      {
+        "prefix": "/wastage-analytics",
+        "count": 1
+      },
+      {
+        "prefix": "/welcome",
+        "count": 1
+      },
+      {
+        "prefix": "/worksheet",
+        "count": 1
+      },
+      {
+        "prefix": "/yield-rules",
+        "count": 1
+      }
+    ]
+  },
+  "flutter": {
+    "endpoint_count": 669,
+    "endpoints_by_prefix": [
+      {
+        "prefix": "/store",
+        "count": 104
+      },
+      {
+        "prefix": "/kitchen",
+        "count": 51
+      },
+      {
+        "prefix": "/auditor",
+        "count": 41
+      },
+      {
+        "prefix": "/procurement",
+        "count": 33
+      },
+      {
+        "prefix": "/staff",
+        "count": 32
+      },
+      {
+        "prefix": "/cashier",
+        "count": 26
+      },
+      {
+        "prefix": "/housekeeping",
+        "count": 26
+      },
+      {
+        "prefix": "/finance",
+        "count": 21
+      },
+      {
+        "prefix": "/pos",
+        "count": 20
+      },
+      {
+        "prefix": "/superadmin",
+        "count": 19
+      },
+      {
+        "prefix": "/reports",
+        "count": 17
+      },
+      {
+        "prefix": "/bar",
+        "count": 14
+      },
+      {
+        "prefix": "/bookings",
+        "count": 14
+      },
+      {
+        "prefix": "/restaurant",
+        "count": 14
+      },
+      {
+        "prefix": "/system",
+        "count": 13
+      },
+      {
+        "prefix": "/branch-operations",
+        "count": 11
+      },
+      {
+        "prefix": "/guests",
+        "count": 11
+      },
+      {
+        "prefix": "/lina",
+        "count": 11
+      },
+      {
+        "prefix": "/auth",
+        "count": 10
+      },
+      {
+        "prefix": "/kitchen-ledger",
+        "count": 10
+      },
+      {
+        "prefix": "/rooms",
+        "count": 10
+      },
+      {
+        "prefix": "/payroll",
+        "count": 9
+      },
+      {
+        "prefix": "/stock-takes",
+        "count": 9
+      },
+      {
+        "prefix": "/storekeeping",
+        "count": 9
+      },
+      {
+        "prefix": "/notifications",
+        "count": 8
+      },
+      {
+        "prefix": "/payroll-policies",
+        "count": 8
+      },
+      {
+        "prefix": "/catering-bookings",
+        "count": 7
+      },
+      {
+        "prefix": "/conference",
+        "count": 7
+      },
+      {
+        "prefix": "/payments-verification",
+        "count": 7
+      },
+      {
+        "prefix": "/employee-portal",
+        "count": 6
+      },
+      {
+        "prefix": "/petty-cash",
+        "count": 6
+      },
+      {
+        "prefix": "/users",
+        "count": 6
+      },
+      {
+        "prefix": "/accounting",
+        "count": 5
+      },
+      {
+        "prefix": "/banking",
+        "count": 5
+      },
+      {
+        "prefix": "/buffet",
+        "count": 5
+      },
+      {
+        "prefix": "/dispatch",
+        "count": 5
+      },
+      {
+        "prefix": "/fleet",
+        "count": 5
+      },
+      {
+        "prefix": "/payroll-adjustments",
+        "count": 5
+      },
+      {
+        "prefix": "/suppliers",
+        "count": 5
+      },
+      {
+        "prefix": "/audit",
+        "count": 4
+      },
+      {
+        "prefix": "/inventory",
+        "count": 4
+      },
+      {
+        "prefix": "/analytics",
+        "count": 3
+      },
+      {
+        "prefix": "/maintenance-enhanced",
+        "count": 3
+      },
+      {
+        "prefix": "/payments",
+        "count": 3
+      },
+      {
+        "prefix": "/admin-ai",
+        "count": 2
+      },
+      {
+        "prefix": "/admin-logs",
+        "count": 2
+      },
+      {
+        "prefix": "/catering-food-control",
+        "count": 2
+      },
+      {
+        "prefix": "/credit",
+        "count": 2
+      },
+      {
+        "prefix": "/facilities",
+        "count": 2
+      },
+      {
+        "prefix": "/food-control",
+        "count": 2
+      },
+      {
+        "prefix": "/forecasting",
+        "count": 2
+      },
+      {
+        "prefix": "/maintenance",
+        "count": 2
+      },
+      {
+        "prefix": "/search",
+        "count": 2
+      },
+      {
+        "prefix": "/security",
+        "count": 2
+      },
+      {
+        "prefix": "/branch-food-control-config",
+        "count": 1
+      },
+      {
+        "prefix": "/folios",
+        "count": 1
+      },
+      {
+        "prefix": "/health",
+        "count": 1
+      },
+      {
+        "prefix": "/hr-reports",
+        "count": 1
+      },
+      {
+        "prefix": "/performance",
+        "count": 1
+      },
+      {
+        "prefix": "/receipts",
+        "count": 1
+      },
+      {
+        "prefix": "/wastage",
+        "count": 1
+      }
+    ],
+    "unknown_prefixes_against_backend_mounts": [],
+    "unmatched_endpoints_against_backend_routes": []
+  }
+}

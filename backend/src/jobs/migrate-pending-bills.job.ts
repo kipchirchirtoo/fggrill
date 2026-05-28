@@ -2,7 +2,7 @@ import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 
 /**
- * Migrate pending orders older than 8 hours to staff credit bills
+ * Migrate pending orders older than 8 hours to unpaid bills
  * Also record void bills to audit table
  * Runs every hour via cron
  */
@@ -129,26 +129,7 @@ export const migratePendingBills = async (branchId?: number) => {
                         const amount = parseFloat(item[target.amountField] || '0');
                         const number = item[target.numberField] || item[target.idField];
 
-                        // Create credit bill
-                        const { data: creditBill, error: creditError } = await supabase
-                            .from('staff_credit_bills')
-                            .insert({
-                                staff_id: staffProfile.id,
-                                amount: amount,
-                                description: `Unsettled ${target.typeLabel} - ${number} - ${location}`,
-                                bill_date: new Date().toISOString().split('T')[0],
-                                status: 'pending',
-                                branch_id: item.branch_id
-                            })
-                            .select()
-                            .single();
-
-                        if (creditError) {
-                            logger.error(`Error creating credit bill for ${target.table} ${number}:`, creditError);
-                            continue;
-                        }
-
-                        await supabase
+                        const { error: unpaidBillError } = await supabase
                             .from('unpaid_bills')
                             .insert({
                                 bill_type: target.table,
@@ -168,13 +149,17 @@ export const migratePendingBills = async (branchId?: number) => {
                                 status: 'unpaid'
                             });
 
+                        if (unpaidBillError) {
+                            logger.error(`Error creating unpaid bill for ${target.table} ${number}:`, unpaidBillError);
+                            continue;
+                        }
+
                         // Update item to mark as migrated
                         const { error: updateError } = await supabase
                             .from(target.table)
                             .update({
                                 migrated_to_credit_bill: true,
-                                migrated_at: new Date().toISOString(),
-                                credit_bill_id: creditBill.id
+                                migrated_at: new Date().toISOString()
                             })
                             .eq(target.idField, item[target.idField]);
 
@@ -195,7 +180,7 @@ export const migratePendingBills = async (branchId?: number) => {
                             });
                         }
 
-                        logger.info(`Successfully migrated ${target.table} ${number} to credit bill`);
+                        logger.info(`Successfully migrated ${target.table} ${number} to unpaid bill`);
                     } catch (err) {
                         logger.error(`Error processing ${target.table} item:`, err);
                     }

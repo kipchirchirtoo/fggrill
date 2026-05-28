@@ -7,6 +7,7 @@ import '../domain/providers.dart';
 import '../domain/models.dart';
 import '../data/repository.dart';
 import 'branch_orders_tab.dart';
+import '../../lina/presentation/lina_screen.dart';
 
 class AuditorDashboard extends ConsumerStatefulWidget {
   const AuditorDashboard({super.key});
@@ -44,6 +45,10 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
             label: 'Reconciliation',
             icon: PhosphorIcons.arrowsClockwise(),
             content: const _ReconciliationTab()),
+        DashboardTab(
+            label: 'Lina(Ai Service)',
+            icon: PhosphorIcons.sparkle(),
+            content: const LinaScreen()),
       ],
     );
   }

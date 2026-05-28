@@ -24,6 +24,32 @@ const getJwtSecrets = (): string[] => {
 // Roles that have universal access and skip the context selector
 const UNIVERSAL_ROLES = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor', 'hr_manager', 'director'];
 
+const parseBooleanConfig = (value: unknown, fallback = true): boolean => {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'enabled', 'active'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'disabled', 'inactive'].includes(normalized)) return false;
+  return fallback;
+};
+
+const readSystemConfig = async (keys: string[]): Promise<Record<string, any>> => {
+  const { data, error } = await supabase
+    .from('system_config_values')
+    .select('key, value')
+    .in('key', keys);
+
+  if (error) {
+    logger.warn('Failed to read system configuration', { keys, error });
+    return {};
+  }
+
+  return (data || []).reduce((acc: Record<string, any>, row: any) => {
+    acc[row.key] = row.value;
+    return acc;
+  }, {});
+};
+
 const enrichUserBranch = async (user: any): Promise<any> => {
   const branchId = user?.branch_id ?? user?.branchId;
   if (!branchId) return user;
@@ -50,6 +76,93 @@ const enrichUserBranch = async (user: any): Promise<any> => {
       error
     });
     return user;
+  }
+};
+
+// @desc    Validate local deployment license and bind terminal to a branch
+// @route   POST /api/auth/license/validate
+// @access  Public
+export const validateLicense = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const licenseKey = String(req.body.license_key ?? req.body.licenseKey ?? '').trim();
+    const branchCode = String(req.body.branch_code ?? req.body.branchCode ?? '').trim().toUpperCase();
+
+    if (!licenseKey || !branchCode) {
+      res.status(400).json({
+        success: false,
+        message: 'License key and branch code are required',
+        is_valid: false
+      });
+      return;
+    }
+
+    const { data: branch, error: branchError } = await supabase
+      .from('branches')
+      .select('id, name, code, status')
+      .ilike('code', branchCode)
+      .maybeSingle();
+
+    if (branchError) throw branchError;
+
+    if (!branch) {
+      res.status(404).json({
+        success: false,
+        message: 'Branch code not found',
+        is_valid: false
+      });
+      return;
+    }
+
+    const config = await readSystemConfig(['licenseKey', 'licenseExpiry', 'isLicenseValid']);
+    const configuredKey = String(
+      config.licenseKey ?? process.env.APP_LICENSE_KEY ?? process.env.FG_LICENSE_KEY ?? ''
+    ).trim();
+    const expiryDate = String(
+      config.licenseExpiry ?? process.env.APP_LICENSE_EXPIRY ?? ''
+    ).trim();
+    const licenseEnabled = parseBooleanConfig(
+      config.isLicenseValid ?? process.env.APP_LICENSE_ENABLED,
+      true
+    );
+    const expiryMs = expiryDate ? Date.parse(expiryDate) : NaN;
+    const notExpired = !expiryDate || (Number.isFinite(expiryMs) && expiryMs >= Date.now());
+    const keyMatches = configuredKey ? configuredKey === licenseKey : true;
+    const branchActive = String(branch.status || 'active').toLowerCase() !== 'inactive';
+    const isValid = Boolean(licenseEnabled && notExpired && keyMatches && branchActive);
+
+    const payload = {
+      branch_id: String(branch.id),
+      branchId: String(branch.id),
+      branch_name: branch.name,
+      branchName: branch.name,
+      branch_code: branch.code,
+      branchCode: branch.code,
+      expiry_date: expiryDate || null,
+      expiryDate: expiryDate || null,
+      is_valid: isValid,
+      isValid
+    };
+
+    if (!isValid) {
+      res.status(401).json({
+        success: false,
+        message: 'License is not valid for this branch',
+        ...payload
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      ...payload,
+      data: payload
+    });
+  } catch (error) {
+    next(error);
   }
 };
 

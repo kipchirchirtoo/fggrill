@@ -438,7 +438,7 @@ export async function getPendingRequests() {
   const { data: requests, error } = await supabase
     .from('stock_requests')
     .select('*')
-    .in('status', ['PENDING', 'UNDER_REVIEW'])
+    .in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW'])
     .order('created_at', { ascending: true });
 
   if (error) throw error;
@@ -1393,7 +1393,7 @@ export async function getBranchDashboardStats(branchId: number) {
   const [totalItemsRes, allStockRes, pendingRequestsRes, incomingDispatchesRes] = await Promise.all([
     supabase.from('branch_stock').select('id', { count: 'exact', head: true }).eq('branch_id', branchId),
     supabase.from('branch_stock').select('id, quantity, reorder_level').eq('branch_id', branchId),
-    supabase.from('stock_requests').select('id', { count: 'exact', head: true }).eq('requesting_branch_id', branchId).in('status', ['PENDING', 'APPROVED', 'UNDER_REVIEW']),
+    supabase.from('stock_requests').select('id', { count: 'exact', head: true }).eq('requesting_branch_id', branchId).in('status', ['PENDING', 'PENDING_AUDIT', 'APPROVED', 'UNDER_REVIEW']),
     supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).eq('to_branch_id', branchId).eq('status', 'IN_TRANSIT')
   ]);
 

@@ -161,8 +161,8 @@ class AdminRepository {
     await _dio.delete('/users/$id');
   }
 
-  Future<void> resetUserPassword(String id) async {
-    await _dio.post('/users/$id/reset-password');
+  Future<void> resetUserPassword(String id, String newPassword) async {
+    await _dio.put('/users/$id', data: {'password': newPassword});
   }
 
   /// Normalises the backend snake_case staff/user response to the fields that
@@ -886,7 +886,7 @@ class AdminRepository {
     final params = <String, dynamic>{'limit': limit};
     if (severity != null) params['severity'] = severity;
     if (action != null) params['action'] = action;
-    final response = await _dio.get('/audit', queryParameters: params);
+    final response = await _dio.get('/audit/logs', queryParameters: params);
     return _parseList(response.data, AdminAuditLog.fromJson);
   }
 
@@ -951,17 +951,20 @@ class AdminRepository {
   }
 
   Future<List<ForecastPoint>> getDemandForecast() async {
-    final response = await _dio.get('/forecasting/demand');
+    final response = await _dio.get('/forecasting/inventory');
     return _parseList(response.data, ForecastPoint.fromJson);
   }
 
   Future<List<ForecastPoint>> getRevenueForecast() async {
-    final response = await _dio.get('/forecasting/revenue');
+    final response = await _dio.get('/forecasting/sales');
     return _parseList(response.data, ForecastPoint.fromJson);
   }
 
-  Future<void> logoutSession(String sessionId) async {
-    await _dio.post('/auth/sessions/$sessionId/terminate');
+  Future<void> logoutSession(String userId, {String? sessionId}) async {
+    await _dio.post('/security/terminate-session', data: {
+      'user_id': userId,
+      if (sessionId != null && sessionId.isNotEmpty) 'session_id': sessionId,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getActiveSessions() async {
@@ -1000,8 +1003,7 @@ class AdminRepository {
       String? startDate,
       String? endDate,
       String? status}) async {
-    final response =
-        await _dio.get('/finance/cashier-clearance', queryParameters: {
+    final response = await _dio.get('/cashier/clearances', queryParameters: {
       if (branchId != null) 'branch_id': branchId,
       if (startDate != null) 'start_date': startDate,
       if (endDate != null) 'end_date': endDate,
@@ -1017,7 +1019,7 @@ class AdminRepository {
   }
 
   Future<void> approveClearance(String id) async {
-    await _dio.patch('/finance/cashier-clearance/$id/approve');
+    await _dio.post('/cashier/clearances/$id/approve');
   }
 
   Future<List<Map<String, dynamic>>> getShiftSummaries(
@@ -1043,7 +1045,7 @@ class AdminRepository {
       {String? branchId, String? startDate, String? endDate}) async {
     try {
       final response =
-          await _dio.get('/restaurant/sales/items', queryParameters: {
+          await _dio.get('/auditor/verify/sold-items', queryParameters: {
         if (branchId != null) 'branch_id': branchId,
         if (startDate != null) 'start_date': startDate,
         if (endDate != null) 'end_date': endDate,
@@ -1114,7 +1116,7 @@ class AdminRepository {
       {String? branchId}) async {
     try {
       final response =
-          await _dio.get('/inventory/bar-audits', queryParameters: {
+          await _dio.get('/auditor/bar/stock-audits', queryParameters: {
         if (branchId != null) 'branch_id': branchId,
       });
       final data = response.data;

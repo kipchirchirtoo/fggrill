@@ -295,7 +295,7 @@ class ReportsService extends BaseApiService {
 
   // ==================== ML FORECASTING ====================
 
-  // GET /api/ml-forecasting/demand
+  // GET /api/forecasting/inventory
   Future<Map<String, dynamic>> getDemandForecast({
     String? horizon,
     int? branchId,
@@ -306,12 +306,12 @@ class ReportsService extends BaseApiService {
       if (branchId != null) 'branchId': branchId,
       if (roomType != null) 'roomType': roomType,
     };
-    final response = await get<Map<String, dynamic>>('/ml-forecasting/demand',
+    final response = await get<Map<String, dynamic>>('/forecasting/inventory',
         queryParameters: query);
     return response;
   }
 
-  // GET /api/ml-forecasting/revenue
+  // GET /api/forecasting/sales
   Future<Map<String, dynamic>> getRevenueForecast({
     String? horizon,
     int? branchId,
@@ -320,12 +320,12 @@ class ReportsService extends BaseApiService {
       if (horizon != null) 'horizon': horizon,
       if (branchId != null) 'branchId': branchId,
     };
-    final response = await get<Map<String, dynamic>>('/ml-forecasting/revenue',
+    final response = await get<Map<String, dynamic>>('/forecasting/sales',
         queryParameters: query);
     return response;
   }
 
-  // GET /api/ml-forecasting/pricing
+  // GET /api/forecasting/sales
   Future<Map<String, dynamic>> getPricingRecommendations({
     String? date,
     int? branchId,
@@ -334,14 +334,14 @@ class ReportsService extends BaseApiService {
       if (date != null) 'date': date,
       if (branchId != null) 'branchId': branchId,
     };
-    final response = await get<Map<String, dynamic>>('/ml-forecasting/pricing',
+    final response = await get<Map<String, dynamic>>('/forecasting/sales',
         queryParameters: query);
     return response;
   }
 
   // ==================== STOCK ANALYTICS ====================
 
-  // GET /api/stock-analytics
+  // GET /api/store/consumption-trends
   Future<Map<String, dynamic>> getStockAnalytics({
     String? type,
     String? period,
@@ -350,14 +350,15 @@ class ReportsService extends BaseApiService {
     final query = {
       if (type != null) 'type': type,
       if (period != null) 'period': period,
-      if (branchId != null) 'branchId': branchId,
+      if (branchId != null) 'branch_id': branchId,
     };
-    final response = await get<Map<String, dynamic>>('/stock-analytics',
+    final response = await get<Map<String, dynamic>>(
+        '/store/consumption-trends',
         queryParameters: query);
     return response;
   }
 
-  // GET /api/stock-analytics/trends
+  // GET /api/store/stock-movement
   Future<Map<String, dynamic>> getStockTrends({
     String? itemId,
     String? period,
@@ -366,9 +367,9 @@ class ReportsService extends BaseApiService {
     final query = {
       if (itemId != null) 'itemId': itemId,
       if (period != null) 'period': period,
-      if (branchId != null) 'branchId': branchId,
+      if (branchId != null) 'branch_id': branchId,
     };
-    final response = await get<Map<String, dynamic>>('/stock-analytics/trends',
+    final response = await get<Map<String, dynamic>>('/store/stock-movement',
         queryParameters: query);
     return response;
   }

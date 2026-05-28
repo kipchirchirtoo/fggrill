@@ -27,6 +27,7 @@ export default function Header({ className = '', hideLogo = false }: HeaderProps
     { label: 'Dining', href: '/dining' },
     { label: 'Events', href: '/events' },
     { label: 'Hotels', href: '/hotels' },
+    { label: 'Reviews', href: '/reviews' },
     { label: 'Reservations', href: '/#reservations' },
   ];
 

@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
+import 'mobile/mobile_manager_reviews_screen.dart';
 
 enum BranchManagerSection {
   overview,
@@ -42,6 +43,7 @@ enum BranchManagerSection {
   maintenance,
   wastage,
   reports,
+  reviews,
 }
 
 class BranchManagerDashboard extends ConsumerStatefulWidget {
@@ -283,6 +285,8 @@ class _BranchManagerDashboardState
           break;
         case BranchManagerSection.reports:
           _rows = _reportCards;
+          break;
+        case BranchManagerSection.reviews:
           break;
       }
     } catch (error) {
@@ -526,6 +530,12 @@ class _BranchManagerDashboardState
           icon: PhosphorIcons.filePdf(),
           group: 'Reporting',
         ),
+        MasterNavItem(
+          section: BranchManagerSection.reviews,
+          label: 'Review Management',
+          icon: PhosphorIcons.chatCircle(),
+          group: 'Reporting',
+        ),
       ];
 
   Widget _buildSection() {
@@ -559,6 +569,8 @@ class _BranchManagerDashboardState
         );
       case BranchManagerSection.reports:
         return _reports();
+      case BranchManagerSection.reviews:
+        return const MobileManagerReviewsScreen();
       case BranchManagerSection.stockAnalytics:
         return _stockAnalytics();
       case BranchManagerSection.staffDocuments:
@@ -1276,7 +1288,6 @@ class _BranchManagerDashboardState
         return [
           _miniButton('View', () => _showRow(row)),
           _miniButton('Edit', () => _editGeneric(row)),
-          if (id.isNotEmpty) _miniButton('Delete', () => _deleteGeneric(id)),
         ];
       case BranchManagerSection.guests:
         return [
@@ -1292,7 +1303,6 @@ class _BranchManagerDashboardState
           _miniButton('Clock in', () => _staffClock(id, true)),
           _miniButton('Clock out', () => _staffClock(id, false)),
           _miniButton('Edit', () => _editGeneric(row)),
-          if (id.isNotEmpty) _miniButton('Delete', () => _deleteGeneric(id)),
         ];
       case BranchManagerSection.leave:
       case BranchManagerSection.staffLeave:
@@ -2035,6 +2045,8 @@ String _label(BranchManagerSection section) {
       return 'Wastage';
     case BranchManagerSection.reports:
       return 'Reports';
+    case BranchManagerSection.reviews:
+      return 'Reviews';
   }
 }
 

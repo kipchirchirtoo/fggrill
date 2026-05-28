@@ -1346,8 +1346,8 @@ const _centralStoreSectionRouteSpecs = <MapEntry<String, AdminSection>>[
 ];
 
 const _superAdminSectionRouteSpecs = <MapEntry<String, SuperAdminSection>>[
-  MapEntry('/superadmin/behavior-intelligence',
-      SuperAdminSection.behavioralIntelligence),
+  MapEntry('/superadmin/lina',
+      SuperAdminSection.lina),
   MapEntry('/superadmin/admin-dashboard', SuperAdminSection.adminDashboard),
   MapEntry('/superadmin/audit-logs', SuperAdminSection.securityCenter),
   MapEntry('/super/admin/security', SuperAdminSection.securityCenter),

@@ -4,6 +4,10 @@ class KitchenOrder {
   final String orderType;
   final int? tableNumber;
   final String? waiterName;
+  final String? customerName;
+  final String? shortCode;
+  final String? source;
+  final String? paymentStatus;
   final String status;
   final double total;
   final List<KitchenOrderItem> items;
@@ -16,6 +20,10 @@ class KitchenOrder {
     this.orderType = 'dine_in',
     this.tableNumber,
     this.waiterName,
+    this.customerName,
+    this.shortCode,
+    this.source,
+    this.paymentStatus,
     this.status = 'pending',
     this.total = 0,
     this.items = const [],
@@ -34,6 +42,11 @@ class KitchenOrder {
           int.tryParse('${json['table_number'] ?? json['table'] ?? ''}') ??
               (json['table_number'] as num?)?.toInt(),
       waiterName: json['waiter_name'] as String?,
+      customerName: json['customer_name'] as String?,
+      shortCode: json['short_code'] == null ? null : '${json['short_code']}',
+      source: json['source'] == null ? null : '${json['source']}',
+      paymentStatus:
+          json['payment_status'] == null ? null : '${json['payment_status']}',
       status: '${json['status'] ?? 'pending'}',
       total: (json['total'] as num?)?.toDouble() ?? 0,
       items: rawItems
@@ -47,6 +60,9 @@ class KitchenOrder {
       bumpedAt: DateTime.tryParse('${json['bumped_at'] ?? ''}'),
     );
   }
+
+  bool get isCaptainOrder =>
+      source == 'pos_shift_order' || id.startsWith('pos:');
 
   String get locationLabel {
     if (tableNumber != null) return 'Table $tableNumber';

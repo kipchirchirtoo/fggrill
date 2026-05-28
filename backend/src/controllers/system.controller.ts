@@ -2,6 +2,44 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 
+const DEFAULT_SYSTEM_CONFIG: Record<string, any> = {
+  vatRate: 16.0,
+  currency: 'KES',
+  timezone: 'Africa/Nairobi',
+  logoUrl: '',
+  hotelName: 'Famous Gates Hotels',
+  address: '',
+  phone: '',
+  email: '',
+  isLicenseValid: false,
+  licenseExpiry: null,
+  licenseKey: '',
+  appVersion: process.env.APP_VERSION || '1.0.0',
+};
+
+const CONFIG_KEY_ALIASES: Record<string, string> = {
+  vat_rate: 'vatRate',
+  logo_url: 'logoUrl',
+  hotel_name: 'hotelName',
+  license_key: 'licenseKey',
+  license_expiry: 'licenseExpiry',
+  is_license_valid: 'isLicenseValid',
+  app_version: 'appVersion',
+};
+
+const normalizeConfigKey = (key: string): string => CONFIG_KEY_ALIASES[key] || key;
+
+const countRows = async (table: string, modifier?: (query: any) => any): Promise<number> => {
+  let query = supabase.from(table).select('*', { count: 'exact', head: true });
+  if (modifier) query = modifier(query);
+  const { count, error } = await query;
+  if (error) {
+    logger.warn(`System stats count failed for ${table}: ${error.message}`);
+    return 0;
+  }
+  return count || 0;
+};
+
 // =====================================================
 // BRANCHES
 // =====================================================
@@ -500,19 +538,37 @@ export const getRolePermissions = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const roleParam = req.params.id;
+    const roleParam = String(req.params.id || '').trim();
     let roleId: number | null = /^\d+$/.test(roleParam) ? Number(roleParam) : null;
 
     if (roleId === null) {
-      const { data: role, error: roleError } = await supabase
-        .from('roles')
-        .select('id, role_name')
-        .eq('role_name', roleParam)
-        .maybeSingle();
+      const roleLookups = [
+        { column: 'name', select: 'id, name' },
+        { column: 'role_name', select: 'id, role_name' }
+      ];
 
-      if (roleError) throw roleError;
+      for (const lookup of roleLookups) {
+        const { data: role, error: roleError } = await supabase
+          .from('roles')
+          .select(lookup.select)
+          .eq(lookup.column, roleParam)
+          .maybeSingle();
 
-      roleId = role?.id ?? null;
+        if (roleError) {
+          logger.warn(`Role permission lookup skipped for ${lookup.column}: ${roleError.message}`);
+          continue;
+        }
+
+        const id = (role as { id?: unknown } | null)?.id;
+        if (typeof id === 'number') {
+          roleId = id;
+          break;
+        }
+        if (typeof id === 'string' && /^\d+$/.test(id)) {
+          roleId = Number(id);
+          break;
+        }
+      }
     }
 
     if (roleId === null) {
@@ -592,6 +648,124 @@ export const getSystemStatus = async (
       disk:        0,          // Requires native OS module — surfaced as 0
       connections: activeConnections || 0,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get system-wide summary counts for mobile/admin dashboards
+// @route   GET /api/system/stats
+// @access  Private (Super Admin)
+export const getSystemStats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [
+      totalUsers,
+      totalBranches,
+      totalRoles,
+      todayTransactions,
+    ] = await Promise.all([
+      countRows('users'),
+      countRows('branches'),
+      countRows('roles'),
+      countRows('payments', query => query.gte('created_at', today.toISOString())),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        total_users: totalUsers,
+        users_count: totalUsers,
+        total_branches: totalBranches,
+        branches_count: totalBranches,
+        total_roles: totalRoles,
+        roles_count: totalRoles,
+        today_transactions: todayTransactions,
+        transactions_today: todayTransactions,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get system configuration values
+// @route   GET /api/system/config
+// @access  Private (Super Admin)
+export const getSystemConfig = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const config = { ...DEFAULT_SYSTEM_CONFIG };
+
+    const { data, error } = await supabase
+      .from('system_config_values')
+      .select('key, value');
+
+    if (error) {
+      logger.warn(`System config table unavailable: ${error.message}`);
+    } else {
+      for (const row of data || []) {
+        config[normalizeConfigKey(row.key)] = row.value;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: config,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update system configuration values
+// @route   PUT /api/system/config
+// @access  Private (Super Admin)
+export const updateSystemConfig = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const entries = Object.entries(req.body || {})
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => ({
+        key: normalizeConfigKey(key),
+        value,
+        updated_by: req.user?.id || null,
+        updated_at: new Date().toISOString(),
+      }));
+
+    if (!entries.length) {
+      res.status(400).json({ success: false, message: 'No config values supplied' });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('system_config_values')
+      .upsert(entries, { onConflict: 'key' });
+
+    if (error) throw error;
+
+    await supabase.from('system_config_history').insert(
+      entries.map(entry => ({
+        changed_by: req.user?.id || null,
+        field_path: entry.key,
+        old_value: null,
+        new_value: entry.value,
+      })),
+    );
+
+    await getSystemConfig(req, res, next);
   } catch (error) {
     next(error);
   }

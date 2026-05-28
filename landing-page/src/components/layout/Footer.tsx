@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface FooterProps {
   className?: string;
@@ -77,10 +78,10 @@ export default function Footer({ className = '' }: FooterProps) {
             <div className="lp-footer__col">
               <h4 className="lp-footer__heading">Explore</h4>
               <ul className="lp-footer__list">
-                <li><a href="#experience">Our Experience</a></li>
-                <li><a href="#dining">Dining</a></li>
-                <li><a href="#events">Events</a></li>
-                <li><a href="#branches">Branches</a></li>
+                <li><Link href="/about">Our Legacy</Link></li>
+                <li><Link href="/dining">Dining</Link></li>
+                <li><Link href="/events">Events</Link></li>
+                <li><Link href="/reviews">Reviews</Link></li>
               </ul>
             </div>
 

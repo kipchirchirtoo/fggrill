@@ -503,7 +503,7 @@ class ReceptionRepository {
   }
 
   Future<Map<String, dynamic>> getFolio(String bookingId) async {
-    final response = await _dio.get('/folios/$bookingId');
+    final response = await _dio.get('/folios/reservation/$bookingId');
     return _payload(response.data, entityKeys: ['folio']);
   }
 

@@ -74,6 +74,78 @@ function resolveCashierBranchId(req: Request, requestedBranchId?: unknown): numb
     return effectiveBranchId;
 }
 
+type CashierCreditStaffProfile = {
+    id: string;
+    name: string;
+    employeeId: string | null;
+    department: string | null;
+    branchId: number | null;
+};
+
+async function resolveCashierCreditStaffProfile(
+    staffId: unknown,
+    effectiveBranchId?: number | null
+): Promise<CashierCreditStaffProfile> {
+    const staffKey = String(staffId || '').trim();
+    if (!staffKey) {
+        throw new AppError('Staff member is required for a credit bill', 400);
+    }
+
+    let query = supabase
+        .from('staff_profiles')
+        .select('id, first_name, last_name, employee_id, staff_code, id_number, department, position, branch_id, user_id')
+        .limit(1);
+
+    if (UUID_PATTERN.test(staffKey)) {
+        query = query.or(`id.eq.${staffKey},user_id.eq.${staffKey}`);
+    } else {
+        const safeStaffKey = staffKey.replace(/[(),]/g, '');
+        query = query.or(`employee_id.eq.${safeStaffKey},staff_code.eq.${safeStaffKey},id_number.eq.${safeStaffKey}`);
+    }
+
+    const { data: staffRows, error: staffError } = await query;
+
+    if (staffError) {
+        throw new AppError(`Staff lookup failed: ${staffError.message}`, 500);
+    }
+
+    const staff = staffRows?.[0];
+    if (!staff) {
+        throw new AppError('Staff profile not found for credit bill', 404);
+    }
+
+    const staffBranchId = parseBranchId(staff.branch_id);
+    if (effectiveBranchId && staffBranchId && staffBranchId !== effectiveBranchId) {
+        throw new AppError('Selected staff member does not belong to this branch', 403);
+    }
+
+    let userName = '';
+    if (staff.user_id) {
+        const { data: user } = await supabase
+            .from('users')
+            .select('first_name, last_name')
+            .eq('id', staff.user_id)
+            .maybeSingle();
+
+        userName = String(
+            [user?.first_name, user?.last_name].filter(Boolean).join(' ')
+        ).trim();
+    }
+
+    const staffName = String(
+        userName ||
+        [staff.first_name, staff.last_name].filter(Boolean).join(' ')
+    ).trim();
+
+    return {
+        id: staff.id,
+        name: staffName || staff.employee_id || staff.staff_code || 'Staff',
+        employeeId: staff.employee_id || staff.staff_code || staff.id_number || null,
+        department: staff.department || staff.position || null,
+        branchId: staffBranchId
+    };
+}
+
 function normalizeSearchTerm(value: unknown): string {
     return String(value || '').trim();
 }
@@ -421,7 +493,7 @@ async function resolveCashierShortCode(
         {
             table: 'pos_shift_orders',
             source: 'pos_shift_order',
-            select: 'order_number, short_code',
+            select: 'id, order_number, short_code, shift_id',
             map: (row) => row.order_number
         },
         {
@@ -1951,11 +2023,20 @@ export const processCashierPayment = async (
                 throw new AppError('Unsupported POS payment method', 400);
             }
 
-            const { data: order, error: orderError } = await supabase
+            const resolvedPosOrderId = shortCodeResolution?.source === 'pos_shift_order' &&
+                UUID_PATTERN.test(String(shortCodeResolution.row?.id || ''))
+                ? String(shortCodeResolution.row.id)
+                : null;
+
+            let orderQuery = supabase
                 .from('pos_shift_orders')
-                .select('*')
-                .eq('order_number', bookingId)
-                .maybeSingle();
+                .select('*');
+
+            orderQuery = resolvedPosOrderId
+                ? orderQuery.eq('id', resolvedPosOrderId)
+                : orderQuery.eq('order_number', bookingId);
+
+            const { data: order, error: orderError } = await orderQuery.maybeSingle();
 
             if (orderError) throw new AppError(`POS order lookup failed: ${orderError.message}`, 500);
             if (!order) throw new AppError('POS order not found', 404);
@@ -2323,6 +2404,10 @@ export const processCashierPayment = async (
                 throw new AppError('Hotel reservation not found', 404);
             }
             resolvedBookingId = resv.id;
+        }
+
+        if (!UUID_PATTERN.test(String(resolvedBookingId))) {
+            throw new AppError('Bill or booking not found', 404);
         }
 
         // 1. Record Payment in Database
@@ -2873,6 +2958,11 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             items
         } = req.body;
 
+        const effectiveBranchId = resolveCashierBranchId(req, branch_id);
+        const waiterProfile = waiter_id
+            ? await resolveCashierCreditStaffProfile(waiter_id, effectiveBranchId)
+            : null;
+
         // Generate bill number
         const { data: billNumberData } = await supabase
             .rpc('generate_bill_number');
@@ -2885,15 +2975,15 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             .from('unpaid_bills')
             .insert({
                 bill_number,
-                branch_id,
+                branch_id: effectiveBranchId,
                 bill_type,
                 reference_type,
                 reference_id,
                 customer_type,
                 customer_id,
-                customer_name,
+                customer_name: customer_name || waiterProfile?.name,
                 room_number,
-                waiter_id,
+                waiter_id: waiterProfile?.id || waiter_id,
                 total_amount,
                 balance_amount: total_amount,
                 payment_terms,
@@ -2926,6 +3016,11 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
     try {
         const { id } = req.params;
         const { payment_amount, payment_method, payment_reference } = req.body;
+        const paymentAmount = Number(payment_amount || 0);
+
+        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+            throw new AppError('Payment amount must be greater than zero', 400);
+        }
 
         // Fetch current bill
         const { data: bill, error: fetchError } = await supabase
@@ -2940,17 +3035,19 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
         }
 
         // Calculate new paid amount
-        const new_paid_amount = (bill.paid_amount || 0) + payment_amount;
+        const new_paid_amount = Number(bill.paid_amount || 0) + paymentAmount;
         const new_balance = bill.total_amount - new_paid_amount;
 
         // Update bill — mark as paid when balance reaches zero
         const isFullyPaid = new_balance <= 0;
+        const nextStatus = isFullyPaid ? 'paid' : 'partial';
         const { data: updatedBill, error: updateError } = await supabase
             .from('unpaid_bills')
             .update({
                 paid_amount: new_paid_amount,
                 balance_amount: Math.max(0, new_balance),
-                ...(isFullyPaid ? { status: 'paid', paid_at: new Date().toISOString() } : {})
+                status: nextStatus,
+                ...(isFullyPaid ? { paid_at: new Date().toISOString() } : {})
             })
             .eq('id', id)
             .select()
@@ -2975,7 +3072,7 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
                 reference_type: 'unpaid_bill',
                 reference_id: bill.id,
                 payment_method,
-                amount: payment_amount,
+                amount: paymentAmount,
                 payment_reference,
                 customer_name: bill.customer_name
             });
@@ -3663,6 +3760,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
         if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
             throw new AppError('Credit bill amount must be greater than zero', 400);
         }
+        const staffProfile = await resolveCashierCreditStaffProfile(staff_id, effectiveBranchId);
 
         // Calculate monthly deduction
         const monthly_deduction = totalAmount / (deduction_months || 1);
@@ -3678,10 +3776,10 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             .insert({
                 credit_number,
                 branch_id: effectiveBranchId,
-                staff_id,
-                staff_name,
-                employee_id,
-                department,
+                staff_id: staffProfile.id,
+                staff_name: staff_name || staffProfile.name,
+                employee_id: employee_id || staffProfile.employeeId,
+                department: department || staffProfile.department,
                 bill_type,
                 reference_type,
                 reference_id,
@@ -3702,9 +3800,9 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
         if (error) throw error;
 
         const payrollPayload: any = {
-            staff_id,
+            staff_id: staffProfile.id,
             amount: totalAmount,
-            description: `Cashier Credit Bill - ${credit_number}${staff_name ? ` - ${staff_name}` : ''}`,
+            description: `Cashier Credit Bill - ${credit_number} - ${staff_name || staffProfile.name}`,
             bill_date: new Date().toISOString().slice(0, 10),
             status: 'pending',
             branch_id: effectiveBranchId,
@@ -3804,6 +3902,11 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
     try {
         const { id } = req.params;
         const { payment_amount, payment_method, payment_reference } = req.body;
+        const paymentAmount = Number(payment_amount || 0);
+
+        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+            throw new AppError('Payment amount must be greater than zero', 400);
+        }
 
         // Fetch current credit bill
         const { data: credit, error: fetchError } = await supabase
@@ -3820,7 +3923,7 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
         // Calculate new paid amount
         const new_paid_amount = Math.min(
             Number(credit.total_amount || 0),
-            Number(credit.paid_amount || 0) + Number(payment_amount || 0)
+            Number(credit.paid_amount || 0) + paymentAmount
         );
         const new_balance = Math.max(0, Number(credit.total_amount || 0) - new_paid_amount);
 
@@ -3837,6 +3940,57 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
             .single();
 
         if (updateError) throw updateError;
+
+        const { data: linkedPayrollBills, error: linkedPayrollError } = await supabase
+            .from('staff_credit_bills')
+            .select('id, amount, paid_amount, balance, status')
+            .eq('source_cashier_credit_bill_id', id);
+
+        if (linkedPayrollError) {
+            throw new AppError(`Payroll credit bill lookup failed: ${linkedPayrollError.message}`, 500);
+        }
+
+        for (const payrollBill of linkedPayrollBills || []) {
+            const payrollAmount = Number(payrollBill.amount || 0);
+            const currentPaid = Number(payrollBill.paid_amount || 0);
+            const payrollPaid = Math.min(payrollAmount, currentPaid + paymentAmount);
+            const payrollBalance = Math.max(0, payrollAmount - payrollPaid);
+
+            const { error: payrollUpdateError } = await supabase
+                .from('staff_credit_bills')
+                .update({
+                    paid_amount: payrollPaid,
+                    balance: payrollBalance,
+                    status: payrollBalance <= 0 ? 'paid_cash' : 'partial'
+                })
+                .eq('id', payrollBill.id);
+
+            if (payrollUpdateError) {
+                throw new AppError(`Payroll credit bill update failed: ${payrollUpdateError.message}`, 500);
+            }
+
+            const appliedPaymentAmount = Math.min(paymentAmount, Math.max(0, payrollAmount - currentPaid));
+            if (appliedPaymentAmount > 0) {
+                const { error: paymentHistoryError } = await supabase
+                    .from('staff_credit_bill_payments')
+                    .insert({
+                        credit_bill_id: payrollBill.id,
+                        amount: appliedPaymentAmount,
+                        payment_method: String(payment_method || 'cash').toLowerCase().includes('mpesa')
+                            ? 'mpesa'
+                            : String(payment_method || 'cash').toLowerCase().includes('bank')
+                                ? 'bank'
+                                : 'cash',
+                        reference: payment_reference || null,
+                        notes: `Cashier payment for credit bill ${credit.credit_number || id}`,
+                        recorded_by: req.user?.id || null
+                    });
+
+                if (paymentHistoryError) {
+                    throw new AppError(`Payroll credit payment history failed: ${paymentHistoryError.message}`, 500);
+                }
+            }
+        }
 
         // Record cashier transaction
         const { data: transactionData } = await supabase
@@ -3855,7 +4009,7 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
                 reference_type: 'credit_bill',
                 reference_id: credit.id,
                 payment_method,
-                amount: payment_amount,
+                amount: paymentAmount,
                 payment_reference,
                 customer_name: credit.staff_name
             });
@@ -4866,6 +5020,17 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
             const { reference, credit_bill } = req.body;
             let creditBillId = credit_bill?.id || null;
             let staffCreditBillId = credit_bill?.staff_credit_bill_id || null;
+            let creditStaffProfile: CashierCreditStaffProfile | null = null;
+
+            if (method === 'CREDIT_BILL') {
+                if (!credit_bill?.staff_id) {
+                    throw new AppError('Staff member is required for a POS credit bill', 400);
+                }
+                creditStaffProfile = await resolveCashierCreditStaffProfile(
+                    credit_bill.staff_id,
+                    parseBranchId(credit_bill.branch_id) || parseBranchId(transaction.branch_id)
+                );
+            }
 
             if (method === 'CREDIT_BILL' && credit_bill && !creditBillId) {
                 const { data: creditNumberData } = await supabase.rpc('generate_credit_number');
@@ -4878,6 +5043,10 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                         ...credit_bill,
                         credit_number: credit_bill.credit_number || creditNumber,
                         branch_id: credit_bill.branch_id || transaction.branch_id,
+                        staff_id: creditStaffProfile?.id,
+                        staff_name: credit_bill.staff_name || creditStaffProfile?.name || transaction.customer_name || 'Staff',
+                        employee_id: credit_bill.employee_id || creditStaffProfile?.employeeId || null,
+                        department: credit_bill.department || creditStaffProfile?.department || null,
                         bill_type: credit_bill.bill_type || 'pos_sale',
                         reference_type: 'pos_transaction',
                         reference_id: transaction.id,
@@ -4901,11 +5070,11 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
 
             if (method === 'CREDIT_BILL' && credit_bill?.staff_id && !staffCreditBillId) {
                 const totalAmount = Number(credit_bill.total_amount || transaction.total_amount || 0);
-                const staffName = credit_bill.staff_name || credit_bill.name || transaction.customer_name || 'Staff';
+                const staffName = credit_bill.staff_name || creditStaffProfile?.name || credit_bill.name || transaction.customer_name || 'Staff';
                 const { data: staffCreditBill, error: staffCreditError } = await supabase
                     .from('staff_credit_bills')
                     .insert({
-                        staff_id: credit_bill.staff_id,
+                        staff_id: creditStaffProfile?.id,
                         amount: totalAmount,
                         description: `Cashier POS Credit - ${transaction.transaction_ref} - ${staffName}`,
                         bill_date: new Date().toISOString().split('T')[0],
@@ -5336,25 +5505,6 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                     branch_id: orderBranchId,
                     ...(isPosCaptainOrder ? { source_pos_order_id: id } : {})
                 }).select('id').single();
-
-                await supabase.from('unpaid_bills').insert({
-                    bill_type: isPosCaptainOrder ? 'pos_shift_order' : `${normalizedSource}_order`,
-                    reference_type: table,
-                    reference_id: id,
-                    customer_type: 'staff',
-                    customer_name: `${staffProfile.first_name || ''} ${staffProfile.last_name || ''}`.trim() || 'Waiter',
-                    waiter_id: staffProfile.id,
-                    branch_id: orderBranchId,
-                    total_amount: amountPaid,
-                    paid_amount: 0,
-                    balance_amount: amountPaid,
-                    bill_date: new Date().toISOString(),
-                    payment_terms: 'Payroll deduction',
-                    remarks: `Order ${(order as any).order_number || id} cleared as waiter credit bill`,
-                    items: [],
-                    status: 'unpaid',
-                    created_by: req.user?.id
-                });
 
                 if (isPosCaptainOrder && staffCreditBill?.id) {
                     await supabase

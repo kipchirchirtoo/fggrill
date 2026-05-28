@@ -179,6 +179,39 @@ class _BranchStorekeeperDashboardState
     return [];
   }
 
+  List<Map<String, dynamic>> _uniqueRows(
+    List<Map<String, dynamic>> rows,
+    String Function(Map<String, dynamic>) keyFor,
+  ) {
+    final seen = <String>{};
+    return rows.where((row) {
+      final key = keyFor(row).trim();
+      if (key.isEmpty || key == 'null' || seen.contains(key)) return false;
+      seen.add(key);
+      return true;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> get _catalogOptions => _uniqueRows(
+        _catalog,
+        (item) => '${item['sku'] ?? item['item_sku'] ?? ''}',
+      );
+
+  List<Map<String, dynamic>> get _stockOptions => _uniqueRows(
+        _stock,
+        (item) => '${item['item_sku'] ?? item['sku'] ?? ''}',
+      );
+
+  List<Map<String, dynamic>> get _supplierOptions => _uniqueRows(
+        _suppliers,
+        (supplier) => '${supplier['id'] ?? ''}',
+      );
+
+  List<Map<String, dynamic>> get _trackableOptions => _uniqueRows(
+        _trackableItems,
+        (item) => '${item['item_sku'] ?? item['sku'] ?? ''}',
+      );
+
   @override
   Widget build(BuildContext context) {
     return MasterDashboardShell<BranchStorekeeperSection>(
@@ -430,6 +463,7 @@ class _BranchStorekeeperDashboardState
           searchHint: 'Search branch inventory or catalog...',
           onSearchChanged: (value) => setState(() => _search = value),
           trailing: DropdownButton<String>(
+            isExpanded: true,
             value: _catalogFilter,
             items: _categories
                 .map((item) => DropdownMenuItem(value: item, child: Text(item)))
@@ -647,7 +681,8 @@ class _BranchStorekeeperDashboardState
   Widget _stockTakesPage() {
     return _Page(
       title: 'Stock Take History',
-      subtitle: 'Start counts, update counted quantities, and submit/complete.',
+      subtitle:
+          'Start daily food, bar, and store-item counts, explain variances, then submit to the branch accountant.',
       actions: [
         _RefreshButton(onPressed: _loadAll),
         OutlinedButton.icon(
@@ -733,7 +768,7 @@ class _BranchStorekeeperDashboardState
               PhosphorIcons.package(), AppColors.kPrimary),
           _StatCardData(
               'Counted',
-              '${_stockTakeItems.where((i) => i['counted_quantity'] != null).length}',
+              '${_stockTakeItems.where((i) => i['counted_quantity'] != null || i['physical_quantity'] != null).length}',
               PhosphorIcons.checkCircle(),
               AppColors.kSuccess),
           _StatCardData(
@@ -774,7 +809,7 @@ class _BranchStorekeeperDashboardState
                 title:
                     '${item['item']?['name'] ?? item['item_name'] ?? item['item_sku']}',
                 subtitle:
-                    'Opening: ${_qtyText(item['opening_stock'])} | Additions: ${_qtyText(item['additions'])} | Issued: ${_qtyText(item['issued_quantity'])} | System closing: ${_qtyText(item['system_closing_stock'] ?? item['system_quantity'])} | Physical: ${item['counted_quantity'] ?? '-'} | Variance: ${item['variance'] ?? 0} | Cost: ${_money(_num(item['cost_price'] ?? item['unit_cost']))}',
+                    'Opening: ${_qtyText(item['opening_stock'])} | Additions: ${_qtyText(item['additions'])} | Issued: ${_qtyText(item['issued_quantity'])} | System closing: ${_qtyText(item['system_closing_stock'] ?? item['system_quantity'])} | Physical: ${item['physical_quantity'] ?? item['counted_quantity'] ?? '-'} | Variance: ${item['variance'] ?? 0} | Cost: ${_money(_num(item['cost_price'] ?? item['unit_cost']))}',
                 trailing: _StatusChip('${item['status'] ?? 'PENDING'}',
                     success: '${item['status']}' == 'COUNTED'),
                 actions: [
@@ -883,20 +918,25 @@ class _BranchStorekeeperDashboardState
   Widget _requestsPage() {
     final currentStatuses = {
       'PENDING',
+      'PENDING_AUDIT',
+      'REVIEWED',
       'APPROVED',
       'PARTIALLY_APPROVED',
+      'PACKED',
+      'DISPATCHED',
       'REJECTED',
       'IN_TRANSIT',
     };
     final filtered = _stockRequests.where((request) {
-      final status = '${request['status']}';
+      final status = '${request['status']}'.toUpperCase();
       final current = currentStatuses.contains(status);
       final tabOk = _statusFilter == 'HISTORY' ? !current : current;
       return tabOk;
     }).toList();
     return _Page(
       title: 'Stock Requests',
-      subtitle: 'Request stock from central store and monitor approval flow.',
+      subtitle:
+          'Request stock from central store. Auditor-approved requests move to central store for packing and dispatch.',
       actions: [
         _RefreshButton(onPressed: _loadAll),
         OutlinedButton.icon(
@@ -970,6 +1010,7 @@ class _BranchStorekeeperDashboardState
             runSpacing: 12,
             children: [
               _InfoPill('Status', '${request['status'] ?? '-'}'),
+              _InfoPill('Next Step', _stockRequestNextStep(request['status'])),
               _InfoPill('Priority', '${request['priority'] ?? '-'}'),
               _InfoPill('Type', '${request['request_type'] ?? '-'}'),
               _InfoPill('Created', _date(request['created_at'])),
@@ -1004,8 +1045,20 @@ class _BranchStorekeeperDashboardState
   }
 
   Widget _kitchenRequisitionsPage() {
+    final q = _search.toLowerCase();
     final filtered = _kitchenRequisitions.where((req) {
-      return _statusFilter == 'ALL' || '${req['status']}' == _statusFilter;
+      final status = '${req['status']}'.toUpperCase();
+      final statusOk = _statusFilter == 'ALL' || status == _statusFilter;
+      final items = _listFrom(req['items']);
+      final text = [
+        req['requisition_number'],
+        req['reason'],
+        req['priority'],
+        req['department'],
+        for (final item in items) item['item_name'],
+        for (final item in items) item['item_sku'],
+      ].join(' ').toLowerCase();
+      return statusOk && (q.isEmpty || text.contains(q));
     }).toList();
     return _Page(
       title: 'Department Requisitions',
@@ -1245,9 +1298,13 @@ class _BranchStorekeeperDashboardState
 
   Widget _statusDropdown(List<String> statuses) {
     return DropdownButton<String>(
+      isExpanded: true,
       value: statuses.contains(_statusFilter) ? _statusFilter : statuses.first,
       items: statuses
-          .map((status) => DropdownMenuItem(value: status, child: Text(status)))
+          .map((status) => DropdownMenuItem(
+                value: status,
+                child: Text(status, overflow: TextOverflow.ellipsis),
+              ))
           .toList(),
       onChanged: (value) => setState(() => _statusFilter = value!),
     );
@@ -1294,7 +1351,7 @@ class _BranchStorekeeperDashboardState
         filters: {
           'status': history
               ? 'DELIVERED,RECEIVED,CANCELLED,FULFILLED'
-              : 'PENDING,APPROVED,PARTIALLY_APPROVED,REJECTED,IN_TRANSIT',
+              : 'PENDING,PENDING_AUDIT,REVIEWED,APPROVED,PARTIALLY_APPROVED,PACKED,DISPATCHED,REJECTED,IN_TRANSIT',
         },
       );
       _showSnack('Stock request report downloaded: ${file.path}');
@@ -1345,8 +1402,10 @@ class _BranchStorekeeperDashboardState
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: storeType,
-                  decoration: const InputDecoration(labelText: 'Stock take type'),
+                  decoration:
+                      const InputDecoration(labelText: 'Stock take type'),
                   items: _stockTakeStoreTypes.entries
                       .map((entry) => DropdownMenuItem(
                             value: entry.key,
@@ -1360,6 +1419,7 @@ class _BranchStorekeeperDashboardState
                 if (storeType == 'bar_store') ...[
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: outletCode,
                     decoration: const InputDecoration(labelText: 'Bar outlet'),
                     items: _barOutlets.entries
@@ -1394,8 +1454,7 @@ class _BranchStorekeeperDashboardState
                   }
                   _showSnack('Daily stock take initialized');
                 } catch (error) {
-                  _showSnack('Failed to start stock take: $error',
-                      error: true);
+                  _showSnack('Failed to start stock take: $error', error: true);
                 }
               },
               child: const Text('Start'),
@@ -1458,6 +1517,7 @@ class _BranchStorekeeperDashboardState
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: type,
                   decoration:
                       const InputDecoration(labelText: 'Adjustment Type'),
@@ -1626,9 +1686,10 @@ class _BranchStorekeeperDashboardState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: supplierId,
                     decoration: const InputDecoration(labelText: 'Supplier'),
-                    items: _suppliers
+                    items: _supplierOptions
                         .map((supplier) => DropdownMenuItem(
                               value: '${supplier['id']}',
                               child: Text('${supplier['name']}'),
@@ -1772,6 +1833,7 @@ class _BranchStorekeeperDashboardState
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: terms,
                         decoration:
                             const InputDecoration(labelText: 'Payment Terms'),
@@ -1786,6 +1848,7 @@ class _BranchStorekeeperDashboardState
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: status,
                         decoration: const InputDecoration(labelText: 'Status'),
                         items: const ['ACTIVE', 'INACTIVE', 'BLOCKED']
@@ -1861,7 +1924,8 @@ class _BranchStorekeeperDashboardState
         text:
             '${item['counted_quantity'] ?? item['system_closing_stock'] ?? item['system_quantity'] ?? 0}');
     final notes = TextEditingController(
-        text: '${item['variance_reason'] ?? item['reason'] ?? item['notes'] ?? ''}');
+        text:
+            '${item['variance_reason'] ?? item['reason'] ?? item['notes'] ?? ''}');
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1874,15 +1938,15 @@ class _BranchStorekeeperDashboardState
               TextField(
                 controller: counted,
                 keyboardType: TextInputType.number,
-                decoration:
-                    const InputDecoration(labelText: 'Physical Count'),
+                decoration: const InputDecoration(labelText: 'Physical Count'),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: notes,
                 decoration: const InputDecoration(
                     labelText: 'Variance reason / notes',
-                    helperText: 'Required when physical count differs from system closing stock'),
+                    helperText:
+                        'Required when physical count differs from system closing stock'),
               ),
             ],
           ),
@@ -1938,9 +2002,10 @@ class _BranchStorekeeperDashboardState
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: sku,
                   decoration: const InputDecoration(labelText: 'Item'),
-                  items: _catalog
+                  items: _catalogOptions
                       .map((item) => DropdownMenuItem(
                             value: '${item['sku'] ?? item['item_sku']}',
                             child: Text(
@@ -1994,12 +2059,14 @@ class _BranchStorekeeperDashboardState
   }
 
   Future<void> _completeStockTake(String id) async {
-    final confirmed = await _confirm('Submit this stock take to auditor?');
+    final confirmed = await _confirm(
+      'Submit this stock take to the branch accountant for review?',
+    );
     if (!confirmed) return;
     try {
       await _repo.completeStockTake(id, notes: 'Submitted from Flutter app');
       await _loadStockTakeDetail(id);
-      _showSnack('Stock take submitted');
+      _showSnack('Stock take submitted to branch accountant');
     } catch (error) {
       _showSnack('Submit failed: $error', error: true);
     }
@@ -2027,10 +2094,11 @@ class _BranchStorekeeperDashboardState
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           initialValue: supplierId,
                           decoration:
                               const InputDecoration(labelText: 'Supplier'),
-                          items: _suppliers
+                          items: _supplierOptions
                               .map((supplier) => DropdownMenuItem(
                                   value: '${supplier['id']}',
                                   child: Text('${supplier['name']}')))
@@ -2315,8 +2383,8 @@ class _BranchStorekeeperDashboardState
     showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
-        final selected = _trackableItems.firstWhere(
-          (item) => '${item['item_sku']}' == sku,
+        final selected = _trackableOptions.firstWhere(
+          (item) => '${item['item_sku'] ?? item['sku']}' == sku,
           orElse: () => <String, dynamic>{},
         );
         return AlertDialog(
@@ -2327,13 +2395,16 @@ class _BranchStorekeeperDashboardState
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: sku,
                   decoration: const InputDecoration(labelText: 'Item'),
-                  items: _trackableItems
+                  items: _trackableOptions
                       .map((item) => DropdownMenuItem(
-                            value: '${item['item_sku']}',
+                            value: '${item['item_sku'] ?? item['sku']}',
                             child: Text(
-                                '${item['item_name'] ?? item['item_sku']} (${item['quantity'] ?? 0})'),
+                              '${item['item_name'] ?? item['name'] ?? item['item_sku'] ?? item['sku']} (${item['quantity'] ?? 0})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ))
                       .toList(),
                   onChanged: (value) => setDialogState(() => sku = value),
@@ -2505,7 +2576,7 @@ class _BranchStorekeeperDashboardState
     showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
-        final selected = _stock.firstWhere(
+        final selected = _stockOptions.firstWhere(
           (item) => '${item['item_sku'] ?? item['sku']}' == sku,
           orElse: () => <String, dynamic>{},
         );
@@ -2517,12 +2588,16 @@ class _BranchStorekeeperDashboardState
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: sku,
                   decoration: const InputDecoration(labelText: 'Item'),
-                  items: _stock
+                  items: _stockOptions
                       .map((item) => DropdownMenuItem(
                             value: '${item['item_sku'] ?? item['sku']}',
-                            child: Text('${_itemName(item)} (${_qty(item)})'),
+                            child: Text(
+                              '${_itemName(item)} (${_qty(item)})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ))
                       .toList(),
                   onChanged: (value) => setDialogState(() => sku = value),
@@ -2540,6 +2615,7 @@ class _BranchStorekeeperDashboardState
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: department,
                   decoration: const InputDecoration(labelText: 'Department'),
                   items: const [
@@ -2714,6 +2790,28 @@ class _BranchStorekeeperDashboardState
     }
     return '$value';
   }
+
+  String _stockRequestNextStep(dynamic rawStatus) {
+    final status = '$rawStatus'.toUpperCase();
+    if (status == 'PENDING' || status == 'PENDING_AUDIT') {
+      return 'Auditor review';
+    }
+    if (status == 'APPROVED' || status == 'REVIEWED') {
+      return 'Central store packing';
+    }
+    if (status == 'PACKED' ||
+        status == 'DISPATCHED' ||
+        status == 'IN_TRANSIT') {
+      return 'Await branch receipt';
+    }
+    if (status == 'DELIVERED' ||
+        status == 'RECEIVED' ||
+        status == 'FULFILLED') {
+      return 'Completed';
+    }
+    if (status == 'REJECTED' || status == 'CANCELLED') return 'Closed';
+    return '-';
+  }
 }
 
 extension on String {
@@ -2744,8 +2842,19 @@ class _LineEditor extends StatefulWidget {
 class _LineEditorState extends State<_LineEditor> {
   String? _selectedSku;
 
+  List<Map<String, dynamic>> get _catalogOptions {
+    final seen = <String>{};
+    return widget.catalog.where((item) {
+      final sku = '${item['sku'] ?? item['item_sku'] ?? ''}'.trim();
+      if (sku.isEmpty || sku == 'null' || seen.contains(sku)) return false;
+      seen.add(sku);
+      return true;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final catalog = _catalogOptions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2753,9 +2862,10 @@ class _LineEditorState extends State<_LineEditor> {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 initialValue: _selectedSku,
                 decoration: const InputDecoration(labelText: 'Add Item'),
-                items: widget.catalog
+                items: catalog
                     .map((item) => DropdownMenuItem(
                           value: '${item['sku'] ?? item['item_sku']}',
                           child: Text(
@@ -2850,7 +2960,7 @@ class _LineEditorState extends State<_LineEditor> {
   }
 
   void _addLine() {
-    final item = widget.catalog.firstWhere(
+    final item = _catalogOptions.firstWhere(
       (element) => '${element['sku'] ?? element['item_sku']}' == _selectedSku,
       orElse: () => <String, dynamic>{},
     );
@@ -2858,7 +2968,8 @@ class _LineEditorState extends State<_LineEditor> {
     if (widget.lines.any((line) => line['item_sku'] == _selectedSku)) return;
     setState(() {
       widget.lines.add({
-        if (widget.itemIdKey != null) widget.itemIdKey!: item['sku'],
+        if (widget.itemIdKey != null)
+          widget.itemIdKey!: item['sku'] ?? item['item_sku'],
         'item_sku': item['sku'] ?? item['item_sku'],
         'item_name': item['item_name'] ?? item['name'] ?? item['sku'],
         widget.quantityKey: 1,
@@ -3105,7 +3216,7 @@ class _FiltersBar extends StatelessWidget {
           ),
           if (trailing != null) ...[
             const SizedBox(width: 16),
-            trailing!,
+            SizedBox(width: 220, child: trailing!),
           ],
         ],
       ),

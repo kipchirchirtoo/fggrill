@@ -20,7 +20,11 @@ class SuperAdminMobileRepository {
     final list = data is List
         ? data
         : (data is Map
-            ? (data['data'] ?? data['items'] ?? data['rows'] ?? data['results'] ?? [])
+            ? (data['data'] ??
+                data['items'] ??
+                data['rows'] ??
+                data['results'] ??
+                [])
             : []);
     return (list as List)
         .whereType<Map>()
@@ -43,7 +47,7 @@ class SuperAdminMobileRepository {
 
   Future<Map<String, dynamic>> getSystemHealth() async {
     try {
-      final res = await _dio.get('/system/health');
+      final res = await _dio.get('/system/status');
       return _map(res.data);
     } catch (_) {
       return {'status': 'unknown'};
@@ -75,7 +79,7 @@ class SuperAdminMobileRepository {
   // ---------------------------------------------------------------------------
 
   Future<List<Map<String, dynamic>>> getAuditLogs({String? severity}) async {
-    final res = await _dio.get('/audit-logs', queryParameters: {
+    final res = await _dio.get('/admin-logs', queryParameters: {
       if (severity != null && severity.isNotEmpty) 'severity': severity,
       'limit': 50,
     });
@@ -87,7 +91,7 @@ class SuperAdminMobileRepository {
   // ---------------------------------------------------------------------------
 
   Future<List<Map<String, dynamic>>> getBranches() async {
-    final res = await _dio.get('/branches');
+    final res = await _dio.get('/system/branches');
     return _list(res.data);
   }
 }

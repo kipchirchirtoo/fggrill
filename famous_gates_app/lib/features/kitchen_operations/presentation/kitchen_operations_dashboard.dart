@@ -17,7 +17,7 @@ enum KitchenOperationsSection {
   foodControls,
 }
 
-enum KitchenFoodTab { rules, portions, variance, reports }
+enum KitchenFoodTab { rules, portions, expected, variance, reports }
 
 class KitchenOperationsDashboard extends ConsumerStatefulWidget {
   const KitchenOperationsDashboard({
@@ -93,6 +93,9 @@ class _KitchenOperationsDashboardState
         <Map<String, dynamic>>[],
       ),
       _safe(_repo.getManualLedger(), <Map<String, dynamic>>[]),
+      _safe(_repo.getStoreReceipts(), <Map<String, dynamic>>[]),
+      _safe(_repo.getPortionTracking(), <Map<String, dynamic>>[]),
+      _safe(_repo.getVarianceLogs(), <Map<String, dynamic>>[]),
       _safe(_repo.getRequisitions(status: _requisitionStatus),
           <Map<String, dynamic>>[]),
       _safe(_repo.getRecipes(), <Map<String, dynamic>>[]),
@@ -100,6 +103,7 @@ class _KitchenOperationsDashboardState
       _safe(_repo.getWastage(reason: _wastageReason), <Map<String, dynamic>>[]),
       _safe(_repo.getFoodControls(), <Map<String, dynamic>>[]),
       _safe(_repo.getPortionStock(), <Map<String, dynamic>>[]),
+      _safe(_repo.getExpectedPortions(), <Map<String, dynamic>>[]),
       _safe(_repo.getVarianceReasons(), <Map<String, dynamic>>[]),
       _safe(_repo.getVariance(), <Map<String, dynamic>>[]),
       _safe(_repo.getYieldReport(startDate: startDate, endDate: endDate),
@@ -112,23 +116,29 @@ class _KitchenOperationsDashboardState
       stock: _rows(results[1]),
       ledger: _rows(results[2]),
       manualLedger: _rows(results[3]),
-      requisitions: _rows(results[4]),
-      recipes: _rows(results[5]),
-      usage: _rows(results[6]),
-      wastage: _rows(results[7]),
-      foodControls: _rows(results[8]),
-      portionStock: _rows(results[9]),
-      varianceReasons: _rows(results[10]),
-      variance: _rows(results[11]),
-      yieldReport: _rows(results[12]),
-      lossReport: _rows(results[13]),
+      receipts: _rows(results[4]),
+      portionTracking: _rows(results[5]),
+      varianceLogs: _rows(results[6]),
+      requisitions: _rows(results[7]),
+      recipes: _rows(results[8]),
+      usage: _rows(results[9]),
+      wastage: _rows(results[10]),
+      foodControls: _rows(results[11]),
+      portionStock: _rows(results[12]),
+      expectedPortions: _rows(results[13]),
+      varianceReasons: _rows(results[14]),
+      variance: _rows(results[15]),
+      yieldReport: _rows(results[16]),
+      lossReport: _rows(results[17]),
     );
   }
 
   Future<T> _safe<T>(Future<T> future, T fallback) async {
     try {
       return await future;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('Kitchen operations load warning: $error');
+      debugPrint('$stackTrace');
       return fallback;
     }
   }
@@ -390,6 +400,9 @@ class _KitchenOperationsDashboardState
                 values: const {
                   'levels': 'Stock Levels',
                   'manual': 'Manual Ledger',
+                  'receipts': 'Receipts',
+                  'portion_tracking': 'Portion Tracking',
+                  'variance_logs': 'Variance Logs',
                   'transactions': 'Transactions',
                   'detail': 'SKU Detail',
                 },
@@ -460,6 +473,75 @@ class _KitchenOperationsDashboardState
                           'submitted',
                         )),
                   ),
+              ]),
+            )
+          else if (_selectedStockTab == 'receipts')
+            _SimpleRows(
+              rows: data.receipts,
+              empty: 'No kitchen store receipts found.',
+              title: (row) => '${_value(row, [
+                    'receipt_number',
+                    'id'
+                  ])} • ${_value(row, ['supplier_name', 'source'])}',
+              subtitle: (row) => '${_value(row, [
+                    'receipt_date',
+                    'created_at'
+                  ])} • Items ${_value(row, [
+                    'items_count',
+                    'total_items'
+                  ])} • Status ${_value(row, ['status'])}',
+              trailing: (row) => _RowActions(actions: [
+                _RowAction(
+                  'Verify',
+                  Icons.verified_outlined,
+                  () => _run(() => _repo.verifyStoreReceipt(
+                        '${row['id']}',
+                        'verified',
+                      )),
+                ),
+              ]),
+            )
+          else if (_selectedStockTab == 'portion_tracking')
+            _SimpleRows(
+              rows: data.portionTracking,
+              empty: 'No portion tracking records found.',
+              title: (row) =>
+                  _value(row, ['portion_name', 'item_name', 'item_sku']),
+              subtitle: (row) => '${_value(row, [
+                    'tracking_date',
+                    'created_at'
+                  ])} • Produced ${_value(row, [
+                    'produced_portions',
+                    'portions_produced'
+                  ])} • Sold ${_value(row, [
+                    'sold_portions',
+                    'portions_sold'
+                  ])}',
+            )
+          else if (_selectedStockTab == 'variance_logs')
+            _SimpleRows(
+              rows: data.varianceLogs,
+              empty: 'No kitchen variance logs found.',
+              title: (row) => '${_value(row, [
+                    'item_name',
+                    'item_sku'
+                  ])} • ${_value(row, ['variance_quantity', 'variance'])}',
+              subtitle: (row) => '${_value(row, [
+                    'created_at',
+                    'variance_date'
+                  ])} • ${_value(row, [
+                    'reason',
+                    'notes'
+                  ])} • Status ${_value(row, ['status'])}',
+              trailing: (row) => _RowActions(actions: [
+                _RowAction(
+                  'Approve',
+                  Icons.check_circle_outline,
+                  () => _run(() => _repo.approveVarianceLog(
+                        '${row['id']}',
+                        'approved',
+                      )),
+                ),
               ]),
             )
           else
@@ -769,6 +851,7 @@ class _KitchenOperationsDashboardState
                 values: const {
                   'rules': 'Yield Rules',
                   'portions': 'Portion Stock',
+                  'expected': 'Expected Portions',
                   'variance': 'Variance',
                   'reports': 'Reports',
                 },
@@ -784,6 +867,8 @@ class _KitchenOperationsDashboardState
             _foodRules(data)
           else if (_foodTab == KitchenFoodTab.portions)
             _portionStock(data)
+          else if (_foodTab == KitchenFoodTab.expected)
+            _expectedPortions(data)
           else if (_foodTab == KitchenFoodTab.variance)
             _variance(data)
           else
@@ -845,6 +930,29 @@ class _KitchenOperationsDashboardState
             'expected_balance'
           ])} • Updated ${_value(row, ['last_updated', 'updated_at'])}',
       trailing: (row) => Text(_value(row, ['status'])),
+    );
+  }
+
+  Widget _expectedPortions(_KitchenSnapshot data) {
+    return _SimpleRows(
+      rows: data.expectedPortions,
+      empty: 'No expected portion records found.',
+      title: (row) =>
+          _value(row, ['menu_item_name', 'portion_name', 'item_name', 'id']),
+      subtitle: (row) => 'Expected ${_value(row, [
+            'expected_portions',
+            'expected_quantity'
+          ])} • Actual ${_value(row, [
+            'actual_portions',
+            'actual_quantity'
+          ])} • Status ${_value(row, ['status'])}',
+      trailing: (row) => _RowActions(actions: [
+        _RowAction(
+          'Verify',
+          Icons.verified_outlined,
+          () => _showExpectedPortionDialog(row),
+        ),
+      ]),
     );
   }
 
@@ -1340,6 +1448,28 @@ class _KitchenOperationsDashboardState
     });
   }
 
+  Future<void> _showExpectedPortionDialog(Map<String, dynamic> row) async {
+    final form = _FormBag({
+      'actual_portions': _value(row, ['actual_portions', 'actual_quantity']),
+      'notes': _value(row, ['notes', 'verification_notes']),
+    });
+    final saved = await _showFormDialog(
+      title: 'Verify Expected Portions',
+      form: form,
+      fields: const [
+        _FieldSpec('actual_portions', 'Actual portions', number: true),
+        _FieldSpec('notes', 'Notes'),
+      ],
+    );
+    if (saved == null) return;
+    final actual = double.tryParse(form.values['actual_portions'] ?? '') ?? 0;
+    await _run(() => _repo.verifyExpectedPortion(
+          '${row['id']}',
+          actualPortions: actual,
+          notes: form.values['notes'],
+        ));
+  }
+
   Future<void> _showVarianceReasonDialog(
     Map<String, dynamic> row,
     List<Map<String, dynamic>> reasons,
@@ -1527,12 +1657,16 @@ class _KitchenSnapshot {
     required this.stock,
     required this.ledger,
     required this.manualLedger,
+    required this.receipts,
+    required this.portionTracking,
+    required this.varianceLogs,
     required this.requisitions,
     required this.recipes,
     required this.usage,
     required this.wastage,
     required this.foodControls,
     required this.portionStock,
+    required this.expectedPortions,
     required this.varianceReasons,
     required this.variance,
     required this.yieldReport,
@@ -1544,12 +1678,16 @@ class _KitchenSnapshot {
         stock: [],
         ledger: [],
         manualLedger: [],
+        receipts: [],
+        portionTracking: [],
+        varianceLogs: [],
         requisitions: [],
         recipes: [],
         usage: [],
         wastage: [],
         foodControls: [],
         portionStock: [],
+        expectedPortions: [],
         varianceReasons: [],
         variance: [],
         yieldReport: [],
@@ -1560,12 +1698,16 @@ class _KitchenSnapshot {
   final List<Map<String, dynamic>> stock;
   final List<Map<String, dynamic>> ledger;
   final List<Map<String, dynamic>> manualLedger;
+  final List<Map<String, dynamic>> receipts;
+  final List<Map<String, dynamic>> portionTracking;
+  final List<Map<String, dynamic>> varianceLogs;
   final List<Map<String, dynamic>> requisitions;
   final List<Map<String, dynamic>> recipes;
   final List<Map<String, dynamic>> usage;
   final List<Map<String, dynamic>> wastage;
   final List<Map<String, dynamic>> foodControls;
   final List<Map<String, dynamic>> portionStock;
+  final List<Map<String, dynamic>> expectedPortions;
   final List<Map<String, dynamic>> varianceReasons;
   final List<Map<String, dynamic>> variance;
   final List<Map<String, dynamic>> yieldReport;

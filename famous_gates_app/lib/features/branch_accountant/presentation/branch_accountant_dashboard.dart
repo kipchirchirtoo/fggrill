@@ -25,6 +25,18 @@ enum BranchAccountantSection {
   revenueOversight,
   soldItems,
   staffAudit,
+  shiftReview,
+  cashierLogbooks,
+  banking,
+  payments,
+  creditBills,
+  foodVariance,
+  shiftPnl,
+  bookingsInvoices,
+  stockTake,
+  purchases,
+  buffet,
+  catering,
   budgets,
 }
 
@@ -85,25 +97,49 @@ class _BranchAccountantDashboardState
   Widget _buildSection() {
     switch (_section) {
       case BranchAccountantSection.overview:
-        return const _OverviewSection();
+        return _OverviewSection();
       case BranchAccountantSection.cashierClearance:
-        return const _CashierClearanceSection();
+        return _CashierClearanceSection();
       case BranchAccountantSection.analytics:
-        return const _AnalyticsSection();
+        return _AnalyticsSection();
       case BranchAccountantSection.financialWorkspace:
-        return const _FinancialWorkspaceSection();
+        return _FinancialWorkspaceSection();
       case BranchAccountantSection.discrepancies:
-        return const _DiscrepanciesSection();
+        return _DiscrepanciesSection();
       case BranchAccountantSection.profitLoss:
-        return const _ProfitLossSection();
+        return _ProfitLossSection();
       case BranchAccountantSection.revenueOversight:
-        return const _RevenueOversightSection();
+        return _RevenueOversightSection();
       case BranchAccountantSection.soldItems:
-        return const _SoldItemsSection();
+        return _SoldItemsSection();
       case BranchAccountantSection.staffAudit:
-        return const _StaffAuditSection();
+        return _StaffAuditSection();
+      case BranchAccountantSection.shiftReview:
+        return _ShiftReviewSection();
+      case BranchAccountantSection.cashierLogbooks:
+        return _CashierLogbooksSection();
+      case BranchAccountantSection.banking:
+        return _BankingSection();
+      case BranchAccountantSection.payments:
+        return _PaymentsInvoicesSection();
+      case BranchAccountantSection.creditBills:
+        return _CreditBillsSection();
+      case BranchAccountantSection.foodVariance:
+        return _FoodVarianceSection();
+      case BranchAccountantSection.shiftPnl:
+        return _ShiftPnlSection();
+      case BranchAccountantSection.bookingsInvoices:
+        return _BookingsInvoicesSection();
+      case BranchAccountantSection.stockTake:
+        return _StockTakeSection();
+      case BranchAccountantSection.purchases:
+        return _PurchasesSection();
+      case BranchAccountantSection.buffet:
+        return _BuffetSection();
+      case BranchAccountantSection.catering:
+        return _CateringSection();
       case BranchAccountantSection.budgets:
-        return const _BudgetsSection();
+        return _BudgetsSection();
     }
   }
 
@@ -146,6 +182,24 @@ const _navItems = [
       Icons.trending_up),
   _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
+  _NavItem(BranchAccountantSection.shiftReview, 'Shift Review', Icons.schedule),
+  _NavItem(
+      BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
+  _NavItem(BranchAccountantSection.banking, 'Banking', Icons.account_balance),
+  _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
+      Icons.receipt_long),
+  _NavItem(
+      BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
+  _NavItem(
+      BranchAccountantSection.foodVariance, 'Food Variance', Icons.warning),
+  _NavItem(BranchAccountantSection.shiftPnl, 'Shift P&L', Icons.insights),
+  _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings Invoices',
+      Icons.hotel),
+  _NavItem(BranchAccountantSection.stockTake, 'Stock Takes', Icons.inventory),
+  _NavItem(BranchAccountantSection.purchases, 'Purchases', Icons.shopping_cart),
+  _NavItem(BranchAccountantSection.buffet, 'Buffet Control', Icons.restaurant),
+  _NavItem(
+      BranchAccountantSection.catering, 'Catering Control', Icons.room_service),
   _NavItem(BranchAccountantSection.budgets, 'Budgets', Icons.account_balance),
 ];
 
@@ -683,8 +737,7 @@ class _ApproveClearanceDialogState extends State<_ApproveClearanceDialog> {
   @override
   Widget build(BuildContext context) {
     final c = widget.clearance;
-    final expected =
-        _num(c['expected_cash'] ?? c['expected_amount']);
+    final expected = _num(c['expected_cash'] ?? c['expected_amount']);
     final actual = _num(c['actual_cash'] ?? c['actual_amount']);
     final variance = _num(c['variance']);
     final varColor = variance.abs() <= 0
@@ -709,12 +762,9 @@ class _ApproveClearanceDialogState extends State<_ApproveClearanceDialog> {
                 border: Border.all(color: Colors.grey.shade200),
               ),
               child: Column(children: [
-                _InfoRow(
-                    'Cashier',
-                    _text(c,
-                        ['cashier_name', 'cashier', 'user_name'])),
-                _InfoRow('Shift',
-                    _text(c, ['shift_time', 'shift_id', 'id'])),
+                _InfoRow('Cashier',
+                    _text(c, ['cashier_name', 'cashier', 'user_name'])),
+                _InfoRow('Shift', _text(c, ['shift_time', 'shift_id', 'id'])),
                 _InfoRow('Expected Cash', _money(expected)),
                 _InfoRow('Actual Cash', _money(actual)),
                 Row(children: [
@@ -724,8 +774,8 @@ class _ApproveClearanceDialogState extends State<_ApproveClearanceDialog> {
                   ),
                   Text(
                     _money(variance),
-                    style: TextStyle(
-                        color: varColor, fontWeight: FontWeight.w800),
+                    style:
+                        TextStyle(color: varColor, fontWeight: FontWeight.w800),
                   ),
                 ]),
               ]),
@@ -769,8 +819,7 @@ class _InfoRow extends StatelessWidget {
           child: Text(label,
               style: const TextStyle(color: AppColors.kTextSecondary)),
         ),
-        Text(value,
-            style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
       ]),
     );
   }
@@ -792,17 +841,12 @@ class _ClearanceDetailsDialog extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _InfoRow('Shift',
-                  _text(c, ['shift_time', 'shift_id', 'id'])),
+              _InfoRow('Shift', _text(c, ['shift_time', 'shift_id', 'id'])),
               _InfoRow('Date', _text(c, ['created_at', 'date'])),
-              _InfoRow(
-                  'Expected Cash',
-                  _money(_num(
-                      c['expected_cash'] ?? c['expected_amount']))),
-              _InfoRow(
-                  'Actual Cash',
-                  _money(
-                      _num(c['actual_cash'] ?? c['actual_amount']))),
+              _InfoRow('Expected Cash',
+                  _money(_num(c['expected_cash'] ?? c['expected_amount']))),
+              _InfoRow('Actual Cash',
+                  _money(_num(c['actual_cash'] ?? c['actual_amount']))),
               _InfoRow('Variance', _money(_num(c['variance']))),
               _InfoRow('Status', _text(c, ['status'])),
               if (c['notes'] != null && '${c['notes']}'.isNotEmpty)
@@ -2210,14 +2254,13 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
           // Build staff name list from summary for dropdown
           final staffNames = <String>{
             for (final e in summary)
-              if (_text(e, ['staff_name']).isNotEmpty)
-                _text(e, ['staff_name']),
+              if (_text(e, ['staff_name']).isNotEmpty) _text(e, ['staff_name']),
           }.toList()
             ..sort();
 
           // Validate _staffFilter against available names
-          final validStaff = _staffFilter == 'all' ||
-              staffNames.contains(_staffFilter);
+          final validStaff =
+              _staffFilter == 'all' || staffNames.contains(_staffFilter);
           if (!validStaff && mounted) {
             Future.microtask(() => setState(() => _staffFilter = 'all'));
           }
@@ -2241,8 +2284,7 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
                   'department'
                 ])} ${_text(e, ['role'])}'
                 .toLowerCase();
-            return matchesStaff &&
-                (lower.isEmpty || haystack.contains(lower));
+            return matchesStaff && (lower.isEmpty || haystack.contains(lower));
           }).toList();
           return _Page(
             title: 'Staff Financial Audit',
@@ -2285,8 +2327,7 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
                           child: Text(name),
                         )),
                   ],
-                  onChanged: (v) =>
-                      setState(() => _staffFilter = v ?? 'all'),
+                  onChanged: (v) => setState(() => _staffFilter = v ?? 'all'),
                 ),
               SizedBox(
                 width: 200,
@@ -2452,6 +2493,1132 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
   }
 }
 
+class _ShiftReviewSection extends ConsumerStatefulWidget {
+  const _ShiftReviewSection();
+
+  @override
+  ConsumerState<_ShiftReviewSection> createState() =>
+      _ShiftReviewSectionState();
+}
+
+class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
+  String _status = 'closed';
+  late Future<List<Map<String, dynamic>>> _future = _load();
+
+  Future<List<Map<String, dynamic>>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .getShiftLogs(status: _status);
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Shift Review',
+          subtitle:
+              'Reconcile closed cashier shifts before auditor verification.',
+          actions: [
+            _Dropdown(
+              value: _status,
+              values: const ['closed', 'reconciled', 'verified', 'all'],
+              onChanged: (v) => setState(() {
+                _status = v;
+                _future = _load();
+              }),
+            ),
+            _RefreshButton(onPressed: _refresh),
+          ],
+          children: [
+            _ResponsiveGrid(children: [
+              _MetricCard(
+                  'Shifts', '${items.length}', Icons.schedule, Colors.blue),
+              _MetricCard('Sales', _money(_sum(items, 'total_sales')),
+                  Icons.payments, Colors.green),
+              _MetricCard('Variance', _money(_sum(items, 'variance')),
+                  Icons.compare_arrows, Colors.orange),
+              _MetricCard(
+                  'Credit Bills',
+                  _money(_sum(items, 'credit_bills_taken')),
+                  Icons.credit_card,
+                  Colors.purple),
+            ]),
+            _SectionCard(
+              title: 'Shift Queue',
+              child: _SimpleTable(
+                columns: const [
+                  'Shift',
+                  'Cashier',
+                  'Started',
+                  'Sales',
+                  'Cash',
+                  'Variance',
+                  'Status',
+                  'Actions'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e, ['shift_number', 'id']),
+                          _text(e, ['cashier_name']),
+                          _shortDate(_text(e, ['shift_start', 'created_at'])),
+                          _money(_num(e['total_sales'])),
+                          _money(_num(e['closing_float'])),
+                          _money(_num(e['variance'])),
+                          _StatusPill(_text(e, ['status'])),
+                          Wrap(spacing: 8, children: [
+                            TextButton(
+                              onPressed: () => _showRecord(context, e),
+                              child: const Text('View'),
+                            ),
+                            if (_text(e, ['status']).toLowerCase() == 'closed')
+                              FilledButton.tonal(
+                                onPressed: () => _reconcile(e),
+                                child: const Text('Reconcile'),
+                              ),
+                          ]),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _reconcile(Map<String, dynamic> shift) async {
+    final notes = await _textDialog(context, 'Reconcile Shift',
+        hint: 'Reconciliation notes', minLines: 4);
+    if (notes == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .reconcileShift('${shift['id']}', notes);
+    _toast('Shift reconciled');
+    _refresh();
+  }
+}
+
+class _CashierLogbooksSection extends ConsumerStatefulWidget {
+  const _CashierLogbooksSection();
+
+  @override
+  ConsumerState<_CashierLogbooksSection> createState() =>
+      _CashierLogbooksSectionState();
+}
+
+class _CashierLogbooksSectionState
+    extends ConsumerState<_CashierLogbooksSection> {
+  late Future<List<Map<String, dynamic>>> _future =
+      ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks();
+
+  void _refresh() => setState(() => _future =
+      ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Cashier Logbooks',
+          subtitle:
+              'Audit submitted daily cashier logbooks and bill line entries.',
+          actions: [_RefreshButton(onPressed: _refresh)],
+          children: [
+            _SectionCard(
+              title: 'Pending Audit',
+              child: _SimpleTable(
+                columns: const [
+                  'Date',
+                  'Type',
+                  'Cashier',
+                  'Branch',
+                  'Closing',
+                  'Variance',
+                  'Actions'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e, ['log_date', 'date']),
+                          _text(e, ['type']),
+                          '${_text(_map(e['cashier']), [
+                                'first_name'
+                              ])} ${_text(_map(e['cashier']), ['last_name'])}'
+                              .trim(),
+                          _text(_map(e['branch']), ['name']),
+                          _money(_num(e['closing_float'])),
+                          _money(_num(e['variance'])),
+                          Wrap(spacing: 8, children: [
+                            TextButton(
+                                onPressed: () => _showRecord(context, e),
+                                child: const Text('View')),
+                            FilledButton.tonal(
+                                onPressed: () => _audit(e, true),
+                                child: const Text('Approve')),
+                            OutlinedButton(
+                                onPressed: () => _audit(e, false),
+                                child: const Text('Reject')),
+                          ]),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _audit(Map<String, dynamic> logbook, bool approve) async {
+    final notes = await _textDialog(
+      context,
+      approve ? 'Approve Logbook' : 'Reject Logbook',
+      hint: approve ? 'Optional approval notes' : 'Reason for rejection',
+      minLines: 4,
+    );
+    if (notes == null) return;
+    await ref.read(branchAccountantRepositoryProvider).auditCashierLogbook(
+          '${logbook['id']}',
+          approve: approve,
+          notes: notes,
+        );
+    _toast(approve ? 'Logbook approved' : 'Logbook rejected');
+    _refresh();
+  }
+}
+
+class _BankingSection extends ConsumerStatefulWidget {
+  const _BankingSection();
+
+  @override
+  ConsumerState<_BankingSection> createState() => _BankingSectionState();
+}
+
+class _BankingSectionState extends ConsumerState<_BankingSection> {
+  String _status = 'all';
+  late Future<Map<String, dynamic>> _future = _load();
+
+  Future<Map<String, dynamic>> _load() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final results = await Future.wait([
+      repo.getBankingSummary(),
+      repo.getBankingTransactions(status: _status),
+      repo.getBankAccounts(),
+      repo.getBankReconciliations(),
+    ]);
+    return {
+      'summary': results[0],
+      'transactions': results[1],
+      'accounts': results[2],
+      'reconciliations': results[3],
+    };
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (data) {
+          final summary = _map(data['summary']);
+          final txns = _list(data['transactions']);
+          final accounts = _list(data['accounts']);
+          final reconciliations = _list(data['reconciliations']);
+          return _Page(
+            title: 'Banking',
+            subtitle:
+                'Record deposits, approve banking transactions, and review bank reconciliations.',
+            actions: [
+              _Dropdown(
+                value: _status,
+                values: const ['all', 'PENDING', 'APPROVED', 'REJECTED'],
+                onChanged: (v) => setState(() {
+                  _status = v;
+                  _future = _load();
+                }),
+              ),
+              FilledButton.icon(
+                onPressed: _recordTransaction,
+                icon: const Icon(Icons.add),
+                label: const Text('Record Transaction'),
+              ),
+              _RefreshButton(onPressed: _refresh),
+            ],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Transactions', '${txns.length}', Icons.receipt,
+                    Colors.blue),
+                _MetricCard(
+                    'Total Amount',
+                    _money(summary.containsKey('total_amount')
+                        ? _num(summary['total_amount'])
+                        : _sum(txns, 'amount')),
+                    Icons.payments,
+                    Colors.green),
+                _MetricCard('Accounts', '${accounts.length}',
+                    Icons.account_balance, Colors.indigo),
+                _MetricCard('Reconciliations', '${reconciliations.length}',
+                    Icons.fact_check, Colors.purple),
+              ]),
+              _SectionCard(
+                title: 'Banking Transactions',
+                child: _SimpleTable(
+                  columns: const [
+                    'Date',
+                    'Type',
+                    'Bank',
+                    'Reference',
+                    'Amount',
+                    'Status',
+                    'Actions'
+                  ],
+                  rows: txns
+                      .map((e) => [
+                            _text(e, ['transaction_date', 'created_at']),
+                            _text(e, ['transaction_type']),
+                            _text(e, ['bank_name']),
+                            _text(e, ['reference_number']),
+                            _money(_num(e['amount'])),
+                            _StatusPill(_text(e, ['status'])),
+                            Wrap(spacing: 8, children: [
+                              TextButton(
+                                  onPressed: () => _showRecord(context, e),
+                                  child: const Text('View')),
+                              if (_text(e, ['status']).toUpperCase() ==
+                                  'PENDING')
+                                FilledButton.tonal(
+                                    onPressed: () => _approveTxn(e, true),
+                                    child: const Text('Approve')),
+                              if (_text(e, ['status']).toUpperCase() ==
+                                  'PENDING')
+                                OutlinedButton(
+                                    onPressed: () => _approveTxn(e, false),
+                                    child: const Text('Reject')),
+                            ]),
+                          ])
+                      .toList(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _recordTransaction() async {
+    final data =
+        await _formDialog(context, 'Record Banking Transaction', const [
+      'transaction_date',
+      'transaction_type',
+      'bank_name',
+      'account_number',
+      'amount',
+      'purpose_description',
+      'reference_number',
+      'notes',
+    ]);
+    if (data == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .recordBankingTransaction(data);
+    _toast('Banking transaction recorded');
+    _refresh();
+  }
+
+  Future<void> _approveTxn(Map<String, dynamic> txn, bool approve) async {
+    final notes = await _textDialog(
+      context,
+      approve ? 'Approve Transaction' : 'Reject Transaction',
+      hint: 'Notes',
+    );
+    if (notes == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .approveBankingTransaction(
+          '${txn['id']}',
+          approve: approve,
+          notes: notes,
+        );
+    _toast(approve ? 'Transaction approved' : 'Transaction rejected');
+    _refresh();
+  }
+}
+
+class _PaymentsInvoicesSection extends ConsumerStatefulWidget {
+  const _PaymentsInvoicesSection();
+
+  @override
+  ConsumerState<_PaymentsInvoicesSection> createState() =>
+      _PaymentsInvoicesSectionState();
+}
+
+class _PaymentsInvoicesSectionState
+    extends ConsumerState<_PaymentsInvoicesSection> {
+  late Future<Map<String, dynamic>> _future = _load();
+
+  Future<Map<String, dynamic>> _load() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final results = await Future.wait([
+      repo.getFinanceInvoices(),
+      repo.getFinanceTransactions(),
+    ]);
+    return {'invoices': results[0], 'transactions': results[1]};
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (data) {
+          final invoices = _list(data['invoices']);
+          final transactions = _list(data['transactions']);
+          return _Page(
+            title: 'Payments & Invoices',
+            subtitle:
+                'Accounts receivable invoices, balances, and finance transactions.',
+            actions: [_RefreshButton(onPressed: _refresh)],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Invoices', '${invoices.length}', Icons.receipt,
+                    Colors.blue),
+                _MetricCard(
+                    'Invoice Total',
+                    _money(_sum(invoices, 'total_amount')),
+                    Icons.payments,
+                    Colors.green),
+                _MetricCard('Outstanding', _money(_sum(invoices, 'balance')),
+                    Icons.warning, Colors.orange),
+                _MetricCard('Transactions', '${transactions.length}',
+                    Icons.sync_alt, Colors.purple),
+              ]),
+              _SectionCard(
+                title: 'Invoices',
+                child: _SimpleTable(
+                  columns: const [
+                    'Invoice',
+                    'Customer',
+                    'Short Code',
+                    'Total',
+                    'Paid',
+                    'Balance',
+                    'Status'
+                  ],
+                  rows: invoices
+                      .map((e) => [
+                            _text(e, ['invoice_number', 'id']),
+                            _text(e, ['customer_name', 'customer']),
+                            _text(e, ['short_code']),
+                            _money(_num(e['total_amount'])),
+                            _money(_num(e['paid_amount'])),
+                            _money(_num(e['balance'])),
+                            _StatusPill(_text(e, ['status'])),
+                          ])
+                      .toList(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CreditBillsSection extends ConsumerStatefulWidget {
+  const _CreditBillsSection();
+
+  @override
+  ConsumerState<_CreditBillsSection> createState() =>
+      _CreditBillsSectionState();
+}
+
+class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
+  String _status = 'all';
+  late Future<List<Map<String, dynamic>>> _future = _load();
+
+  Future<List<Map<String, dynamic>>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .getCreditBills(status: _status);
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Credit Bills',
+          subtitle:
+              'Review staff credit bills from cashier clearance and payroll deductions.',
+          actions: [
+            _Dropdown(
+              value: _status,
+              values: const ['all', 'pending', 'paid_cash', 'approved'],
+              onChanged: (v) => setState(() {
+                _status = v;
+                _future = _load();
+              }),
+            ),
+            _RefreshButton(onPressed: _refresh),
+          ],
+          children: [
+            _ResponsiveGrid(children: [
+              _MetricCard(
+                  'Bills', '${items.length}', Icons.credit_card, Colors.blue),
+              _MetricCard('Total', _money(_sum(items, 'amount')),
+                  Icons.payments, Colors.green),
+              _MetricCard('Outstanding', _money(_sum(items, 'balance_amount')),
+                  Icons.warning, Colors.orange),
+            ]),
+            _SectionCard(
+              title: 'Credit Bill Ledger',
+              child: _SimpleTable(
+                columns: const [
+                  'Staff',
+                  'Description',
+                  'Amount',
+                  'Status',
+                  'Date',
+                  'Actions'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e, ['staff_name', 'employee_name']),
+                          _text(e, ['description', 'credit_number']),
+                          _money(_num(e['amount'] ?? e['total_amount'])),
+                          _StatusPill(_text(e, ['status'])),
+                          _text(e, ['bill_date', 'created_at']),
+                          Wrap(spacing: 8, children: [
+                            TextButton(
+                                onPressed: () => _showRecord(context, e),
+                                child: const Text('View')),
+                            FilledButton.tonal(
+                                onPressed: () => _confirmBill(e),
+                                child: const Text('Confirm')),
+                            OutlinedButton(
+                                onPressed: () => _recordPayment(e),
+                                child: const Text('Paid Bill')),
+                          ]),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmBill(Map<String, dynamic> bill) async {
+    final notes =
+        await _textDialog(context, 'Confirm Credit Bill', hint: 'Notes');
+    if (notes == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .confirmCreditBill('${bill['id']}', notes);
+    _toast('Credit bill confirmed');
+    _refresh();
+  }
+
+  Future<void> _recordPayment(Map<String, dynamic> bill) async {
+    final data = await _formDialog(context, 'Record Paid Bill', const [
+      'amount',
+      'payment_method',
+      'reference',
+      'notes',
+    ]);
+    if (data == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .recordCreditBillPayment('${bill['id']}', data);
+    _toast('Paid bill recorded');
+    _refresh();
+  }
+}
+
+class _FoodVarianceSection extends ConsumerStatefulWidget {
+  const _FoodVarianceSection();
+
+  @override
+  ConsumerState<_FoodVarianceSection> createState() =>
+      _FoodVarianceSectionState();
+}
+
+class _FoodVarianceSectionState extends ConsumerState<_FoodVarianceSection> {
+  late Future<List<Map<String, dynamic>>> _future =
+      ref.read(branchAccountantRepositoryProvider).getPendingFoodVariances();
+
+  void _refresh() => setState(() => _future =
+      ref.read(branchAccountantRepositoryProvider).getPendingFoodVariances());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Food Control Variance',
+          subtitle:
+              'Review variance explanations from kitchen, buffet, and catering food control.',
+          actions: [_RefreshButton(onPressed: _refresh)],
+          children: [
+            _SectionCard(
+              title: 'Pending Variances',
+              child: _SimpleTable(
+                columns: const [
+                  'Item',
+                  'Expected',
+                  'Actual',
+                  'Variance',
+                  'Reason',
+                  'Status',
+                  'Actions'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e, ['item_name', 'name']),
+                          _num(e['expected_quantity']).toStringAsFixed(2),
+                          _num(e['actual_quantity']).toStringAsFixed(2),
+                          _num(e['variance_quantity'] ?? e['variance'])
+                              .toStringAsFixed(2),
+                          _text(e, ['variance_reason', 'reason']),
+                          _StatusPill(_text(e, ['status'])),
+                          Wrap(spacing: 8, children: [
+                            TextButton(
+                                onPressed: () => _showRecord(context, e),
+                                child: const Text('View')),
+                            FilledButton.tonal(
+                                onPressed: () => _approve(e),
+                                child: const Text('Approve')),
+                            OutlinedButton(
+                                onPressed: () => _flag(e),
+                                child: const Text('Flag')),
+                          ]),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _approve(Map<String, dynamic> item) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .approveFoodVariance('${item['id']}');
+    _toast('Variance approved');
+    _refresh();
+  }
+
+  Future<void> _flag(Map<String, dynamic> item) async {
+    final notes = await _textDialog(context, 'Flag Variance', hint: 'Notes');
+    if (notes == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .flagFoodVariance('${item['id']}', notes);
+    _toast('Variance flagged');
+    _refresh();
+  }
+}
+
+class _ShiftPnlSection extends ConsumerStatefulWidget {
+  const _ShiftPnlSection();
+
+  @override
+  ConsumerState<_ShiftPnlSection> createState() => _ShiftPnlSectionState();
+}
+
+class _ShiftPnlSectionState extends ConsumerState<_ShiftPnlSection> {
+  String _status = 'all';
+  late Future<Map<String, dynamic>> _future = _load();
+
+  Future<Map<String, dynamic>> _load() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final results = await Future.wait([
+      repo.getShiftPnLs(status: _status),
+      repo.getShiftPnLSummary(),
+    ]);
+    return {'items': results[0], 'summary': results[1]};
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (data) {
+          final items = _list(data['items']);
+          final summary = _map(data['summary']);
+          return _Page(
+            title: 'Shift Profit & Loss',
+            subtitle:
+                'Review shift sales, food cost, COGS, gross profit, and margin.',
+            actions: [
+              _Dropdown(
+                value: _status,
+                values: const ['all', 'draft', 'submitted', 'reviewed'],
+                onChanged: (v) => setState(() {
+                  _status = v;
+                  _future = _load();
+                }),
+              ),
+              _RefreshButton(onPressed: _refresh),
+            ],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard(
+                    'Shifts', '${items.length}', Icons.schedule, Colors.blue),
+                _MetricCard('Sales', _money(_num(summary['total_sales'])),
+                    Icons.payments, Colors.green),
+                _MetricCard('COGS', _money(_num(summary['total_cogs'])),
+                    Icons.inventory, Colors.orange),
+                _MetricCard(
+                    'Gross Profit',
+                    _money(_num(summary['gross_profit'])),
+                    Icons.insights,
+                    Colors.purple),
+              ]),
+              _SectionCard(
+                title: 'Shift P&L Records',
+                child: _SimpleTable(
+                  columns: const [
+                    'Shift',
+                    'Sales',
+                    'COGS',
+                    'Gross Profit',
+                    'Margin',
+                    'Status',
+                    'Actions'
+                  ],
+                  rows: items
+                      .map((e) => [
+                            _text(e, ['shift_number', 'shift_id', 'id']),
+                            _money(_num(e['total_sales'])),
+                            _money(_num(e['total_cogs'])),
+                            _money(_num(e['gross_profit'])),
+                            '${_num(e['profit_margin']).toStringAsFixed(1)}%',
+                            _StatusPill(_text(e, ['status'])),
+                            Wrap(spacing: 8, children: [
+                              TextButton(
+                                  onPressed: () => _showRecord(context, e),
+                                  child: const Text('View')),
+                              FilledButton.tonal(
+                                  onPressed: () => _review(e),
+                                  child: const Text('Review')),
+                            ]),
+                          ])
+                      .toList(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _review(Map<String, dynamic> pnl) async {
+    final notes =
+        await _textDialog(context, 'Review Shift P&L', hint: 'Review notes');
+    if (notes == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .reviewShiftPnL('${pnl['shift_id'] ?? pnl['id']}', notes);
+    _toast('Shift P&L reviewed');
+    _refresh();
+  }
+}
+
+class _BookingsInvoicesSection extends ConsumerStatefulWidget {
+  const _BookingsInvoicesSection();
+
+  @override
+  ConsumerState<_BookingsInvoicesSection> createState() =>
+      _BookingsInvoicesSectionState();
+}
+
+class _BookingsInvoicesSectionState
+    extends ConsumerState<_BookingsInvoicesSection> {
+  late Future<List<Map<String, dynamic>>> _future =
+      ref.read(branchAccountantRepositoryProvider).getFinanceInvoices();
+
+  void _refresh() => setState(() => _future =
+      ref.read(branchAccountantRepositoryProvider).getFinanceInvoices());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Bookings & Invoices',
+          subtitle:
+              'Branch invoice queue for hotel bookings, restaurant bills, catering, and conference revenue.',
+          actions: [_RefreshButton(onPressed: _refresh)],
+          children: [
+            _SectionCard(
+              title: 'Invoice Register',
+              child: _SimpleTable(
+                columns: const [
+                  'Invoice',
+                  'Customer',
+                  'Source',
+                  'Total',
+                  'Balance',
+                  'Status'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e,
+                              ['invoice_number', 'confirmation_number', 'id']),
+                          _text(e, ['customer_name', 'guest_name']),
+                          _text(e, ['source', 'invoice_type']),
+                          _money(_num(e['total_amount'])),
+                          _money(_num(e['balance'])),
+                          _StatusPill(_text(e, ['status'])),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StockTakeSection extends ConsumerWidget {
+  const _StockTakeSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: ref.read(branchAccountantRepositoryProvider).getStockTakes(),
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: () {},
+        builder: (items) => _Page(
+          title: 'Stock Takes',
+          subtitle:
+              'Daily branch stock takes submitted by storekeepers for accountant review and auditor flow.',
+          actions: const [],
+          children: [
+            _ResponsiveGrid(children: [
+              _MetricCard(
+                  'Sessions', '${items.length}', Icons.inventory, Colors.blue),
+              _MetricCard(
+                  'Draft',
+                  '${items.where((e) => _text(e, [
+                            'status'
+                          ]).toLowerCase() == 'draft').length}',
+                  Icons.edit_note,
+                  Colors.orange),
+              _MetricCard(
+                  'Submitted',
+                  '${items.where((e) => _text(e, [
+                            'status'
+                          ]).toLowerCase().contains('submit')).length}',
+                  Icons.send,
+                  Colors.green),
+            ]),
+            _SectionCard(
+              title: 'Stock Take Register',
+              child: _SimpleTable(
+                columns: const [
+                  'Date',
+                  'Type',
+                  'Store',
+                  'Branch',
+                  'Status',
+                  'Items',
+                  'Actions'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e, ['count_date', 'created_at']),
+                          _text(e, ['count_type', 'take_type']),
+                          _text(e, ['store_type', 'outlet_code']),
+                          _text(_map(e['branch']), ['name']),
+                          _StatusPill(_text(e, ['status'])),
+                          '${e['items_count'] ?? e['item_count'] ?? 0}',
+                          TextButton(
+                              onPressed: () => _showRecord(context, e),
+                              child: const Text('Review')),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PurchasesSection extends ConsumerWidget {
+  const _PurchasesSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    return FutureBuilder<Map<String, dynamic>>(
+      future: Future.wait([
+        repo.getPurchaseOrders(),
+        repo.getSupplierInvoices(),
+        repo.getSupplierPayments(),
+      ]).then((r) => {'pos': r[0], 'invoices': r[1], 'payments': r[2]}),
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: () {},
+        builder: (data) {
+          final pos = _list(data['pos']);
+          final invoices = _list(data['invoices']);
+          final payments = _list(data['payments']);
+          return _Page(
+            title: 'Purchases',
+            subtitle:
+                'Purchase orders, supplier invoices, and supplier payments for branch accounting.',
+            actions: const [],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Purchase Orders', '${pos.length}',
+                    Icons.shopping_cart, Colors.blue),
+                _MetricCard('Supplier Invoices', '${invoices.length}',
+                    Icons.receipt_long, Colors.orange),
+                _MetricCard('Supplier Payments', '${payments.length}',
+                    Icons.payments, Colors.green),
+              ]),
+              _SectionCard(
+                title: 'Purchase Orders',
+                child: _SimpleTable(
+                  columns: const ['PO', 'Supplier', 'Total', 'Status', 'Date'],
+                  rows: pos
+                      .map((e) => [
+                            _text(e,
+                                ['po_number', 'purchase_order_number', 'id']),
+                            _text(e, ['supplier_name']),
+                            _money(_num(e['total_amount'])),
+                            _StatusPill(_text(e, ['status'])),
+                            _text(e, ['created_at', 'order_date']),
+                          ])
+                      .toList(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BuffetSection extends ConsumerStatefulWidget {
+  const _BuffetSection();
+
+  @override
+  ConsumerState<_BuffetSection> createState() => _BuffetSectionState();
+}
+
+class _BuffetSectionState extends ConsumerState<_BuffetSection> {
+  late Future<List<Map<String, dynamic>>> _future =
+      ref.read(branchAccountantRepositoryProvider).getBuffets();
+
+  void _refresh() => setState(() =>
+      _future = ref.read(branchAccountantRepositoryProvider).getBuffets());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Buffet Control',
+          subtitle:
+              'Review buffet food-control status, opening, closing, and variance risk.',
+          actions: [_RefreshButton(onPressed: _refresh)],
+          children: [
+            _SectionCard(
+              title: 'Buffets',
+              child: _SimpleTable(
+                columns: const [
+                  'Buffet',
+                  'Date',
+                  'Expected',
+                  'Actual',
+                  'Status',
+                  'Actions'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e, ['name', 'buffet_name', 'id']),
+                          _text(e, ['service_date', 'date']),
+                          _money(_num(e['expected_revenue'])),
+                          _money(_num(e['actual_revenue'])),
+                          _StatusPill(_text(e, ['status'])),
+                          Wrap(spacing: 8, children: [
+                            TextButton(
+                                onPressed: () => _showRecord(context, e),
+                                child: const Text('View')),
+                            if (_text(e, ['status']).toLowerCase() == 'draft')
+                              FilledButton.tonal(
+                                  onPressed: () => _open(e),
+                                  child: const Text('Open')),
+                            OutlinedButton(
+                                onPressed: () => _close(e),
+                                child: const Text('Close')),
+                          ]),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(Map<String, dynamic> buffet) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .openBuffet('${buffet['id']}');
+    _toast('Buffet opened');
+    _refresh();
+  }
+
+  Future<void> _close(Map<String, dynamic> buffet) async {
+    final data = await _formDialog(context, 'Close Buffet', const [
+      'actual_revenue',
+      'actual_guests',
+      'notes',
+    ]);
+    if (data == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .closeBuffet('${buffet['id']}', data);
+    _toast('Buffet closed');
+    _refresh();
+  }
+}
+
+class _CateringSection extends ConsumerStatefulWidget {
+  const _CateringSection();
+
+  @override
+  ConsumerState<_CateringSection> createState() => _CateringSectionState();
+}
+
+class _CateringSectionState extends ConsumerState<_CateringSection> {
+  late Future<List<Map<String, dynamic>>> _future =
+      ref.read(branchAccountantRepositoryProvider).getCateringEvents();
+
+  void _refresh() => setState(() => _future =
+      ref.read(branchAccountantRepositoryProvider).getCateringEvents());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Catering Control',
+          subtitle:
+              'Catering event food-control ledger, actuals, and completion review.',
+          actions: [_RefreshButton(onPressed: _refresh)],
+          children: [
+            _SectionCard(
+              title: 'Catering Events',
+              child: _SimpleTable(
+                columns: const [
+                  'Event',
+                  'Date',
+                  'Customer',
+                  'Expected',
+                  'Actual',
+                  'Status',
+                  'Actions'
+                ],
+                rows: items
+                    .map((e) => [
+                          _text(e, ['event_name', 'name', 'id']),
+                          _text(e, ['event_date', 'date']),
+                          _text(e, ['customer_name', 'client_name']),
+                          _money(_num(e['expected_revenue'])),
+                          _money(_num(e['actual_revenue'])),
+                          _StatusPill(_text(e, ['status'])),
+                          Wrap(spacing: 8, children: [
+                            TextButton(
+                                onPressed: () => _showRecord(context, e),
+                                child: const Text('View')),
+                            FilledButton.tonal(
+                                onPressed: () => _complete(e),
+                                child: const Text('Complete')),
+                            OutlinedButton(
+                                onPressed: () => _cancel(e),
+                                child: const Text('Cancel')),
+                          ]),
+                        ])
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _complete(Map<String, dynamic> event) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .completeCateringEvent('${event['id']}');
+    _toast('Catering event completed');
+    _refresh();
+  }
+
+  Future<void> _cancel(Map<String, dynamic> event) async {
+    final reason =
+        await _textDialog(context, 'Cancel Catering Event', hint: 'Reason');
+    if (reason == null) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .cancelCateringEvent('${event['id']}', reason);
+    _toast('Catering event cancelled');
+    _refresh();
+  }
+}
+
 class _BudgetsSection extends ConsumerStatefulWidget {
   const _BudgetsSection();
 
@@ -2505,8 +3672,8 @@ class _BudgetsSectionState extends ConsumerState<_BudgetsSection> {
               _ResponsiveGrid(children: [
                 _MetricCard(
                     'Total Budget',
-                    _money(_num(summary['total_allocated'] ??
-                        summary['total_budget'])),
+                    _money(_num(
+                        summary['total_allocated'] ?? summary['total_budget'])),
                     Icons.account_balance,
                     Colors.blue),
                 _MetricCard(
@@ -2757,15 +3924,12 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
                   const SizedBox(width: 6),
                   Text(
                     'Read-only: This record has been $statusText and cannot be edited.',
-                    style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontSize: 12),
+                    style: TextStyle(color: Colors.blue.shade700, fontSize: 12),
                   ),
                 ]),
               ),
             const SizedBox(height: 8),
-            Expanded(
-                child: SingleChildScrollView(child: _tabBody(isReadOnly))),
+            Expanded(child: SingleChildScrollView(child: _tabBody(isReadOnly))),
             const Divider(),
             _KeyValueList({
               'Total Revenue': _money(_total(_revenueFields)),
@@ -2820,14 +3984,14 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
               final variance = totalPay - totalRev;
               final isOk = variance.abs() <= 1;
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: isOk ? Colors.green.shade50 : Colors.red.shade50,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                      color: isOk
-                          ? Colors.green.shade200
-                          : Colors.red.shade200),
+                      color:
+                          isOk ? Colors.green.shade200 : Colors.red.shade200),
                 ),
                 child: Row(children: [
                   Icon(
@@ -2841,9 +4005,7 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
                         ? 'Payments balanced — Variance: ${_money(variance)}'
                         : 'Variance: ${_money(variance)} — Must be KES 0 to submit',
                     style: TextStyle(
-                      color: isOk
-                          ? Colors.green.shade700
-                          : Colors.red.shade700,
+                      color: isOk ? Colors.green.shade700 : Colors.red.shade700,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
@@ -2884,8 +4046,8 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
             if (!readOnly && _numText('cash') > _numText('banked'))
               Container(
                 margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(8),
@@ -3199,14 +4361,13 @@ class _LineItemEditor extends StatelessWidget {
                             decoration:
                                 const InputDecoration(labelText: 'Method'),
                             items: bankingMethods
-                                .map((m) => DropdownMenuItem(
-                                    value: m, child: Text(m)))
+                                .map((m) =>
+                                    DropdownMenuItem(value: m, child: Text(m)))
                                 .toList(),
                             onChanged: (value) {
                               if (value == null) return;
                               final next = entries
-                                  .map((row) =>
-                                      Map<String, dynamic>.from(row))
+                                  .map((row) => Map<String, dynamic>.from(row))
                                   .toList();
                               next[index][column] = value;
                               onChanged(next);
@@ -3339,8 +4500,7 @@ class _MonthCalendarGrid extends StatelessWidget {
                       ),
                     );
                   }
-                  final dateStr =
-                      _date(DateTime(month.year, month.month, day));
+                  final dateStr = _date(DateTime(month.year, month.month, day));
                   final record = recordByDate[dateStr];
                   final status = record != null
                       ? _text(record, ['status']).toUpperCase()
@@ -3369,16 +4529,15 @@ class _MonthCalendarGrid extends StatelessWidget {
                   return Expanded(
                     child: GestureDetector(
                       onTap: () => onDayTapped(
-                        record ??
-                            {'record_date': dateStr, 'status': 'DRAFT'},
+                        record ?? {'record_date': dateStr, 'status': 'DRAFT'},
                       ),
                       child: Container(
                         constraints: const BoxConstraints(minHeight: 70),
                         padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
                           color: bg,
-                          border: Border.all(
-                              color: accent.withValues(alpha: 0.5)),
+                          border:
+                              Border.all(color: accent.withValues(alpha: 0.5)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3485,14 +4644,12 @@ class _MonthCalendarGrid extends StatelessWidget {
             runSpacing: 8,
             children: [
               _CalLegend(Colors.white, Colors.grey.shade300, 'No entry'),
-              _CalLegend(
-                  Colors.amber.shade50, Colors.amber.shade400, 'Draft'),
+              _CalLegend(Colors.amber.shade50, Colors.amber.shade400, 'Draft'),
               _CalLegend(
                   Colors.blue.shade50, Colors.blue.shade400, 'Submitted'),
               _CalLegend(
                   Colors.green.shade50, Colors.green.shade400, 'Reviewed'),
-              _CalLegend(
-                  Colors.red.shade50, Colors.red.shade400, 'Flagged'),
+              _CalLegend(Colors.red.shade50, Colors.red.shade400, 'Flagged'),
             ],
           ),
           const SizedBox(height: 14),
@@ -3529,8 +4686,8 @@ class _CalLegend extends StatelessWidget {
         ),
         const SizedBox(width: 5),
         Text(label,
-            style: const TextStyle(
-                fontSize: 11, color: AppColors.kTextSecondary)),
+            style:
+                const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
       ],
     );
   }
@@ -3550,8 +4707,11 @@ class _AchievementBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = achievement;
-    final color =
-        pct >= 100 ? Colors.green : pct >= 80 ? Colors.blue : Colors.amber;
+    final color = pct >= 100
+        ? Colors.green
+        : pct >= 80
+            ? Colors.blue
+            : Colors.amber;
     final label = pct >= 100
         ? '✓ Target Met'
         : pct >= 80
@@ -3578,8 +4738,8 @@ class _AchievementBar extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
@@ -3615,10 +4775,8 @@ class _AchievementBar extends StatelessWidget {
               children: categories.map((item) {
                 final cat = _text(item, ['category', 'name']);
                 final rev = _num(item['revenue']);
-                final tgt = _num(
-                    item['target'] ?? item['target_revenue'] ?? 0);
-                final catPct =
-                    tgt > 0 ? (rev / tgt * 100).toDouble() : 0.0;
+                final tgt = _num(item['target'] ?? item['target_revenue'] ?? 0);
+                final catPct = tgt > 0 ? (rev / tgt * 100).toDouble() : 0.0;
                 final catColor = catPct >= 100
                     ? Colors.green
                     : catPct >= 80
@@ -3642,14 +4800,12 @@ class _AchievementBar extends StatelessWidget {
                         Expanded(
                           child: Text(
                             _categoryLabel(cat),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ),
                         Text(
                           _money(rev),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         if (tgt > 0)
                           Padding(
@@ -3671,8 +4827,7 @@ class _AchievementBar extends StatelessWidget {
                             value: (catPct / 100).clamp(0.0, 1.0),
                             minHeight: 6,
                             backgroundColor: Colors.grey.shade200,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                catColor),
+                            valueColor: AlwaysStoppedAnimation<Color>(catColor),
                           ),
                         ),
                       ],
@@ -3770,8 +4925,8 @@ class _MonthlyAdjustmentsDialogState
 
   @override
   Widget build(BuildContext context) {
-    final monthName = DateFormat('MMMM yyyy')
-        .format(DateTime(widget.year, widget.month));
+    final monthName =
+        DateFormat('MMMM yyyy').format(DateTime(widget.year, widget.month));
     return AlertDialog(
       title: Text('Monthly Adjustments — $monthName'),
       content: SizedBox(
@@ -3852,8 +5007,7 @@ class _MonthlyAdjustmentsDialogState
                               Text(
                                 _money(num.tryParse(fixedTotal) ?? 0),
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15),
+                                    fontWeight: FontWeight.w800, fontSize: 15),
                               ),
                             ]),
                           );
@@ -4019,24 +5173,26 @@ class _BudgetDialog extends StatefulWidget {
 class _BudgetDialogState extends State<_BudgetDialog> {
   // Maps field key → TextEditingController with default from existing budget
   late final Map<String, TextEditingController> controllers = {
-    'name': TextEditingController(
-        text: '${widget.existing?['name'] ?? ''}'),
-    'category': TextEditingController(
-        text: '${widget.existing?['category'] ?? ''}'),
+    'name': TextEditingController(text: '${widget.existing?['name'] ?? ''}'),
+    'category':
+        TextEditingController(text: '${widget.existing?['category'] ?? ''}'),
     'period': TextEditingController(
         text: '${widget.existing?['period'] ?? 'monthly'}'),
     'allocated_amount': TextEditingController(
-        text: '${widget.existing?['allocated_amount'] ?? widget.existing?['amount'] ?? ''}'),
+        text:
+            '${widget.existing?['allocated_amount'] ?? widget.existing?['amount'] ?? ''}'),
     'start_date': TextEditingController(
-        text: '${widget.existing?['start_date'] ?? _date(DateTime(DateTime.now().year, DateTime.now().month, 1))}'),
+        text:
+            '${widget.existing?['start_date'] ?? _date(DateTime(DateTime.now().year, DateTime.now().month, 1))}'),
     'end_date': TextEditingController(
-        text: '${widget.existing?['end_date'] ?? _date(DateTime(DateTime.now().year, DateTime.now().month + 1, 0))}'),
+        text:
+            '${widget.existing?['end_date'] ?? _date(DateTime(DateTime.now().year, DateTime.now().month + 1, 0))}'),
     'fiscal_year': TextEditingController(
         text: '${widget.existing?['fiscal_year'] ?? DateTime.now().year}'),
     'fiscal_month': TextEditingController(
         text: '${widget.existing?['fiscal_month'] ?? DateTime.now().month}'),
-    'description': TextEditingController(
-        text: '${widget.existing?['description'] ?? ''}'),
+    'description':
+        TextEditingController(text: '${widget.existing?['description'] ?? ''}'),
   };
 
   static const _numericFields = {
@@ -4126,8 +5282,7 @@ class _DirectorTasks extends ConsumerWidget {
               ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.red.shade100,
                   borderRadius: BorderRadius.circular(20),
@@ -4154,8 +5309,7 @@ class _DirectorTasks extends ConsumerWidget {
                         trailing: _StatusPill(_text(task, ['priority'])),
                         rows: {
                           'Due Date': _text(task, ['due_date']),
-                          'Record Date':
-                              _text(task, ['related_record_date']),
+                          'Record Date': _text(task, ['related_record_date']),
                         },
                         actions: [
                           FilledButton(
@@ -4676,8 +5830,6 @@ class _Dropdown extends StatelessWidget {
   }
 }
 
-
-
 Future<String?> _textDialog(
   BuildContext context,
   String title, {
@@ -4778,6 +5930,46 @@ Future<bool> _confirm(BuildContext context, String message) async {
       false;
 }
 
+void _showRecord(BuildContext context, Map<String, dynamic> record) {
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Record Details'),
+      content: SizedBox(
+        width: 680,
+        child: SingleChildScrollView(child: _KeyValueList(_flatten(record))),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+Map<String, String> _flatten(Map<String, dynamic> record) {
+  final out = <String, String>{};
+  for (final entry in record.entries) {
+    final value = entry.value;
+    if (value == null || '$value' == 'null') continue;
+    if (value is Map) {
+      for (final child in value.entries) {
+        final childValue = child.value;
+        if (childValue != null && '$childValue' != 'null') {
+          out['${_title(entry.key)} ${_title('${child.key}')}'] = '$childValue';
+        }
+      }
+    } else if (value is List) {
+      out[_title(entry.key)] = '${value.length} records';
+    } else {
+      out[_title(entry.key)] = '$value';
+    }
+  }
+  return out;
+}
+
 IconData _icon(BranchAccountantSection section) =>
     _navItems.firstWhere((item) => item.section == section).icon;
 
@@ -4792,6 +5984,16 @@ String _shortLabel(BranchAccountantSection section) {
       return 'Workspace';
     case BranchAccountantSection.discrepancies:
       return 'Flags';
+    case BranchAccountantSection.shiftReview:
+      return 'Shifts';
+    case BranchAccountantSection.cashierLogbooks:
+      return 'Logs';
+    case BranchAccountantSection.creditBills:
+      return 'Credit';
+    case BranchAccountantSection.foodVariance:
+      return 'Variance';
+    case BranchAccountantSection.shiftPnl:
+      return 'P&L';
     case BranchAccountantSection.budgets:
       return 'Budgets';
     default:
@@ -4816,9 +6018,25 @@ List<Map<String, dynamic>> _entriesFrom(dynamic value) {
 }
 
 List<Map<String, dynamic>> _list(dynamic value) {
-  final data = value is Map
+  var data = value is Map
       ? value['data'] ?? value['items'] ?? value['records'] ?? value['analysis']
       : value;
+  if (data is Map) {
+    data = data['data'] ??
+        data['items'] ??
+        data['records'] ??
+        data['rows'] ??
+        data['results'] ??
+        data['clearances'] ??
+        data['logbooks'] ??
+        data['transactions'] ??
+        data['invoices'] ??
+        data['payments'] ??
+        data['purchase_orders'] ??
+        data['purchaseOrders'] ??
+        data['stock_takes'] ??
+        data['stockTakes'];
+  }
   if (data is List) {
     return data
         .whereType<Map>()

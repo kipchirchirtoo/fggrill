@@ -16,8 +16,8 @@ import { applyBranchFilter } from '../utils/branchIsolation';
  *
  * Deduction rules:
  *  - NSSF / SHIF / Housing Levy / PAYE → ONLY from staff_payroll_adjustments (never auto-calculated)
- *  - Credit Bills  → ALL status='pending'
- *  - Unpaid Bills  → ALL status='unpaid' where waiter_id = staffId
+ *  - Credit Bills  → ALL status='pending' or 'partial', deducted by remaining balance
+ *  - Unpaid Bills  → ALL status='unpaid' or 'partial' where waiter_id = staffId, deducted by remaining balance
  *  - Advances      → status='approved' AND month_to_deduct/year_to_deduct match
  *  - Loans         → status='active', remaining_balance > 0, deduction period started
  */
@@ -83,20 +83,20 @@ async function processStaffPayroll(
 
     // ── Step 3: Fetch ALL dynamic deductions ─────────────────────────────────
 
-    // 3a. Credit bills — ALL pending
+    // 3a. Credit bills — ALL pending or partially paid, deducted by remaining balance
     const { data: creditBillRows, error: cbErr } = await supabase
         .from('staff_credit_bills')
-        .select('id, amount')
+        .select('id, amount, paid_amount, balance, status, description')
         .eq('staff_id', staffId)
-        .eq('status', 'pending');
+        .in('status', ['pending', 'partial']);
     if (cbErr) throw cbErr;
 
-    // 3b. Unpaid bills — ALL unpaid for this waiter
+    // 3b. Unpaid bills — ALL unpaid or partially paid for this waiter
     const { data: unpaidBillRows, error: ubErr } = await supabase
         .from('unpaid_bills')
         .select('id, total_amount, balance_amount')
         .eq('waiter_id', staffId)
-        .eq('status', 'unpaid');
+        .in('status', ['unpaid', 'partial']);
     if (ubErr) throw ubErr;
 
     // 3c. Approved advances matching this payroll month/year
@@ -126,7 +126,15 @@ async function processStaffPayroll(
     let totalCreditBills = 0;
     const creditBillIds: string[] = [];
     for (const b of creditBillRows || []) {
-        totalCreditBills += Number(b.amount || 0);
+        if (String(b.description || '').startsWith('Unsettled ')) {
+            continue;
+        }
+        const amount = Number(b.amount || 0);
+        const paidAmount = Number(b.paid_amount || 0);
+        const remainingBalance = b.balance === null || b.balance === undefined
+            ? Math.max(0, amount - paidAmount)
+            : Number(b.balance || 0);
+        totalCreditBills += Math.max(0, remainingBalance);
         creditBillIds.push(b.id);
     }
 

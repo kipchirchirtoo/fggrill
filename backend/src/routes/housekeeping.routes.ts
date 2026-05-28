@@ -18,6 +18,7 @@ import * as maintenanceCtrl from '../controllers/housekeeping/maintenance.contro
 import * as guestRequestsCtrl from '../controllers/housekeeping/guest-requests.controller';
 import * as schedulingCtrl from '../controllers/housekeeping/scheduling.controller';
 import * as reportsCtrl from '../controllers/housekeeping/reports.controller';
+import * as suppliesCtrl from '../controllers/housekeeping/supplies.controller';
 import * as enhancedCtrl from '../controllers/housekeeping/enhanced.controller';
 
 const router = express.Router();
@@ -28,6 +29,8 @@ const ALL_HK_ROLES = [
   UserRole.GENERAL_MANAGER,
   UserRole.BRANCH_MANAGER,
   UserRole.HOUSEKEEPING,
+  UserRole.HOUSEKEEPING_SUPERVISOR,
+  UserRole.ROOM_ATTENDANT,
   UserRole.RECEPTIONIST,
   UserRole.FRONT_DESK_SUPERVISOR
 ];
@@ -36,6 +39,7 @@ const SUPERVISOR_ROLES = [
   UserRole.SUPER_ADMIN,
   UserRole.GENERAL_MANAGER,
   UserRole.BRANCH_MANAGER,
+  UserRole.HOUSEKEEPING_SUPERVISOR,
   UserRole.RECEPTIONIST,
   UserRole.FRONT_DESK_SUPERVISOR
 ];
@@ -168,6 +172,12 @@ router.put('/scheduling/leave-requests/:id/review', authorize(MANAGER_ROLES), sc
 router.post('/scheduling/shift-swaps', authorize(ALL_HK_ROLES), schedulingCtrl.createShiftSwap);
 router.put('/scheduling/shift-swaps/:id/respond', authorize(ALL_HK_ROLES), schedulingCtrl.respondToShiftSwap);
 router.put('/scheduling/shift-swaps/:id/approve', authorize(MANAGER_ROLES), schedulingCtrl.approveShiftSwap);
+
+// =====================================================
+// SUPPLIES ROUTES
+// =====================================================
+router.get('/supplies', authorize(ALL_HK_ROLES), suppliesCtrl.getSuppliesInventory);
+router.post('/supplies/request', authorize(ALL_HK_ROLES), suppliesCtrl.requestSupplies);
 
 // =====================================================
 // REPORTS ROUTES

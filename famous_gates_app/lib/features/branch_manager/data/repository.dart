@@ -60,14 +60,42 @@ class BranchManagerRepository {
             map['guests'] ??
             map['staff'] ??
             map['rooms'] ??
-            map['tasks'];
+            map['tasks'] ??
+            map['requests'] ??
+            map['orders'] ??
+            map['clearances'];
     if (payload is List) {
       return payload
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
     }
-    if (payload is Map) return [Map<String, dynamic>.from(payload)];
+    if (payload is Map) {
+      for (final key in const [
+        'data',
+        'items',
+        'rows',
+        'records',
+        'results',
+        'bookings',
+        'guests',
+        'staff',
+        'rooms',
+        'tasks',
+        'requests',
+        'orders',
+        'clearances',
+      ]) {
+        final nested = payload[key];
+        if (nested is List) {
+          return nested
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+        }
+      }
+      return [Map<String, dynamic>.from(payload)];
+    }
     return <Map<String, dynamic>>[];
   }
 
@@ -266,12 +294,12 @@ class BranchManagerRepository {
     await putMap('/bookings/$id', data: data);
   }
 
-  Future<void> checkIn(String id) async => postMap('/bookings/$id/check-in');
+  Future<void> checkIn(String id) async => putMap('/bookings/$id/check-in');
 
-  Future<void> checkOut(String id) async => postMap('/bookings/$id/check-out');
+  Future<void> checkOut(String id) async => putMap('/bookings/$id/check-out');
 
   Future<void> cancelBooking(String id, {String? reason}) async {
-    await postMap('/bookings/$id/cancel', data: {
+    await putMap('/bookings/$id/cancel', data: {
       if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
     });
   }
@@ -281,10 +309,10 @@ class BranchManagerRepository {
     required String checkOut,
     int guests = 1,
   }) {
-    return getList('/rooms/available', query: {
-      'check_in': checkIn,
-      'check_out': checkOut,
-      'guests': guests,
+    return getList('/bookings/available', query: {
+      'checkIn': checkIn,
+      'checkOut': checkOut,
+      'adults': guests,
     });
   }
 
@@ -383,30 +411,30 @@ class BranchManagerRepository {
     String? status,
     String? staffId,
   }) {
-    return getList('/staff/leave-requests', query: {
+    return getList('/staff/leave', query: {
       if (status != null && status != 'all') 'status': status,
       if (staffId != null) 'staff_id': staffId,
     });
   }
 
   Future<void> createLeaveRequest(Map<String, dynamic> data) async {
-    await postMap('/staff/leave-requests', data: data);
+    await postMap('/staff/leave', data: data);
   }
 
   Future<void> approveLeave(String id, {String? notes}) async {
-    await putMap('/staff/leave-requests/$id/approve', data: {
+    await putMap('/staff/leave/$id/approve', data: {
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
     });
   }
 
   Future<void> rejectLeave(String id, {String? reason}) async {
-    await putMap('/staff/leave-requests/$id/reject', data: {
+    await putMap('/staff/leave/$id/reject', data: {
       if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
     });
   }
 
   Future<void> reportToDuty(String id) async {
-    await putMap('/staff/leave-requests/$id/report-duty');
+    await putMap('/staff/leave/$id/report-to-duty');
   }
 
   Future<List<Map<String, dynamic>>> staffDocuments(String staffId) {
@@ -425,16 +453,16 @@ class BranchManagerRepository {
   }
 
   Future<Map<String, dynamic>> stockAnalytics({String period = 'month'}) {
-    return getMap('/store/stock-analytics', query: {'period': period});
+    return getMap('/store/consumption-trends', query: {'period': period});
   }
 
   Future<List<Map<String, dynamic>>> stockOut() {
     return getList('/store/stock-movements',
-        query: {'movement_type': 'stock_out'});
+        query: {'movement_type': 'STOCK_OUT'});
   }
 
   Future<void> createStockRequest(Map<String, dynamic> data) async {
-    await postMap('/stock-requests', data: data);
+    await postMap('/store/stock-requests', data: data);
   }
 
   Future<List<Map<String, dynamic>>> restaurantOrders() {
@@ -515,7 +543,8 @@ class BranchManagerRepository {
   }
 
   Future<List<Map<String, dynamic>>> maintenanceRequests({String? status}) {
-    return getList('/maintenance', query: {
+    return getList('/housekeeping/tasks', query: {
+      'category': 'maintenance',
       if (status != null && status != 'all') 'status': status,
     });
   }

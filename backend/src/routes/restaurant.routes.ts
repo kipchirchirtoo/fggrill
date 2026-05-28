@@ -2,6 +2,7 @@ import express from 'express';
 import { supabase } from '../config/supabase';
 import {
   getMenuCategories,
+  createCategory,
   getMenuItems,
   createMenuItem,
   updateMenuItem,
@@ -38,12 +39,50 @@ import reservationRoutes from './restaurant.reservation.routes';
 
 const router = express.Router();
 
+const normalizeKitchenStatus = (value: any): string => {
+  const status = String(value || 'pending').toLowerCase();
+  return ['pending', 'confirmed'].includes(status) ? 'pending' : status;
+};
+
+const posItemKey = (item: any, index: number): string =>
+  String(item?.outlet_item_id || item?.id || item?.menu_item_id || item?.sku || item?.name || index);
+
+const updatePosCaptainOrderKitchenStatus = async (rawOrderId: string, status: string) => {
+  const orderId = rawOrderId.replace(/^pos:/, '');
+  const patch: Record<string, any> = {
+    kitchen_status: status,
+    updated_at: new Date().toISOString()
+  };
+  if (status === 'preparing') patch.kitchen_started_at = new Date().toISOString();
+  if (status === 'ready') patch.kitchen_ready_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('pos_shift_orders')
+    .update(patch)
+    .eq('id', orderId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
 // Public routes
 router.get('/menu/categories', getMenuCategories);
 router.get('/menu/items', getMenuItems);
 
 // Protected routes
 router.use(protect);
+
+router.post('/categories',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
+  createCategory
+);
+
+router.post('/menu/categories',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
+  createCategory
+);
 
 // Guest and staff routes
 router.get('/orders/:id',
@@ -69,33 +108,33 @@ router.post('/orders/:id/items',
 
 // Restaurant staff routes
 router.post('/menu/items',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
   createMenuItem
 );
 
 router.put('/menu/items/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
   updateMenuItem
 );
 
 router.delete('/menu/items/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
   deleteMenuItem
 );
 
 router.put('/menu/items/:id/toggle',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
   toggleItemAvailability
 );
 
 // Menu item image upload
 router.post('/menu/items/:id/image',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
   uploadMenuItemImage
 );
 
 router.delete('/menu/items/:id/image',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RESTAURANT]),
   deleteMenuItemImage
 );
 
@@ -164,7 +203,7 @@ router.get('/kitchen/orders',
       if (orderIds.length) {
         const itemsResult = await supabase
           .from('restaurant_order_items')
-          .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name')
+          .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name, kitchen_status, kitchen_ready_at')
           .in('order_id', orderIds);
         allItems = itemsResult.data || [];
         itemsError = itemsResult.error;
@@ -193,7 +232,9 @@ router.get('/kitchen/orders',
             quantity: item.quantity,
             unit_price: item.unit_price,
             notes: item.special_instructions,
-            status: 'pending'
+            status: item.kitchen_status || 'pending',
+            is_ready: item.kitchen_status === 'ready',
+            kitchen_ready_at: item.kitchen_ready_at
           }))
         };
       });
@@ -243,21 +284,26 @@ router.get('/kitchen/orders',
               table_number: tableMatch ? Number(tableMatch[1]) : null,
               waiter_name: order.waiter_name,
               customer_name: order.customer_name || 'Walk-in',
-              status: 'pending',
+              status: normalizeKitchenStatus(order.kitchen_status || order.status),
+              order_status: order.status,
               payment_status: order.payment_status,
               created_at: order.created_at,
               elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
               items_count: orderItems.length,
               total: order.total_amount,
               total_amount: order.total_amount,
-              items: orderItems.map((item: any, index: number) => ({
-                id: item.outlet_item_id || `${order.id}-${index}`,
+              items: orderItems.map((item: any, index: number) => {
+                const itemStatus = normalizeKitchenStatus(item.kitchen_status || item.status || order.kitchen_status);
+                return {
+                id: posItemKey(item, index),
                 name: item.name || item.item_name || 'POS item',
                 quantity: Number(item.quantity || item.qty || 1),
                 unit_price: Number(item.unit_price || item.price || 0),
                 notes: item.notes,
-                status: 'pending'
-              }))
+                status: itemStatus,
+                is_ready: itemStatus === 'ready'
+              };
+              })
             };
           });
         }
@@ -303,7 +349,7 @@ router.get('/kitchen/orders/history',
       const orderIds = orders.map((o: any) => o.id);
       const { data: allItems, error: itemsError } = await supabase
         .from('restaurant_order_items')
-        .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name')
+        .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name, kitchen_status, kitchen_ready_at')
         .in('order_id', orderIds);
 
       if (itemsError) {
@@ -329,7 +375,9 @@ router.get('/kitchen/orders/history',
             quantity: item.quantity,
             unit_price: item.unit_price,
             notes: item.special_instructions,
-            status: 'ready'
+            status: item.kitchen_status || 'ready',
+            is_ready: (item.kitchen_status || 'ready') === 'ready',
+            kitchen_ready_at: item.kitchen_ready_at
           }))
         };
       });
@@ -342,19 +390,112 @@ router.get('/kitchen/orders/history',
   }
 );
 
+// Kitchen Display - Update prep status without clearing cashier payment state.
+router.put('/kitchen/orders/:orderId/status',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
+  async (req, res, next) => {
+    try {
+      const { orderId } = req.params;
+      const status = normalizeKitchenStatus(req.body.status);
+      if (!['pending', 'preparing', 'ready', 'served', 'cancelled'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid kitchen status' });
+      }
+
+      if (orderId.startsWith('pos:')) {
+        const updatedOrder = await updatePosCaptainOrderKitchenStatus(orderId, status);
+        return res.json({ success: true, data: updatedOrder });
+      }
+
+      const { data: updatedOrder, error } = await supabase
+        .from('restaurant_orders')
+        .update({
+          status,
+          updated_at: new Date().toISOString(),
+          ...(status === 'preparing' ? { prepared_at: new Date().toISOString() } : {}),
+          ...(status === 'ready' ? { prepared_at: new Date().toISOString() } : {}),
+          ...(status === 'served' ? { delivered_at: new Date().toISOString() } : {})
+        })
+        .eq('id', orderId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.json({ success: true, data: updatedOrder });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Kitchen Display - Mark item as ready
 router.put('/kitchen/orders/:orderId/items/:itemId/ready',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const { orderId, itemId } = req.params;
+
+      if (orderId.startsWith('pos:')) {
+        const posOrderId = orderId.replace(/^pos:/, '');
+        const { data: order, error: getError } = await supabase
+          .from('pos_shift_orders')
+          .select('id, items')
+          .eq('id', posOrderId)
+          .single();
+
+        if (getError || !order) {
+          return res.status(404).json({ success: false, message: 'POS captain order not found' });
+        }
+
+        const items = Array.isArray(order.items) ? order.items : [];
+        const updatedItems = items.map((item: any, index: number) =>
+          posItemKey(item, index) === itemId
+            ? { ...item, kitchen_status: 'ready', kitchen_ready_at: new Date().toISOString() }
+            : item
+        );
+        const allReady = updatedItems.length > 0 &&
+          updatedItems.every((item: any) => normalizeKitchenStatus(item.kitchen_status || item.status) === 'ready');
+
+        const { error: updateError } = await supabase
+          .from('pos_shift_orders')
+          .update({
+            items: updatedItems,
+            ...(allReady ? {
+              kitchen_status: 'ready',
+              kitchen_ready_at: new Date().toISOString()
+            } : {}),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', posOrderId);
+        if (updateError) throw updateError;
+
+        return res.json({
+          success: true,
+          message: 'POS captain item marked as ready',
+          data: { orderId, itemId, status: 'ready', allReady }
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('restaurant_order_items')
+        .update({
+          kitchen_status: 'ready',
+          kitchen_ready_at: new Date().toISOString(),
+          kitchen_ready_by: req.user?.id || null
+        })
+        .eq('order_id', orderId)
+        .eq('id', itemId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
       res.json({
         success: true,
         message: 'Item marked as ready',
-        data: { orderId, itemId, status: 'ready' }
+        data: data || { orderId, itemId, status: 'ready' }
       });
     } catch (error) {
-      res.status(500).json({ success: false, error: 'Failed to update item status' });
+      next(error);
     }
   }
 );

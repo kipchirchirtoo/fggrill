@@ -115,13 +115,13 @@ class UserService extends BaseApiService {
     return response;
   }
 
-  // POST /api/users/:id/profile-photo
+  // POST /api/users/:id/photo
   Future<Map<String, dynamic>> uploadProfilePhoto(
       String id, String filePath) async {
     final formData = FormData.fromMap({
       'photo': await MultipartFile.fromFile(filePath),
     });
-    final response = await dio.post('/users/$id/profile-photo', data: formData);
+    final response = await dio.post('/users/$id/photo', data: formData);
     return response.data;
   }
 }

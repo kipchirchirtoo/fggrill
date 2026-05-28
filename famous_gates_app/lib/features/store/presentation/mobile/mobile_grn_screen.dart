@@ -14,11 +14,9 @@ import 'mobile_barcode_scan_screen.dart';
 // Providers
 // ---------------------------------------------------------------------------
 
-final _activePOProvider =
-    StateProvider<Map<String, dynamic>?>((ref) => null);
+final _activePOProvider = StateProvider<Map<String, dynamic>?>((ref) => null);
 
-final _grnScansProvider =
-    StateProvider<List<_GrnLineItem>>((ref) => const []);
+final _grnScansProvider = StateProvider<List<_GrnLineItem>>((ref) => const []);
 
 // ---------------------------------------------------------------------------
 // Model
@@ -121,7 +119,11 @@ class _MobileGrnScreenState extends ConsumerState<MobileGrnScreen> {
       setState(() => _purchaseOrders = pos);
     } catch (e) {
       if (mounted) {
-        if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load POs: $e'), backgroundColor: AppColors.kError)); }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Failed to load POs: $e'),
+              backgroundColor: AppColors.kError));
+        }
       }
     } finally {
       if (mounted) setState(() => _loadingPOs = false);
@@ -209,13 +211,21 @@ class _MobileGrnScreenState extends ConsumerState<MobileGrnScreen> {
     final activePO = ref.read(_activePOProvider);
     final scans = ref.read(_grnScansProvider);
     if (scans.isEmpty) {
-      if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Scan at least one item before submitting.'), backgroundColor: AppColors.kError)); }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Scan at least one item before submitting.'),
+            backgroundColor: AppColors.kError));
+      }
       return;
     }
 
     final invoiceNo = _invoiceCtrl.text.trim();
     if (invoiceNo.isEmpty) {
-      if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enter the supplier invoice number.'), backgroundColor: AppColors.kError)); }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Enter the supplier invoice number.'),
+            backgroundColor: AppColors.kError));
+      }
       return;
     }
 
@@ -253,12 +263,20 @@ class _MobileGrnScreenState extends ConsumerState<MobileGrnScreen> {
       _invoiceCtrl.clear();
 
       if (mounted) {
-        if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GRN submitted successfully!'), backgroundColor: AppColors.kSuccess)); }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('GRN submitted successfully!'),
+              backgroundColor: AppColors.kSuccess));
+        }
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GRN submission failed: $e'), backgroundColor: AppColors.kError)); }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('GRN submission failed: $e'),
+              backgroundColor: AppColors.kError));
+        }
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -349,8 +367,7 @@ class _MobileGrnScreenState extends ConsumerState<MobileGrnScreen> {
                                   style:
                                       TextStyle(fontFamily: 'SF Pro Display'))),
                           ...(_purchaseOrders ?? []).map((po) {
-                            final poNum =
-                                po['po_number'] ?? po['id'] ?? 'PO';
+                            final poNum = po['po_number'] ?? po['id'] ?? 'PO';
                             final supplier = po['supplier_name'] ?? '';
                             return DropdownMenuItem(
                               value: po,
@@ -376,10 +393,8 @@ class _MobileGrnScreenState extends ConsumerState<MobileGrnScreen> {
                         borderRadius: BorderRadius.circular(8)),
                     filled: true,
                     fillColor: AppColors.kSurface,
-                    prefixIcon: Icon(
-                        PhosphorIcons.receipt(),
-                        size: 18,
-                        color: AppColors.kTextSecondary),
+                    prefixIcon: Icon(PhosphorIcons.receipt(),
+                        size: 18, color: AppColors.kTextSecondary),
                   ),
                   style: const TextStyle(fontFamily: 'SF Pro Display'),
                 ),
@@ -524,8 +539,7 @@ class _GrnLineCardState extends State<_GrnLineCard> {
                       final qty = double.tryParse(v) ?? 0;
                       widget.onUpdate(widget.line.copyWith(
                         quantityReceived: qty,
-                        quantityAccepted:
-                            qty - widget.line.quantityRejected,
+                        quantityAccepted: qty - widget.line.quantityRejected,
                       ));
                     },
                   ),
@@ -540,8 +554,7 @@ class _GrnLineCardState extends State<_GrnLineCard> {
                       final rej = double.tryParse(v) ?? 0;
                       widget.onUpdate(widget.line.copyWith(
                         quantityRejected: rej,
-                        quantityAccepted:
-                            widget.line.quantityReceived - rej,
+                        quantityAccepted: widget.line.quantityReceived - rej,
                       ));
                     },
                   ),
@@ -596,10 +609,8 @@ class _QtyField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        border:
-            OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         labelStyle: TextStyle(
           fontSize: 11,
           color: color ?? AppColors.kTextSecondary,
@@ -633,8 +644,8 @@ class _ScanButton extends StatelessWidget {
           backgroundColor: AppColors.kPrimary,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(
             fontFamily: 'SF Pro Display',
             fontWeight: FontWeight.w700,

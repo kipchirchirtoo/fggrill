@@ -244,6 +244,219 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getShiftLogs(
+      {String status = 'closed'}) async {
+    final branchId = await getBranchId();
+    return _getList('/cashier/shifts', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+      'page': 1,
+      'limit': 100,
+    });
+  }
+
+  Future<void> reconcileShift(String id, String notes) async {
+    await _dio.put('/cashier/shifts/$id/reconcile', data: {
+      'reconciliation_notes': notes,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingCashierLogbooks() async {
+    final branchId = await getBranchId();
+    return _getList('/cashier/logbook/pending', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<void> auditCashierLogbook(
+    String id, {
+    required bool approve,
+    String notes = '',
+  }) async {
+    await _dio.post('/cashier/logbook/$id/audit', data: {
+      'action': approve ? 'approve' : 'reject',
+      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<Map<String, dynamic>> getBankingSummary() async {
+    final branchId = await getBranchId();
+    return _getMap('/banking/summary', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getBankingTransactions({
+    String status = 'all',
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/banking/transactions', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getBankAccounts() async {
+    final branchId = await getBranchId();
+    return _getList('/banking/accounts', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getBankReconciliations() async {
+    final branchId = await getBranchId();
+    return _getList('/banking/reconciliations', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<void> recordBankingTransaction(Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    await _dio.post('/banking/transactions', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...data,
+    });
+  }
+
+  Future<void> approveBankingTransaction(
+    String id, {
+    required bool approve,
+    String notes = '',
+  }) async {
+    await _dio.put('/banking/transactions/$id/approve', data: {
+      'action': approve ? 'approve' : 'reject',
+      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getCreditBills({
+    String status = 'all',
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/cashier/credit-bills', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+    });
+  }
+
+  Future<void> confirmCreditBill(String id, String notes) async {
+    await _dio.patch('/cashier/credit-bills/$id/confirm', data: {
+      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> recordCreditBillPayment(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.post('/cashier/credit-bills/$id/payment', data: data);
+  }
+
+  Future<List<Map<String, dynamic>>> getFinanceInvoices() async {
+    final branchId = await getBranchId();
+    return _getList('/finance/invoices', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getFinanceTransactions() async {
+    final branchId = await getBranchId();
+    return _getList('/finance/transactions', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingFoodVariances() async {
+    final branchId = await getBranchId();
+    return _getList('/food-control/variance/pending', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<void> approveFoodVariance(String id) async {
+    await _dio.post('/food-control/variance/$id/approve');
+  }
+
+  Future<void> flagFoodVariance(String id, String notes) async {
+    await _dio.post('/food-control/variance/$id/flag', data: {
+      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getShiftPnLs({
+    String status = 'all',
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/finance/shift-pnl', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+    });
+  }
+
+  Future<Map<String, dynamic>> getShiftPnLSummary() async {
+    final branchId = await getBranchId();
+    return _getMap('/finance/shift-pnl/summary', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<void> reviewShiftPnL(String shiftId, String notes) async {
+    await _dio.post('/finance/shift-pnl/$shiftId/review', data: {
+      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getStockTakes() async {
+    final branchId = await getBranchId();
+    return _getList('/stock-takes', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPurchaseOrders() {
+    return _getList('/procurement/purchase-orders');
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierInvoices() {
+    return _getList('/procurement/invoices');
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierPayments() {
+    return _getList('/procurement/payments');
+  }
+
+  Future<List<Map<String, dynamic>>> getBuffets() {
+    return _getList('/buffet');
+  }
+
+  Future<void> openBuffet(String id) async {
+    await _dio.post('/buffet/$id/open');
+  }
+
+  Future<void> closeBuffet(String id, Map<String, dynamic> data) async {
+    await _dio.post('/buffet/$id/close', data: data);
+  }
+
+  Future<void> cancelBuffet(String id, String reason) async {
+    await _dio.post('/buffet/$id/cancel', data: {
+      if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getCateringEvents() {
+    return _getList('/catering-food-control/events');
+  }
+
+  Future<void> completeCateringEvent(String id) async {
+    await _dio.post('/catering-food-control/events/$id/complete');
+  }
+
+  Future<void> cancelCateringEvent(String id, String reason) async {
+    await _dio.post('/catering-food-control/events/$id/cancel', data: {
+      if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getBudgets() async {
     final branchId = await getBranchId();
     return _getList('/branch-operations/finances/budgets', query: {
@@ -313,13 +526,30 @@ class BranchAccountantRepository {
   }
 
   List<Map<String, dynamic>> _asList(dynamic value) {
-    final data = value is Map
+    var data = value is Map
         ? value['data'] ??
             value['items'] ??
             value['records'] ??
             value['analysis'] ??
             []
         : value;
+    if (data is Map) {
+      data = data['data'] ??
+          data['items'] ??
+          data['records'] ??
+          data['rows'] ??
+          data['results'] ??
+          data['clearances'] ??
+          data['logbooks'] ??
+          data['transactions'] ??
+          data['invoices'] ??
+          data['payments'] ??
+          data['purchase_orders'] ??
+          data['purchaseOrders'] ??
+          data['stock_takes'] ??
+          data['stockTakes'] ??
+          [];
+    }
     if (data is List) {
       return data
           .whereType<Map>()

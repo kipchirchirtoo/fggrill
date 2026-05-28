@@ -13,7 +13,10 @@ import {
   getRoles,
   getRolePermissions,
   getSystemUsers,
-  getSystemStatus
+  getSystemStatus,
+  getSystemStats,
+  getSystemConfig,
+  updateSystemConfig
 } from '../controllers/system.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -34,6 +37,15 @@ router.get('/status',
   authorize([UserRole.SUPER_ADMIN]),
   getSystemStatus
 );
+
+router.get('/stats',
+  authorize([UserRole.SUPER_ADMIN]),
+  getSystemStats
+);
+
+router.route('/config')
+  .get(authorize([UserRole.SUPER_ADMIN]), getSystemConfig)
+  .put(authorize([UserRole.SUPER_ADMIN]), updateSystemConfig);
 
 // =====================================================
 // USERS (SYSTEM-WIDE)

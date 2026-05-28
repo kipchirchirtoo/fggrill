@@ -65,11 +65,11 @@ class AuthService extends BaseApiService {
     return response;
   }
 
-  // POST /api/auth/change-password
+  // PUT /api/auth/updatepassword
   Future<Map<String, dynamic>> changePassword(
       String currentPassword, String newPassword) async {
-    final response = await post<Map<String, dynamic>>(
-      '/auth/change-password',
+    final response = await put<Map<String, dynamic>>(
+      '/auth/updatepassword',
       data: {'currentPassword': currentPassword, 'newPassword': newPassword},
     );
     return response;

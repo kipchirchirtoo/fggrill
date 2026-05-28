@@ -96,6 +96,15 @@ export const protect = async (
           });
           // Fallback to Supabase auth in case they used a Supabase token
         } else {
+          // Check force_logout_at: reject tokens issued before this timestamp
+          if (user.force_logout_at) {
+            const tokenIssuedAt = (decoded.iat || 0) * 1000;
+            if (new Date(user.force_logout_at).getTime() > tokenIssuedAt) {
+              res.status(401).json({ success: false, message: 'Session invalidated by administrator' });
+              return;
+            }
+          }
+
           // Base user from DB
           const effectiveRole = decoded.active_role || user.role;
           const effectiveBranchId = (decoded.active_branch_id !== undefined && decoded.active_branch_id !== null)
@@ -116,7 +125,10 @@ export const protect = async (
             active_outlet_id: decoded.active_outlet_id || null,
             active_outlet_type: decoded.active_outlet_type || null,
             active_outlet_prefix: decoded.active_outlet_prefix || null,
-            is_pos_login: decoded.isPosLogin === true
+            is_pos_login: decoded.isPosLogin === true,
+            is_impersonation: decoded.impersonation === true,
+            impersonation_session_id: decoded.impersonation_session_id || null,
+            actual_actor_id: decoded.actual_actor_id || null,
           };
           next();
           return;

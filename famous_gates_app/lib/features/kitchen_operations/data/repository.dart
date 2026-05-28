@@ -147,6 +147,61 @@ class KitchenOpsRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getStoreReceipts({
+    String? status,
+  }) async {
+    final response = await _dio.get(
+      '/kitchen-ledger/receipts',
+      queryParameters: await _branchQuery({
+        if (status != null && status != 'ALL') 'status': status,
+      }),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> createStoreReceipt(Map<String, dynamic> data) async {
+    await _dio.post('/kitchen-ledger/receipts', data: {
+      ...await _branchQuery(),
+      ...data,
+    });
+  }
+
+  Future<void> verifyStoreReceipt(String id, String status) async {
+    await _dio.patch('/kitchen-ledger/receipts/$id/verify', data: {
+      'status': status,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPortionTracking({
+    String? date,
+  }) async {
+    final response = await _dio.get(
+      '/kitchen-ledger/portion-tracking',
+      queryParameters: await _branchQuery({
+        if (date != null) 'date': date,
+      }),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getVarianceLogs({
+    String? status,
+  }) async {
+    final response = await _dio.get(
+      '/kitchen-ledger/variance-logs',
+      queryParameters: await _branchQuery({
+        if (status != null && status != 'ALL') 'status': status,
+      }),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> approveVarianceLog(String id, String status) async {
+    await _dio.patch('/kitchen-ledger/variance-logs/$id/approve', data: {
+      'status': status,
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getStoreItems({
     String? search,
     int limit = 500,
@@ -397,6 +452,17 @@ class KitchenOpsRepository {
       }),
     );
     return _unwrapList(response.data);
+  }
+
+  Future<void> verifyExpectedPortion(
+    String id, {
+    required double actualPortions,
+    String? notes,
+  }) async {
+    await _dio.put('/kitchen/expected-portions/$id/verify', data: {
+      'actual_portions': actualPortions,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
   }
 
   Future<void> submitVarianceReason(

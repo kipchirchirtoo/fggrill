@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart' hide DataColumn, DataRow;
 import '../data/repository.dart';
+import '../../lina/presentation/lina_screen.dart';
 
 enum DirectorSection {
   overview,
@@ -21,6 +22,7 @@ enum DirectorSection {
   hr,
   branchAccounting,
   procurement,
+  lina,
 }
 
 class DirectorDashboard extends ConsumerStatefulWidget {
@@ -128,6 +130,8 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
         context.go('/branch-accountant/financial-workspace');
       case DirectorSection.procurement:
         context.go('/procurement');
+      case DirectorSection.lina:
+        setState(() => _section = section);
       default:
         setState(() => _section = section);
     }
@@ -201,6 +205,12 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
           section: DirectorSection.procurement,
           label: 'Procurement',
           icon: Icons.shopping_cart_outlined,
+          group: 'Departments',
+        ),
+        MasterNavItem(
+          section: DirectorSection.lina,
+          label: 'Lina(Ai Service)',
+          icon: Icons.psychology,
           group: 'Departments',
         ),
       ],
@@ -356,6 +366,8 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
       case DirectorSection.branchAccounting:
       case DirectorSection.procurement:
         return const SizedBox.shrink();
+      case DirectorSection.lina:
+        return const LinaScreen();
     }
   }
 

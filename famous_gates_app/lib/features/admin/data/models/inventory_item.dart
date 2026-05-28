@@ -1,6 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 part 'inventory_item.freezed.dart';
-part 'inventory_item.g.dart';
 
 double _doubleValue(dynamic value) {
   if (value is num) return value.toDouble();
@@ -42,24 +41,24 @@ class InventoryItem with _$InventoryItem {
         json['min_stock_level'] ??
         json['minStock']);
 
-    return _$InventoryItemFromJson({
-      ...json,
-      'id': '${json['id'] ?? json['sku'] ?? json['item_code'] ?? ''}',
-      'name':
+    return InventoryItem(
+      id: '${json['id'] ?? json['sku'] ?? json['item_code'] ?? ''}',
+      name:
           '${json['name'] ?? json['item_name'] ?? json['description'] ?? ''}',
-      'sku': '${json['sku'] ?? json['item_code'] ?? json['code'] ?? ''}',
-      'unit': '${json['unit'] ?? json['unit_of_measure'] ?? 'units'}',
-      'quantity': quantity,
-      'reorderLevel': reorderLevel,
-      'status': '${json['status'] ?? ''}',
-      'supplierId': '${json['supplierId'] ?? json['supplier_id'] ?? ''}',
-      'supplierName':
+      sku: '${json['sku'] ?? json['item_code'] ?? json['code'] ?? ''}',
+      category: '${json['category'] ?? ''}',
+      unit: '${json['unit'] ?? json['unit_of_measure'] ?? 'units'}',
+      quantity: quantity,
+      reorderLevel: reorderLevel,
+      status: '${json['status'] ?? ''}',
+      supplierId: '${json['supplierId'] ?? json['supplier_id'] ?? ''}',
+      supplierName:
           '${json['supplierName'] ?? json['supplier_name'] ?? json['supplier'] ?? ''}',
-      'branchId': '${json['branchId'] ?? json['branch_id'] ?? ''}',
-      'unitCost': unitCost,
-      'totalValue': _doubleValue(json['totalValue']) == 0
+      branchId: '${json['branchId'] ?? json['branch_id'] ?? ''}',
+      unitCost: unitCost,
+      totalValue: _doubleValue(json['totalValue']) == 0
           ? quantity * unitCost
           : _doubleValue(json['totalValue']),
-    });
+    );
   }
 }

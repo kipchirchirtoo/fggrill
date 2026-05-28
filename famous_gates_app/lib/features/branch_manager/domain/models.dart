@@ -16,15 +16,27 @@ class BranchManagerStats {
   });
 
   factory BranchManagerStats.fromJson(Map<String, dynamic> json) {
+    num asNum(List<String> keys) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value is num) return value;
+        if (value is String) return num.tryParse(value) ?? 0;
+      }
+      return 0;
+    }
+
     return BranchManagerStats(
-      todayRevenue: (json['today_revenue'] ?? json['revenue'] ?? 0).toDouble(),
-      activeOrders: (json['active_orders'] ?? json['orders'] ?? 0).toInt(),
+      todayRevenue:
+          asNum(['today_revenue', 'todayRevenue', 'revenue']).toDouble(),
+      activeOrders:
+          asNum(['active_orders', 'activeOrders', 'orders', 'todayOrders'])
+              .toInt(),
       occupancyRate:
-          (json['occupancy_rate'] ?? json['occupancy'] ?? 0).toDouble(),
+          asNum(['occupancy_rate', 'occupancyRate', 'occupancy']).toDouble(),
       lowStockItems:
-          (json['low_stock_items'] ?? json['low_stock'] ?? 0).toInt(),
-      totalRooms: (json['total_rooms'] ?? 0).toInt(),
-      occupiedRooms: (json['occupied_rooms'] ?? 0).toInt(),
+          asNum(['low_stock_items', 'lowStockItems', 'low_stock']).toInt(),
+      totalRooms: asNum(['total_rooms', 'totalRooms']).toInt(),
+      occupiedRooms: asNum(['occupied_rooms', 'occupiedRooms']).toInt(),
     );
   }
 }

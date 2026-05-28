@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/services.dart';
+import '../../../core/network/dio_client.dart';
+import '../data/superadmin_god_repository.dart';
 
 // SuperAdmin Navigation Sections
 enum SuperAdminSection {
   // Command
   adminDashboard,
-  behavioralIntelligence,
+  lina,
   securityCenter,
   systemHealth,
   globalSearch,
@@ -47,6 +49,14 @@ enum SuperAdminSection {
   reports,
   integrations,
   settings,
+
+  // God Controls
+  impersonation,
+  featureFlags,
+  announcements,
+  emergencyControls,
+  dataOverrides,
+  godAuditLog,
 }
 
 final superAdminSectionProvider =
@@ -170,3 +180,40 @@ final systemLogsProvider =
   final service = ref.read(systemServiceProvider);
   return service.getAdminLogs(category: 'security', limit: 50);
 });
+
+// SuperAdmin God Repository Provider
+final superadminGodRepositoryProvider =
+    Provider<SuperadminGodRepository>((ref) {
+  final dio = ref.read(dioProvider);
+  return SuperadminGodRepository(dio);
+});
+
+// Feature Flags Provider
+final featureFlagsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(superadminGodRepositoryProvider).getFeatureFlags();
+});
+
+// Announcements Provider
+final announcementsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(superadminGodRepositoryProvider).getAnnouncements();
+});
+
+// Security Config (God Mode) Provider
+final godSecurityConfigProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  return ref.read(superadminGodRepositoryProvider).getSecurityConfig();
+});
+
+// Superadmin Audit Log Provider
+final godAuditLogProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref
+      .read(superadminGodRepositoryProvider)
+      .getSuperadminAuditLog(limit: 50);
+});
+
+// Active impersonation session state
+final impersonationSessionProvider =
+    StateProvider<Map<String, dynamic>?>((ref) => null);

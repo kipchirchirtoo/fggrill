@@ -208,6 +208,13 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
                   itemCount: data.activeOrders.length,
                   itemBuilder: (context, index) => _OrderTicket(
                     order: data.activeOrders[index],
+                    onItemReady: (item) => _run(
+                      () => _repo.markItemReady(
+                        data.activeOrders[index].id,
+                        item.id,
+                      ),
+                      successMessage: '${item.name} marked ready',
+                    ),
                     onStart: () => _updateOrder(
                       data.activeOrders[index].id,
                       'preparing',
@@ -501,12 +508,14 @@ class _Page extends StatelessWidget {
 class _OrderTicket extends StatelessWidget {
   const _OrderTicket({
     required this.order,
+    required this.onItemReady,
     required this.onStart,
     required this.onReady,
     required this.onServed,
   });
 
   final KitchenOrder order;
+  final ValueChanged<KitchenOrderItem> onItemReady;
   final VoidCallback onStart;
   final VoidCallback onReady;
   final VoidCallback onServed;
@@ -555,17 +564,32 @@ class _OrderTicket extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Icon(Icons.table_restaurant_outlined,
                     size: 18, color: Colors.grey.shade600),
-                const SizedBox(width: 8),
-                Expanded(
+                SizedBox(
+                  width: 120,
                   child: Text(
                     order.locationLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
+                if (order.shortCode != null && order.shortCode!.isNotEmpty)
+                  _MetaPill(label: order.shortCode!, icon: Icons.tag),
+                if (order.isCaptainOrder)
+                  const _MetaPill(label: 'Captain', icon: Icons.point_of_sale),
+                if (order.paymentStatus != null &&
+                    order.paymentStatus!.isNotEmpty)
+                  _MetaPill(
+                    label: order.paymentStatus!,
+                    icon: Icons.payments_outlined,
+                  ),
                 _StatusPill(status: status),
               ],
             ),
@@ -613,6 +637,20 @@ class _OrderTicket extends StatelessWidget {
                                 ),
                               ),
                           ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip:
+                            item.isReady ? 'Item ready' : 'Mark item ready',
+                        onPressed:
+                            item.isReady ? null : () => onItemReady(item),
+                        icon: Icon(
+                          item.isReady
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          color: item.isReady
+                              ? AppColors.kSuccess
+                              : AppColors.kTextSecondary,
                         ),
                       ),
                     ],
@@ -684,6 +722,40 @@ class _OrderList extends StatelessWidget {
             trailing: _StatusPill(status: order.status),
           );
         },
+      ),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.kPrimary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.kPrimary.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppColors.kPrimary),
+          const SizedBox(width: 4),
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.kPrimary,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

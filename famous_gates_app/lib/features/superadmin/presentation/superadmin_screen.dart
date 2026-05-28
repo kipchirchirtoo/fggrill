@@ -8,7 +8,7 @@ import 'widgets/superadmin_side_nav.dart'
 import 'widgets/superadmin_top_bar.dart';
 
 // Superadmin-specific sections
-import 'sections/behavioral_intelligence_section.dart';
+import '../../lina/presentation/lina_screen.dart';
 import 'sections/security_center_section.dart';
 import 'sections/system_health_section.dart';
 import 'sections/global_users_section.dart';
@@ -18,6 +18,11 @@ import 'sections/settings_section.dart';
 import 'sections/admin_menu_sections.dart';
 import 'sections/operations_sections.dart';
 import 'sections/configuration_sections.dart';
+import 'sections/impersonation_section.dart';
+import 'sections/feature_flags_section.dart';
+import 'sections/announcements_section.dart';
+import 'sections/emergency_controls_section.dart';
+import 'sections/data_override_section.dart';
 
 // Admin sections reused in superadmin
 import '../../admin/presentation/sections/misc_admin_sections.dart';
@@ -82,8 +87,7 @@ class SuperAdminScreen extends ConsumerWidget {
     final widgets = <SuperAdminSection, Widget>{
       // Command
       SuperAdminSection.adminDashboard: const OverviewSection(),
-      SuperAdminSection.behavioralIntelligence:
-          const BehavioralIntelligenceSection(),
+      SuperAdminSection.lina: const LinaScreen(),
       SuperAdminSection.securityCenter: const SecurityCenterSection(),
       SuperAdminSection.systemHealth: const SystemHealthSection(),
       SuperAdminSection.globalSearch: const SuperAdminSearchSection(),
@@ -127,6 +131,14 @@ class SuperAdminScreen extends ConsumerWidget {
       SuperAdminSection.reports: const ReportsSection(),
       SuperAdminSection.integrations: const SystemIntegrationsSection(),
       SuperAdminSection.settings: const SuperAdminSettingsSection(),
+
+      // God Controls
+      SuperAdminSection.impersonation: const ImpersonationSection(),
+      SuperAdminSection.featureFlags: const FeatureFlagsSection(),
+      SuperAdminSection.announcements: const AnnouncementsSection(),
+      SuperAdminSection.emergencyControls: const EmergencyControlsSection(),
+      SuperAdminSection.dataOverrides: const DataOverrideSection(),
+      SuperAdminSection.godAuditLog: const DataOverrideSection(),
     };
 
     return AnimatedSwitcher(
@@ -138,7 +150,7 @@ class SuperAdminScreen extends ConsumerWidget {
           if (currentChild != null) currentChild,
         ],
       ),
-      child: widgets[section] ?? const BehavioralIntelligenceSection(),
+      child: widgets[section] ?? const LinaScreen(),
     );
   }
 
@@ -236,7 +248,7 @@ class _MobileBottomNav extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final items = <SuperAdminSection, IconData>{
       SuperAdminSection.adminDashboard: PhosphorIcons.house(),
-      SuperAdminSection.behavioralIntelligence: PhosphorIcons.cube(),
+      SuperAdminSection.lina: PhosphorIcons.sparkle(),
       SuperAdminSection.securityCenter: PhosphorIcons.shield(),
       SuperAdminSection.globalUsers: PhosphorIcons.users(),
       SuperAdminSection.settings: PhosphorIcons.gear(),
@@ -263,8 +275,8 @@ class _MobileBottomNav extends ConsumerWidget {
     switch (section) {
       case SuperAdminSection.adminDashboard:
         return 'Home';
-      case SuperAdminSection.behavioralIntelligence:
-        return 'AI';
+      case SuperAdminSection.lina:
+        return 'Lina';
       case SuperAdminSection.securityCenter:
         return 'Security';
       case SuperAdminSection.globalUsers:

@@ -117,7 +117,8 @@ class HousekeepingRepository {
 
   Future<List<Map<String, dynamic>>> getSchedule({String? date}) async {
     final branchId = await _branchId;
-    final response = await _dio.get('/housekeeping/schedule', queryParameters: {
+    final response =
+        await _dio.get('/housekeeping/scheduling/schedules', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (date != null) 'date': date,
     });
@@ -125,6 +126,6 @@ class HousekeepingRepository {
   }
 
   Future<void> createScheduleEntry(Map<String, dynamic> data) async {
-    await _dio.post('/housekeeping/schedule', data: data);
+    await _dio.post('/housekeeping/scheduling/schedules', data: data);
   }
 }

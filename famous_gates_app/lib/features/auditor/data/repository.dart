@@ -235,11 +235,11 @@ class AuditorRepository {
     String? startDate,
     String? endDate,
   }) async {
-    final response = await _dio.get('/auditor/verify/branch-orders',
-        queryParameters: {
-          if (startDate != null) 'start_date': startDate,
-          if (endDate != null) 'end_date': endDate,
-        });
+    final response =
+        await _dio.get('/auditor/verify/branch-orders', queryParameters: {
+      if (startDate != null) 'start_date': startDate,
+      if (endDate != null) 'end_date': endDate,
+    });
     final data = _unwrap(response.data);
     return BranchOrdersData.fromJson(data);
   }

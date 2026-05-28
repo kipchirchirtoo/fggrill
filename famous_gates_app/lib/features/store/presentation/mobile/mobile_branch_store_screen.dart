@@ -94,8 +94,7 @@ class _RequestsTab extends ConsumerWidget {
                       'Tap + to submit a new stock request to central store.',
                 )
               : ListView.separated(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
                   itemCount: requests.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, i) =>
@@ -149,20 +148,17 @@ class _RequestTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final number =
-        request['request_number'] ?? request['id'] ?? '—';
+    final number = request['request_number'] ?? request['id'] ?? '—';
     final status =
         (request['status'] ?? 'PENDING_AUDIT').toString().toUpperCase();
     final date = request['created_at'] ?? request['date'] ?? '';
     final items = request['stock_request_items'] as List? ??
-        request['items'] as List? ?? [];
-    final itemCount =
-        request['items_count'] ?? items.length;
-    final priority =
-        (request['priority'] ?? 'NORMAL').toString().toUpperCase();
+        request['items'] as List? ??
+        [];
+    final itemCount = request['items_count'] ?? items.length;
+    final priority = (request['priority'] ?? 'NORMAL').toString().toUpperCase();
 
-    final statusColor =
-        _statusColors[status] ?? AppColors.kTextSecondary;
+    final statusColor = _statusColors[status] ?? AppColors.kTextSecondary;
 
     String dateDisplay = '';
     if (date.isNotEmpty) {
@@ -196,8 +192,7 @@ class _RequestTile extends StatelessWidget {
               color: statusColor.withOpacity(0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child:
-                Icon(Icons.list_alt, color: statusColor, size: 22),
+            child: Icon(Icons.list_alt, color: statusColor, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -341,8 +336,7 @@ class _NewRequestSheetState extends ConsumerState<_NewRequestSheet> {
         );
       }
     } catch (e) {
-      setState(
-          () => _error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -439,8 +433,8 @@ class _NewRequestSheetState extends ConsumerState<_NewRequestSheet> {
                     decoration: const InputDecoration(
                       hintText: 'SKU',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),
                   ),
                 ),
@@ -452,8 +446,8 @@ class _NewRequestSheetState extends ConsumerState<_NewRequestSheet> {
                     decoration: const InputDecoration(
                       hintText: 'Item Name',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),
                   ),
                 ),
@@ -466,16 +460,15 @@ class _NewRequestSheetState extends ConsumerState<_NewRequestSheet> {
                     decoration: const InputDecoration(
                       hintText: 'Qty',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     ),
                   ),
                 ),
                 const SizedBox(width: 6),
                 IconButton(
                   onPressed: _addItem,
-                  icon: const Icon(Icons.add_circle,
-                      color: AppColors.kPrimary),
+                  icon: const Icon(Icons.add_circle, color: AppColors.kPrimary),
                 ),
               ],
             ),
@@ -485,8 +478,7 @@ class _NewRequestSheetState extends ConsumerState<_NewRequestSheet> {
               const SizedBox(height: 8),
               ..._items.map((item) => _ItemChip(
                     item: item,
-                    onRemove: () =>
-                        setState(() => _items.remove(item)),
+                    onRemove: () => setState(() => _items.remove(item)),
                   )),
             ],
 
@@ -494,8 +486,7 @@ class _NewRequestSheetState extends ConsumerState<_NewRequestSheet> {
               const SizedBox(height: 10),
               Text(
                 _error!,
-                style: const TextStyle(
-                    color: AppColors.kError, fontSize: 12),
+                style: const TextStyle(color: AppColors.kError, fontSize: 12),
               ),
             ],
             const SizedBox(height: 16),
@@ -541,13 +532,11 @@ class _ItemChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.kPrimary.withOpacity(0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: AppColors.kPrimary.withOpacity(0.2)),
+        border: Border.all(color: AppColors.kPrimary.withOpacity(0.2)),
       ),
       child: Row(
         children: [
@@ -563,8 +552,7 @@ class _ItemChip extends StatelessWidget {
           ),
           GestureDetector(
             onTap: onRemove,
-            child: const Icon(Icons.close,
-                size: 16, color: AppColors.kError),
+            child: const Icon(Icons.close, size: 16, color: AppColors.kError),
           ),
         ],
       ),
@@ -583,8 +571,7 @@ class _ReceiveTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_incomingDispatchesProvider);
     return async.when(
-      loading: () =>
-          const MobileLoadingView(message: 'Loading dispatches…'),
+      loading: () => const MobileLoadingView(message: 'Loading dispatches…'),
       error: (e, _) => MobileEmptyState(
         icon: Icons.error_outline,
         title: 'Could not load dispatches',
@@ -621,13 +608,12 @@ class _IncomingDispatchTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final number =
-        dispatch['dispatch_number'] ?? dispatch['id'] ?? '—';
+    final number = dispatch['dispatch_number'] ?? dispatch['id'] ?? '—';
     final from =
         dispatch['from_branch'] ?? dispatch['source_branch'] ?? 'Central Store';
     final driver = dispatch['driver_name'] ?? dispatch['driver'] ?? '—';
-    final items = dispatch['dispatch_items'] as List? ??
-        dispatch['items'] as List? ?? [];
+    final items =
+        dispatch['dispatch_items'] as List? ?? dispatch['items'] as List? ?? [];
     final itemCount = dispatch['items_count'] ?? items.length;
     final status =
         (dispatch['status'] ?? 'IN_TRANSIT').toString().toUpperCase();
@@ -675,8 +661,7 @@ class _IncomingDispatchTile extends ConsumerWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.kPrimary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -714,8 +699,8 @@ class _IncomingDispatchTile extends ConsumerWidget {
                 label: const Text('Verify B-OTP'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.kPrimary,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   textStyle: const TextStyle(
                     fontSize: 12,
                     fontFamily: 'SF Pro Display',
@@ -728,8 +713,8 @@ class _IncomingDispatchTile extends ConsumerWidget {
                 label: const Text('Confirm'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.kSuccess,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   textStyle: const TextStyle(
                     fontSize: 12,
                     fontFamily: 'SF Pro Display',
@@ -760,8 +745,8 @@ class _IncomingDispatchTile extends ConsumerWidget {
 
   void _showConfirmSheet(BuildContext context, WidgetRef ref) {
     final id = '${dispatch['id'] ?? dispatch['dispatch_id']}';
-    final items = dispatch['dispatch_items'] as List? ??
-        dispatch['items'] as List? ?? [];
+    final items =
+        dispatch['dispatch_items'] as List? ?? dispatch['items'] as List? ?? [];
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -772,9 +757,7 @@ class _IncomingDispatchTile extends ConsumerWidget {
         container: ProviderScope.containerOf(context),
         child: _ConfirmDeliverySheet(
           dispatchId: id,
-          items: items
-              .map((i) => Map<String, dynamic>.from(i as Map))
-              .toList(),
+          items: items.map((i) => Map<String, dynamic>.from(i as Map)).toList(),
         ),
       ),
     );
@@ -826,8 +809,7 @@ class _BranchOtpSheetState extends ConsumerState<_BranchOtpSheet> {
         );
       }
     } catch (e) {
-      setState(
-          () => _error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -893,8 +875,8 @@ class _BranchOtpSheetState extends ConsumerState<_BranchOtpSheet> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                    color: AppColors.kPrimary, width: 2),
+                borderSide:
+                    const BorderSide(color: AppColors.kPrimary, width: 2),
               ),
               errorText: _error,
             ),
@@ -944,8 +926,7 @@ class _ConfirmDeliverySheet extends ConsumerStatefulWidget {
       _ConfirmDeliverySheetState();
 }
 
-class _ConfirmDeliverySheetState
-    extends ConsumerState<_ConfirmDeliverySheet> {
+class _ConfirmDeliverySheetState extends ConsumerState<_ConfirmDeliverySheet> {
   late final List<Map<String, dynamic>> _lines;
   bool _loading = false;
   String? _error;
@@ -958,11 +939,10 @@ class _ConfirmDeliverySheetState
           (item['dispatched_quantity'] ?? item['quantity'] ?? 0) as num;
       return {
         'item_id': item['item_id'] ?? item['id'],
-        'item_name':
-            item['item_name'] ?? item['name'] ?? item['sku'] ?? '—',
+        'item_name': item['item_name'] ?? item['name'] ?? item['sku'] ?? '—',
         'dispatched': dispatched,
-        'received_qty': TextEditingController(
-            text: dispatched.toStringAsFixed(0)),
+        'received_qty':
+            TextEditingController(text: dispatched.toStringAsFixed(0)),
         'damaged_qty': TextEditingController(text: '0'),
       };
     }).toList();
@@ -986,21 +966,19 @@ class _ConfirmDeliverySheetState
       final items = _lines.map((l) {
         return {
           'item_id': l['item_id'],
-          'received_quantity':
-              double.tryParse(
-                      (l['received_qty'] as TextEditingController).text) ??
-                  0,
-          'damaged_quantity':
-              double.tryParse(
-                      (l['damaged_qty'] as TextEditingController).text) ??
-                  0,
+          'received_quantity': double.tryParse(
+                  (l['received_qty'] as TextEditingController).text) ??
+              0,
+          'damaged_quantity': double.tryParse(
+                  (l['damaged_qty'] as TextEditingController).text) ??
+              0,
         };
       }).toList();
 
       await ref.read(storeRepositoryProvider).confirmDispatchNote(
-            widget.dispatchId,
-            {'items': items},
-          );
+        widget.dispatchId,
+        {'items': items},
+      );
       ref.invalidate(_incomingDispatchesProvider);
       if (mounted) {
         Navigator.pop(context);
@@ -1012,8 +990,7 @@ class _ConfirmDeliverySheetState
         );
       }
     } catch (e) {
-      setState(
-          () => _error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1122,8 +1099,7 @@ class _ConfirmDeliverySheetState
             const SizedBox(height: 8),
             Text(
               _error!,
-              style: const TextStyle(
-                  color: AppColors.kError, fontSize: 12),
+              style: const TextStyle(color: AppColors.kError, fontSize: 12),
             ),
           ],
           const SizedBox(height: 16),
@@ -1168,8 +1144,7 @@ class _MyStockTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_lowStockProvider);
     return async.when(
-      loading: () =>
-          const MobileLoadingView(message: 'Loading stock levels…'),
+      loading: () => const MobileLoadingView(message: 'Loading stock levels…'),
       error: (e, _) => MobileEmptyState(
         icon: Icons.error_outline,
         title: 'Could not load stock',
@@ -1191,8 +1166,7 @@ class _MyStockTab extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: AppColors.kWarning.withOpacity(0.1),
               child: Row(
                 children: [

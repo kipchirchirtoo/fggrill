@@ -1265,7 +1265,7 @@ Future<void> _showInvestigationDialog(
   final type = _rowEntityType(row, fallback: _inferAuditEntityType(row));
   dynamic detail;
   Object? error;
-  if (id.isNotEmpty && type != 'record') {
+  if (id.isNotEmpty && _canLoadAuditorDetail(type)) {
     try {
       detail = await ref
           .read(auditorRepositoryProvider)
@@ -1529,6 +1529,43 @@ String _inferAuditEntityType(Map<String, dynamic> row) {
   return 'record';
 }
 
+const Set<String> _auditorDetailEntityTypes = {
+  'restaurant_order',
+  'bar_order',
+  'bill',
+  'exception',
+  'delivery',
+  'stock_audit',
+  'bar_stock',
+  'stock_request',
+  'approval',
+  'stock_item',
+  'sold_item',
+};
+
+const Set<String> _auditorVerificationEntityTypes = {
+  'restaurant_order',
+  'bar_order',
+  'bill',
+  'invoice',
+  'exception',
+  'pos_transaction',
+  'payment',
+  'stock_movement',
+  'kitchen_usage',
+  'stock_request',
+  'dispatch_note',
+};
+
+String _normalizeAuditEntityType(String value) =>
+    value.toLowerCase().trim().replaceAll('-', '_').replaceAll(' ', '_');
+
+bool _canLoadAuditorDetail(String type) =>
+    _auditorDetailEntityTypes.contains(_normalizeAuditEntityType(type));
+
+bool _canVerifyAuditorEntity(String type) =>
+    _auditorVerificationEntityTypes.contains(_normalizeAuditEntityType(type));
+
 Widget _detailItemsBlock(String title, List<dynamic> items) {
   final rows = items.whereType<Map>().map(Map<String, dynamic>.from).toList();
   if (rows.isEmpty) {
@@ -1622,10 +1659,13 @@ _AuditorRowAction _verifyAnomalyAction({String fallbackType = 'record'}) =>
       color: AppColors.kSuccess,
       body: (row, notes) => {
         'id': _rowId(row),
-        'type': _rowEntityType(row, fallback: fallbackType),
+        'type': _normalizeAuditEntityType(
+            _rowEntityType(row, fallback: fallbackType)),
         if (notes.isNotEmpty) 'notes': notes,
       },
-      visible: _isPending,
+      visible: (row) =>
+          _isPending(row) &&
+          _canVerifyAuditorEntity(_rowEntityType(row, fallback: fallbackType)),
     );
 
 _AuditorRowAction _flagAction({String fallbackType = 'record'}) =>
@@ -1636,7 +1676,8 @@ _AuditorRowAction _flagAction({String fallbackType = 'record'}) =>
       color: AppColors.kWarning,
       requiresNotes: true,
       body: (row, notes) => {
-        'entity_type': _rowEntityType(row, fallback: fallbackType),
+        'entity_type': _normalizeAuditEntityType(
+            _rowEntityType(row, fallback: fallbackType)),
         'entity_id': _rowId(row),
         'reason': notes,
         'metadata': row,
@@ -4454,9 +4495,18 @@ class _AuditorDetailScreenState extends ConsumerState<AuditorDetailScreen> {
   Future<void> _verifyAnomaly() async {
     final notes = await _notes('Verify Record');
     if (!mounted || notes == null) return;
+    final entityType = '${widget._queryParameters['type'] ?? 'record'}';
+    if (!_canVerifyAuditorEntity(entityType)) {
+      AppNotifier.show(
+        context,
+        'This record type does not support direct verification. Flag it for review instead.',
+        isError: true,
+      );
+      return;
+    }
     await _submit('POST', '/auditor/verify/clear', {
       'id': widget._recordId,
-      'type': widget._queryParameters['type'] ?? 'record',
+      'type': _normalizeAuditEntityType(entityType),
       if (notes.isNotEmpty) 'notes': notes,
     });
   }
@@ -4464,9 +4514,10 @@ class _AuditorDetailScreenState extends ConsumerState<AuditorDetailScreen> {
   Future<void> _flagAnomaly() async {
     final notes = await _notes('Flag Record', required: true);
     if (!mounted || notes == null) return;
+    final entityType = '${widget._queryParameters['type'] ?? 'record'}';
     await _submit('POST', '/auditor/exceptions', {
-      'exception_type': '${widget._queryParameters['type'] ?? 'record'}',
-      'reference_type': '${widget._queryParameters['type'] ?? 'record'}',
+      'exception_type': _normalizeAuditEntityType(entityType),
+      'reference_type': _normalizeAuditEntityType(entityType),
       'reference_id': widget._recordId,
       'description': notes,
       'severity': 'medium',

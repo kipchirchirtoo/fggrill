@@ -74,8 +74,7 @@ class MaintenanceRepository {
   Future<List<Map<String, dynamic>>> getMaintenanceSchedule(
       {String? date}) async {
     final branchId = await _branchId;
-    final response =
-        await _dio.get('/maintenance-enhanced/schedule', queryParameters: {
+    final response = await _dio.get('/maintenance/schedule', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (date != null) 'date': date,
     });
@@ -83,6 +82,6 @@ class MaintenanceRepository {
   }
 
   Future<void> createScheduleEntry(Map<String, dynamic> data) async {
-    await _dio.post('/maintenance-enhanced/schedule', data: data);
+    await _dio.post('/maintenance/tasks', data: data);
   }
 }

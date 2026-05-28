@@ -22,16 +22,16 @@ class ProcurementRepository {
   }
 
   Future<List<ProcurementItem>> getProcurements() async {
-    final response = await _dio.get('/procurement');
+    final response = await _dio.get('/procurement/purchase-orders');
     return _parseList(response.data, ProcurementItem.fromJson);
   }
 
   Future<void> createProcurement(Map<String, dynamic> data) async {
-    await _dio.post('/procurement', data: data);
+    await _dio.post('/procurement/purchase-orders', data: data);
   }
 
   Future<List<ProcurementSupplier>> getSuppliers() async {
-    final response = await _dio.get('/procurement/suppliers');
+    final response = await _dio.get('/suppliers');
     return _parseList(response.data, ProcurementSupplier.fromJson);
   }
 

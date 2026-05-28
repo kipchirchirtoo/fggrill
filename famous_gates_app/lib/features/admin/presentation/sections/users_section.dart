@@ -263,30 +263,94 @@ class _UsersSectionState extends ConsumerState<UsersSection> {
     );
   }
 
-  void _resetPassword(AdminUser user) {
-    showDialog(
+  Future<void> _resetPassword(AdminUser user) async {
+    final passwordCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final newPassword = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reset Password'),
-        content: Text('Send password reset link to ${user.email}?'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Set a new password for ${user.email}.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmCtrl,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirm password'),
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(adminRepositoryProvider).resetUserPassword(user.id);
-              AppNotifier.showSnackBar(
-                context,
-                SnackBar(
-                    content: Text('Password reset link sent to ${user.email}')),
-              );
+              final password = passwordCtrl.text.trim();
+              if (password.length < 6) {
+                AppNotifier.showSnackBar(
+                  context,
+                  const SnackBar(
+                    content: Text('Password must be at least 6 characters'),
+                    backgroundColor: AppColors.kError,
+                  ),
+                );
+                return;
+              }
+              if (password != confirmCtrl.text.trim()) {
+                AppNotifier.showSnackBar(
+                  context,
+                  const SnackBar(
+                    content: Text('Passwords do not match'),
+                    backgroundColor: AppColors.kError,
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(ctx, password);
             },
-            child: const Text('Send Reset Link'),
+            child: const Text('Reset'),
           ),
         ],
       ),
     );
+
+    passwordCtrl.dispose();
+    confirmCtrl.dispose();
+    if (newPassword == null || !mounted) return;
+
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .resetUserPassword(user.id, newPassword);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(content: Text('Password reset for ${user.email}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+            content: Text('Password reset failed: $e'),
+            backgroundColor: AppColors.kError,
+          ),
+        );
+      }
+    }
   }
 
   void _confirmDelete(BuildContext context, AdminUser user) {

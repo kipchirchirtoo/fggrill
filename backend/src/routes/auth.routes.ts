@@ -8,6 +8,7 @@ import {
   updateDetails,
   updatePassword,
   forgotPassword,
+  validateLicense,
   posLogin,
   switchContext
 } from '../controllers/auth.controller';
@@ -18,6 +19,7 @@ const router = express.Router();
 
 router.post('/register', register);
 router.post('/login', login);
+router.post('/license/validate', validateLicense);
 router.post('/pos-login', posLogin);
 router.post('/refresh-token', refreshToken);
 router.post('/logout', protect, logout);
