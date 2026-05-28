@@ -500,10 +500,34 @@ export const getRolePermissions = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const roleParam = req.params.id;
+    let roleId: number | null = /^\d+$/.test(roleParam) ? Number(roleParam) : null;
+
+    if (roleId === null) {
+      const { data: role, error: roleError } = await supabase
+        .from('roles')
+        .select('id, role_name')
+        .eq('role_name', roleParam)
+        .maybeSingle();
+
+      if (roleError) throw roleError;
+
+      roleId = role?.id ?? null;
+    }
+
+    if (roleId === null) {
+      res.status(200).json({
+        success: true,
+        count: 0,
+        data: []
+      });
+      return;
+    }
+
     const { data, error } = await supabase
       .from('permissions')
       .select('*')
-      .eq('role_id', req.params.id);
+      .eq('role_id', roleId);
 
     if (error) throw error;
 

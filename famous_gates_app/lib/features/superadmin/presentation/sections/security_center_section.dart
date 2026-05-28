@@ -559,7 +559,14 @@ class _SecurityCenterSectionState extends ConsumerState<SecurityCenterSection> {
                   DataColumn(label: Text('Threat')),
                 ],
                 rows: logs.map((log) {
-                  final user = log['user'] as Map<String, dynamic>?;
+                  final user = _mapValue(log['user']).isNotEmpty
+                      ? _mapValue(log['user'])
+                      : _mapValue(log['actor']);
+                  final email = _firstText([
+                    log['email'],
+                    user['email'],
+                  ]);
+                  final userName = _securityUserName(user, email);
                   final geo = log;
                   final threatScore =
                       (log['threat_score'] as num?)?.toInt() ?? 0;
@@ -573,14 +580,12 @@ class _SecurityCenterSectionState extends ConsumerState<SecurityCenterSection> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              user != null
-                                  ? '${user['first_name']} ${user['last_name']}'
-                                  : 'Unknown',
+                              userName,
                               style:
                                   const TextStyle(fontWeight: FontWeight.w500),
                             ),
                             Text(
-                              log['email']?.toString() ?? '',
+                              email,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade500,
@@ -1353,4 +1358,33 @@ class _SecurityCenterSectionState extends ConsumerState<SecurityCenterSection> {
           context, SnackBar(content: Text(apiErrorMessage(e))));
     }
   }
+}
+
+Map<String, dynamic> _mapValue(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return {};
+}
+
+String _firstText(Iterable<dynamic> values) {
+  for (final value in values) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+  }
+  return '';
+}
+
+String _securityUserName(Map<String, dynamic> user, String email) {
+  final direct = _firstText([
+    user['name'],
+    user['full_name'],
+    '${_firstText([user['first_name']])} ${_firstText([user['last_name']])}'
+        .trim(),
+  ]);
+  if (direct.isNotEmpty) return direct;
+  if (email.isNotEmpty && !email.startsWith('N/A')) {
+    return email.split('@').first;
+  }
+  if (email.startsWith('N/A')) return 'PIN attempt';
+  return 'Unknown user';
 }

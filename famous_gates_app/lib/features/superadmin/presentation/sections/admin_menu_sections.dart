@@ -29,6 +29,14 @@ double _number(Map<String, dynamic> row, String key) {
   return double.tryParse(value?.toString() ?? '') ?? 0;
 }
 
+Widget _dropdownText(String value) {
+  return Text(
+    value,
+    overflow: TextOverflow.ellipsis,
+    maxLines: 1,
+  );
+}
+
 class RestaurantMenuAdminSection extends ConsumerStatefulWidget {
   const RestaurantMenuAdminSection({super.key});
 
@@ -131,14 +139,15 @@ class _RestaurantMenuAdminSectionState
         width: 220,
         child: DropdownButtonFormField<String>(
           initialValue: categoryId.isEmpty ? '' : categoryId,
+          isExpanded: true,
           decoration: const InputDecoration(labelText: 'Category'),
           items: [
-            const DropdownMenuItem(value: '', child: Text('All categories')),
+            DropdownMenuItem(value: '', child: _dropdownText('All categories')),
             ...categoryRows.whereType<Map>().map((row) {
               final item = Map<String, dynamic>.from(row);
               return DropdownMenuItem(
                 value: _text(item, 'id'),
-                child: Text(_text(item, 'name', 'Unnamed')),
+                child: _dropdownText(_text(item, 'name', 'Unnamed')),
               );
             }),
           ],
@@ -291,14 +300,15 @@ class _BarMenuAdminSectionState extends ConsumerState<BarMenuAdminSection> {
         width: 220,
         child: DropdownButtonFormField<String>(
           initialValue: categoryId.isEmpty ? '' : categoryId,
+          isExpanded: true,
           decoration: const InputDecoration(labelText: 'Category'),
           items: [
-            const DropdownMenuItem(value: '', child: Text('All categories')),
+            DropdownMenuItem(value: '', child: _dropdownText('All categories')),
             ...categoryRows.whereType<Map>().map((row) {
               final item = Map<String, dynamic>.from(row);
               return DropdownMenuItem(
                 value: _text(item, 'id'),
-                child: Text(_text(item, 'name', 'Unnamed')),
+                child: _dropdownText(_text(item, 'name', 'Unnamed')),
               );
             }),
           ],
@@ -387,14 +397,19 @@ class _KyogongServicesAdminSectionState
           width: 220,
           child: DropdownButtonFormField<String>(
             initialValue: type,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Service type'),
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('All services')),
-              DropdownMenuItem(value: 'spa', child: Text('Spa')),
+            items: [
               DropdownMenuItem(
-                  value: 'executive-bar', child: Text('Executive Bar')),
-              DropdownMenuItem(value: 'sports-bar', child: Text('Sports Bar')),
-              DropdownMenuItem(value: 'reception', child: Text('Reception')),
+                  value: 'all', child: _dropdownText('All services')),
+              DropdownMenuItem(value: 'spa', child: _dropdownText('Spa')),
+              DropdownMenuItem(
+                  value: 'executive-bar',
+                  child: _dropdownText('Executive Bar')),
+              DropdownMenuItem(
+                  value: 'sports-bar', child: _dropdownText('Sports Bar')),
+              DropdownMenuItem(
+                  value: 'reception', child: _dropdownText('Reception')),
             ],
             onChanged: (value) => setState(() => type = value ?? 'all'),
           ),
@@ -1207,16 +1222,21 @@ class _KyogongServiceDialogState extends ConsumerState<_KyogongServiceDialog> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: serviceType,
+                    isExpanded: true,
                     decoration:
                         const InputDecoration(labelText: 'Service Type'),
-                    items: const [
-                      DropdownMenuItem(value: 'spa', child: Text('Spa')),
+                    items: [
                       DropdownMenuItem(
-                          value: 'executive-bar', child: Text('Executive Bar')),
+                          value: 'spa', child: _dropdownText('Spa')),
                       DropdownMenuItem(
-                          value: 'sports-bar', child: Text('Sports Bar')),
+                          value: 'executive-bar',
+                          child: _dropdownText('Executive Bar')),
                       DropdownMenuItem(
-                          value: 'reception', child: Text('Reception')),
+                          value: 'sports-bar',
+                          child: _dropdownText('Sports Bar')),
+                      DropdownMenuItem(
+                          value: 'reception',
+                          child: _dropdownText('Reception')),
                     ],
                     onChanged: (v) =>
                         setState(() => serviceType = v ?? serviceType),
@@ -1226,13 +1246,14 @@ class _KyogongServiceDialogState extends ConsumerState<_KyogongServiceDialog> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: pricingModel,
+                    isExpanded: true,
                     decoration:
                         const InputDecoration(labelText: 'Pricing Model'),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
-                          value: 'fixed', child: Text('Fixed Price')),
+                          value: 'fixed', child: _dropdownText('Fixed Price')),
                       DropdownMenuItem(
-                          value: 'hourly', child: Text('Hourly Rate')),
+                          value: 'hourly', child: _dropdownText('Hourly Rate')),
                     ],
                     onChanged: (v) =>
                         setState(() => pricingModel = v ?? pricingModel),

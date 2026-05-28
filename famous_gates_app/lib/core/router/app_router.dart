@@ -45,6 +45,8 @@ import '../../features/director/presentation/director_dashboard.dart';
 import '../../features/system/presentation/crud_module_screen.dart';
 import '../../features/admin/domain/admin_providers.dart';
 import '../../features/auditor/presentation/auditor_sections.dart';
+import '../../features/store/presentation/mobile/mobile_receiving_barcode_screen.dart';
+import '../utils/platform_utils.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _RouterRefreshNotifier();
@@ -753,8 +755,15 @@ List<GoRoute> get _centralStoreSectionRoutes => _centralStoreSectionRouteSpecs
     .map(
       (entry) => GoRoute(
         path: entry.key,
-        builder: (context, state) =>
-            AdminScreen.centralStore(initialSection: entry.value),
+        builder: (context, state) {
+          // On mobile, the receiving-barcode route opens the full mobile
+          // barcode scanner hub instead of the desktop goods-receiving screen.
+          if (entry.key == '/central-store/receiving-barcode' &&
+              AppPlatform.isMobile) {
+            return const MobileReceivingBarcodeScreen();
+          }
+          return AdminScreen.centralStore(initialSection: entry.value);
+        },
       ),
     )
     .toList();

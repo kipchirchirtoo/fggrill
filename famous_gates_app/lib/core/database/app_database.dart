@@ -19,19 +19,31 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
     OfflineSales,
     HeldOrders,
     CachedNotifications,
+    ScanSessions,
   ],
   daos: [
     ProductsCacheDao,
     OfflineSalesDao,
     HeldOrdersDao,
     NotificationsDao,
+    ScanSessionsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.createTable(scanSessions);
+          }
+        },
+      );
 }
 
 LazyDatabase _openConnection() {
@@ -99,6 +111,101 @@ class CachedNotifications extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+// ---------------------------------------------------------------------------
+// Scan Sessions table — offline barcode scan queue for GRN / stock takes
+// ---------------------------------------------------------------------------
+
+@DataClassName('ScanSessionEntry')
+class ScanSessions extends Table {
+  /// Local UUID assigned at scan time
+  TextColumn get localId => text()();
+
+  /// 'grn' | 'stock_take' | 'barcode_lookup'
+  TextColumn get sessionType => text()();
+
+  /// PO id (for grn), stock-take id, etc.
+  TextColumn get sessionRef => text().nullable()();
+
+  TextColumn get barcode => text()();
+  TextColumn get itemId => text().nullable()();
+  TextColumn get itemSku => text()();
+  TextColumn get itemName => text()();
+  TextColumn get itemUnit => text()();
+  RealColumn get scannedQuantity => real().withDefault(const Constant(1.0))();
+
+  /// System stock at time of scan (used for variance in stock takes)
+  RealColumn get systemStock => real().nullable()();
+
+  /// Unix timestamp ms
+  IntColumn get scannedAt => integer()();
+
+  BoolColumn get synced =>
+      boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {localId};
+}
+
+@DriftAccessor(tables: [ScanSessions])
+class ScanSessionsDao extends DatabaseAccessor<AppDatabase>
+    with _$ScanSessionsDaoMixin {
+  ScanSessionsDao(super.db);
+
+  Future<void> insertScan(ScanSessionEntry entry) =>
+      into(scanSessions).insertOnConflictUpdate(entry);
+
+  Future<List<ScanSessionEntry>> getBySession(
+      String sessionType, String sessionRef) {
+    return (select(scanSessions)
+          ..where((t) =>
+              t.sessionType.equals(sessionType) &
+              t.sessionRef.equals(sessionRef))
+          ..orderBy([(t) => OrderingTerm.asc(t.scannedAt)]))
+        .get();
+  }
+
+  Future<List<ScanSessionEntry>> getPending() {
+    return (select(scanSessions)
+          ..where((t) => t.synced.equals(false))
+          ..orderBy([(t) => OrderingTerm.asc(t.scannedAt)]))
+        .get();
+  }
+
+  Stream<List<ScanSessionEntry>> watchSession(
+      String sessionType, String sessionRef) {
+    return (select(scanSessions)
+          ..where((t) =>
+              t.sessionType.equals(sessionType) &
+              t.sessionRef.equals(sessionRef))
+          ..orderBy([(t) => OrderingTerm.asc(t.scannedAt)]))
+        .watch();
+  }
+
+  Future<void> markSynced(String localId) {
+    return (update(scanSessions)
+          ..where((t) => t.localId.equals(localId)))
+        .write(const ScanSessionsCompanion(synced: Value(true)));
+  }
+
+  Future<int> deleteSession(String sessionType, String sessionRef) {
+    return (delete(scanSessions)
+          ..where((t) =>
+              t.sessionType.equals(sessionType) &
+              t.sessionRef.equals(sessionRef)))
+        .go();
+  }
+
+  Future<int> deleteById(String localId) {
+    return (delete(scanSessions)
+          ..where((t) => t.localId.equals(localId)))
+        .go();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Existing DAOs
+// ---------------------------------------------------------------------------
 
 @DriftAccessor(tables: [ProductsCache])
 class ProductsCacheDao extends DatabaseAccessor<AppDatabase>

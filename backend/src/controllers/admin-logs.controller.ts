@@ -149,26 +149,49 @@ export const getUnifiedLogs = async (req: Request, res: Response, next: NextFunc
     const userIds = [...new Set((data || [])
       .map((item: any) => item[userIdField] || item.user_id)
       .filter(Boolean))];
+    const emails = [...new Set((data || [])
+      .map((item: any) => String(item.email || '').trim().toLowerCase())
+      .filter(Boolean))];
 
     const { data: users, error: usersError } = userIds.length
       ? await supabase
           .from('users')
-          .select('id, email, first_name, last_name')
+          .select('id, email, first_name, last_name, role')
           .in('id', userIds)
       : { data: [], error: null };
 
     if (usersError) throw usersError;
 
+    const { data: emailUsers, error: emailUsersError } = emails.length
+      ? await supabase
+          .from('users')
+          .select('id, email, first_name, last_name, role')
+          .in('email', emails)
+      : { data: [], error: null };
+
+    if (emailUsersError) throw emailUsersError;
+
     const userMap = new Map((users || []).map((user: any) => [String(user.id), user]));
+    const emailUserMap = new Map((emailUsers || []).map((user: any) => [String(user.email || '').toLowerCase(), user]));
 
     // Normalize data for frontend consistency
-    const normalizedData = (data || []).map((item: any) => ({
-        ...item,
-        category,
-        // Ensure a consistent timestamp field for the frontend
-        created_at: item.created_at || item.performed_at || item.audit_date || item.started_at,
-        actor: userMap.get(String(item[userIdField] || item.user_id)) || { email: item.email || 'System' }
-    }));
+    const normalizedData = (data || []).map((item: any) => {
+        const actor =
+          userMap.get(String(item[userIdField] || item.user_id)) ||
+          emailUserMap.get(String(item.email || '').toLowerCase()) ||
+          { email: item.email || 'System' };
+
+        return {
+          ...item,
+          category,
+          // Ensure a consistent timestamp field for the frontend
+          created_at: item.created_at || item.performed_at || item.audit_date || item.started_at,
+          actor,
+          user: actor,
+          user_name: `${actor.first_name || ''} ${actor.last_name || ''}`.trim(),
+          user_role: actor.role || item.role || null
+        };
+    });
 
     res.status(200).json({
       success: true,

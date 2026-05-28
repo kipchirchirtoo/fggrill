@@ -227,4 +227,75 @@ class StoreRepository {
   Future<void> createResource(String path, Map<String, dynamic> data) async {
     await _dio.post(path, data: data);
   }
+
+  // -----------------------------------------------------------------------
+  // Mobile / Barcode APIs
+  // -----------------------------------------------------------------------
+
+  /// Look up a store item by its barcode or SKU.
+  /// Returns null when not found (404 treated as null).
+  Future<Map<String, dynamic>?> getItemByBarcode(String code) async {
+    try {
+      final response = await _dio.get(
+        '/storekeeping/items',
+        queryParameters: {'search': code, 'limit': 5},
+      );
+      final list = _parseList(response.data, (j) => j);
+      if (list.isEmpty) return null;
+      // Prefer exact barcode/SKU match before falling back to first result
+      final exact = list.firstWhere(
+        (item) =>
+            (item['barcode'] ?? '').toString().toLowerCase() ==
+                code.toLowerCase() ||
+            (item['sku'] ?? '').toString().toLowerCase() ==
+                code.toLowerCase(),
+        orElse: () => list.first,
+      );
+      return exact;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// List purchase orders (for selecting which PO to GRN against).
+  Future<List<Map<String, dynamic>>> getPurchaseOrders(
+      {String? status}) async {
+    final response = await _dio.get('/procurement/purchase-orders',
+        queryParameters: {
+          if (status != null) 'status': status,
+        });
+    return _parseList(response.data, (j) => j);
+  }
+
+  /// Submit a new Goods Receipt Note.
+  /// [data] must contain: po_id, invoice_number, items[].
+  Future<Map<String, dynamic>> submitGrn(Map<String, dynamic> data) async {
+    final response = await _dio.post('/procurement/grn', data: data);
+    return _unwrap(response.data);
+  }
+
+  /// List stock-take sessions.
+  Future<List<Map<String, dynamic>>> getStockTakes({String? status}) async {
+    final branchId = await _branchId;
+    final response = await _dio.get('/stock-takes', queryParameters: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null) 'status': status,
+    });
+    return _parseList(response.data, (j) => j);
+  }
+
+  /// Submit a finalised stock-take count.
+  Future<Map<String, dynamic>> submitStockTake(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/stock-takes', data: data);
+    return _unwrap(response.data);
+  }
+
+  /// Confirm receipt of a dispatch note (central store receiving from supplier
+  /// or branch receiving from central store).
+  Future<void> confirmDispatchNote(
+      String id, Map<String, dynamic> items) async {
+    await _dio.put('/storekeeping/dispatch-notes/$id/confirm', data: items);
+  }
 }

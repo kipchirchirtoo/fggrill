@@ -14,10 +14,6 @@ T _$identity<T>(T value) => value;
 final _privateConstructorUsedError = UnsupportedError(
     'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
 
-InventoryItem _$InventoryItemFromJson(Map<String, dynamic> json) {
-  return _InventoryItem.fromJson(json);
-}
-
 /// @nodoc
 mixin _$InventoryItem {
   String get id => throw _privateConstructorUsedError;
@@ -33,9 +29,6 @@ mixin _$InventoryItem {
   String get branchId => throw _privateConstructorUsedError;
   double get unitCost => throw _privateConstructorUsedError;
   double get totalValue => throw _privateConstructorUsedError;
-
-  /// Serializes this InventoryItem to a JSON map.
-  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
 
   /// Create a copy of InventoryItem
   /// with the given fields replaced by the non-null parameter values.
@@ -261,7 +254,7 @@ class __$$InventoryItemImplCopyWithImpl<$Res>
 }
 
 /// @nodoc
-@JsonSerializable()
+
 class _$InventoryItemImpl implements _InventoryItem {
   const _$InventoryItemImpl(
       {this.id = '',
@@ -277,9 +270,6 @@ class _$InventoryItemImpl implements _InventoryItem {
       this.branchId = '',
       this.unitCost = 0.0,
       this.totalValue = 0.0});
-
-  factory _$InventoryItemImpl.fromJson(Map<String, dynamic> json) =>
-      _$$InventoryItemImplFromJson(json);
 
   @override
   @JsonKey()
@@ -354,7 +344,6 @@ class _$InventoryItemImpl implements _InventoryItem {
                 other.totalValue == totalValue));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
       runtimeType,
@@ -379,13 +368,6 @@ class _$InventoryItemImpl implements _InventoryItem {
   @pragma('vm:prefer-inline')
   _$$InventoryItemImplCopyWith<_$InventoryItemImpl> get copyWith =>
       __$$InventoryItemImplCopyWithImpl<_$InventoryItemImpl>(this, _$identity);
-
-  @override
-  Map<String, dynamic> toJson() {
-    return _$$InventoryItemImplToJson(
-      this,
-    );
-  }
 }
 
 abstract class _InventoryItem implements InventoryItem {
@@ -403,9 +385,6 @@ abstract class _InventoryItem implements InventoryItem {
       final String branchId,
       final double unitCost,
       final double totalValue}) = _$InventoryItemImpl;
-
-  factory _InventoryItem.fromJson(Map<String, dynamic> json) =
-      _$InventoryItemImpl.fromJson;
 
   @override
   String get id;

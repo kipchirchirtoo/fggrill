@@ -1648,6 +1648,623 @@ class CachedNotificationsCompanion
   }
 }
 
+class $ScanSessionsTable extends ScanSessions
+    with TableInfo<$ScanSessionsTable, ScanSessionEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ScanSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localIdMeta =
+      const VerificationMeta('localId');
+  @override
+  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
+      'local_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sessionTypeMeta =
+      const VerificationMeta('sessionType');
+  @override
+  late final GeneratedColumn<String> sessionType = GeneratedColumn<String>(
+      'session_type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sessionRefMeta =
+      const VerificationMeta('sessionRef');
+  @override
+  late final GeneratedColumn<String> sessionRef = GeneratedColumn<String>(
+      'session_ref', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _barcodeMeta =
+      const VerificationMeta('barcode');
+  @override
+  late final GeneratedColumn<String> barcode = GeneratedColumn<String>(
+      'barcode', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _itemIdMeta = const VerificationMeta('itemId');
+  @override
+  late final GeneratedColumn<String> itemId = GeneratedColumn<String>(
+      'item_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _itemSkuMeta =
+      const VerificationMeta('itemSku');
+  @override
+  late final GeneratedColumn<String> itemSku = GeneratedColumn<String>(
+      'item_sku', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _itemNameMeta =
+      const VerificationMeta('itemName');
+  @override
+  late final GeneratedColumn<String> itemName = GeneratedColumn<String>(
+      'item_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _itemUnitMeta =
+      const VerificationMeta('itemUnit');
+  @override
+  late final GeneratedColumn<String> itemUnit = GeneratedColumn<String>(
+      'item_unit', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _scannedQuantityMeta =
+      const VerificationMeta('scannedQuantity');
+  @override
+  late final GeneratedColumn<double> scannedQuantity = GeneratedColumn<double>(
+      'scanned_quantity', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1.0));
+  static const VerificationMeta _systemStockMeta =
+      const VerificationMeta('systemStock');
+  @override
+  late final GeneratedColumn<double> systemStock = GeneratedColumn<double>(
+      'system_stock', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _scannedAtMeta =
+      const VerificationMeta('scannedAt');
+  @override
+  late final GeneratedColumn<int> scannedAt = GeneratedColumn<int>(
+      'scanned_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _syncedMeta = const VerificationMeta('synced');
+  @override
+  late final GeneratedColumn<bool> synced = GeneratedColumn<bool>(
+      'synced', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("synced" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns => [
+        localId,
+        sessionType,
+        sessionRef,
+        barcode,
+        itemId,
+        itemSku,
+        itemName,
+        itemUnit,
+        scannedQuantity,
+        systemStock,
+        scannedAt,
+        synced
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'scan_sessions';
+  @override
+  VerificationContext validateIntegrity(Insertable<ScanSessionEntry> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_id')) {
+      context.handle(_localIdMeta,
+          localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta));
+    } else if (isInserting) {
+      context.missing(_localIdMeta);
+    }
+    if (data.containsKey('session_type')) {
+      context.handle(
+          _sessionTypeMeta,
+          sessionType.isAcceptableOrUnknown(
+              data['session_type']!, _sessionTypeMeta));
+    } else if (isInserting) {
+      context.missing(_sessionTypeMeta);
+    }
+    if (data.containsKey('session_ref')) {
+      context.handle(
+          _sessionRefMeta,
+          sessionRef.isAcceptableOrUnknown(
+              data['session_ref']!, _sessionRefMeta));
+    }
+    if (data.containsKey('barcode')) {
+      context.handle(_barcodeMeta,
+          barcode.isAcceptableOrUnknown(data['barcode']!, _barcodeMeta));
+    } else if (isInserting) {
+      context.missing(_barcodeMeta);
+    }
+    if (data.containsKey('item_id')) {
+      context.handle(_itemIdMeta,
+          itemId.isAcceptableOrUnknown(data['item_id']!, _itemIdMeta));
+    }
+    if (data.containsKey('item_sku')) {
+      context.handle(_itemSkuMeta,
+          itemSku.isAcceptableOrUnknown(data['item_sku']!, _itemSkuMeta));
+    } else if (isInserting) {
+      context.missing(_itemSkuMeta);
+    }
+    if (data.containsKey('item_name')) {
+      context.handle(_itemNameMeta,
+          itemName.isAcceptableOrUnknown(data['item_name']!, _itemNameMeta));
+    } else if (isInserting) {
+      context.missing(_itemNameMeta);
+    }
+    if (data.containsKey('item_unit')) {
+      context.handle(_itemUnitMeta,
+          itemUnit.isAcceptableOrUnknown(data['item_unit']!, _itemUnitMeta));
+    } else if (isInserting) {
+      context.missing(_itemUnitMeta);
+    }
+    if (data.containsKey('scanned_quantity')) {
+      context.handle(
+          _scannedQuantityMeta,
+          scannedQuantity.isAcceptableOrUnknown(
+              data['scanned_quantity']!, _scannedQuantityMeta));
+    }
+    if (data.containsKey('system_stock')) {
+      context.handle(
+          _systemStockMeta,
+          systemStock.isAcceptableOrUnknown(
+              data['system_stock']!, _systemStockMeta));
+    }
+    if (data.containsKey('scanned_at')) {
+      context.handle(_scannedAtMeta,
+          scannedAt.isAcceptableOrUnknown(data['scanned_at']!, _scannedAtMeta));
+    } else if (isInserting) {
+      context.missing(_scannedAtMeta);
+    }
+    if (data.containsKey('synced')) {
+      context.handle(_syncedMeta,
+          synced.isAcceptableOrUnknown(data['synced']!, _syncedMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localId};
+  @override
+  ScanSessionEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ScanSessionEntry(
+      localId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}local_id'])!,
+      sessionType: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}session_type'])!,
+      sessionRef: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}session_ref']),
+      barcode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}barcode'])!,
+      itemId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}item_id']),
+      itemSku: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}item_sku'])!,
+      itemName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}item_name'])!,
+      itemUnit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}item_unit'])!,
+      scannedQuantity: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}scanned_quantity'])!,
+      systemStock: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}system_stock']),
+      scannedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}scanned_at'])!,
+      synced: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}synced'])!,
+    );
+  }
+
+  @override
+  $ScanSessionsTable createAlias(String alias) {
+    return $ScanSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class ScanSessionEntry extends DataClass
+    implements Insertable<ScanSessionEntry> {
+  /// Local UUID assigned at scan time
+  final String localId;
+
+  /// 'grn' | 'stock_take' | 'barcode_lookup'
+  final String sessionType;
+
+  /// PO id (for grn), stock-take id, etc.
+  final String? sessionRef;
+  final String barcode;
+  final String? itemId;
+  final String itemSku;
+  final String itemName;
+  final String itemUnit;
+  final double scannedQuantity;
+
+  /// System stock at time of scan (used for variance in stock takes)
+  final double? systemStock;
+
+  /// Unix timestamp ms
+  final int scannedAt;
+  final bool synced;
+  const ScanSessionEntry(
+      {required this.localId,
+      required this.sessionType,
+      this.sessionRef,
+      required this.barcode,
+      this.itemId,
+      required this.itemSku,
+      required this.itemName,
+      required this.itemUnit,
+      required this.scannedQuantity,
+      this.systemStock,
+      required this.scannedAt,
+      required this.synced});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_id'] = Variable<String>(localId);
+    map['session_type'] = Variable<String>(sessionType);
+    if (!nullToAbsent || sessionRef != null) {
+      map['session_ref'] = Variable<String>(sessionRef);
+    }
+    map['barcode'] = Variable<String>(barcode);
+    if (!nullToAbsent || itemId != null) {
+      map['item_id'] = Variable<String>(itemId);
+    }
+    map['item_sku'] = Variable<String>(itemSku);
+    map['item_name'] = Variable<String>(itemName);
+    map['item_unit'] = Variable<String>(itemUnit);
+    map['scanned_quantity'] = Variable<double>(scannedQuantity);
+    if (!nullToAbsent || systemStock != null) {
+      map['system_stock'] = Variable<double>(systemStock);
+    }
+    map['scanned_at'] = Variable<int>(scannedAt);
+    map['synced'] = Variable<bool>(synced);
+    return map;
+  }
+
+  ScanSessionsCompanion toCompanion(bool nullToAbsent) {
+    return ScanSessionsCompanion(
+      localId: Value(localId),
+      sessionType: Value(sessionType),
+      sessionRef: sessionRef == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sessionRef),
+      barcode: Value(barcode),
+      itemId:
+          itemId == null && nullToAbsent ? const Value.absent() : Value(itemId),
+      itemSku: Value(itemSku),
+      itemName: Value(itemName),
+      itemUnit: Value(itemUnit),
+      scannedQuantity: Value(scannedQuantity),
+      systemStock: systemStock == null && nullToAbsent
+          ? const Value.absent()
+          : Value(systemStock),
+      scannedAt: Value(scannedAt),
+      synced: Value(synced),
+    );
+  }
+
+  factory ScanSessionEntry.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ScanSessionEntry(
+      localId: serializer.fromJson<String>(json['localId']),
+      sessionType: serializer.fromJson<String>(json['sessionType']),
+      sessionRef: serializer.fromJson<String?>(json['sessionRef']),
+      barcode: serializer.fromJson<String>(json['barcode']),
+      itemId: serializer.fromJson<String?>(json['itemId']),
+      itemSku: serializer.fromJson<String>(json['itemSku']),
+      itemName: serializer.fromJson<String>(json['itemName']),
+      itemUnit: serializer.fromJson<String>(json['itemUnit']),
+      scannedQuantity: serializer.fromJson<double>(json['scannedQuantity']),
+      systemStock: serializer.fromJson<double?>(json['systemStock']),
+      scannedAt: serializer.fromJson<int>(json['scannedAt']),
+      synced: serializer.fromJson<bool>(json['synced']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localId': serializer.toJson<String>(localId),
+      'sessionType': serializer.toJson<String>(sessionType),
+      'sessionRef': serializer.toJson<String?>(sessionRef),
+      'barcode': serializer.toJson<String>(barcode),
+      'itemId': serializer.toJson<String?>(itemId),
+      'itemSku': serializer.toJson<String>(itemSku),
+      'itemName': serializer.toJson<String>(itemName),
+      'itemUnit': serializer.toJson<String>(itemUnit),
+      'scannedQuantity': serializer.toJson<double>(scannedQuantity),
+      'systemStock': serializer.toJson<double?>(systemStock),
+      'scannedAt': serializer.toJson<int>(scannedAt),
+      'synced': serializer.toJson<bool>(synced),
+    };
+  }
+
+  ScanSessionEntry copyWith(
+          {String? localId,
+          String? sessionType,
+          Value<String?> sessionRef = const Value.absent(),
+          String? barcode,
+          Value<String?> itemId = const Value.absent(),
+          String? itemSku,
+          String? itemName,
+          String? itemUnit,
+          double? scannedQuantity,
+          Value<double?> systemStock = const Value.absent(),
+          int? scannedAt,
+          bool? synced}) =>
+      ScanSessionEntry(
+        localId: localId ?? this.localId,
+        sessionType: sessionType ?? this.sessionType,
+        sessionRef: sessionRef.present ? sessionRef.value : this.sessionRef,
+        barcode: barcode ?? this.barcode,
+        itemId: itemId.present ? itemId.value : this.itemId,
+        itemSku: itemSku ?? this.itemSku,
+        itemName: itemName ?? this.itemName,
+        itemUnit: itemUnit ?? this.itemUnit,
+        scannedQuantity: scannedQuantity ?? this.scannedQuantity,
+        systemStock: systemStock.present ? systemStock.value : this.systemStock,
+        scannedAt: scannedAt ?? this.scannedAt,
+        synced: synced ?? this.synced,
+      );
+  ScanSessionEntry copyWithCompanion(ScanSessionsCompanion data) {
+    return ScanSessionEntry(
+      localId: data.localId.present ? data.localId.value : this.localId,
+      sessionType:
+          data.sessionType.present ? data.sessionType.value : this.sessionType,
+      sessionRef:
+          data.sessionRef.present ? data.sessionRef.value : this.sessionRef,
+      barcode: data.barcode.present ? data.barcode.value : this.barcode,
+      itemId: data.itemId.present ? data.itemId.value : this.itemId,
+      itemSku: data.itemSku.present ? data.itemSku.value : this.itemSku,
+      itemName: data.itemName.present ? data.itemName.value : this.itemName,
+      itemUnit: data.itemUnit.present ? data.itemUnit.value : this.itemUnit,
+      scannedQuantity: data.scannedQuantity.present
+          ? data.scannedQuantity.value
+          : this.scannedQuantity,
+      systemStock:
+          data.systemStock.present ? data.systemStock.value : this.systemStock,
+      scannedAt: data.scannedAt.present ? data.scannedAt.value : this.scannedAt,
+      synced: data.synced.present ? data.synced.value : this.synced,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ScanSessionEntry(')
+          ..write('localId: $localId, ')
+          ..write('sessionType: $sessionType, ')
+          ..write('sessionRef: $sessionRef, ')
+          ..write('barcode: $barcode, ')
+          ..write('itemId: $itemId, ')
+          ..write('itemSku: $itemSku, ')
+          ..write('itemName: $itemName, ')
+          ..write('itemUnit: $itemUnit, ')
+          ..write('scannedQuantity: $scannedQuantity, ')
+          ..write('systemStock: $systemStock, ')
+          ..write('scannedAt: $scannedAt, ')
+          ..write('synced: $synced')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      localId,
+      sessionType,
+      sessionRef,
+      barcode,
+      itemId,
+      itemSku,
+      itemName,
+      itemUnit,
+      scannedQuantity,
+      systemStock,
+      scannedAt,
+      synced);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ScanSessionEntry &&
+          other.localId == this.localId &&
+          other.sessionType == this.sessionType &&
+          other.sessionRef == this.sessionRef &&
+          other.barcode == this.barcode &&
+          other.itemId == this.itemId &&
+          other.itemSku == this.itemSku &&
+          other.itemName == this.itemName &&
+          other.itemUnit == this.itemUnit &&
+          other.scannedQuantity == this.scannedQuantity &&
+          other.systemStock == this.systemStock &&
+          other.scannedAt == this.scannedAt &&
+          other.synced == this.synced);
+}
+
+class ScanSessionsCompanion extends UpdateCompanion<ScanSessionEntry> {
+  final Value<String> localId;
+  final Value<String> sessionType;
+  final Value<String?> sessionRef;
+  final Value<String> barcode;
+  final Value<String?> itemId;
+  final Value<String> itemSku;
+  final Value<String> itemName;
+  final Value<String> itemUnit;
+  final Value<double> scannedQuantity;
+  final Value<double?> systemStock;
+  final Value<int> scannedAt;
+  final Value<bool> synced;
+  final Value<int> rowid;
+  const ScanSessionsCompanion({
+    this.localId = const Value.absent(),
+    this.sessionType = const Value.absent(),
+    this.sessionRef = const Value.absent(),
+    this.barcode = const Value.absent(),
+    this.itemId = const Value.absent(),
+    this.itemSku = const Value.absent(),
+    this.itemName = const Value.absent(),
+    this.itemUnit = const Value.absent(),
+    this.scannedQuantity = const Value.absent(),
+    this.systemStock = const Value.absent(),
+    this.scannedAt = const Value.absent(),
+    this.synced = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ScanSessionsCompanion.insert({
+    required String localId,
+    required String sessionType,
+    this.sessionRef = const Value.absent(),
+    required String barcode,
+    this.itemId = const Value.absent(),
+    required String itemSku,
+    required String itemName,
+    required String itemUnit,
+    this.scannedQuantity = const Value.absent(),
+    this.systemStock = const Value.absent(),
+    required int scannedAt,
+    this.synced = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : localId = Value(localId),
+        sessionType = Value(sessionType),
+        barcode = Value(barcode),
+        itemSku = Value(itemSku),
+        itemName = Value(itemName),
+        itemUnit = Value(itemUnit),
+        scannedAt = Value(scannedAt);
+  static Insertable<ScanSessionEntry> custom({
+    Expression<String>? localId,
+    Expression<String>? sessionType,
+    Expression<String>? sessionRef,
+    Expression<String>? barcode,
+    Expression<String>? itemId,
+    Expression<String>? itemSku,
+    Expression<String>? itemName,
+    Expression<String>? itemUnit,
+    Expression<double>? scannedQuantity,
+    Expression<double>? systemStock,
+    Expression<int>? scannedAt,
+    Expression<bool>? synced,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localId != null) 'local_id': localId,
+      if (sessionType != null) 'session_type': sessionType,
+      if (sessionRef != null) 'session_ref': sessionRef,
+      if (barcode != null) 'barcode': barcode,
+      if (itemId != null) 'item_id': itemId,
+      if (itemSku != null) 'item_sku': itemSku,
+      if (itemName != null) 'item_name': itemName,
+      if (itemUnit != null) 'item_unit': itemUnit,
+      if (scannedQuantity != null) 'scanned_quantity': scannedQuantity,
+      if (systemStock != null) 'system_stock': systemStock,
+      if (scannedAt != null) 'scanned_at': scannedAt,
+      if (synced != null) 'synced': synced,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ScanSessionsCompanion copyWith(
+      {Value<String>? localId,
+      Value<String>? sessionType,
+      Value<String?>? sessionRef,
+      Value<String>? barcode,
+      Value<String?>? itemId,
+      Value<String>? itemSku,
+      Value<String>? itemName,
+      Value<String>? itemUnit,
+      Value<double>? scannedQuantity,
+      Value<double?>? systemStock,
+      Value<int>? scannedAt,
+      Value<bool>? synced,
+      Value<int>? rowid}) {
+    return ScanSessionsCompanion(
+      localId: localId ?? this.localId,
+      sessionType: sessionType ?? this.sessionType,
+      sessionRef: sessionRef ?? this.sessionRef,
+      barcode: barcode ?? this.barcode,
+      itemId: itemId ?? this.itemId,
+      itemSku: itemSku ?? this.itemSku,
+      itemName: itemName ?? this.itemName,
+      itemUnit: itemUnit ?? this.itemUnit,
+      scannedQuantity: scannedQuantity ?? this.scannedQuantity,
+      systemStock: systemStock ?? this.systemStock,
+      scannedAt: scannedAt ?? this.scannedAt,
+      synced: synced ?? this.synced,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localId.present) {
+      map['local_id'] = Variable<String>(localId.value);
+    }
+    if (sessionType.present) {
+      map['session_type'] = Variable<String>(sessionType.value);
+    }
+    if (sessionRef.present) {
+      map['session_ref'] = Variable<String>(sessionRef.value);
+    }
+    if (barcode.present) {
+      map['barcode'] = Variable<String>(barcode.value);
+    }
+    if (itemId.present) {
+      map['item_id'] = Variable<String>(itemId.value);
+    }
+    if (itemSku.present) {
+      map['item_sku'] = Variable<String>(itemSku.value);
+    }
+    if (itemName.present) {
+      map['item_name'] = Variable<String>(itemName.value);
+    }
+    if (itemUnit.present) {
+      map['item_unit'] = Variable<String>(itemUnit.value);
+    }
+    if (scannedQuantity.present) {
+      map['scanned_quantity'] = Variable<double>(scannedQuantity.value);
+    }
+    if (systemStock.present) {
+      map['system_stock'] = Variable<double>(systemStock.value);
+    }
+    if (scannedAt.present) {
+      map['scanned_at'] = Variable<int>(scannedAt.value);
+    }
+    if (synced.present) {
+      map['synced'] = Variable<bool>(synced.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ScanSessionsCompanion(')
+          ..write('localId: $localId, ')
+          ..write('sessionType: $sessionType, ')
+          ..write('sessionRef: $sessionRef, ')
+          ..write('barcode: $barcode, ')
+          ..write('itemId: $itemId, ')
+          ..write('itemSku: $itemSku, ')
+          ..write('itemName: $itemName, ')
+          ..write('itemUnit: $itemUnit, ')
+          ..write('scannedQuantity: $scannedQuantity, ')
+          ..write('systemStock: $systemStock, ')
+          ..write('scannedAt: $scannedAt, ')
+          ..write('synced: $synced, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1656,6 +2273,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HeldOrdersTable heldOrders = $HeldOrdersTable(this);
   late final $CachedNotificationsTable cachedNotifications =
       $CachedNotificationsTable(this);
+  late final $ScanSessionsTable scanSessions = $ScanSessionsTable(this);
   late final ProductsCacheDao productsCacheDao =
       ProductsCacheDao(this as AppDatabase);
   late final OfflineSalesDao offlineSalesDao =
@@ -1663,12 +2281,19 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final HeldOrdersDao heldOrdersDao = HeldOrdersDao(this as AppDatabase);
   late final NotificationsDao notificationsDao =
       NotificationsDao(this as AppDatabase);
+  late final ScanSessionsDao scanSessionsDao =
+      ScanSessionsDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [productsCache, offlineSales, heldOrders, cachedNotifications];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+        productsCache,
+        offlineSales,
+        heldOrders,
+        cachedNotifications,
+        scanSessions
+      ];
 }
 
 typedef $$ProductsCacheTableCreateCompanionBuilder = ProductsCacheCompanion
@@ -2517,6 +3142,286 @@ typedef $$CachedNotificationsTableProcessedTableManager = ProcessedTableManager<
     ),
     CachedNotificationEntry,
     PrefetchHooks Function()>;
+typedef $$ScanSessionsTableCreateCompanionBuilder = ScanSessionsCompanion
+    Function({
+  required String localId,
+  required String sessionType,
+  Value<String?> sessionRef,
+  required String barcode,
+  Value<String?> itemId,
+  required String itemSku,
+  required String itemName,
+  required String itemUnit,
+  Value<double> scannedQuantity,
+  Value<double?> systemStock,
+  required int scannedAt,
+  Value<bool> synced,
+  Value<int> rowid,
+});
+typedef $$ScanSessionsTableUpdateCompanionBuilder = ScanSessionsCompanion
+    Function({
+  Value<String> localId,
+  Value<String> sessionType,
+  Value<String?> sessionRef,
+  Value<String> barcode,
+  Value<String?> itemId,
+  Value<String> itemSku,
+  Value<String> itemName,
+  Value<String> itemUnit,
+  Value<double> scannedQuantity,
+  Value<double?> systemStock,
+  Value<int> scannedAt,
+  Value<bool> synced,
+  Value<int> rowid,
+});
+
+class $$ScanSessionsTableFilterComposer
+    extends Composer<_$AppDatabase, $ScanSessionsTable> {
+  $$ScanSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localId => $composableBuilder(
+      column: $table.localId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sessionType => $composableBuilder(
+      column: $table.sessionType, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sessionRef => $composableBuilder(
+      column: $table.sessionRef, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get barcode => $composableBuilder(
+      column: $table.barcode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get itemId => $composableBuilder(
+      column: $table.itemId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get itemSku => $composableBuilder(
+      column: $table.itemSku, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get itemName => $composableBuilder(
+      column: $table.itemName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get itemUnit => $composableBuilder(
+      column: $table.itemUnit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get scannedQuantity => $composableBuilder(
+      column: $table.scannedQuantity,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get systemStock => $composableBuilder(
+      column: $table.systemStock, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get scannedAt => $composableBuilder(
+      column: $table.scannedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get synced => $composableBuilder(
+      column: $table.synced, builder: (column) => ColumnFilters(column));
+}
+
+class $$ScanSessionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ScanSessionsTable> {
+  $$ScanSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localId => $composableBuilder(
+      column: $table.localId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sessionType => $composableBuilder(
+      column: $table.sessionType, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sessionRef => $composableBuilder(
+      column: $table.sessionRef, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get barcode => $composableBuilder(
+      column: $table.barcode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get itemId => $composableBuilder(
+      column: $table.itemId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get itemSku => $composableBuilder(
+      column: $table.itemSku, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get itemName => $composableBuilder(
+      column: $table.itemName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get itemUnit => $composableBuilder(
+      column: $table.itemUnit, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get scannedQuantity => $composableBuilder(
+      column: $table.scannedQuantity,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get systemStock => $composableBuilder(
+      column: $table.systemStock, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get scannedAt => $composableBuilder(
+      column: $table.scannedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get synced => $composableBuilder(
+      column: $table.synced, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ScanSessionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ScanSessionsTable> {
+  $$ScanSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionType => $composableBuilder(
+      column: $table.sessionType, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionRef => $composableBuilder(
+      column: $table.sessionRef, builder: (column) => column);
+
+  GeneratedColumn<String> get barcode =>
+      $composableBuilder(column: $table.barcode, builder: (column) => column);
+
+  GeneratedColumn<String> get itemId =>
+      $composableBuilder(column: $table.itemId, builder: (column) => column);
+
+  GeneratedColumn<String> get itemSku =>
+      $composableBuilder(column: $table.itemSku, builder: (column) => column);
+
+  GeneratedColumn<String> get itemName =>
+      $composableBuilder(column: $table.itemName, builder: (column) => column);
+
+  GeneratedColumn<String> get itemUnit =>
+      $composableBuilder(column: $table.itemUnit, builder: (column) => column);
+
+  GeneratedColumn<double> get scannedQuantity => $composableBuilder(
+      column: $table.scannedQuantity, builder: (column) => column);
+
+  GeneratedColumn<double> get systemStock => $composableBuilder(
+      column: $table.systemStock, builder: (column) => column);
+
+  GeneratedColumn<int> get scannedAt =>
+      $composableBuilder(column: $table.scannedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get synced =>
+      $composableBuilder(column: $table.synced, builder: (column) => column);
+}
+
+class $$ScanSessionsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ScanSessionsTable,
+    ScanSessionEntry,
+    $$ScanSessionsTableFilterComposer,
+    $$ScanSessionsTableOrderingComposer,
+    $$ScanSessionsTableAnnotationComposer,
+    $$ScanSessionsTableCreateCompanionBuilder,
+    $$ScanSessionsTableUpdateCompanionBuilder,
+    (
+      ScanSessionEntry,
+      BaseReferences<_$AppDatabase, $ScanSessionsTable, ScanSessionEntry>
+    ),
+    ScanSessionEntry,
+    PrefetchHooks Function()> {
+  $$ScanSessionsTableTableManager(_$AppDatabase db, $ScanSessionsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ScanSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ScanSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ScanSessionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> localId = const Value.absent(),
+            Value<String> sessionType = const Value.absent(),
+            Value<String?> sessionRef = const Value.absent(),
+            Value<String> barcode = const Value.absent(),
+            Value<String?> itemId = const Value.absent(),
+            Value<String> itemSku = const Value.absent(),
+            Value<String> itemName = const Value.absent(),
+            Value<String> itemUnit = const Value.absent(),
+            Value<double> scannedQuantity = const Value.absent(),
+            Value<double?> systemStock = const Value.absent(),
+            Value<int> scannedAt = const Value.absent(),
+            Value<bool> synced = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ScanSessionsCompanion(
+            localId: localId,
+            sessionType: sessionType,
+            sessionRef: sessionRef,
+            barcode: barcode,
+            itemId: itemId,
+            itemSku: itemSku,
+            itemName: itemName,
+            itemUnit: itemUnit,
+            scannedQuantity: scannedQuantity,
+            systemStock: systemStock,
+            scannedAt: scannedAt,
+            synced: synced,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String localId,
+            required String sessionType,
+            Value<String?> sessionRef = const Value.absent(),
+            required String barcode,
+            Value<String?> itemId = const Value.absent(),
+            required String itemSku,
+            required String itemName,
+            required String itemUnit,
+            Value<double> scannedQuantity = const Value.absent(),
+            Value<double?> systemStock = const Value.absent(),
+            required int scannedAt,
+            Value<bool> synced = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ScanSessionsCompanion.insert(
+            localId: localId,
+            sessionType: sessionType,
+            sessionRef: sessionRef,
+            barcode: barcode,
+            itemId: itemId,
+            itemSku: itemSku,
+            itemName: itemName,
+            itemUnit: itemUnit,
+            scannedQuantity: scannedQuantity,
+            systemStock: systemStock,
+            scannedAt: scannedAt,
+            synced: synced,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ScanSessionsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ScanSessionsTable,
+    ScanSessionEntry,
+    $$ScanSessionsTableFilterComposer,
+    $$ScanSessionsTableOrderingComposer,
+    $$ScanSessionsTableAnnotationComposer,
+    $$ScanSessionsTableCreateCompanionBuilder,
+    $$ScanSessionsTableUpdateCompanionBuilder,
+    (
+      ScanSessionEntry,
+      BaseReferences<_$AppDatabase, $ScanSessionsTable, ScanSessionEntry>
+    ),
+    ScanSessionEntry,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2529,6 +3434,8 @@ class $AppDatabaseManager {
       $$HeldOrdersTableTableManager(_db, _db.heldOrders);
   $$CachedNotificationsTableTableManager get cachedNotifications =>
       $$CachedNotificationsTableTableManager(_db, _db.cachedNotifications);
+  $$ScanSessionsTableTableManager get scanSessions =>
+      $$ScanSessionsTableTableManager(_db, _db.scanSessions);
 }
 
 mixin _$ProductsCacheDaoMixin on DatabaseAccessor<AppDatabase> {
@@ -2543,4 +3450,7 @@ mixin _$HeldOrdersDaoMixin on DatabaseAccessor<AppDatabase> {
 mixin _$NotificationsDaoMixin on DatabaseAccessor<AppDatabase> {
   $CachedNotificationsTable get cachedNotifications =>
       attachedDatabase.cachedNotifications;
+}
+mixin _$ScanSessionsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $ScanSessionsTable get scanSessions => attachedDatabase.scanSessions;
 }
