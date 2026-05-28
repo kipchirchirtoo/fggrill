@@ -638,9 +638,16 @@ class AdminRepository {
 
   Future<void> updateCentralSpoilageStatus(
       String id, String status, String? notes) async {
+    final normalized = status.trim().toLowerCase();
+    final action = normalized == 'approved' || normalized == 'approve'
+        ? 'approve'
+        : normalized == 'rejected' || normalized == 'reject'
+            ? 'reject'
+            : normalized;
     await _dio.patch('/store/central-spoilage/$id/status', data: {
-      'status': status,
-      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      'action': action,
+      if (action == 'reject' && notes != null && notes.trim().isNotEmpty)
+        'rejection_reason': notes.trim(),
     });
   }
 

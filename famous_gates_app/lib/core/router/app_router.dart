@@ -46,6 +46,12 @@ import '../../features/system/presentation/crud_module_screen.dart';
 import '../../features/admin/domain/admin_providers.dart';
 import '../../features/auditor/presentation/auditor_sections.dart';
 import '../../features/store/presentation/mobile/mobile_receiving_barcode_screen.dart';
+import '../../features/store/presentation/mobile/mobile_branch_store_screen.dart';
+import '../../features/driver/presentation/mobile/mobile_driver_screen.dart';
+import '../../features/director/presentation/mobile/mobile_director_screen.dart';
+import '../../features/branch_manager/presentation/mobile/mobile_manager_screen.dart';
+import '../../features/gm/presentation/mobile/mobile_gm_screen.dart';
+import '../../features/superadmin/presentation/mobile/mobile_superadmin_screen.dart';
 import '../utils/platform_utils.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -198,7 +204,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               const CashierDashboard(initialTab: CashierTab.barcode)),
       GoRoute(
           path: '/branch-manager',
-          builder: (context, state) => const BranchManagerDashboard()),
+          builder: (context, state) => AppPlatform.isMobile
+              ? const MobileManagerScreen()
+              : const BranchManagerDashboard()),
       ..._branchManagerSectionRoutes,
       GoRoute(
           path: '/reception',
@@ -220,12 +228,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           builder: (context, state) => const AdminScreen.auditor()),
       GoRoute(
           path: '/director',
-          builder: (context, state) => const DirectorDashboard()),
+          builder: (context, state) => AppPlatform.isMobile
+              ? const MobileDirectorScreen()
+              : const DirectorDashboard()),
       ..._directorSectionRoutes,
       GoRoute(path: '/admin', builder: (context, state) => const AdminScreen()),
       GoRoute(
           path: '/superadmin',
-          builder: (context, state) => const SuperAdminScreen()),
+          builder: (context, state) => AppPlatform.isMobile
+              ? const MobileSuperAdminScreen()
+              : const SuperAdminScreen()),
       ..._superAdminSectionRoutes,
       GoRoute(
           path: '/accounting',
@@ -298,8 +310,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           builder: (context, state) => const EmployeePortalScreen()),
       GoRoute(
           path: '/driver',
-          builder: (context, state) => const DriverDashboard()),
-      GoRoute(path: '/gm', builder: (context, state) => const GMDashboard()),
+          builder: (context, state) => AppPlatform.isMobile
+              ? const MobileDriverScreen()
+              : const DriverDashboard()),
+      GoRoute(
+          path: '/gm',
+          builder: (context, state) => AppPlatform.isMobile
+              ? const MobileGmScreen()
+              : const GMDashboard()),
       ..._auditorSectionRoutes,
       ..._auditorDetailRoutes,
       ..._moduleRoutes,
@@ -612,8 +630,14 @@ List<GoRoute> get _branchStorekeeperSectionRoutes => [
       ..._branchStorekeeperSectionRouteSpecs.map(
         (entry) => GoRoute(
           path: entry.key,
-          builder: (context, state) =>
-              BranchStorekeeperDashboard(initialSection: entry.value),
+          builder: (context, state) {
+            // On mobile, the receive-delivery route opens the branch store hub
+            if (entry.key == '/branch-store/receive-delivery' &&
+                AppPlatform.isMobile) {
+              return const MobileBranchStoreScreen();
+            }
+            return BranchStorekeeperDashboard(initialSection: entry.value);
+          },
         ),
       ),
       GoRoute(

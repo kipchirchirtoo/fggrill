@@ -1347,8 +1347,8 @@ export async function getAllBranches() {
 export async function getCentralDashboardStats() {
   try {
     const [pendingRequests, inTransit, lowStock, recentDispatches, totalMaster] = await Promise.all([
-      supabase.from('stock_requests').select('*', { count: 'exact', head: true }).in('status', ['PENDING', 'UNDER_REVIEW']),
-      supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).eq('status', 'IN_TRANSIT'),
+      supabase.from('stock_requests').select('*', { count: 'exact', head: true }).in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW']),
+      supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).in('status', ['READY', 'DISPATCHED', 'IN_TRANSIT']),
       supabase.from('branch_stock').select('*', { count: 'exact', head: true }).lte('quantity', 10), // Threshold default
       supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
       supabase.from('simple_items').select('*', { count: 'exact', head: true }).eq('is_active', true)

@@ -298,4 +298,19 @@ class StoreRepository {
       String id, Map<String, dynamic> items) async {
     await _dio.put('/storekeeping/dispatch-notes/$id/confirm', data: items);
   }
+
+  /// Branch storekeeper verifies B-XXXX OTP to confirm goods arrival.
+  /// Status changes: in_transit → completed.
+  Future<Map<String, dynamic>> verifyBranchOtp(
+      String dispatchId, String otp) async {
+    final response = await _dio.post(
+      '/store/dispatches/$dispatchId/verify-branch-otp',
+      data: {'branch_otp': otp.trim().toUpperCase()},
+    );
+    return _unwrap(response.data);
+  }
+
+  /// Incoming dispatches (IN_TRANSIT) headed to this branch.
+  Future<List<Map<String, dynamic>>> getIncomingDispatches() =>
+      getReceivingRecords();
 }
