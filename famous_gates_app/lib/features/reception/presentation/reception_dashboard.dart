@@ -11,6 +11,7 @@ import '../../../core/widgets/loading_skeleton.dart';
 import '../../../core/widgets/stat_card.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
+import 'screens/screens.dart';
 
 enum ReceptionSection {
   overview,
@@ -316,6 +317,65 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
         return _HistorySection(data: data, onRefresh: _refresh);
     }
   }
+
+  // ── Navigation helpers for new screens ──────────────────────────────────────
+
+  Future<void> navigateToCreateReservation() async {
+    final result = await Navigator.of(context).push<Booking>(
+      MaterialPageRoute(builder: (_) => const CreateReservationScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() => _future = _load());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reservation created: ${result.confirmationNumber}')),
+      );
+    }
+  }
+
+  Future<void> navigateToCheckIn([Booking? booking]) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => CheckInScreen(booking: booking)),
+    );
+    if (result == true && mounted) {
+      setState(() => _future = _load());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Guest checked in successfully')),
+      );
+    }
+  }
+
+  Future<void> navigateToCheckOut([Booking? booking]) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => CheckOutScreen(booking: booking)),
+    );
+    if (result == true && mounted) {
+      setState(() => _future = _load());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Guest checked out successfully')),
+      );
+    }
+  }
+
+  Future<void> navigateToGuestManagement() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const GuestManagementScreen()),
+    );
+    if (mounted) setState(() => _future = _load());
+  }
+
+  Future<void> navigateToRoomManagement() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RoomManagementScreen()),
+    );
+    if (mounted) setState(() => _future = _load());
+  }
+
+  Future<void> navigateToHousekeeping() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const HousekeepingScreen()),
+    );
+    if (mounted) setState(() => _future = _load());
+  }
 }
 
 class _OverviewSection extends ConsumerWidget {
@@ -373,6 +433,8 @@ class _OverviewSection extends ConsumerWidget {
             _StatData('Today Departures', '${departures.length}',
                 Icons.logout_outlined, AppColors.kError),
           ]),
+          const SizedBox(height: 20),
+          _OperationsPulseSection(data: data, onAction: onAction),
           const SizedBox(height: 20),
           _ResponsivePair(
             leftFlex: 2,
@@ -515,6 +577,17 @@ class _ReservationsSection extends ConsumerWidget {
           onPressed: () => _showNewReservationDialog(context, ref, onRefresh),
           icon: const Icon(Icons.add, size: 16),
           label: const Text('New Reservation'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () async {
+            final result = await Navigator.of(context).push<Booking>(
+              MaterialPageRoute(
+                  builder: (_) => const CreateReservationScreen()),
+            );
+            if (result != null && context.mounted) onRefresh();
+          },
+          icon: const Icon(Icons.open_in_new, size: 16),
+          label: const Text('Full Screen'),
         ),
       ],
       child: Column(
@@ -680,6 +753,26 @@ class _CheckInOutSectionState extends ConsumerState<_CheckInOutSection> {
           onPressed: widget.onRefresh,
           icon: const Icon(Icons.refresh, size: 16),
           label: const Text('Refresh'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () async {
+            final ok = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(builder: (_) => const CheckInScreen()),
+            );
+            if (ok == true && context.mounted) widget.onRefresh();
+          },
+          icon: const Icon(Icons.login, size: 16),
+          label: const Text('Check In'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () async {
+            final ok = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(builder: (_) => const CheckOutScreen()),
+            );
+            if (ok == true && context.mounted) widget.onRefresh();
+          },
+          icon: const Icon(Icons.logout, size: 16),
+          label: const Text('Check Out'),
         ),
       ],
       child: Column(
@@ -1657,6 +1750,84 @@ class _ReceptionSnapshot {
   final List<Map<String, dynamic>> guestHistory;
   final Map<String, dynamic> guestLoyalty;
 
+  int get availableRooms => rooms.where((room) => room.status == 'available').length;
+
+  int get occupiedRooms => rooms.where((room) => room.status == 'occupied').length;
+
+  double get occupancyRate =>
+      rooms.isEmpty ? 0 : occupiedRooms / rooms.length;
+
+  int get vipGuestCount => guests.where((guest) => guest.isVip).length;
+
+  int get openHousekeepingCount => housekeepingTasks.where((task) {
+        final status = _text(task, const ['status']) ?? '';
+        return status == 'pending' || status == 'in_progress';
+      }).length;
+
+  int get dirtyRoomCount {
+    final source = housekeepingRooms.isNotEmpty ? housekeepingRooms : roomRows;
+    return source.where((room) {
+      final status = (_text(room, const [
+                'status',
+                'hk_status',
+                'cleaning_status'
+              ]) ??
+              '')
+          .toLowerCase();
+      return status == 'dirty' ||
+          status == 'cleaning' ||
+          status == 'inspecting' ||
+          status == 'maintenance';
+    }).length;
+  }
+
+  int get unassignedArrivalsToday {
+    final today = DateTime.now();
+    return bookings.where((booking) {
+      final roomKey = (booking.roomNumber ?? booking.roomId ?? '').trim();
+      return booking.status == 'confirmed' &&
+          _sameDay(booking.checkIn, today) &&
+          roomKey.isEmpty;
+    }).length;
+  }
+
+  int get departuresWithBalance {
+    final today = DateTime.now();
+    return bookings.where((booking) {
+      return booking.status == 'checked_in' &&
+          _sameDay(booking.checkOut, today) &&
+          booking.balance > 0;
+    }).length;
+  }
+
+  int get activeEventCount {
+    bool active(Map<String, dynamic> row) {
+      final status =
+          (_text(row, const ['status', 'booking_status']) ?? '').toLowerCase();
+      return status.isEmpty ||
+          status == 'confirmed' ||
+          status == 'in_progress' ||
+          status == 'active';
+    }
+
+    return conferenceBookings.where(active).length +
+        cateringBookings.where(active).length;
+  }
+
+  num get totalOutstandingBalance {
+    return bookings.fold<num>(0, (sum, booking) {
+      final balance = booking.balance;
+      return sum + (balance > 0 ? balance : 0);
+    });
+  }
+
+  num get todayRevenue => _num(cashierStats, const [
+        'today_payments',
+        'todayRevenue',
+        'today_collections',
+        'today_sales',
+      ]);
+
   factory _ReceptionSnapshot.empty() => const _ReceptionSnapshot(
         bookings: [],
         bookingRows: [],
@@ -1811,6 +1982,194 @@ class _ResponsivePair extends StatelessWidget {
   }
 }
 
+class _OperationsPulseSection extends StatelessWidget {
+  const _OperationsPulseSection({
+    required this.data,
+    required this.onAction,
+  });
+
+  final _ReceptionSnapshot data;
+  final ValueChanged<ReceptionSection> onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final occupancy = (data.occupancyRate * 100).clamp(0, 100).round();
+    final actionCues = [
+      _ActionCueData(
+        label: 'Checkout balances',
+        value: '${data.departuresWithBalance}',
+        note: 'Guests due out today with unsettled folios',
+        icon: Icons.receipt_long_outlined,
+        color: AppColors.kError,
+        section: ReceptionSection.checkInOut,
+      ),
+      _ActionCueData(
+        label: 'Dirty / blocked rooms',
+        value: '${data.dirtyRoomCount}',
+        note: 'Rooms that need cleaning, inspection or maintenance',
+        icon: Icons.cleaning_services_outlined,
+        color: AppColors.kWarning,
+        section: ReceptionSection.housekeeping,
+      ),
+      _ActionCueData(
+        label: 'Housekeeping queue',
+        value: '${data.openHousekeepingCount}',
+        note: 'Pending and in-progress task load from operations',
+        icon: Icons.assignment_late_outlined,
+        color: Colors.blue,
+        section: ReceptionSection.housekeeping,
+      ),
+      _ActionCueData(
+        label: 'VIP guest watchlist',
+        value: '${data.vipGuestCount}',
+        note: 'Guest profiles flagged for premium service handling',
+        icon: Icons.workspace_premium_outlined,
+        color: const Color(0xFFB7791F),
+        section: ReceptionSection.guests,
+      ),
+    ];
+
+    return _ResponsivePair(
+      left: _CardPanel(
+        title: 'Operations Pulse',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.kPrimary.withValues(alpha: 0.10),
+                    Colors.blue.withValues(alpha: 0.06),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.radar_outlined,
+                            color: AppColors.kPrimary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Live service health',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Occupancy, cash exposure and service pressure in one place.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                      color: AppColors.kTextSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '$occupancy%',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      minHeight: 10,
+                      value: data.occupancyRate.clamp(0, 1),
+                      backgroundColor: Colors.white,
+                      color: occupancy >= 85
+                          ? AppColors.kWarning
+                          : occupancy >= 65
+                              ? Colors.blue
+                              : AppColors.kSuccess,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _PulseMetricTile(
+                  label: 'Outstanding folios',
+                  value: _money(data.totalOutstandingBalance),
+                  hint: 'Open receivable exposure',
+                  icon: Icons.account_balance_wallet_outlined,
+                  color: AppColors.kError,
+                ),
+                _PulseMetricTile(
+                  label: 'Today revenue',
+                  value: _money(data.todayRevenue),
+                  hint: 'Cashier collections and payments',
+                  icon: Icons.payments_outlined,
+                  color: AppColors.kSuccess,
+                ),
+                _PulseMetricTile(
+                  label: 'Events in motion',
+                  value: '${data.activeEventCount}',
+                  hint: 'Conference and catering workload',
+                  icon: Icons.corporate_fare_outlined,
+                  color: Colors.blue,
+                ),
+                _PulseMetricTile(
+                  label: 'Unassigned arrivals',
+                  value: '${data.unassignedArrivalsToday}',
+                  hint: 'Guests due in without room placement',
+                  icon: Icons.key_off_outlined,
+                  color: AppColors.kWarning,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      right: _CardPanel(
+        title: 'Action Center',
+        action: TextButton(
+          onPressed: () => onAction(ReceptionSection.reservations),
+          child: const Text('Open reservations'),
+        ),
+        child: Column(
+          children: actionCues
+              .map((cue) => _ActionCueTile(
+                    data: cue,
+                    onTap: () => onAction(cue.section),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+  }
+}
+
 class _CardPanel extends StatelessWidget {
   const _CardPanel({required this.title, required this.child, this.action});
 
@@ -1843,6 +2202,171 @@ class _CardPanel extends StatelessWidget {
             const SizedBox(height: 12),
             child,
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PulseMetricTile extends StatelessWidget {
+  const _PulseMetricTile({
+    required this.label,
+    required this.value,
+    required this.hint,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final String hint;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 220, maxWidth: 320),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.kDivider),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(value,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 2),
+                  Text(hint,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppColors.kTextSecondary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionCueData {
+  const _ActionCueData({
+    required this.label,
+    required this.value,
+    required this.note,
+    required this.icon,
+    required this.color,
+    required this.section,
+  });
+
+  final String label;
+  final String value;
+  final String note;
+  final IconData icon;
+  final Color color;
+  final ReceptionSection section;
+}
+
+class _ActionCueTile extends StatelessWidget {
+  const _ActionCueTile({
+    required this.data,
+    required this.onTap,
+  });
+
+  final _ActionCueData data;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Ink(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.kDivider),
+              color: data.color.withValues(alpha: 0.05),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: data.color.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(data.icon, color: data.color),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(data.label,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text(data.note,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: AppColors.kTextSecondary)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(data.value,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: data.color)),
+                    const SizedBox(height: 2),
+                    const Icon(Icons.chevron_right_rounded,
+                        color: AppColors.kTextSecondary),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

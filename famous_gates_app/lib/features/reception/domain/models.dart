@@ -81,6 +81,20 @@ class Booking {
   }
 
   double get balance => (totalAmount ?? 0) - (amountPaid ?? 0);
+  
+  // Convenience getters for additional properties from raw
+  int get adults => _int(raw['adults']) ?? 1;
+  int get children => _int(raw['children']) ?? 0;
+  int get infants => _int(raw['infants']) ?? 0;
+  String? get mealPlan => _string(raw['meal_plan'] ?? raw['mealPlan']);
+  String? get bookingSource => _string(raw['booking_source'] ?? raw['bookingSource']);
+  String? get internalNotes => _string(raw['internal_notes'] ?? raw['internalNotes']);
+  double? get depositAmount => _double(raw['deposit_amount'] ?? raw['depositAmount']);
+  String? get paymentMethod => _string(raw['payment_method'] ?? raw['paymentMethod']);
+  double? get roomRate => _double(raw['room_rate'] ?? raw['roomRate']);
+  double? get subtotal => _double(raw['subtotal']);
+  double? get taxAmount => _double(raw['tax_amount'] ?? raw['taxAmount']);
+  double? get serviceCharge => _double(raw['service_charge'] ?? raw['serviceCharge']);
 
   String get statusLabel {
     switch (status) {
@@ -130,7 +144,7 @@ class Room {
       id: '${json['id']}',
       number: _int(json['number'] ?? json['room_number']) ?? 0,
       type: _string(json['room_type'] ?? json['type'] ?? type?['name']),
-      floor: _int(json['floor']),
+      floor: _int(json['floor'] ?? json['floor_number']),
       status: '${json['status'] ?? 'available'}',
       guestName: _string(json['guest_name'] ?? json['current_guest']),
       checkOutDate: _tryDate(json['check_out_date'] ?? json['checkOutDate']),
@@ -139,6 +153,11 @@ class Room {
       raw: json,
     );
   }
+  
+  // Convenience getters
+  int? get maxOccupancy => _int(raw['max_occupancy'] ?? raw['maxOccupancy']);
+  bool? get isClean => raw['is_clean'] == true || raw['clean'] == true;
+  String? get roomTypeId => _string(raw['room_type_id'] ?? raw['type_id']);
 }
 
 class Guest {
@@ -188,6 +207,16 @@ class Guest {
       raw: json,
     );
   }
+  
+  // Convenience getters
+  String? get idType => _string(raw['id_type'] ?? raw['idType']);
+  String? get address => _string(raw['address']);
+  String? get nationality => _string(raw['nationality']);
+  String? get vipTier => _string(raw['vip_tier'] ?? raw['vipTier']);
+  int? get loyaltyPoints => _int(raw['loyalty_points'] ?? raw['loyaltyPoints']);
+  bool get blacklistStatus => raw['blacklist_status'] == true || raw['blacklisted'] == true;
+  String? get blacklistReason => _string(raw['blacklist_reason'] ?? raw['blacklistReason']);
+  String? get notes => _string(raw['notes']);
 }
 
 String? _string(dynamic value) {

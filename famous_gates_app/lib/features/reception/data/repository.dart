@@ -38,38 +38,104 @@ class ReceptionRepository {
     };
   }
 
-  Map<String, dynamic> _payload(dynamic data) {
-    if (data is Map<String, dynamic>) {
-      final nested = data['data'];
-      if (nested is Map<String, dynamic>) return nested;
-      return data;
-    }
-    if (data is Map) return Map<String, dynamic>.from(data);
-    return <String, dynamic>{};
+  static const List<String> _listKeys = [
+    'data',
+    'items',
+    'rows',
+    'results',
+    'bookings',
+    'rooms',
+    'guests',
+    'tasks',
+    'payments',
+    'bills',
+    'credit_bills',
+    'creditBills',
+    'transactions',
+    'halls',
+    'requests',
+    'history',
+  ];
+
+  Map<String, dynamic> _payload(
+    dynamic data, {
+    List<String> entityKeys = const [],
+  }) {
+    return _extractMap(data, entityKeys: entityKeys);
   }
 
-  List<Map<String, dynamic>> _mapList(dynamic data) {
-    dynamic value = data;
-    if (value is Map) {
-      value = value['data'] ??
-          value['items'] ??
-          value['rows'] ??
-          value['bookings'] ??
-          value['rooms'] ??
-          value['guests'] ??
-          value['tasks'] ??
-          value['payments'] ??
-          value['bills'] ??
-          value['credit_bills'] ??
-          value['creditBills'] ??
-          value['transactions'] ??
-          const [];
+  Map<String, dynamic> _extractMap(
+    dynamic data, {
+    List<String> entityKeys = const [],
+  }) {
+    if (data is! Map) return const <String, dynamic>{};
+
+    final map = Map<String, dynamic>.from(data);
+    for (final key in entityKeys) {
+      final nestedEntity = map[key];
+      if (nestedEntity is Map) {
+        return _extractMap(nestedEntity, entityKeys: entityKeys);
+      }
     }
-    if (value is! List) return const [];
-    return value
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList();
+
+    final nested = map['data'];
+    if (nested is Map) {
+      final nestedMap = Map<String, dynamic>.from(nested);
+      for (final key in entityKeys) {
+        final nestedEntity = nestedMap[key];
+        if (nestedEntity is Map) {
+          return _extractMap(nestedEntity, entityKeys: entityKeys);
+        }
+      }
+      return nestedMap;
+    }
+
+    return map;
+  }
+
+  List<Map<String, dynamic>> _mapList(
+    dynamic data, {
+    List<String> preferredKeys = const [],
+  }) {
+    return _extractList(data, preferredKeys: preferredKeys);
+  }
+
+  List<Map<String, dynamic>> _extractList(
+    dynamic data, {
+    List<String> preferredKeys = const [],
+  }) {
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    }
+
+    if (data is! Map) return const [];
+
+    final map = Map<String, dynamic>.from(data);
+    final keys = <String>[
+      ...preferredKeys,
+      ..._listKeys.where((key) => !preferredKeys.contains(key)),
+    ];
+
+    for (final key in keys) {
+      if (!map.containsKey(key)) continue;
+      final value = map[key];
+      final nestedList = _extractList(value, preferredKeys: preferredKeys);
+      if (nestedList.isNotEmpty || value is List) {
+        return nestedList;
+      }
+    }
+
+    for (final value in map.values) {
+      final nestedList = _extractList(value, preferredKeys: preferredKeys);
+      if (nestedList.isNotEmpty) {
+        return nestedList;
+      }
+    }
+
+    return const [];
   }
 
   List<T> _parseList<T>(
@@ -102,14 +168,14 @@ class ReceptionRepository {
   Future<Booking> createBooking(Map<String, dynamic> data) async {
     final response =
         await _dio.post('/bookings', data: await _withBranch(data));
-    return Booking.fromJson(_payload(response.data));
+    return Booking.fromJson(_payload(response.data, entityKeys: ['booking']));
   }
 
   Future<Map<String, dynamic>> createBookingRow(
       Map<String, dynamic> data) async {
     final response =
         await _dio.post('/bookings', data: await _withBranch(data));
-    return _payload(response.data);
+    return _payload(response.data, entityKeys: ['booking']);
   }
 
   Future<void> updateBooking(
@@ -222,7 +288,7 @@ class ReceptionRepository {
   Future<List<Map<String, dynamic>>> getConferenceHalls() async {
     final response = await _dio.get('/conference/halls',
         queryParameters: await _branchParams());
-    return _mapList(response.data);
+    return _mapList(response.data, preferredKeys: const ['halls']);
   }
 
   Future<void> updateConferenceHall(
@@ -234,7 +300,7 @@ class ReceptionRepository {
       {Map<String, dynamic>? params}) async {
     final response = await _dio.get('/conference/bookings',
         queryParameters: await _branchParams(params));
-    return _mapList(response.data);
+    return _mapList(response.data, preferredKeys: const ['bookings']);
   }
 
   Future<Map<String, dynamic>> createConferenceBooking(
@@ -258,7 +324,7 @@ class ReceptionRepository {
       {Map<String, dynamic>? params}) async {
     final response = await _dio.get('/catering-bookings',
         queryParameters: await _branchParams(params));
-    return _mapList(response.data);
+    return _mapList(response.data, preferredKeys: const ['bookings', 'rows']);
   }
 
   Future<Map<String, dynamic>> createCateringBooking(
@@ -285,13 +351,13 @@ class ReceptionRepository {
       {Map<String, dynamic>? params}) async {
     final response = await _dio.get('/housekeeping/tasks',
         queryParameters: await _branchParams(params));
-    return _mapList(response.data);
+    return _mapList(response.data, preferredKeys: const ['tasks']);
   }
 
   Future<List<Map<String, dynamic>>> getHousekeepingRoomGrid() async {
     final response = await _dio.get('/housekeeping/dashboard/room-grid',
         queryParameters: await _branchParams());
-    return _mapList(response.data);
+    return _mapList(response.data, preferredKeys: const ['rooms']);
   }
 
   Future<void> createHousekeepingGuestRequest(Map<String, dynamic> data) async {
@@ -405,5 +471,49 @@ class ReceptionRepository {
         await getApplicationDocumentsDirectory();
     final file = File('${directory.path}/$filename');
     return file.writeAsBytes(bytes, flush: true);
+  }
+
+  // Additional methods for new screens
+
+  Future<Map<String, dynamic>> getBookingQuote({
+    String? roomId,
+    String? roomTypeId,
+    required DateTime checkIn,
+    required DateTime checkOut,
+    required int adults,
+    required int children,
+  }) async {
+    final response = await _dio.post('/bookings/quote', data: {
+      if (roomId != null) 'room_id': roomId,
+      if (roomTypeId != null) 'room_type_id': roomTypeId,
+      'check_in_date': checkIn.toIso8601String().split('T')[0],
+      'check_out_date': checkOut.toIso8601String().split('T')[0],
+      'adults': adults,
+      'children': children,
+    });
+    return _payload(response.data);
+  }
+
+  Future<void> checkInBooking(String bookingId) async {
+    await _dio.put('/bookings/$bookingId/check-in');
+  }
+
+  Future<void> checkOutBooking(String bookingId) async {
+    await _dio.put('/bookings/$bookingId/check-out');
+  }
+
+  Future<Map<String, dynamic>> getFolio(String bookingId) async {
+    final response = await _dio.get('/folios/$bookingId');
+    return _payload(response.data, entityKeys: ['folio']);
+  }
+
+  Future<List<Map<String, dynamic>>> getHousekeepingRooms() async {
+    final response = await _dio.get('/housekeeping/rooms',
+        queryParameters: await _branchParams());
+    return _mapList(response.data, preferredKeys: const ['rooms']);
+  }
+
+  Future<void> updateHousekeepingTask(String taskId, String status) async {
+    await _dio.patch('/housekeeping/tasks/$taskId', data: {'status': status});
   }
 }
