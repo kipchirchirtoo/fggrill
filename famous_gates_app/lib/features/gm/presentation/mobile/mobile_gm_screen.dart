@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/mobile_shell.dart';
+import '../../../../core/widgets/adaptive_stat_grid.dart';
 import '../../data/repository.dart';
 
 // ---------------------------------------------------------------------------
@@ -105,38 +106,16 @@ class _GmOverviewTab extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.3,
-                children: [
-                  MobileStatCard(
-                    label: 'Occupancy Rate',
-                    value: occupancy,
-                    icon: Icons.hotel,
-                    color: AppColors.kAccent,
-                  ),
-                  MobileStatCard(
-                    label: 'Branch Count',
-                    value: branchCount,
-                    icon: Icons.business,
-                    color: AppColors.kPrimary,
-                  ),
-                  MobileStatCard(
-                    label: 'Staff Count',
-                    value: staffCount,
-                    icon: Icons.people,
-                    color: const Color(0xFF7C3AED),
-                  ),
-                  MobileStatCard(
-                    label: 'Total Revenue',
-                    value: revenue,
-                    icon: Icons.trending_up,
-                    color: AppColors.kSuccess,
-                  ),
+              AdaptiveStatGrid(
+                stats: [
+                  statDef(label: 'Occupancy Rate', value: occupancy,
+                      icon: Icons.hotel, color: AppColors.kAccent),
+                  statDef(label: 'Branch Count', value: branchCount,
+                      icon: Icons.business, color: AppColors.kPrimary),
+                  statDef(label: 'Staff Count', value: staffCount,
+                      icon: Icons.people, color: const Color(0xFF7C3AED)),
+                  statDef(label: 'Total Revenue', value: revenue,
+                      icon: Icons.trending_up, color: AppColors.kSuccess),
                 ],
               ),
               const SizedBox(height: 20),

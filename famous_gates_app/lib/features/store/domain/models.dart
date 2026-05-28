@@ -23,6 +23,19 @@ class InventoryItem {
 
   bool get isLowStock => minStock != null && currentStock < minStock!;
 
+  /// Serialize to a plain JSON map (skill: flutter-implement-json-serialization).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'sku': sku,
+        'category': category,
+        'unit': unit,
+        'current_stock': currentStock,
+        'min_stock': minStock,
+        'max_stock': maxStock,
+        'store_type': storeType,
+      };
+
   factory InventoryItem.fromJson(Map<String, dynamic> json) {
     double? toDouble(dynamic value) {
       if (value is num) return value.toDouble();
@@ -70,6 +83,21 @@ class StockRequest {
     this.unit,
     this.requestedBy,
   });
+
+  /// Serialize to a plain JSON map (skill: flutter-implement-json-serialization).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'request_number': id,
+        'requesting_branch': requestingBranch,
+        'status': status,
+        'priority': priority,
+        'items_count': itemCount,
+        'created_at': createdAt?.toIso8601String(),
+        'item_name': itemName,
+        'quantity': quantity,
+        'unit': unit,
+        'requested_by': requestedBy,
+      };
 
   factory StockRequest.fromJson(Map<String, dynamic> json) {
     final items =

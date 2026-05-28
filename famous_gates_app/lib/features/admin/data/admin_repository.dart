@@ -515,6 +515,11 @@ class AdminRepository {
     return _parseMapList(response.data);
   }
 
+  Future<List<Map<String, dynamic>>> getApprovedStoreStockRequests() async {
+    final response = await _dio.get('/store/stock-requests/approved');
+    return _parseMapList(response.data);
+  }
+
   Future<void> reviewStoreStockRequest(
       String id, Map<String, dynamic> data) async {
     await _dio.put('/store/stock-requests/$id/review', data: data);

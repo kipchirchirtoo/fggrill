@@ -20,6 +20,7 @@ class StorekeepingSection extends ConsumerWidget {
           ..invalidate(centralStoreDashboardProvider)
           ..invalidate(centralStoreValuationProvider)
           ..invalidate(centralStoreRequestsProvider)
+          ..invalidate(centralApprovedStoreRequestsProvider)
           ..invalidate(centralStoreDispatchesProvider)
           ..invalidate(centralPurchaseOrdersProvider)
           ..invalidate(centralGrnsProvider)
@@ -158,21 +159,21 @@ class _ValuationCards extends StatelessWidget {
           label: 'Foodstuffs Value',
           value: _money(food['total_value']),
           detail: '${_intText(food['item_count'])} items',
-          icon: PhosphorIcons.bowlFood(),
+          icon: PhosphorIcons.forkKnife(),
           color: Colors.teal,
         ),
         _MetricCard(
           label: 'Bar Store Value',
           value: _money(bar['total_value']),
           detail: '${_intText(bar['item_count'])} items',
-          icon: PhosphorIcons.beerBottle(),
+          icon: PhosphorIcons.wine(),
           color: Colors.purple,
         ),
         _MetricCard(
           label: 'Total Stock Value',
           value: _money(total['total_value']),
           detail: '${_intText(total['item_count'])} active items',
-          icon: PhosphorIcons.currencyCircleDollar(),
+          icon: PhosphorIcons.currencyDollar(),
           color: Colors.green,
         ),
       ],
@@ -191,9 +192,9 @@ class _OperationsGrid extends StatelessWidget {
       _CentralAction('Master Inventory', 'Create items, SKU, barcode and stock',
           PhosphorIcons.package(), AdminSection.inventory),
       _CentralAction('Foodstuffs', 'Food store stock and valuation',
-          PhosphorIcons.bowlFood(), AdminSection.foodstuffs),
+          PhosphorIcons.forkKnife(), AdminSection.foodstuffs),
       _CentralAction('Bar & Beverages', 'Alcohol and beverage store',
-          PhosphorIcons.beerBottle(), AdminSection.barBeverages),
+          PhosphorIcons.wine(), AdminSection.barBeverages),
       _CentralAction('Stock Requests', 'Branch requisitions and approvals',
           PhosphorIcons.clipboardText(), AdminSection.requisitions),
       _CentralAction('Packing', 'Prepare approved stock requests',
@@ -205,7 +206,7 @@ class _OperationsGrid extends StatelessWidget {
       _CentralAction('Goods Receipt (GRN)', 'Receive supplier deliveries',
           PhosphorIcons.downloadSimple(), AdminSection.goodsReceiptGRN),
       _CentralAction('Stock Takes', 'Food and bar-store physical counts',
-          PhosphorIcons.clipboard(), AdminSection.centralStockTakes),
+          PhosphorIcons.clipboardText(), AdminSection.centralStockTakes),
       _CentralAction('Spoilage Log', 'Record and approve store losses',
           PhosphorIcons.trash(), AdminSection.centralSpoilage),
       _CentralAction('Suppliers', 'Supplier database and contacts',
@@ -244,7 +245,7 @@ class _QueueGrid extends StatelessWidget {
       children: [
         _QueueCard(
           title: 'Stock Requests',
-          value: ref.watch(centralStoreRequestsProvider),
+          value: ref.watch(centralApprovedStoreRequestsProvider),
           statusKey: 'status',
           openSection: AdminSection.requisitions,
           ref: ref,
@@ -389,7 +390,7 @@ class _ResponsiveCards extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final gap = 12.0;
+        const gap = 12.0;
         final columns = (constraints.maxWidth / minWidth).floor().clamp(1, 4);
         final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
         return Wrap(

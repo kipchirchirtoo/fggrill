@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/mobile_shell.dart';
+import '../../../../core/widgets/adaptive_stat_grid.dart';
 import '../../data/repository.dart';
 
 // ---------------------------------------------------------------------------
@@ -598,26 +599,14 @@ class _VehicleTab extends ConsumerWidget {
   Widget _buildStatGrid(List<Map<String, dynamic>> vehicles) {
     if (vehicles.isEmpty) return const SizedBox.shrink();
     final v = vehicles.first;
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.4,
-      children: [
-        MobileStatCard(
-          label: 'Total Trips',
-          value: '${v['total_trips'] ?? 0}',
-          icon: Icons.route,
-          color: AppColors.kPrimary,
-        ),
-        MobileStatCard(
-          label: 'Mileage',
-          value: '${v['current_mileage'] ?? v['mileage'] ?? 0} km',
-          icon: Icons.speed,
-          color: AppColors.kAccent,
-        ),
+    // AdaptiveStatGrid (skill: flutter-build-responsive-layout)
+    return AdaptiveStatGrid(
+      stats: [
+        statDef(label: 'Total Trips', value: '${v['total_trips'] ?? 0}',
+            icon: Icons.route, color: AppColors.kPrimary),
+        statDef(label: 'Mileage',
+            value: '${v['current_mileage'] ?? v['mileage'] ?? 0} km',
+            icon: Icons.speed, color: AppColors.kAccent),
       ],
     );
   }

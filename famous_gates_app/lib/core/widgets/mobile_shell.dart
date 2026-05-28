@@ -171,11 +171,15 @@ class MobileStatCard extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
+            // skill: flutter-fix-layout-issues — maxLines+overflow prevents
+            // vertical RenderFlex overflow when tiles are rendered at narrow widths
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.kTextSecondary,
                     fontSize: 11,
@@ -185,6 +189,8 @@ class MobileStatCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: c,
                     fontSize: 18,
@@ -195,6 +201,8 @@ class MobileStatCard extends StatelessWidget {
                 if (subtitle != null)
                   Text(
                     subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppColors.kTextSecondary,
                       fontSize: 10,

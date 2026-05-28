@@ -10,18 +10,9 @@ import '../../data/repository.dart';
 
 final _branchStockRequestsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  // Uses toJson() from StockRequest model (skill: flutter-implement-json-serialization)
   final list = await ref.read(storeRepositoryProvider).getStockRequests();
-  return list
-      .map((r) => {
-            'id': r.id,
-            'request_number': r.id,
-            'status': r.status ?? 'PENDING_AUDIT',
-            'priority': r.priority ?? 'NORMAL',
-            'items_count': r.itemCount,
-            'created_at': r.createdAt?.toIso8601String() ?? '',
-            'branch': r.requestingBranch ?? '',
-          })
-      .toList();
+  return list.map((r) => r.toJson()).toList();
 });
 
 final _incomingDispatchesProvider =
@@ -31,18 +22,9 @@ final _incomingDispatchesProvider =
 
 final _lowStockProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  // Uses toJson() from InventoryItem model (skill: flutter-implement-json-serialization)
   final items = await ref.read(storeRepositoryProvider).getLowStockItems();
-  return items
-      .map((i) => {
-            'id': i.id,
-            'name': i.name,
-            'sku': i.sku ?? '',
-            'category': i.category ?? '',
-            'unit': i.unit ?? '',
-            'current_quantity': i.currentStock,
-            'reorder_level': i.minStock ?? 0,
-          })
-      .toList();
+  return items.map((i) => i.toJson()).toList();
 });
 
 // ---------------------------------------------------------------------------
@@ -1253,8 +1235,8 @@ class _StockTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = item['name'] ?? item['item_name'] ?? '—';
     final sku = item['sku'] ?? item['item_sku'] ?? '';
-    final qty = item['current_quantity'] ?? item['quantity'] ?? 0;
-    final reorder = item['reorder_level'] ?? item['min_stock'] ?? 0;
+    final qty = item['current_stock'] ?? item['current_quantity'] ?? 0;
+    final reorder = item['min_stock'] ?? item['reorder_level'] ?? 0;
     final unit = item['unit'] ?? '';
     final category = item['category'] ?? '';
 

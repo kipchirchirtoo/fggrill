@@ -284,6 +284,7 @@ void _refreshCentralStore(WidgetRef ref) {
     ..invalidate(centralBarItemsProvider)
     ..invalidate(centralStationeryProvider)
     ..invalidate(centralStoreRequestsProvider)
+    ..invalidate(centralApprovedStoreRequestsProvider)
     ..invalidate(centralStoreDispatchesProvider)
     ..invalidate(centralPurchaseOrdersProvider)
     ..invalidate(centralGrnsProvider)
@@ -1279,39 +1280,36 @@ class RequisitionsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => _LiveSection(
-        title: 'Requisitions',
-        subtitle: 'Branch stock requests awaiting review and fulfillment',
+        title: 'Approved Requisitions',
+        subtitle:
+            'Auditor-approved branch stock requests ready for central fulfillment',
         icon: PhosphorIcons.clipboardText(),
         child: _LiveRows(
-          value: ref.watch(centralStoreRequestsProvider),
+          value: ref.watch(centralApprovedStoreRequestsProvider),
           data: (rows) {
-            final pending = rows
-                .where(
-                    (row) => _text(row, ['status']).toUpperCase() == 'PENDING')
-                .length;
-            final approved = rows
-                .where((row) =>
-                    _text(row, ['status']).toUpperCase().contains('APPROVED'))
+            final ready = rows
+                .where((row) => ['APPROVED', 'PARTIALLY_APPROVED']
+                    .contains(_text(row, ['status']).toUpperCase()))
                 .length;
             return Column(children: [
               Row(children: [
                 Expanded(
                     child: _StatCard(
-                        label: 'Pending Review',
-                        value: '$pending',
-                        icon: PhosphorIcons.clock(),
-                        color: Colors.orange)),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: _StatCard(
-                        label: 'Approved',
-                        value: '$approved',
-                        icon: PhosphorIcons.checkCircle(),
+                        label: 'Ready for Packing',
+                        value: '$ready',
+                        icon: PhosphorIcons.package(),
                         color: Colors.green)),
                 const SizedBox(width: 12),
                 Expanded(
                     child: _StatCard(
-                        label: 'Total Monitored',
+                        label: 'Auditor Approved',
+                        value: '${rows.length}',
+                        icon: PhosphorIcons.shieldCheck(),
+                        color: Colors.green)),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: _StatCard(
+                        label: 'Approved Requests',
                         value: '${rows.length}',
                         icon: PhosphorIcons.clipboardText(),
                         color: AppColors.kPrimary)),
@@ -1340,18 +1338,6 @@ class RequisitionsSection extends ConsumerWidget {
                             _showRequisitionDetails(context, ref, row),
                         child: const Text('View'),
                       ),
-                      if (status.toUpperCase() == 'PENDING') ...[
-                        TextButton(
-                          onPressed: () =>
-                              _review(context, ref, row, 'REJECTED'),
-                          child: const Text('Reject'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () =>
-                              _review(context, ref, row, 'APPROVED'),
-                          child: const Text('Approve'),
-                        ),
-                      ],
                     ]),
                   );
                 },
@@ -1368,66 +1354,16 @@ class RequisitionsSection extends ConsumerWidget {
       'Requisition ${_text(row, ['request_number', 'id'])}',
       row,
       actions: [
-        if (_text(row, ['status']).toUpperCase() == 'PENDING')
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _review(context, ref, row, 'APPROVED');
-            },
-            child: const Text('Approve Request'),
-          ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            ref.read(adminSectionProvider.notifier).state =
+                AdminSection.packing;
+          },
+          child: const Text('Open Packing'),
+        ),
       ],
     );
-  }
-
-  Future<void> _review(BuildContext context, WidgetRef ref,
-      Map<String, dynamic> row, String status) async {
-    final notesCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title:
-            Text(status == 'APPROVED' ? 'Approve Request' : 'Reject Request'),
-        content: SizedBox(
-          width: 420,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Request ${_text(row, ['request_number', 'id'])}'),
-            const SizedBox(height: 12),
-            _field(notesCtrl, status == 'APPROVED' ? 'Review Notes' : 'Reason',
-                maxLines: 3),
-          ]),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(status == 'APPROVED' ? 'Approve' : 'Reject')),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      notesCtrl.dispose();
-      return;
-    }
-    try {
-      await ref.read(adminRepositoryProvider).reviewStoreStockRequest(
-        _id(row),
-        {
-          'status': status,
-          'review_notes': notesCtrl.text.trim(),
-          'notes': notesCtrl.text.trim(),
-        },
-      );
-      if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Request ${status.toLowerCase()}');
-    } catch (error) {
-      if (context.mounted) _snack(context, 'Failed: $error');
-    } finally {
-      notesCtrl.dispose();
-    }
   }
 }
 
@@ -1440,7 +1376,7 @@ class PackingSection extends ConsumerWidget {
         subtitle: 'Approved branch requests ready to pack into dispatch notes',
         icon: PhosphorIcons.package(),
         child: _LiveRows(
-          value: ref.watch(centralStoreRequestsProvider),
+          value: ref.watch(centralApprovedStoreRequestsProvider),
           data: (rows) {
             final approved = rows
                 .where((row) => ['APPROVED', 'PARTIALLY_APPROVED']

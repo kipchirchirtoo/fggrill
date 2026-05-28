@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/mobile_shell.dart';
+import '../../../../core/widgets/adaptive_stat_grid.dart';
 import '../../data/repository.dart';
 import '../../domain/models.dart';
 
@@ -109,38 +110,20 @@ class _OverviewTab extends ConsumerWidget {
       ),
       data: (stats) {
         return MobileTabBody(
-          child: GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.3,
-            children: [
-              MobileStatCard(
-                label: 'Occupancy',
-                value: '${stats.occupancyRate.toStringAsFixed(0)}%',
-                icon: Icons.hotel,
-                color: AppColors.kAccent,
-              ),
-              MobileStatCard(
-                label: 'Today Revenue',
-                value: _fmt(stats.todayRevenue),
-                icon: Icons.attach_money,
-                color: AppColors.kSuccess,
-              ),
-              MobileStatCard(
-                label: 'Active Orders',
-                value: '${stats.activeOrders}',
-                icon: Icons.receipt_long,
-                color: AppColors.kPrimary,
-              ),
-              MobileStatCard(
-                label: 'Low Stock Items',
-                value: '${stats.lowStockItems}',
-                icon: Icons.inventory_2,
-                color: AppColors.kWarning,
-              ),
+          child: AdaptiveStatGrid(
+            stats: [
+              statDef(label: 'Occupancy',
+                  value: '${stats.occupancyRate.toStringAsFixed(0)}%',
+                  icon: Icons.hotel, color: AppColors.kAccent),
+              statDef(label: 'Today Revenue',
+                  value: _fmt(stats.todayRevenue),
+                  icon: Icons.attach_money, color: AppColors.kSuccess),
+              statDef(label: 'Active Orders',
+                  value: '${stats.activeOrders}',
+                  icon: Icons.receipt_long, color: AppColors.kPrimary),
+              statDef(label: 'Low Stock Items',
+                  value: '${stats.lowStockItems}',
+                  icon: Icons.inventory_2, color: AppColors.kWarning),
             ],
           ),
         );

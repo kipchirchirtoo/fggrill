@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/mobile_shell.dart';
+import '../../../../core/widgets/adaptive_stat_grid.dart';
 import '../../data/repository.dart';
 
 // ---------------------------------------------------------------------------
@@ -106,54 +107,26 @@ class _OverviewTab extends ConsumerWidget {
             '${data['pending_flags'] ?? data['audit_flags'] ?? 0}';
         final lowStock = '${data['low_stock_count'] ?? data['low_stock'] ?? 0}';
 
+        // AdaptiveStatGrid (skill: flutter-build-responsive-layout) —
+        // automatically adjusts column count via LayoutBuilder constraints.
         return MobileTabBody(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.3,
-                children: [
-                  MobileStatCard(
-                    label: 'Total Revenue',
-                    value: revenue,
-                    icon: Icons.trending_up,
-                    color: AppColors.kSuccess,
-                  ),
-                  MobileStatCard(
-                    label: 'Net Profit',
-                    value: netProfit,
-                    icon: Icons.account_balance_wallet,
-                    color: AppColors.kPrimary,
-                  ),
-                  MobileStatCard(
-                    label: 'Occupancy',
-                    value: occupancy,
-                    icon: Icons.hotel,
-                    color: AppColors.kAccent,
-                  ),
-                  MobileStatCard(
-                    label: 'Active Staff',
-                    value: activeStaff,
-                    icon: Icons.people,
-                    color: const Color(0xFF7C3AED),
-                  ),
-                  MobileStatCard(
-                    label: 'Audit Flags',
-                    value: pendingFlags,
-                    icon: Icons.flag,
-                    color: AppColors.kError,
-                  ),
-                  MobileStatCard(
-                    label: 'Low Stock',
-                    value: lowStock,
-                    icon: Icons.inventory_2,
-                    color: AppColors.kWarning,
-                  ),
+              AdaptiveStatGrid(
+                stats: [
+                  statDef(label: 'Total Revenue', value: revenue,
+                      icon: Icons.trending_up, color: AppColors.kSuccess),
+                  statDef(label: 'Net Profit', value: netProfit,
+                      icon: Icons.account_balance_wallet, color: AppColors.kPrimary),
+                  statDef(label: 'Occupancy', value: occupancy,
+                      icon: Icons.hotel, color: AppColors.kAccent),
+                  statDef(label: 'Active Staff', value: activeStaff,
+                      icon: Icons.people, color: const Color(0xFF7C3AED)),
+                  statDef(label: 'Audit Flags', value: pendingFlags,
+                      icon: Icons.flag, color: AppColors.kError),
+                  statDef(label: 'Low Stock', value: lowStock,
+                      icon: Icons.inventory_2, color: AppColors.kWarning),
                 ],
               ),
               const SizedBox(height: 20),
@@ -727,38 +700,16 @@ class _FinanceTab extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.4,
-                children: [
-                  MobileStatCard(
-                    label: 'Expected Cash',
-                    value: expected,
-                    icon: Icons.attach_money,
-                    color: AppColors.kPrimary,
-                  ),
-                  MobileStatCard(
-                    label: 'Total Banked',
-                    value: banked,
-                    icon: Icons.account_balance,
-                    color: AppColors.kSuccess,
-                  ),
-                  MobileStatCard(
-                    label: 'Variance',
-                    value: variance,
-                    icon: Icons.compare_arrows,
-                    color: AppColors.kWarning,
-                  ),
-                  MobileStatCard(
-                    label: 'Unbanked',
-                    value: '$unbanked branches',
-                    icon: Icons.warning_amber,
-                    color: AppColors.kError,
-                  ),
+              AdaptiveStatGrid(
+                stats: [
+                  statDef(label: 'Expected Cash', value: expected,
+                      icon: Icons.attach_money, color: AppColors.kPrimary),
+                  statDef(label: 'Total Banked', value: banked,
+                      icon: Icons.account_balance, color: AppColors.kSuccess),
+                  statDef(label: 'Variance', value: variance,
+                      icon: Icons.compare_arrows, color: AppColors.kWarning),
+                  statDef(label: 'Unbanked', value: '$unbanked branches',
+                      icon: Icons.warning_amber, color: AppColors.kError),
                 ],
               ),
               if (branches.isNotEmpty) ...[

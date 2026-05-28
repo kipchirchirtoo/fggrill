@@ -286,6 +286,11 @@ final centralStoreRequestsProvider =
   return ref.read(adminRepositoryProvider).getStoreStockRequests();
 });
 
+final centralApprovedStoreRequestsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(adminRepositoryProvider).getApprovedStoreStockRequests();
+});
+
 final centralStoreDispatchesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.read(adminRepositoryProvider).getStoreDispatchNotes();
