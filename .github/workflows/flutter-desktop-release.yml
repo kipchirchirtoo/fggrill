@@ -32,6 +32,7 @@ jobs:
             pkg-config \
             libgtk-3-dev \
             liblzma-dev \
+            libsecret-1-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev
 
@@ -71,7 +72,7 @@ jobs:
           Priority: optional
           Architecture: amd64
           Maintainer: Famous Gates Hotels <support@famousgates.com>
-          Depends: libgtk-3-0, libstdc++6, libsqlite3-0, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0
+          Depends: libgtk-3-0, libstdc++6, libsqlite3-0, libsecret-1-0, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0
           Description: Famous Gates Hotels Management System
            Desktop client for the Famous Gates hotel management platform.
           EOF
@@ -127,6 +128,10 @@ jobs:
           }
           if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "dist\FamousGates-$version-windows-x64-portable.zip" -Force
+          $stage = "C:\fg-release"
+          if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item -Path "build\windows\x64\runner\Release\*" -Destination $stage -Recurse -Force
 
       - name: Install Inno Setup
         shell: pwsh
@@ -142,7 +147,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
             "/DMyAppVersion=$version" `
-            "/DMyAppSource=${env:GITHUB_WORKSPACE}\famous_gates_app\build\windows\x64\runner\Release" `
+            "/DMyAppSource=C:\fg-release" `
             "/DMyAppOutput=${env:GITHUB_WORKSPACE}\famous_gates_app\dist" `
             "${env:GITHUB_WORKSPACE}\.github\installers\famous-gates-windows.iss"
 
