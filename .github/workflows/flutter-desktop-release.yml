@@ -149,12 +149,52 @@ jobs:
             famous_gates_app/dist/FamousGates-*-windows-x64-portable.zip
           if-no-files-found: error
 
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Android APK
+        working-directory: famous_gates_app
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          VERSION="${VERSION:-1.0.0}"
+          BUILD_NUMBER="${{ github.run_number }}"
+          perl -0pi -e "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/m" pubspec.yaml
+          flutter pub get
+          flutter build apk --release
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/FamousGates-${VERSION}-android.apk"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: famous-gates-android
+          path: famous_gates_app/dist/FamousGates-*-android.apk
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub release
     runs-on: ubuntu-24.04
     needs:
       - build-linux
       - build-windows
+      - build-android
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -184,4 +224,5 @@ jobs:
             release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.tar.gz \
             release-artifacts/famous-gates-windows-x64/FamousGates-Setup-*-x64.exe \
             release-artifacts/famous-gates-windows-x64/FamousGates-*-windows-x64-portable.zip \
+            release-artifacts/famous-gates-android/FamousGates-*-android.apk \
             --clobber
