@@ -5,9 +5,73 @@ import { generateCentralStockTakePDF } from '../../services/native-pdf-reports.s
 const ExcelJS = require('exceljs');
 
 const STORE_TYPES = ['foodstuffs', 'bar_store'] as const;
+const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
 
 const ensureValidStoreType = (value?: string): value is (typeof STORE_TYPES)[number] =>
   !!value && STORE_TYPES.includes(value as (typeof STORE_TYPES)[number]);
+
+const normalizeSku = (sku: unknown): string => {
+  if (sku === null || sku === undefined) return '';
+  return String(sku).trim();
+};
+
+const fetchSimpleItemsBySku = async (skus: unknown[]): Promise<Map<string, any>> => {
+  const uniqueSkus = [...new Set(skus.map(normalizeSku).filter(Boolean))];
+  if (uniqueSkus.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('simple_items')
+    .select(SIMPLE_ITEM_SELECT)
+    .in('sku', uniqueSkus);
+
+  if (error) throw error;
+
+  return new Map((data || []).map((item: any) => [normalizeSku(item.sku), item]));
+};
+
+const attachCatalogItems = async (items: any[]): Promise<any[]> => {
+  const itemMap = await fetchSimpleItemsBySku(items.map(item => item.item_sku));
+
+  return items.map(item => {
+    const sku = normalizeSku(item.item_sku);
+    const catalogItem = itemMap.get(sku);
+
+    return {
+      ...item,
+      item: catalogItem ? {
+        ...catalogItem,
+        category: catalogItem.store_type || 'uncategorized',
+        unit: 'Unit',
+        unit_of_measure: 'Unit',
+        cost_price: item.unit_cost || 0
+      } : {
+        sku,
+        item_name: sku || 'Unknown item',
+        description: null,
+        category: 'uncategorized',
+        unit: 'Unit',
+        unit_of_measure: 'Unit',
+        cost_price: item.unit_cost || 0,
+        quantity: item.system_quantity || 0
+      },
+      item_name: catalogItem?.item_name || catalogItem?.description || sku || 'Unknown item',
+      unit: 'Unit',
+      category: catalogItem?.store_type || 'uncategorized'
+    };
+  });
+};
+
+const fetchCentralStockTakeItemsWithCatalog = async (sessionId: string): Promise<any[]> => {
+  const { data: items, error } = await supabase
+    .from('central_stock_take_items')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('item_sku');
+
+  if (error) throw error;
+
+  return attachCatalogItems(items || []);
+};
 
 const computeTotals = (items: Array<{ counted_quantity: number | null; variance: number | null; variance_value: number | null }>) => {
   const totalItemsCounted = items.filter(item => item.counted_quantity !== null).length;
@@ -61,20 +125,7 @@ export const getCentralStockTake = async (req: Request, res: Response) => {
       throw sessionError;
     }
 
-    const { data: items, error: itemsError } = await supabase
-      .from('central_stock_take_items')
-      .select(`*, item:simple_items(sku, item_name, description, category, unit_of_measure, cost_price, quantity, store_type)`)
-      .eq('session_id', id)
-      .order('item_sku');
-
-    if (itemsError) throw itemsError;
-
-    const enrichedItems = (items || []).map(item => ({
-      ...item,
-      item_name: item.item?.item_name || item.item?.description || item.item_sku,
-      unit: item.item?.unit_of_measure || 'unit',
-      category: item.item?.category || 'uncategorized'
-    }));
+    const enrichedItems = await fetchCentralStockTakeItemsWithCatalog(id);
 
     res.status(200).json({ success: true, data: { ...session, items: enrichedItems } });
   } catch (error: any) {
@@ -454,15 +505,9 @@ export const generateCentralStockTakeWorksheetPDF = async (req: Request, res: Re
 
     if (sessionError) throw sessionError;
 
-    const { data: items, error: itemsError } = await supabase
-      .from('central_stock_take_items')
-      .select(`*, item:simple_items(sku, item_name, description, category, unit_of_measure)`)
-      .eq('session_id', id)
-      .order('item_sku');
+    const items = await fetchCentralStockTakeItemsWithCatalog(id);
 
-    if (itemsError) throw itemsError;
-
-    const pdfBuffer = await generateCentralStockTakePDF(session, items || []);
+    const pdfBuffer = await generateCentralStockTakePDF(session, items);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${session.session_number}-worksheet.pdf"`);
@@ -485,13 +530,7 @@ export const generateCentralStockTakeExcel = async (req: Request, res: Response)
 
     if (sessionError) throw sessionError;
 
-    const { data: items, error: itemsError } = await supabase
-      .from('central_stock_take_items')
-      .select(`*, item:simple_items(sku, item_name, description, category, unit_of_measure)`)
-      .eq('session_id', id)
-      .order('item_sku');
-
-    if (itemsError) throw itemsError;
+    const items = await fetchCentralStockTakeItemsWithCatalog(id);
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Stock Take Report', {
@@ -515,7 +554,7 @@ export const generateCentralStockTakeExcel = async (req: Request, res: Response)
     worksheet.lastRow.font = { bold: true };
     worksheet.lastRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
 
-    (items || []).forEach(item => {
+    items.forEach((item: any) => {
       worksheet.addRow([
         item.item_sku,
         item.item?.item_name || item.item?.description || item.item_sku,

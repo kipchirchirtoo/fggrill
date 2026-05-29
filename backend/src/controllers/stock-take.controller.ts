@@ -836,15 +836,44 @@ export const generateBranchStockTakeWorksheet = async (req: Request, res: Respon
         const branchName = stockTake.branch?.name || 'Unknown Branch';
         const takeNumber = stockTake.take_number || 'N/A';
 
-        // Get stock take items with item details
+        // Get stock take items, then attach catalog details explicitly. The live
+        // schema does not expose a PostgREST FK from stock_take_items to simple_items.
         const { data: takeItems, error: itemsError } = await supabase
             .from('stock_take_items')
-            .select('*, item:simple_items(item_name, category, unit_of_measure)')
+            .select('*')
             .eq('stock_take_id', id);
 
         if (itemsError) throw itemsError;
 
-        const items = takeItems || [];
+        const itemSkus = [...new Set((takeItems || [])
+            .map((item: any) => item.item_sku ? String(item.item_sku).trim() : '')
+            .filter(Boolean))];
+
+        const { data: catalogItems, error: catalogError } = itemSkus.length > 0
+            ? await supabase
+                .from('simple_items')
+                .select('sku, item_name, description, store_type')
+                .in('sku', itemSkus)
+            : { data: [], error: null };
+
+        if (catalogError) throw catalogError;
+
+        const catalogBySku = new Map<string, any>((catalogItems || [])
+            .map((item: any) => [String(item.sku).trim(), item]));
+
+        const items = (takeItems || []).map((item: any) => {
+            const sku = item.item_sku ? String(item.item_sku).trim() : '';
+            const catalogItem = catalogBySku.get(sku);
+
+            return {
+                ...item,
+                item: {
+                    item_name: catalogItem?.item_name || catalogItem?.description || sku || 'Unknown item',
+                    category: catalogItem?.store_type || 'uncategorized',
+                    unit_of_measure: 'Unit'
+                }
+            };
+        });
 
         await generateBranchStockTakeWorksheetPDF(res, {
             title: 'Branch Stock Take Worksheet',
@@ -859,4 +888,3 @@ export const generateBranchStockTakeWorksheet = async (req: Request, res: Respon
         res.status(500).json({ success: false, message: error.message });
     }
 };
-

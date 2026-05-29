@@ -97,14 +97,29 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
     // Limiting to last 100 request items to avoid performance issues.
     const { data: requestItems } = await supabase
       .from('stock_request_items')
-      .select('item_sku, requested_quantity, item:simple_items(item_name)')
+      .select('item_sku, requested_quantity')
       .order('created_at', { ascending: false })
       .limit(100);
+
+    const requestedSkus = [...new Set((requestItems || []).map((item: any) => item.item_sku).filter(Boolean))];
+    const { data: simpleItems } = requestedSkus.length > 0
+      ? await supabase
+        .from('simple_items')
+        .select('sku, item_name, description')
+        .in('sku', requestedSkus)
+      : { data: [] };
+
+    const itemNames = new Map<string, string>(
+      (simpleItems || []).map((item: any) => [
+        item.sku,
+        item.item_name || item.description || item.sku
+      ])
+    );
 
     const itemMap = new Map<string, { item_name: string, total_requested: number }>();
 
     requestItems?.forEach((item: any) => {
-      const current = itemMap.get(item.item_sku) || { item_name: item.item?.item_name || item.item_sku, total_requested: 0 };
+      const current = itemMap.get(item.item_sku) || { item_name: itemNames.get(item.item_sku) || item.item_sku, total_requested: 0 };
       current.total_requested += item.requested_quantity;
       itemMap.set(item.item_sku, current);
     });

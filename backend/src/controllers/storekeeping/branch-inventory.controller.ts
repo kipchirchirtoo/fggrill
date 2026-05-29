@@ -1001,22 +1001,50 @@ export const getBranchDashboard = async (
       .single();
 
     // Get recent movements
-    const { data: movements } = await supabase
+    const { data: movements, error: movementsError } = await supabase
       .from('branch_stock_movements')
-      .select(`
-        *,
-        item:simple_items(sku, item_name)
-      `)
+      .select('*')
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false })
       .limit(10);
+
+    if (movementsError) throw movementsError;
+
+    const movementSkus = [...new Set((movements || [])
+      .map((movement: any) => movement.item_sku ? String(movement.item_sku).trim() : '')
+      .filter(Boolean))];
+
+    const { data: movementItems, error: movementItemsError } = movementSkus.length > 0
+      ? await supabase
+        .from('simple_items')
+        .select('sku, item_name, description')
+        .in('sku', movementSkus)
+      : { data: [], error: null };
+
+    if (movementItemsError) throw movementItemsError;
+
+    const movementItemsBySku = new Map<string, any>((movementItems || [])
+      .map((item: any) => [String(item.sku).trim(), item]));
+
+    const enrichedMovements = (movements || []).map((movement: any) => {
+      const sku = movement.item_sku ? String(movement.item_sku).trim() : '';
+      const item = movementItemsBySku.get(sku);
+
+      return {
+        ...movement,
+        item: {
+          sku,
+          item_name: item?.item_name || item?.description || sku || 'Unknown item'
+        }
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: {
         stats,
         branch,
-        recentMovements: movements
+        recentMovements: enrichedMovements
       }
     });
   } catch (error) {

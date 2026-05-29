@@ -2,6 +2,38 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 
+const normalizeSku = (sku: unknown): string => String(sku || '').trim();
+
+const fetchSimpleItemsBySku = async (skus: unknown[]): Promise<Map<string, any>> => {
+  const normalizedSkus = Array.from(new Set(skus.map(normalizeSku).filter(Boolean)));
+  if (normalizedSkus.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('simple_items')
+    .select('*')
+    .in('sku', normalizedSkus);
+
+  if (error) throw error;
+
+  return new Map<string, any>((data || []).map((item: any) => [normalizeSku(item.sku), item]));
+};
+
+const attachCatalogItems = async (rows: any[]): Promise<any[]> => {
+  const itemsBySku = await fetchSimpleItemsBySku(rows.map((row) => row.item_sku));
+
+  return rows.map((row) => {
+    const sku = normalizeSku(row.item_sku);
+    return {
+      ...row,
+      item: itemsBySku.get(sku) || {
+        sku,
+        item_name: sku,
+        description: sku,
+      },
+    };
+  });
+};
+
 // @desc    Get shop items
 // @route   GET /api/store/shop-items
 // @access  Private
@@ -16,10 +48,7 @@ export const getShopItems = async (
 
     let query = supabase
       .from('simple_shop_items')
-      .select(`
-        *,
-        item:simple_items(*)
-      `)
+      .select('*')
       .eq('shop_user_id', userId)
       .gt('quantity', 0); // exclude empty or null items roughly matches exclude(item=None) logic if we ensure items exist
 
@@ -60,7 +89,7 @@ export const getShopItems = async (
     if (error) throw error;
 
     // Post-processing for search if needed, or improved query above.
-    let result = data || [];
+    let result = await attachCatalogItems(data || []);
     
     if (search) {
         const searchLower = String(search).toLowerCase();

@@ -6,6 +6,82 @@ import notificationService from '../../services/notification.service';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 import { isGlobalRole } from '../../utils/branchIsolation';
 
+const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
+
+const normalizeSku = (sku: unknown): string => {
+    if (sku === null || sku === undefined) return '';
+    return String(sku).trim();
+};
+
+const fetchSimpleItemsBySku = async (skus: unknown[]): Promise<Map<string, any>> => {
+    const uniqueSkus = [...new Set(skus.map(normalizeSku).filter(Boolean))];
+    if (uniqueSkus.length === 0) return new Map();
+
+    const { data, error } = await supabase
+        .from('simple_items')
+        .select(SIMPLE_ITEM_SELECT)
+        .in('sku', uniqueSkus);
+
+    if (error) throw error;
+
+    return new Map((data || []).map((item: any) => [normalizeSku(item.sku), item]));
+};
+
+const attachCatalogItem = (row: any, itemMap: Map<string, any>): any => {
+    const sku = normalizeSku(row.item_sku);
+    const item = itemMap.get(sku);
+
+    return {
+        ...row,
+        item: item ? {
+            ...item,
+            category: item.store_type || null,
+            unit: 'Unit',
+            unit_of_measure: 'Unit'
+        } : {
+            sku,
+            item_name: sku || 'Unknown item',
+            description: null,
+            category: null,
+            unit: 'Unit',
+            unit_of_measure: 'Unit',
+            quantity: null
+        }
+    };
+};
+
+const fetchRequestItemsWithCatalog = async (requestIds: unknown[]): Promise<Record<string, any[]>> => {
+    const ids = [...new Set(requestIds.map(id => id ? String(id) : '').filter(Boolean))];
+    if (ids.length === 0) return {};
+
+    const { data: items, error } = await supabase
+        .from('stock_request_items')
+        .select('*')
+        .in('request_id', ids)
+        .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const itemMap = await fetchSimpleItemsBySku((items || []).map((item: any) => item.item_sku));
+    const grouped: Record<string, any[]> = {};
+
+    (items || []).forEach((item: any) => {
+        const requestId = String(item.request_id);
+        if (!grouped[requestId]) grouped[requestId] = [];
+        grouped[requestId].push(attachCatalogItem(item, itemMap));
+    });
+
+    return grouped;
+};
+
+const attachRequestItems = async <T extends { id: unknown }>(requests: T[]): Promise<Array<T & { items: any[] }>> => {
+    const itemsByRequest = await fetchRequestItemsWithCatalog(requests.map(request => request.id));
+    return requests.map(request => ({
+        ...request,
+        items: itemsByRequest[String(request.id)] || []
+    }));
+};
+
 // @desc    Get all stock requests
 // @route   GET /api/stock-requests
 // @access  Private
@@ -116,11 +192,7 @@ export const getStockRequest = async (
         *,
         requesting_branch:branches!requesting_branch_id(id, name, code, contact_person),
         requested_by_user:users!requested_by(id, first_name, last_name, email),
-        reviewed_by_user:users!reviewed_by(id, first_name, last_name, email),
-        items:stock_request_items(
-          *,
-          item:simple_items!item_sku(sku, item_name, description, unit, category)
-        )
+        reviewed_by_user:users!reviewed_by(id, first_name, last_name, email)
       `)
             .eq('id', id)
             .single();
@@ -129,9 +201,11 @@ export const getStockRequest = async (
             throw new AppError('Stock request not found', 404);
         }
 
+        const [requestWithItems] = await attachRequestItems([request]);
+
         res.status(200).json({
             success: true,
-            data: request
+            data: requestWithItems
         });
     } catch (error) {
         next(error);
@@ -239,14 +313,14 @@ export const createStockRequest = async (
             .from('stock_requests')
             .select(`
         *,
-        requesting_branch:branches!requesting_branch_id(id, name, code),
-        items:stock_request_items(
-          *,
-          item:simple_items!item_sku(sku, item_name, description, unit)
-        )
+        requesting_branch:branches!requesting_branch_id(id, name, code)
       `)
             .eq('id', newRequest.id)
             .single();
+
+        const completeRequestWithItems = completeRequest
+            ? (await attachRequestItems([completeRequest]))[0]
+            : { ...newRequest, items: [] };
 
         // Notify Auditor/Central Storekeeper
         notificationService.notifyRole(
@@ -264,7 +338,7 @@ export const createStockRequest = async (
 
         res.status(201).json({
             success: true,
-            data: completeRequest
+            data: completeRequestWithItems
         });
     } catch (error) {
         logger.error('Error creating stock request:', error);
@@ -700,21 +774,19 @@ export const getApprovedRequests = async (
                 *,
                 requesting_branch:branches!requesting_branch_id(id, name, code, contact_person),
                 requested_by_user:users!requested_by(id, first_name, last_name, email),
-                reviewed_by_user:users!reviewed_by(id, first_name, last_name, email),
-                items:stock_request_items(
-                    *,
-                    item:simple_items!item_sku(sku, item_name, description, unit, category, quantity)
-                )
+                reviewed_by_user:users!reviewed_by(id, first_name, last_name, email)
             `)
             .in('status', ['APPROVED', 'PARTIALLY_APPROVED'])
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
+        const requestsWithItems = await attachRequestItems(requests || []);
+
         res.status(200).json({
             success: true,
-            count: requests?.length || 0,
-            data: requests || []
+            count: requestsWithItems.length,
+            data: requestsWithItems
         });
     } catch (error) {
         logger.error('Error fetching approved requests:', error);

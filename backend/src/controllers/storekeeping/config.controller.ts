@@ -4,6 +4,45 @@ import { logger } from '../../utils/logger';
 import { UserRole } from '../../models/User';
 import * as XLSX from 'xlsx';
 
+const normalizeSku = (sku: unknown): string => String(sku || '').trim();
+
+const fetchSimpleItemsBySku = async (
+    skus: unknown[],
+    columns = 'sku, item_name, description, retail_price'
+): Promise<Map<string, any>> => {
+    const normalizedSkus = Array.from(new Set(skus.map(normalizeSku).filter(Boolean)));
+    if (normalizedSkus.length === 0) return new Map();
+
+    const { data, error } = await supabase
+        .from('simple_items')
+        .select(columns)
+        .in('sku', normalizedSkus);
+
+    if (error) throw error;
+
+    return new Map<string, any>((data || []).map((item: any) => [normalizeSku(item.sku), item]));
+};
+
+const attachCatalogItems = async (
+    rows: any[],
+    columns = 'sku, item_name, description, retail_price'
+): Promise<any[]> => {
+    const itemsBySku = await fetchSimpleItemsBySku(rows.map((row) => row.item_sku), columns);
+
+    return rows.map((row) => {
+        const sku = normalizeSku(row.item_sku);
+        return {
+            ...row,
+            item: itemsBySku.get(sku) || {
+                sku,
+                item_name: sku,
+                description: sku,
+                retail_price: 0,
+            },
+        };
+    });
+};
+
 // Helper to check edit lock
 const checkEditLock = async (isManager: boolean): Promise<void> => {
   const { data: config , error } = await supabase.from('simple_app_config').select('edit_lock').eq('id', 1).single();
@@ -127,7 +166,7 @@ export const exportDataExcel = async (req: Request, res: Response, next: NextFun
             .from('simple_shop_items')
             .select(`
                 quantity,
-                item:simple_items(sku, description, retail_price),
+                item_sku,
                 shop_user:users(email)
             `);
 
@@ -135,7 +174,9 @@ export const exportDataExcel = async (req: Request, res: Response, next: NextFun
             shopQuery = shopQuery.eq('shop_user_id', req.user.id);
         }
 
-        const { data: shopItems } = await shopQuery;
+        const { data: shopRows, error: shopError } = await shopQuery;
+        if (shopError) throw shopError;
+        const shopItems = await attachCatalogItems(shopRows || [], 'sku, description, retail_price');
 
         // 3. Fetch Stock History (Managers only)
         let historyData: any[] = [];
@@ -144,12 +185,11 @@ export const exportDataExcel = async (req: Request, res: Response, next: NextFun
                 .from('stock_history')
                 .select(`
                     *,
-                    item:simple_items(sku, item_name),
                     user:users(email)
                 `)
                 .order('created_at', { ascending: false })
                 .limit(1000); // Limit for performance
-            historyData = history || [];
+            historyData = await attachCatalogItems(history || [], 'sku, item_name');
         }
 
         // Create Workbook

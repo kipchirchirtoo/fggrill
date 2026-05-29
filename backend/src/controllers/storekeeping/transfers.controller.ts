@@ -3,6 +3,38 @@ import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 import { UserRole } from '../../models/User';
 
+const normalizeSku = (sku: unknown): string => String(sku || '').trim();
+
+const fetchSimpleItemsBySku = async (skus: unknown[]): Promise<Map<string, any>> => {
+  const normalizedSkus = Array.from(new Set(skus.map(normalizeSku).filter(Boolean)));
+  if (normalizedSkus.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('simple_items')
+    .select('*')
+    .in('sku', normalizedSkus);
+
+  if (error) throw error;
+
+  return new Map<string, any>((data || []).map((item: any) => [normalizeSku(item.sku), item]));
+};
+
+const attachCatalogItems = async (rows: any[]): Promise<any[]> => {
+  const itemsBySku = await fetchSimpleItemsBySku(rows.map((row) => row.item_sku));
+
+  return rows.map((row) => {
+    const sku = normalizeSku(row.item_sku);
+    return {
+      ...row,
+      item: itemsBySku.get(sku) || {
+        sku,
+        item_name: sku,
+        description: sku,
+      },
+    };
+  });
+};
+
 // Helper to check edit lock
 const checkEditLock = async (isManager: boolean): Promise<void> => {
   const { data: config , error } = await supabase.from('simple_app_config').select('edit_lock').eq('id', 1).single();
@@ -32,7 +64,6 @@ export const getTransferItems = async (
       .from('simple_transfer_items')
       .select(`
         *,
-        item:simple_items(*),
         shop_user:users(id, first_name, last_name, email)
       `);
 
@@ -47,7 +78,7 @@ export const getTransferItems = async (
 
     // Search filtering similar to shop items
     const { search } = req.query;
-    let result = data || [];
+    let result = await attachCatalogItems(data || []);
     if (search) {
       const searchLower = String(search).toLowerCase();
       result = result.filter((record: any) => 
@@ -162,7 +193,7 @@ export const submitTransferRequest = async (
     // Get unordered items
     const { data: items, error } = await supabase
       .from('simple_transfer_items')
-      .select('*, item:simple_items(*)')
+      .select('*')
       .eq('shop_user_id', userId)
       .eq('ordered', false);
 
@@ -171,6 +202,8 @@ export const submitTransferRequest = async (
       res.status(400).json({ detail: "There were no outstanding items to request!" });
       return;
     }
+
+    const itemsWithCatalog = await attachCatalogItems(items);
 
     // Update to ordered
     const { error: updateError } = await supabase
@@ -190,7 +223,7 @@ export const submitTransferRequest = async (
 
     if (config?.allow_email_notifications) {
         try {
-            await emailService.sendStockTransferEmail(req.user, items);
+            await emailService.sendStockTransferEmail(req.user, itemsWithCatalog);
             logger.info(`Stock Transfer Request email sent for user ${req.user.email}`);
         } catch (emailError) {
             logger.error('Failed to send stock transfer email', emailError);

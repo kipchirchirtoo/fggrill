@@ -67,6 +67,19 @@ initializeApp().then(({ app, httpServer }) => {
     res.status(200).json({ ok: true, timestamp: new Date().toISOString() });
   });
 
+  app.get('/', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      service: 'Famous Gates API',
+      status: 'ok',
+      health: '/health'
+    });
+  });
+
+  app.get(['/favicon.ico', '/favicon.png'], (_req, res) => {
+    res.status(204).end();
+  });
+
   // Trust proxy (required for Render/Heroku/Railway behind load balancer)
   app.set('trust proxy', 1);
 
@@ -245,5 +258,4 @@ initializeApp().then(({ app, httpServer }) => {
   }
   process.exit(1);
 });
-
 

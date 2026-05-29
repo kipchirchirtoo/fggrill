@@ -4,6 +4,66 @@ import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 
+const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
+
+const normalizeSku = (sku: unknown): string => {
+    if (sku === null || sku === undefined) return '';
+    return String(sku).trim();
+};
+
+const fetchSimpleItemsBySku = async (skus: unknown[]): Promise<Map<string, any>> => {
+    const uniqueSkus = [...new Set(skus.map(normalizeSku).filter(Boolean))];
+    if (uniqueSkus.length === 0) return new Map();
+
+    const { data, error } = await supabase
+        .from('simple_items')
+        .select(SIMPLE_ITEM_SELECT)
+        .in('sku', uniqueSkus);
+
+    if (error) throw error;
+
+    return new Map((data || []).map((item: any) => [normalizeSku(item.sku), item]));
+};
+
+const attachCatalogItem = (row: any, itemMap: Map<string, any>): any => {
+    const sku = normalizeSku(row.item_sku);
+    const item = itemMap.get(sku);
+    const itemName = item?.item_name || item?.description || sku || 'Unknown item';
+
+    return {
+        ...row,
+        item: item ? {
+            ...item,
+            category: item.store_type || null,
+            unit: 'Unit',
+            unit_of_measure: 'Unit'
+        } : {
+            sku,
+            item_name: itemName,
+            description: null,
+            category: null,
+            unit: 'Unit',
+            unit_of_measure: 'Unit',
+            quantity: null
+        },
+        item_name: itemName,
+        unit: 'Unit',
+        unit_of_measure: 'Unit'
+    };
+};
+
+const fetchDispatchItemsWithCatalog = async (dispatchId: string): Promise<any[]> => {
+    const { data: items, error } = await supabase
+        .from('dispatch_items')
+        .select('*')
+        .eq('dispatch_id', dispatchId);
+
+    if (error) throw error;
+
+    const itemMap = await fetchSimpleItemsBySku((items || []).map((item: any) => item.item_sku));
+    return (items || []).map((item: any) => attachCatalogItem(item, itemMap));
+};
+
 // @desc    Get all dispatch notes
 // @route   GET /api/dispatch-notes
 // @access  Private
@@ -74,7 +134,7 @@ export const getDispatchNotes = async (
         const itemSkus = [...new Set(items?.map(i => i.item_sku) || [])];
         const { data: itemDetails } = await supabase
             .from('simple_items')
-            .select('sku, item_name, unit_of_measure')
+            .select(SIMPLE_ITEM_SELECT)
             .in('sku', itemSkus);
 
         // Get vehicle and driver details
@@ -124,8 +184,15 @@ export const getDispatchNotes = async (
                     const details = itemDetails?.find(d => d.sku === i.item_sku);
                     return {
                         ...i,
-                        item_name: details?.item_name || i.item_sku,
-                        unit: details?.unit_of_measure || 'Units'
+                        item: details ? {
+                            ...details,
+                            category: details.store_type || null,
+                            unit: 'Unit',
+                            unit_of_measure: 'Unit'
+                        } : null,
+                        item_name: details?.item_name || details?.description || i.item_sku,
+                        unit: 'Unit',
+                        unit_of_measure: 'Unit'
                     };
                 }) || [],
                 vehicle,
@@ -188,20 +255,7 @@ export const getDispatchNote = async (
         }
 
         // Fetch dispatch items separately with item details
-        const { data: items, error: itemsError } = await supabase
-            .from('dispatch_items')
-            .select(`
-                *,
-                item:simple_items!item_sku(sku, item_name, description, unit_of_measure, category)
-            `)
-            .eq('dispatch_id', id);
-
-        if (itemsError) {
-            logger.error(`Error fetching dispatch items for ${id}:`, itemsError);
-            throw new AppError(`Failed to fetch dispatch items: ${itemsError.message}`, 500);
-        }
-
-        dispatch.items = items || [];
+        dispatch.items = await fetchDispatchItemsWithCatalog(id);
 
         res.status(200).json({
             success: true,
@@ -409,16 +463,8 @@ export const createDispatchNote = async (
                 .maybeSingle();
 
             // Fetch dispatch items separately
-            const { data: fetchedItems } = await supabase
-                .from('dispatch_items')
-                .select(`
-                    *,
-                    item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
-                `)
-                .eq('dispatch_id', createdDispatch.id);
-
             if (completeDispatch) {
-                completeDispatch.items = fetchedItems || [];
+                completeDispatch.items = await fetchDispatchItemsWithCatalog(createdDispatch.id);
             }
 
             res.status(201).json({
@@ -491,16 +537,8 @@ export const createDispatchNote = async (
             .maybeSingle();
 
         // Fetch dispatch items separately
-        const { data: fetchedItems } = await supabase
-            .from('dispatch_items')
-            .select(`
-                *,
-                item:simple_items!item_sku(sku, item_name, description, unit_of_measure)
-            `)
-            .eq('dispatch_id', createdDispatch2.id);
-
         if (completeDispatch) {
-            completeDispatch.items = fetchedItems || [];
+            completeDispatch.items = await fetchDispatchItemsWithCatalog(createdDispatch2.id);
         }
 
         res.status(201).json({
