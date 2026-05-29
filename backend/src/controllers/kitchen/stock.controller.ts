@@ -34,7 +34,7 @@ export const getKitchenStock = async (req: Request, res: Response) => {
             const skus = data.map((item: any) => item.item_sku);
             const [{ data: inventoryItems }, { data: simpleItems }, { data: storeItems }] = await Promise.all([
                 supabase.from('inventory_items').select('sku, item_name, description').in('sku', skus),
-                supabase.from('simple_items').select('sku, name, item_name, description').in('sku', skus),
+                supabase.from('simple_items').select('sku, item_name, description').in('sku', skus),
                 supabase.from('store_items').select('sku, name, description').in('sku', skus),
             ]);
 
@@ -44,7 +44,7 @@ export const getKitchenStock = async (req: Request, res: Response) => {
                 itemNameMap.set(item.sku, item.item_name || item.description);
             });
             simpleItems?.forEach((item: any) => {
-                itemNameMap.set(item.sku, item.item_name || item.name || item.description);
+                itemNameMap.set(item.sku, item.item_name || item.description);
             });
             storeItems?.forEach((item: any) => {
                 itemNameMap.set(item.sku, item.name || item.description);
@@ -111,7 +111,7 @@ export const getKitchenLedger = async (req: Request, res: Response) => {
             const skus = [...new Set(data.map((item: any) => item.item_sku))];
             const [{ data: inventoryItems }, { data: simpleItems }, { data: storeItems }] = await Promise.all([
                 supabase.from('inventory_items').select('sku, item_name, description').in('sku', skus),
-                supabase.from('simple_items').select('sku, name, item_name, description').in('sku', skus),
+                supabase.from('simple_items').select('sku, item_name, description').in('sku', skus),
                 supabase.from('store_items').select('sku, name, description').in('sku', skus),
             ]);
 
@@ -121,7 +121,7 @@ export const getKitchenLedger = async (req: Request, res: Response) => {
                 itemNameMap.set(item.sku, item.item_name || item.description);
             });
             simpleItems?.forEach((item: any) => {
-                itemNameMap.set(item.sku, item.item_name || item.name || item.description);
+                itemNameMap.set(item.sku, item.item_name || item.description);
             });
             storeItems?.forEach((item: any) => {
                 itemNameMap.set(item.sku, item.name || item.description);

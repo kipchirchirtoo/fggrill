@@ -768,7 +768,7 @@ const seedStockCountItemsFromBranchStock = async (
   const initialSkus = stockRows.map((item: any) => item.item_sku).filter(Boolean);
   const { data: simpleItems, error: itemsError } = await supabase
     .from('simple_items')
-    .select('sku, item_name, name, category, unit_of_measure, cost_price, store_type')
+    .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
     .in('sku', initialSkus.length > 0 ? initialSkus : ['__none__']);
 
   if (itemsError) throw itemsError;
@@ -778,7 +778,7 @@ const seedStockCountItemsFromBranchStock = async (
   if (stockRows.length === 0) {
     const { data: branchItems, error: branchItemsError } = await supabase
       .from('simple_items')
-      .select('sku, item_name, name, category, unit_of_measure, cost_price, store_type')
+      .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
       .eq('branch_id', branchId)
       .eq('is_active', true)
       .order('sku');
@@ -794,7 +794,7 @@ const seedStockCountItemsFromBranchStock = async (
     if (simpleRows.length === 0) {
       const { data: sharedItems, error: sharedItemsError } = await supabase
         .from('simple_items')
-        .select('sku, item_name, name, category, unit_of_measure, cost_price, store_type')
+        .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
         .is('branch_id', null)
         .eq('is_active', true)
         .order('sku');
@@ -1207,7 +1207,12 @@ export const getStockTake = async (req: Request, res: Response) => {
 
     res.json({ success: true, data: enrichedResult });
   } catch (error: any) {
-    logger.error('getStockTake error:', error.message, error.details || '');
+    logger.error('getStockTake error:', {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+    });
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -1291,7 +1296,12 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
 
     res.json({ success: true, data: mergedData });
   } catch (error: any) {
-    logger.error('getStockTakeItems error:', error.message, error.details || '');
+    logger.error('getStockTakeItems error:', {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+    });
     res.status(500).json({ success: false, message: error.message });
   }
 };
