@@ -197,13 +197,16 @@ export const createPurchaseOrder = async (
 
         const userId = req.user?.id;
 
-        // Enhanced validation and logging
-        console.log('=== CREATE PURCHASE ORDER DEBUG ===');
-        console.log('User ID:', userId);
-        console.log('Supplier ID:', supplier_id, 'Type:', typeof supplier_id);
-        console.log('Items count:', items?.length);
-        console.log('Items:', JSON.stringify(items, null, 2));
-        console.log('Auto-approve:', auto_approve);
+        const debugProcurement = process.env.DEBUG_PROCUREMENT === 'true';
+        if (debugProcurement) {
+            logger.debug('Creating purchase order', {
+                userId,
+                supplier_id,
+                supplier_id_type: typeof supplier_id,
+                items_count: items?.length,
+                auto_approve
+            });
+        }
 
         if (!supplier_id || !items || items.length === 0) {
             throw new AppError('Supplier and items are required', 400);
@@ -226,7 +229,7 @@ export const createPurchaseOrder = async (
         const skusToResolve = items.map((item: any) => item.item_id);
 
         if (skusToResolve.length > 0) {
-            console.log('Resolving SKUs from simple_items:', skusToResolve);
+            if (debugProcurement) logger.debug('Resolving purchase order SKUs', { skusToResolve });
             
             // Try to resolve from simple_items
             const { data: storeItems, error: resolveError } = await supabase
@@ -235,7 +238,7 @@ export const createPurchaseOrder = async (
                 .in('sku', skusToResolve);
 
             if (resolveError) {
-                console.error('CRITICAL: SKU Resolution Error:', JSON.stringify(resolveError, null, 2));
+                logger.error('SKU resolution error while creating purchase order:', resolveError);
                 throw new AppError(`Error resolving item identifiers: ${resolveError.message}`, 500);
             }
 
@@ -245,7 +248,7 @@ export const createPurchaseOrder = async (
                 return acc;
             }, {});
 
-            console.log('SKU resolution map:', skuToIdMap);
+            if (debugProcurement) logger.debug('Purchase order SKU resolution map', { skuToIdMap });
 
             for (const item of resolvedItems) {
                 const resolvedId = skuToIdMap[item.item_id];
@@ -262,11 +265,10 @@ export const createPurchaseOrder = async (
 
         if (numberError) {
             logger.error('Error generating PO number:', numberError);
-            console.error('PO Number generation error:', JSON.stringify(numberError, null, 2));
             throw new AppError('Failed to generate PO number', 500);
         }
 
-        console.log('Generated PO number:', po_number);
+        if (debugProcurement) logger.debug('Generated purchase order number', { po_number });
 
         // Calculate totals WITHOUT VAT
         const subtotal = resolvedItems.reduce((sum: number, item: any) =>
@@ -275,7 +277,7 @@ export const createPurchaseOrder = async (
         const tax_amount = 0; // No VAT
         const total_amount = subtotal; // Total equals subtotal (no tax)
 
-        console.log('Calculated totals - Subtotal:', subtotal, 'Tax:', tax_amount, 'Total:', total_amount);
+        if (debugProcurement) logger.debug('Calculated purchase order totals', { subtotal, tax_amount, total_amount });
 
         // Prepare PO data - set status based on auto_approve flag
         // CRITICAL: Apply module and branch scoping
@@ -305,7 +307,7 @@ export const createPurchaseOrder = async (
         poData.created_by_id = userId || null;
         delete (poData as any).created_by;
 
-        console.log('PO Data to insert:', JSON.stringify(poData, null, 2));
+        if (debugProcurement) logger.debug('Purchase order payload prepared', { poData });
 
         try {
             // Create purchase order
@@ -316,11 +318,11 @@ export const createPurchaseOrder = async (
                 .single();
 
             if (poError) {
-                console.error('CRITICAL: PO Header Insert Error:', JSON.stringify(poError, null, 2));
+                logger.error('PO header insert error:', poError);
                 throw new AppError(`Error creating PO header: ${poError.message}`, 500);
             }
 
-            console.log('PO header created successfully:', newPO.id);
+            if (debugProcurement) logger.debug('Purchase order header created', { id: newPO.id });
 
             // Insert PO items WITHOUT VAT
             const poItems = resolvedItems.map((item: any) => {
@@ -337,25 +339,24 @@ export const createPurchaseOrder = async (
                 };
             });
 
-            console.log('PO Items to insert (prepared):', JSON.stringify(poItems, null, 2));
+            if (debugProcurement) logger.debug('Purchase order items prepared', { count: poItems.length });
 
             const { error: itemsError } = await supabase
                 .from('store_po_items')
                 .insert(poItems);
 
             if (itemsError) {
-                console.error('CRITICAL: PO Items Insert Error:', JSON.stringify(itemsError, null, 2));
+                logger.error('PO items insert error:', itemsError);
                 // Cleanup: Delete the PO header if items failed
                 const { error } = await supabase.from('store_purchase_orders').delete().eq('id', newPO.id);
                 if (error) {
-                  console.error('Database error:', error);
+                  logger.error('Failed to clean up purchase order header after item insert failure:', error);
                   throw error;
                 }
                 throw new AppError(`Error adding items to PO: ${itemsError.message}`, 500);
             }
 
-            console.log('PO Items inserted successfully');
-            console.log('=== END DEBUG ===');
+            if (debugProcurement) logger.debug('Purchase order items inserted', { po_id: newPO.id });
 
             res.status(201).json({
                 success: true,
@@ -363,13 +364,12 @@ export const createPurchaseOrder = async (
                 message: auto_approve ? 'Purchase order created and approved automatically' : 'Purchase order created successfully'
             });
         } catch (dbError: any) {
-            console.error('FULL DATABASE ERROR:', JSON.stringify(dbError, null, 2));
+            logger.error('Purchase order database error:', dbError);
             if (dbError instanceof AppError) throw dbError;
             throw new AppError(dbError.message || 'Database execution error', 500);
         }
     } catch (error) {
         logger.error('Error creating purchase order:', error);
-        console.error('FULL ERROR DETAILS:', JSON.stringify(error, null, 2));
         next(error);
     }
 };

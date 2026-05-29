@@ -43,10 +43,7 @@ export const getSales = async (req: Request, res: Response, next: NextFunction):
 
         let query = supabase
             .from('restaurant_pool_token_sales')
-            .select(`
-        *,
-        cashier:users(id, first_name, last_name)
-      `)
+            .select('*')
             .order('created_at', { ascending: false });
 
         if (branch_id) query = query.eq('branch_id', branch_id);
@@ -56,7 +53,20 @@ export const getSales = async (req: Request, res: Response, next: NextFunction):
 
         if (error) throw error;
 
-        res.status(200).json({ success: true, data });
+        const cashierIds = [...new Set((data || []).map((sale: any) => sale.cashier_id).filter(Boolean))];
+        const { data: cashiers, error: cashierError } = cashierIds.length
+            ? await supabase.from('users').select('id, first_name, last_name').in('id', cashierIds)
+            : { data: [], error: null };
+
+        if (cashierError) throw cashierError;
+
+        const cashierMap = new Map((cashiers || []).map((cashier: any) => [cashier.id, cashier]));
+        const enriched = (data || []).map((sale: any) => ({
+            ...sale,
+            cashier: sale.cashier_id ? cashierMap.get(sale.cashier_id) || null : null
+        }));
+
+        res.status(200).json({ success: true, data: enriched });
     } catch (error) {
         next(error);
     }

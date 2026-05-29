@@ -15,7 +15,12 @@ const groq   = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 const GROQ_MODEL   = process.env.GROQ_MODEL || 'llama-3.1-70b-versatile';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || process.env.GOOGLE_GEMINI_MODEL || 'gemini-2.0-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const RETIRED_GEMINI_MODELS = new Set(['gemini-1.5-flash', 'models/gemini-1.5-flash']);
+const configuredGeminiModel = (process.env.GEMINI_MODEL || process.env.GOOGLE_GEMINI_MODEL || '').trim();
+const GEMINI_MODEL = configuredGeminiModel && !RETIRED_GEMINI_MODELS.has(configuredGeminiModel)
+  ? configuredGeminiModel
+  : DEFAULT_GEMINI_MODEL;
 
 // ── Safety settings for Gemini (permissive for enterprise analytics) ──────────
 const GEMINI_SAFETY = [

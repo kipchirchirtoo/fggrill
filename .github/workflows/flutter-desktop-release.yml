@@ -1,15 +1,8 @@
 name: Flutter Desktop Release
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Release tag to create or update, for example v2.0.6"
-        required: true
-        default: "v2.0.6"
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -46,14 +39,13 @@ jobs:
         working-directory: famous_gates_app
         run: |
           flutter config --enable-linux-desktop
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          VERSION="${VERSION:-1.0.0}"
+          BUILD_NUMBER="${{ github.run_number }}"
+          perl -0pi -e "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/m" pubspec.yaml
           flutter pub get
           flutter build linux --release
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [ "${GITHUB_REF_TYPE}" != "tag" ] || [ -z "${VERSION}" ]; then
-            VERSION="${{ inputs.release_tag }}"
-            VERSION="${VERSION#v}"
-          fi
-          VERSION="${VERSION:-1.0.0}"
           PACKAGE_ROOT="dist/linux/famous-gates_${VERSION}_amd64"
           mkdir -p "${PACKAGE_ROOT}/DEBIAN"
           mkdir -p "${PACKAGE_ROOT}/opt/famous-gates"
@@ -120,14 +112,13 @@ jobs:
         shell: pwsh
         run: |
           flutter config --enable-windows-desktop
+          $version = "${{ github.event.release.tag_name }}".TrimStart("v")
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
+          $buildNumber = "${{ github.run_number }}"
+          (Get-Content pubspec.yaml) -replace '^version: .+$', "version: $version+$buildNumber" | Set-Content pubspec.yaml
           flutter pub get
           flutter build windows --release
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
-          if ("${env:GITHUB_REF_TYPE}" -ne "tag" -or [string]::IsNullOrWhiteSpace($version)) {
-            $version = "${{ inputs.release_tag }}".TrimStart("v")
-          }
-          if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "dist\FamousGates-$version-windows-x64-portable.zip" -Force
           $stage = "C:\fg-release"
           if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
@@ -141,10 +132,7 @@ jobs:
       - name: Build Windows installer
         shell: pwsh
         run: |
-          $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
-          if ("${env:GITHUB_REF_TYPE}" -ne "tag" -or [string]::IsNullOrWhiteSpace($version)) {
-            $version = "${{ inputs.release_tag }}".TrimStart("v")
-          }
+          $version = "${{ github.event.release.tag_name }}".TrimStart("v")
           if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
             "/DMyAppVersion=$version" `
@@ -177,48 +165,23 @@ jobs:
         id: release
         shell: bash
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
-          else
-            TAG="${{ inputs.release_tag }}"
-          fi
+          TAG="${{ github.event.release.tag_name }}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Ensure tag exists
-        shell: bash
-        run: |
-          TAG="${{ steps.release.outputs.tag }}"
-          if ! git rev-parse "${TAG}" >/dev/null 2>&1; then
-            git tag "${TAG}" "${GITHUB_SHA}"
-            git push origin "${TAG}"
-          fi
 
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
 
-      - name: Create or update release
+      - name: Upload assets to release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
-          NOTES=$'Famous Gates Flutter desktop release.\n\nIncluded builds:\n- Linux x64 .deb installer\n- Linux x64 portable tar.gz\n- Windows x64 setup .exe installer\n- Windows x64 portable zip'
-
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release upload "${TAG}" \
-              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.deb \
-              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.tar.gz \
-              release-artifacts/famous-gates-windows-x64/FamousGates-Setup-*-x64.exe \
-              release-artifacts/famous-gates-windows-x64/FamousGates-*-windows-x64-portable.zip \
-              --clobber
-          else
-            gh release create "${TAG}" \
-              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.deb \
-              release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.tar.gz \
-              release-artifacts/famous-gates-windows-x64/FamousGates-Setup-*-x64.exe \
-              release-artifacts/famous-gates-windows-x64/FamousGates-*-windows-x64-portable.zip \
-              --title "Famous Gates Desktop ${TAG}" \
-              --notes "${NOTES}"
-          fi
+          gh release upload "${TAG}" \
+            release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.deb \
+            release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.tar.gz \
+            release-artifacts/famous-gates-windows-x64/FamousGates-Setup-*-x64.exe \
+            release-artifacts/famous-gates-windows-x64/FamousGates-*-windows-x64-portable.zip \
+            --clobber

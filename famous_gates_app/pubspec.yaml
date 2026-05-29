@@ -53,6 +53,10 @@ dependencies:
   freezed_annotation: ^2.4.4
   json_annotation: ^4.9.0
   drift_flutter: ^0.2.7
+  updat: ^1.4.0
+  http: ^1.6.0
+  package_info_plus: ^9.0.1
+  flutter_markdown: ^0.7.7+1
 
 dependency_overrides:
   phosphor_flutter:

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../domain/lina_providers.dart';
@@ -337,6 +338,30 @@ Widget _errorCard(Object error, VoidCallback retry) {
   ]));
 }
 
+Widget _linaMarkdown(String value, {Color color = AppColors.kTextPrimary}) {
+  final textStyle = TextStyle(fontSize: 13.5, height: 1.65, color: color);
+  return MarkdownBody(
+    data: value.trim().isEmpty ? 'No intelligence available yet.' : value,
+    selectable: true,
+    styleSheet: MarkdownStyleSheet(
+      p: textStyle,
+      listBullet: textStyle,
+      strong: textStyle.copyWith(fontWeight: FontWeight.w700),
+      h1: textStyle.copyWith(fontSize: 18, fontWeight: FontWeight.w800),
+      h2: textStyle.copyWith(fontSize: 16, fontWeight: FontWeight.w800),
+      h3: textStyle.copyWith(fontSize: 14.5, fontWeight: FontWeight.w700),
+      blockquote: textStyle.copyWith(color: AppColors.kTextSecondary),
+      code: textStyle.copyWith(
+        fontFamily: 'monospace',
+        color: color,
+        backgroundColor: color == Colors.white
+            ? Colors.white.withValues(alpha: 0.12)
+            : const Color(0xFFF3F4F6),
+      ),
+    ),
+  );
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. Executive Tab
 // ═════════════════════════════════════════════════════════════════════════════
@@ -398,7 +423,7 @@ class _ExecutiveTab extends ConsumerWidget {
                     color: _kLinaAccent.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text('Gemini 1.5 Pro',
+                  child: const Text('Gemini 2.0 Flash',
                       style: TextStyle(
                           color: _kLinaAccent,
                           fontSize: 11,
@@ -406,11 +431,7 @@ class _ExecutiveTab extends ConsumerWidget {
                 ),
               ]),
               const Divider(height: 24),
-              Text(data['summary'] ?? 'No summary available',
-                  style: const TextStyle(
-                      fontSize: 13.5,
-                      height: 1.7,
-                      color: AppColors.kTextPrimary)),
+              _linaMarkdown(data['summary'] ?? 'No summary available'),
               const SizedBox(height: 8),
               Text('Generated: ${data['generated_at'] ?? ''}',
                   style: const TextStyle(
@@ -627,13 +648,9 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
             ),
             child: msg.isStreaming && msg.content.isEmpty
                 ? _TypingIndicator()
-                : Text(
+                : _linaMarkdown(
                     msg.content,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      height: 1.6,
-                      color: isUser ? Colors.white : AppColors.kTextPrimary,
-                    ),
+                    color: isUser ? Colors.white : AppColors.kTextPrimary,
                   ),
           ),
         ],
@@ -955,7 +972,7 @@ class _AuditTab extends ConsumerWidget {
                     decoration: BoxDecoration(
                         color: _kLinaAccent.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6)),
-                    child: const Text('Gemini 1.5 Pro',
+                    child: const Text('Gemini 2.0 Flash',
                         style: TextStyle(
                             color: _kLinaAccent,
                             fontSize: 11,
@@ -963,11 +980,7 @@ class _AuditTab extends ConsumerWidget {
                   ),
                 ]),
                 const Divider(height: 24),
-                Text(data['report'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 13.5,
-                        height: 1.7,
-                        color: AppColors.kTextPrimary)),
+                _linaMarkdown(data['report'] ?? ''),
                 const SizedBox(height: 8),
                 Text('Generated: ${data['generated_at'] ?? ''}',
                     style: const TextStyle(
@@ -1051,7 +1064,7 @@ class _FinancialTab extends ConsumerWidget {
                     decoration: BoxDecoration(
                         color: _kLinaAccent.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6)),
-                    child: const Text('Gemini 1.5 Pro',
+                    child: const Text('Gemini 2.0 Flash',
                         style: TextStyle(
                             color: _kLinaAccent,
                             fontSize: 11,
@@ -1059,11 +1072,7 @@ class _FinancialTab extends ConsumerWidget {
                   ),
                 ]),
                 const Divider(height: 24),
-                Text(data['analysis'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 13.5,
-                        height: 1.7,
-                        color: AppColors.kTextPrimary)),
+                _linaMarkdown(data['analysis'] ?? ''),
               ])),
           loading: () => _loadingCard(),
           error: (e, _) =>
@@ -1142,7 +1151,7 @@ class _EmployeeTab extends ConsumerWidget {
                     decoration: BoxDecoration(
                         color: _kLinaAccent.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6)),
-                    child: const Text('Gemini 1.5 Pro',
+                    child: const Text('Gemini 2.0 Flash',
                         style: TextStyle(
                             color: _kLinaAccent,
                             fontSize: 11,
@@ -1150,11 +1159,7 @@ class _EmployeeTab extends ConsumerWidget {
                   ),
                 ]),
                 const Divider(height: 24),
-                Text(data['analysis'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 13.5,
-                        height: 1.7,
-                        color: AppColors.kTextPrimary)),
+                _linaMarkdown(data['analysis'] ?? ''),
               ])),
           loading: () => _loadingCard(),
           error: (e, _) =>

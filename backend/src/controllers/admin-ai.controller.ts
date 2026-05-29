@@ -4,7 +4,12 @@ import { supabase } from '../config/database';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const GEMINI_MODEL = process.env.GEMINI_MODEL || process.env.GOOGLE_GEMINI_MODEL || 'gemini-2.0-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const RETIRED_GEMINI_MODELS = new Set(['gemini-1.5-flash', 'models/gemini-1.5-flash']);
+const configuredGeminiModel = (process.env.GEMINI_MODEL || process.env.GOOGLE_GEMINI_MODEL || '').trim();
+const GEMINI_MODEL = configuredGeminiModel && !RETIRED_GEMINI_MODELS.has(configuredGeminiModel)
+  ? configuredGeminiModel
+  : DEFAULT_GEMINI_MODEL;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
