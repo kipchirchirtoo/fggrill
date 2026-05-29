@@ -140,7 +140,10 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
     );
   }
 
-  void _showUserDialog({Map<String, dynamic>? user}) {
+  Future<void> _showUserDialog({Map<String, dynamic>? user}) async {
+    final branches = await _loadBranchesForDialog();
+    if (!mounted) return;
+
     final firstNameCtrl =
         TextEditingController(text: user?['first_name'] as String? ?? '');
     final lastNameCtrl =
@@ -156,7 +159,8 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
         TextEditingController(text: user?['department'] as String? ?? '');
     final pinCtrl =
         TextEditingController(text: user?['pos_pin'] as String? ?? '');
-    int? selectedBranch = int.tryParse(user?['branch_id']?.toString() ?? '');
+    int? selectedBranch =
+        int.tryParse('${user?['branch_id'] ?? user?['branchId'] ?? ''}');
     String selectedStatus = user?['status'] as String? ?? 'active';
     String selectedRole = user?['role'] as String? ?? 'receptionist';
     final roles = [
@@ -231,11 +235,6 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       'kyogong_reception_cashier',
       'employee',
     };
-    final rawBranches = ref.read(allBranchesProvider).maybeWhen(
-          data: (data) => data['data'] as List<dynamic>? ?? const [],
-          orElse: () => const <dynamic>[],
-        );
-    final branches = _uniqueBranches(rawBranches);
     final branchIds = branches
         .map((branch) => int.tryParse('${branch['id']}'))
         .whereType<int>()
@@ -310,7 +309,7 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                           value: null, child: Text('Central / No branch')),
                       ...branches.map((branch) => DropdownMenuItem<int?>(
                             value: int.tryParse('${branch['id']}'),
-                            child: Text('${branch['name'] ?? 'Branch'}'),
+                            child: Text(_branchLabel(branch)),
                           )),
                     ],
                     onChanged: branchRequiredRoles.contains(selectedRole)
@@ -802,9 +801,55 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       final branch = Map<String, dynamic>.from(row);
       final id = int.tryParse('${branch['id']}');
       if (id == null) continue;
+      branch['name'] = _branchLabel(branch);
       byId[id] = branch;
     }
     return byId.values.toList()
       ..sort((a, b) => '${a['name'] ?? ''}'.compareTo('${b['name'] ?? ''}'));
+  }
+
+  Future<List<Map<String, dynamic>>> _loadBranchesForDialog() async {
+    try {
+      final response = await ref.read(allBranchesProvider.future);
+      final branches = _uniqueBranches(_extractBranchRows(response));
+      if (branches.isNotEmpty) return branches;
+
+      // Force a fresh request if the cached provider held an empty/loading value.
+      ref.invalidate(allBranchesProvider);
+      final refreshed = await ref.read(allBranchesProvider.future);
+      return _uniqueBranches(_extractBranchRows(refreshed));
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+            content: Text('Could not load branches: $e'),
+            backgroundColor: AppColors.kError,
+          ),
+        );
+      }
+      return const [];
+    }
+  }
+
+  List<dynamic> _extractBranchRows(Map<String, dynamic> response) {
+    final data = response['data'];
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in const ['branches', 'items', 'rows', 'data']) {
+        final value = data[key];
+        if (value is List) return value;
+      }
+    }
+    final branches = response['branches'];
+    return branches is List ? branches : const [];
+  }
+
+  String _branchLabel(Map<String, dynamic> branch) {
+    final name = '${branch['name'] ?? branch['branch_name'] ?? ''}'.trim();
+    if (name.isNotEmpty && name != 'null') return name;
+    final code = '${branch['code'] ?? ''}'.trim();
+    if (code.isNotEmpty && code != 'null') return code;
+    return 'Branch ${branch['id']}';
   }
 }
