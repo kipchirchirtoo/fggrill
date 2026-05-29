@@ -33,6 +33,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   List<OutletPosItem> _items = [];
   List<OutletCartItem> _cart = [];
   List<OutletShiftOrder> _orders = [];
+  OutletShiftOrder? _recalledOrder;
   final _searchController = TextEditingController();
   final _tableController = TextEditingController();
   final _roomController = TextEditingController();
@@ -288,8 +289,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             busy: _busy,
             onIncrement: (item) => _setQty(item.item.id, item.quantity + 1),
             onDecrement: (item) => _setQty(item.item.id, item.quantity - 1),
-            onClear: () => setState(() => _cart = []),
+            onClear: () => setState(() {
+              _cart = [];
+              _recalledOrder = null;
+            }),
             onCreateOrder: _createOrder,
+            recalledOrderNumber: _recalledOrder?.orderNumber,
           );
           if (constraints.maxWidth < 920) {
             return Column(
@@ -321,8 +326,19 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             Text('Recent orders',
                 style: Theme.of(context).textTheme.titleLarge),
             Text(
-              'Orders placed from this POS.',
+              'Recall, split, merge, and request void approval for waiter bills.',
               style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _mergeableOrders.length < 2 || _busy
+                    ? null
+                    : _showMergeOrdersDialog,
+                icon: const Icon(Icons.call_merge),
+                label: const Text('Merge bills'),
+              ),
             ),
             const SizedBox(height: 12),
             for (final order in _orders)
@@ -361,11 +377,70 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                           visualDensity: VisualDensity.compact,
                         )
                       else
-                        const Chip(
-                          label: Text('Cleared'),
-                          avatar: Icon(Icons.check_circle, size: 16),
+                        Chip(
+                          label: Text(order.paymentStatus == 'voided'
+                              ? order.isSplit
+                                  ? 'Split'
+                                  : order.isMerged
+                                      ? 'Merged'
+                                      : 'Voided'
+                              : 'Cleared'),
+                          avatar: Icon(
+                            order.paymentStatus == 'voided'
+                                ? Icons.block
+                                : Icons.check_circle,
+                            size: 16,
+                          ),
                           visualDensity: VisualDensity.compact,
                         ),
+                      PopupMenuButton<String>(
+                        enabled: !_busy,
+                        tooltip: 'Bill actions',
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'recall':
+                              _recallOrder(order);
+                              break;
+                            case 'split':
+                              _showSplitOrderDialog(order);
+                              break;
+                            case 'void':
+                              _showVoidOrderDialog(order);
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'recall',
+                            enabled: _canEditOrder(order),
+                            child: const ListTile(
+                              dense: true,
+                              leading: Icon(Icons.restore),
+                              title: Text('Recall bill'),
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'split',
+                            enabled:
+                                _canEditOrder(order) && order.items.length > 1,
+                            child: const ListTile(
+                              dense: true,
+                              leading: Icon(Icons.call_split),
+                              title: Text('Split bill'),
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'void',
+                            enabled: _canEditOrder(order) &&
+                                order.voidRequestStatus != 'pending',
+                            child: const ListTile(
+                              dense: true,
+                              leading: Icon(Icons.block),
+                              title: Text('Request void'),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -411,18 +486,27 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   Future<void> _createOrder() async {
     if (_shift == null || _cart.isEmpty) return;
     await _run(() async {
-      final order = await ref.read(outletPosRepositoryProvider).createOrder(
-            shiftId: _shift!.id,
-            items: _cart,
-            customerName: _orderCustomerLabel(),
-            orderType: _isRestaurant ? _orderType : null,
-            tableNumber: _tableController.text.trim(),
-            roomNumber: _roomController.text.trim(),
-          );
+      final repo = ref.read(outletPosRepositoryProvider);
+      final recalled = _recalledOrder;
+      final order = recalled == null
+          ? await repo.createOrder(
+              shiftId: _shift!.id,
+              items: _cart,
+              customerName: _orderCustomerLabel(),
+              orderType: _isRestaurant ? _orderType : null,
+              tableNumber: _tableController.text.trim(),
+              roomNumber: _roomController.text.trim(),
+            )
+          : await repo.updateOrder(
+              shiftId: _shift!.id,
+              orderId: recalled.id,
+              items: _cart,
+              customerName: _orderCustomerLabel(),
+            );
       await _printCaptainOrderReceipt(order);
       _cart = [];
-      _orders =
-          await ref.read(outletPosRepositoryProvider).getOrders(_shift!.id);
+      _recalledOrder = null;
+      _orders = await repo.getOrders(_shift!.id);
     });
   }
 
@@ -449,7 +533,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         sale,
         receiptItems,
         _outlet?.name ?? widget.title,
-        receiptType: 'CAPTAIN ORDER',
+        receiptType: 'ORDER PROFORMA BILL',
         tableNumber:
             _orderType == 'dine_in' ? _tableController.text.trim() : null,
         roomNumber:
@@ -494,6 +578,136 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     return (order.totalAmount - order.amountPaid)
         .clamp(0, order.totalAmount)
         .toDouble();
+  }
+
+  List<OutletShiftOrder> get _mergeableOrders =>
+      _orders.where(_canEditOrder).toList();
+
+  bool _canEditOrder(OutletShiftOrder order) {
+    return ['unpaid', 'partial'].contains(order.paymentStatus) &&
+        !order.isSplit &&
+        !order.isMerged &&
+        order.status != 'cancelled' &&
+        order.status != 'voided';
+  }
+
+  void _recallOrder(OutletShiftOrder order) {
+    final recalledCart = <OutletCartItem>[];
+    for (final raw in order.items.whereType<Map>()) {
+      final itemId = '${raw['outlet_item_id'] ?? raw['product_id'] ?? ''}';
+      final item = _findOutletItem(itemId);
+      if (item == null) continue;
+      final qty =
+          ((double.tryParse('${raw['quantity'] ?? raw['qty'] ?? 1}') ?? 1)
+                  .round()
+                  .clamp(1, 999) as num)
+              .toInt();
+      recalledCart.add(OutletCartItem(item: item, quantity: qty));
+    }
+    if (recalledCart.isEmpty) {
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(content: Text('This bill has no recallable items')),
+      );
+      return;
+    }
+    setState(() {
+      _section = OutletPosSection.station;
+      _cart = recalledCart;
+      _recalledOrder = order;
+      _customerController.text = order.customerName;
+    });
+  }
+
+  OutletPosItem? _findOutletItem(String itemId) {
+    for (final item in _items) {
+      if (item.id == itemId) return item;
+    }
+    return null;
+  }
+
+  Future<void> _showSplitOrderDialog(OutletShiftOrder order) async {
+    final selected = await showDialog<Set<int>>(
+      context: context,
+      builder: (context) => _SplitOrderDialog(order: order),
+    );
+    if (selected == null ||
+        selected.isEmpty ||
+        selected.length >= order.items.length) {
+      return;
+    }
+    final selectedIndexes = selected.toList()..sort();
+    final remainingIndexes = [
+      for (var i = 0; i < order.items.length; i++)
+        if (!selected.contains(i)) i
+    ];
+    await _run(() async {
+      final repo = ref.read(outletPosRepositoryProvider);
+      await repo.splitOrder(
+        shiftId: _shift!.id,
+        orderId: order.id,
+        splits: [
+          {
+            'customer_name': '${order.customerName} A',
+            'item_indexes': selectedIndexes,
+          },
+          {
+            'customer_name': '${order.customerName} B',
+            'item_indexes': remainingIndexes,
+          },
+        ],
+      );
+      _orders = await repo.getOrders(_shift!.id);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(content: Text('Bill split successfully')),
+        );
+      }
+    });
+  }
+
+  Future<void> _showMergeOrdersDialog() async {
+    final selected = await showDialog<Set<String>>(
+      context: context,
+      builder: (context) => _MergeOrdersDialog(orders: _mergeableOrders),
+    );
+    if (selected == null || selected.length < 2) return;
+    await _run(() async {
+      final repo = ref.read(outletPosRepositoryProvider);
+      await repo.mergeOrders(shiftId: _shift!.id, orderIds: selected.toList());
+      _orders = await repo.getOrders(_shift!.id);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(content: Text('Bills merged successfully')),
+        );
+      }
+    });
+  }
+
+  Future<void> _showVoidOrderDialog(OutletShiftOrder order) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => const _ReasonDialog(title: 'Request void approval'),
+    );
+    if (reason == null || reason.trim().isEmpty) return;
+    await _run(() async {
+      final repo = ref.read(outletPosRepositoryProvider);
+      await repo.requestVoidOrder(
+        shiftId: _shift!.id,
+        orderId: order.id,
+        reason: reason.trim(),
+      );
+      _orders = await repo.getOrders(_shift!.id);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(
+              content: Text('Void request sent to branch accountant')),
+        );
+      }
+    });
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -654,6 +868,7 @@ class _CartPanel extends StatelessWidget {
     required this.onDecrement,
     required this.onClear,
     required this.onCreateOrder,
+    this.recalledOrderNumber,
   });
 
   final List<OutletCartItem> cart;
@@ -663,6 +878,7 @@ class _CartPanel extends StatelessWidget {
   final ValueChanged<OutletCartItem> onDecrement;
   final VoidCallback onClear;
   final VoidCallback onCreateOrder;
+  final String? recalledOrderNumber;
 
   @override
   Widget build(BuildContext context) {
@@ -673,7 +889,23 @@ class _CartPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Current bill', style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    recalledOrderNumber == null
+                        ? 'Current bill'
+                        : 'Recalled $recalledOrderNumber',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                if (recalledOrderNumber != null)
+                  const Chip(
+                    label: Text('Recall'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
             const Divider(),
             Expanded(
               child: ListView(
@@ -707,7 +939,9 @@ class _CartPanel extends StatelessWidget {
             FilledButton.icon(
               onPressed: cart.isEmpty || busy ? null : onCreateOrder,
               icon: const Icon(Icons.receipt_long),
-              label: const Text('Place Order'),
+              label: Text(recalledOrderNumber == null
+                  ? 'Place Order'
+                  : 'Update recalled bill'),
             ),
             TextButton(
                 onPressed: cart.isEmpty ? null : onClear,
@@ -715,6 +949,179 @@ class _CartPanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SplitOrderDialog extends StatefulWidget {
+  const _SplitOrderDialog({required this.order});
+
+  final OutletShiftOrder order;
+
+  @override
+  State<_SplitOrderDialog> createState() => _SplitOrderDialogState();
+}
+
+class _SplitOrderDialogState extends State<_SplitOrderDialog> {
+  final Set<int> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Split ${widget.order.orderNumber}'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Select the items to move into the second bill.'),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.order.items.length,
+                itemBuilder: (context, index) {
+                  final item = widget.order.items[index];
+                  final map = item is Map ? item : const {};
+                  return CheckboxListTile(
+                    value: _selected.contains(index),
+                    onChanged: (checked) {
+                      setState(() {
+                        if (checked == true) {
+                          _selected.add(index);
+                        } else {
+                          _selected.remove(index);
+                        }
+                      });
+                    },
+                    title: Text('${map['name'] ?? 'Item ${index + 1}'}'),
+                    subtitle: Text(
+                      '${map['quantity'] ?? 1} x ${formatKes(double.tryParse('${map['unit_price'] ?? 0}') ?? 0)}',
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed:
+              _selected.isEmpty || _selected.length >= widget.order.items.length
+                  ? null
+                  : () => Navigator.pop(context, _selected),
+          child: const Text('Split bill'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MergeOrdersDialog extends StatefulWidget {
+  const _MergeOrdersDialog({required this.orders});
+
+  final List<OutletShiftOrder> orders;
+
+  @override
+  State<_MergeOrdersDialog> createState() => _MergeOrdersDialogState();
+}
+
+class _MergeOrdersDialogState extends State<_MergeOrdersDialog> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Merge bills'),
+      content: SizedBox(
+        width: 440,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Text('Select two or more unpaid bills to merge.'),
+            const SizedBox(height: 12),
+            for (final order in widget.orders)
+              CheckboxListTile(
+                value: _selected.contains(order.id),
+                onChanged: (checked) {
+                  setState(() {
+                    if (checked == true) {
+                      _selected.add(order.id);
+                    } else {
+                      _selected.remove(order.id);
+                    }
+                  });
+                },
+                title: Text(order.orderNumber),
+                subtitle: Text(
+                  '${order.customerName} • ${formatKes(order.totalAmount)}',
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _selected.length < 2
+              ? null
+              : () => Navigator.pop(context, _selected),
+          child: const Text('Merge bills'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReasonDialog extends StatefulWidget {
+  const _ReasonDialog({required this.title});
+
+  final String title;
+
+  @override
+  State<_ReasonDialog> createState() => _ReasonDialogState();
+}
+
+class _ReasonDialogState extends State<_ReasonDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        minLines: 3,
+        maxLines: 5,
+        decoration: const InputDecoration(
+          labelText: 'Reason',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('Submit'),
+        ),
+      ],
     );
   }
 }

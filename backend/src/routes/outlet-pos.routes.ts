@@ -6,20 +6,27 @@ import {
   createOutlet,
   createOutletItem,
   getActiveShift,
+  getPendingPosVoidRequests,
   getOutletItems,
   getOutletStaff,
   getOutlets,
+  getShiftOrder,
   getShiftOrders,
   getShiftSummary,
   getStockCount,
+  mergeShiftOrders,
   openShift,
   payShiftOrder,
   recordShiftOrder,
+  requestVoidShiftOrder,
+  reviewPosVoidRequest,
   reviewShift,
+  splitShiftOrder,
   syncOutletItems,
   submitShift,
   updateOutlet,
   updateOutletItem,
+  updateShiftOrder,
   updateStockCount
 } from '../controllers/outlet-pos.controller';
 
@@ -74,8 +81,16 @@ router.patch('/outlets/:outletId', updateOutlet);
 router.get('/outlets/:outletId/shifts/active', getActiveShift);
 router.post('/outlets/:outletId/shifts/open', openShift);
 
+router.get('/void-requests/pending', getPendingPosVoidRequests);
+router.post('/void-requests/:requestId/review', reviewPosVoidRequest);
+
 router.get('/shifts/:shiftId/orders', getShiftOrders);
 router.post('/shifts/:shiftId/orders', recordShiftOrder);
+router.post('/shifts/:shiftId/orders/merge', mergeShiftOrders);
+router.get('/shifts/:shiftId/orders/:orderId', getShiftOrder);
+router.patch('/shifts/:shiftId/orders/:orderId', updateShiftOrder);
+router.post('/shifts/:shiftId/orders/:orderId/split', splitShiftOrder);
+router.post('/shifts/:shiftId/orders/:orderId/void-request', requestVoidShiftOrder);
 router.post('/shifts/:shiftId/orders/:orderId/pay', payShiftOrder);
 router.get('/shifts/:shiftId/stock-count', getStockCount);
 router.put('/shifts/:shiftId/stock-count', updateStockCount);

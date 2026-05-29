@@ -279,6 +279,25 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getPendingPosVoidRequests() async {
+    final branchId = await getBranchId();
+    return _getList('/pos/void-requests/pending', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<void> reviewPosVoidRequest(
+    String id, {
+    required bool approve,
+    String reason = '',
+  }) async {
+    await _dio.post('/pos/void-requests/$id/review', data: {
+      'approved': approve,
+      if (reason.trim().isNotEmpty) 'rejection_reason': reason.trim(),
+      'action': approve ? 'approve' : 'reject',
+    });
+  }
+
   Future<Map<String, dynamic>> getBankingSummary() async {
     final branchId = await getBranchId();
     return _getMap('/banking/summary', query: {

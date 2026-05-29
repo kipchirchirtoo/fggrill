@@ -27,6 +27,7 @@ enum BranchAccountantSection {
   staffAudit,
   shiftReview,
   cashierLogbooks,
+  voidApprovals,
   banking,
   payments,
   creditBills,
@@ -97,49 +98,51 @@ class _BranchAccountantDashboardState
   Widget _buildSection() {
     switch (_section) {
       case BranchAccountantSection.overview:
-        return _OverviewSection();
+        return const _OverviewSection();
       case BranchAccountantSection.cashierClearance:
-        return _CashierClearanceSection();
+        return const _CashierClearanceSection();
       case BranchAccountantSection.analytics:
-        return _AnalyticsSection();
+        return const _AnalyticsSection();
       case BranchAccountantSection.financialWorkspace:
-        return _FinancialWorkspaceSection();
+        return const _FinancialWorkspaceSection();
       case BranchAccountantSection.discrepancies:
-        return _DiscrepanciesSection();
+        return const _DiscrepanciesSection();
       case BranchAccountantSection.profitLoss:
-        return _ProfitLossSection();
+        return const _ProfitLossSection();
       case BranchAccountantSection.revenueOversight:
-        return _RevenueOversightSection();
+        return const _RevenueOversightSection();
       case BranchAccountantSection.soldItems:
-        return _SoldItemsSection();
+        return const _SoldItemsSection();
       case BranchAccountantSection.staffAudit:
-        return _StaffAuditSection();
+        return const _StaffAuditSection();
       case BranchAccountantSection.shiftReview:
-        return _ShiftReviewSection();
+        return const _ShiftReviewSection();
       case BranchAccountantSection.cashierLogbooks:
-        return _CashierLogbooksSection();
+        return const _CashierLogbooksSection();
+      case BranchAccountantSection.voidApprovals:
+        return const _PosVoidApprovalsSection();
       case BranchAccountantSection.banking:
-        return _BankingSection();
+        return const _BankingSection();
       case BranchAccountantSection.payments:
-        return _PaymentsInvoicesSection();
+        return const _PaymentsInvoicesSection();
       case BranchAccountantSection.creditBills:
-        return _CreditBillsSection();
+        return const _CreditBillsSection();
       case BranchAccountantSection.foodVariance:
-        return _FoodVarianceSection();
+        return const _FoodVarianceSection();
       case BranchAccountantSection.shiftPnl:
-        return _ShiftPnlSection();
+        return const _ShiftPnlSection();
       case BranchAccountantSection.bookingsInvoices:
-        return _BookingsInvoicesSection();
+        return const _BookingsInvoicesSection();
       case BranchAccountantSection.stockTake:
-        return _StockTakeSection();
+        return const _StockTakeSection();
       case BranchAccountantSection.purchases:
-        return _PurchasesSection();
+        return const _PurchasesSection();
       case BranchAccountantSection.buffet:
-        return _BuffetSection();
+        return const _BuffetSection();
       case BranchAccountantSection.catering:
-        return _CateringSection();
+        return const _CateringSection();
       case BranchAccountantSection.budgets:
-        return _BudgetsSection();
+        return const _BudgetsSection();
     }
   }
 
@@ -185,6 +188,8 @@ const _navItems = [
   _NavItem(BranchAccountantSection.shiftReview, 'Shift Review', Icons.schedule),
   _NavItem(
       BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
+  _NavItem(
+      BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
   _NavItem(BranchAccountantSection.banking, 'Banking', Icons.account_balance),
   _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
       Icons.receipt_long),
@@ -2689,6 +2694,139 @@ class _CashierLogbooksSectionState
           notes: notes,
         );
     _toast(approve ? 'Logbook approved' : 'Logbook rejected');
+    _refresh();
+  }
+}
+
+class _PosVoidApprovalsSection extends ConsumerStatefulWidget {
+  const _PosVoidApprovalsSection();
+
+  @override
+  ConsumerState<_PosVoidApprovalsSection> createState() =>
+      _PosVoidApprovalsSectionState();
+}
+
+class _PosVoidApprovalsSectionState
+    extends ConsumerState<_PosVoidApprovalsSection> {
+  late Future<List<Map<String, dynamic>>> _future = _load();
+
+  Future<List<Map<String, dynamic>>> _load() =>
+      ref.read(branchAccountantRepositoryProvider).getPendingPosVoidRequests();
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Void Approvals',
+          subtitle:
+              'Review waiter void requests before POS bills are cancelled.',
+          actions: [_RefreshButton(onPressed: _refresh)],
+          children: [
+            _ResponsiveGrid(children: [
+              _MetricCard('Pending Requests', '${items.length}', Icons.block,
+                  Colors.orange),
+              _MetricCard(
+                'Total Amount',
+                _money(_sum(items, 'total_amount')),
+                Icons.payments,
+                Colors.red,
+              ),
+            ]),
+            _SectionCard(
+              title: 'Pending POS Voids',
+              child: items.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(
+                        child: Text(
+                          'No pending void approvals',
+                          style: TextStyle(color: AppColors.kTextSecondary),
+                        ),
+                      ),
+                    )
+                  : Column(
+                      children: items
+                          .map((item) => _ActionCard(
+                                title:
+                                    _text(item, ['order_number', 'bill_number'])
+                                            .isEmpty
+                                        ? 'POS bill'
+                                        : _text(item,
+                                            ['order_number', 'bill_number']),
+                                subtitle:
+                                    _text(item, ['outlet_name', 'reason']),
+                                trailing: _StatusPill(
+                                    _text(item, ['status']).isEmpty
+                                        ? 'pending'
+                                        : _text(item, ['status'])),
+                                rows: {
+                                  'Amount': _money(_num(item['total_amount'])),
+                                  'Requested by': _text(item, [
+                                    'requested_by_name',
+                                    'requested_by_email'
+                                  ]),
+                                  'Branch': _text(item, ['branch_name']),
+                                  'Reason': _text(item, ['reason']),
+                                  'Requested at': _text(item, ['created_at']),
+                                },
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => _showRecord(context, item),
+                                    child: const Text('View'),
+                                  ),
+                                  FilledButton.tonal(
+                                    onPressed: () => _review(item, true),
+                                    child: const Text('Approve'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: () => _review(item, false),
+                                    child: const Text('Reject'),
+                                  ),
+                                ],
+                              ))
+                          .toList(),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _review(Map<String, dynamic> request, bool approve) async {
+    String reason = '';
+    if (approve) {
+      final confirmed = await _confirm(
+        context,
+        'Approve this void request and cancel the POS bill?',
+      );
+      if (!confirmed) return;
+    } else {
+      final text = await _textDialog(
+        context,
+        'Reject Void Request',
+        hint: 'Reason for rejecting this void request',
+        minLines: 4,
+      );
+      if (text == null || text.trim().isEmpty) return;
+      reason = text.trim();
+    }
+    await ref.read(branchAccountantRepositoryProvider).reviewPosVoidRequest(
+          '${request['id']}',
+          approve: approve,
+          reason: reason,
+        );
+    if (!mounted) return;
+    _notify(
+      context,
+      approve ? 'Void request approved' : 'Void request rejected',
+    );
     _refresh();
   }
 }
@@ -5988,6 +6126,8 @@ String _shortLabel(BranchAccountantSection section) {
       return 'Shifts';
     case BranchAccountantSection.cashierLogbooks:
       return 'Logs';
+    case BranchAccountantSection.voidApprovals:
+      return 'Voids';
     case BranchAccountantSection.creditBills:
       return 'Credit';
     case BranchAccountantSection.foodVariance:

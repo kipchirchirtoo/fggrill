@@ -84,6 +84,64 @@ class OutletPosRepository {
         Map<String, dynamic>.from(_data(response.data) as Map));
   }
 
+  Future<OutletShiftOrder> updateOrder({
+    required String shiftId,
+    required String orderId,
+    required List<OutletCartItem> items,
+    String? customerName,
+  }) async {
+    final total = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
+    final response =
+        await _dio.patch('/pos/shifts/$shiftId/orders/$orderId', data: {
+      if (customerName != null && customerName.trim().isNotEmpty)
+        'customer_name': customerName.trim(),
+      'items': items.map((item) => item.toJson()).toList(),
+      'total_amount': total,
+    });
+    return OutletShiftOrder.fromJson(
+        Map<String, dynamic>.from(_data(response.data) as Map));
+  }
+
+  Future<List<OutletShiftOrder>> splitOrder({
+    required String shiftId,
+    required String orderId,
+    required List<Map<String, dynamic>> splits,
+  }) async {
+    final response =
+        await _dio.post('/pos/shifts/$shiftId/orders/$orderId/split', data: {
+      'splits': splits,
+    });
+    return _list(response.data)
+        .map((item) =>
+            OutletShiftOrder.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<OutletShiftOrder> mergeOrders({
+    required String shiftId,
+    required List<String> orderIds,
+    String? customerName,
+  }) async {
+    final response =
+        await _dio.post('/pos/shifts/$shiftId/orders/merge', data: {
+      'order_ids': orderIds,
+      if (customerName != null && customerName.trim().isNotEmpty)
+        'customer_name': customerName.trim(),
+    });
+    return OutletShiftOrder.fromJson(
+        Map<String, dynamic>.from(_data(response.data) as Map));
+  }
+
+  Future<void> requestVoidOrder({
+    required String shiftId,
+    required String orderId,
+    required String reason,
+  }) async {
+    await _dio.post('/pos/shifts/$shiftId/orders/$orderId/void-request', data: {
+      'reason': reason,
+    });
+  }
+
   Future<void> payOrder({
     required String shiftId,
     required String orderId,
@@ -315,6 +373,9 @@ class OutletShiftOrder {
     this.amountPaid = 0,
     this.balanceAmount = 0,
     this.waiterName,
+    this.isSplit = false,
+    this.isMerged = false,
+    this.voidRequestStatus,
     this.createdAt,
     this.items = const [],
   });
@@ -329,6 +390,9 @@ class OutletShiftOrder {
   final double amountPaid;
   final double balanceAmount;
   final String? waiterName;
+  final bool isSplit;
+  final bool isMerged;
+  final String? voidRequestStatus;
   final DateTime? createdAt;
   final List<dynamic> items;
 
@@ -345,6 +409,9 @@ class OutletShiftOrder {
       amountPaid: _num(json['amount_paid']),
       balanceAmount: _num(json['balance_amount'] ?? json['balance']),
       waiterName: json['waiter_name'] as String?,
+      isSplit: json['is_split'] == true,
+      isMerged: json['is_merged'] == true,
+      voidRequestStatus: json['void_request_status'] as String?,
       createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
       items: items is List ? items : const [],
     );

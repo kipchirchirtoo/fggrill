@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import notificationService from '../services/notification.service';
 
 type OutletType =
   | 'restaurant'
@@ -118,6 +119,43 @@ const ensureShiftAccess = async (req: Request, shiftId: string) => {
   const shift = await loadShift(shiftId);
   ensureBranchAccess(req, shift.branch_id);
   return shift;
+};
+
+const loadShiftOrder = async (shiftId: string, orderId: string) => {
+  const { data, error } = await supabase
+    .from('pos_shift_orders')
+    .select('*')
+    .eq('id', orderId)
+    .eq('shift_id', shiftId)
+    .single();
+  if (error || !data) throw new AppError('POS order not found', 404);
+  return data as Record<string, any>;
+};
+
+const ensureEditableOrder = (order: Record<string, any>, action: string): void => {
+  const paymentStatus = String(order.payment_status || '');
+  const status = String(order.status || '');
+  if (['paid', 'credit_bill', 'voided'].includes(paymentStatus) || ['paid', 'credit_bill', 'voided', 'cancelled'].includes(status)) {
+    throw new AppError(`Cannot ${action} a cleared, voided, or cancelled bill`, 400);
+  }
+};
+
+const normalizeOrderItems = (items: Array<Record<string, any>>): Array<Record<string, any>> => {
+  return items.map((item, index) => {
+    const quantity = numberValue(item.qty ?? item.quantity);
+    const unitPrice = numberValue(item.unit_price ?? item.selling_price ?? item.price);
+    const outletItemId = String(item.outlet_item_id ?? item.product_id ?? item.id ?? '');
+    if (!outletItemId || quantity <= 0) {
+      throw new AppError(`Invalid item at line ${index + 1}`, 400);
+    }
+    return {
+      outlet_item_id: outletItemId,
+      name: String(item.name ?? item.item_name ?? ''),
+      quantity,
+      unit_price: unitPrice,
+      line_total: quantity * unitPrice
+    };
+  });
 };
 
 const sanitizeSummary = (summary: Record<string, any>, includeProfit: boolean): Record<string, any> => {
@@ -926,17 +964,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
     const items = Array.isArray(req.body.items) ? req.body.items as Array<Record<string, any>> : [];
     if (!items.length) throw new AppError('At least one item is required', 400);
 
-    const normalizedItems = items.map((item) => {
-      const quantity = numberValue(item.qty ?? item.quantity);
-      const unitPrice = numberValue(item.unit_price ?? item.selling_price ?? item.price);
-      return {
-        outlet_item_id: String(item.outlet_item_id ?? item.product_id ?? item.id ?? ''),
-        name: String(item.name ?? item.item_name ?? ''),
-        quantity,
-        unit_price: unitPrice,
-        line_total: quantity * unitPrice
-      };
-    });
+    const normalizedItems = normalizeOrderItems(items);
 
     const totalAmount = numberValue(req.body.total_amount) ||
       normalizedItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
@@ -951,7 +979,9 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
         order_number: req.body.order_number || `POS-${Date.now()}`,
         customer_name: req.body.customer_name || 'Walk-in',
         waiter_id: req.body.waiter_id || req.user.id,
-        waiter_name: req.body.waiter_name || req.user.name || req.user.email || null,
+        waiter_name: req.body.waiter_name ||
+          `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() ||
+          null,
         status: 'open',
         payment_status: 'unpaid',
         total_amount: totalAmount,
@@ -966,6 +996,393 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
     res.status(201).json({ success: true, data: order });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    res.json({ success: true, data: order });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    const shift = await ensureShiftAccess(req, shiftId);
+    if (shift.status !== 'open') throw new AppError('Bills can only be recalled on an open shift', 400);
+
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureEditableOrder(order, 'recall');
+
+    const items = Array.isArray(req.body.items) ? req.body.items as Array<Record<string, any>> : [];
+    if (!items.length) throw new AppError('At least one item is required', 400);
+    const normalizedItems = normalizeOrderItems(items);
+    const totalAmount = normalizedItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
+    const amountPaid = numberValue(order.amount_paid);
+    if (totalAmount + 0.01 < amountPaid) {
+      throw new AppError('Recalled bill total cannot be less than the amount already paid', 400);
+    }
+
+    await updateStockForItems(shiftId, shift.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+    await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
+
+    const { data, error } = await supabase
+      .from('pos_shift_orders')
+      .update({
+        customer_name: req.body.customer_name || order.customer_name || 'Walk-in',
+        total_amount: totalAmount,
+        balance_amount: Math.max(0, totalAmount - amountPaid),
+        payment_status: amountPaid > 0 ? 'partial' : 'unpaid',
+        status: 'open',
+        items: normalizedItems,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId)
+      .eq('shift_id', shiftId)
+      .select('*')
+      .single();
+    if (error || !data) throw error || new AppError('Failed to update recalled bill', 500);
+
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const splitShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    const shift = await ensureShiftAccess(req, shiftId);
+    if (shift.status !== 'open') throw new AppError('Bills can only be split on an open shift', 400);
+
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureEditableOrder(order, 'split');
+    const items = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
+    const splits = Array.isArray(req.body.splits) ? req.body.splits as Array<Record<string, any>> : [];
+    if (splits.length < 2) throw new AppError('At least two split bills are required', 400);
+
+    const usedIndexes = new Set<number>();
+    const childOrders: Array<Record<string, any>> = [];
+    for (const split of splits) {
+      const indexes = Array.isArray(split.item_indexes) ? split.item_indexes.map((i: unknown) => Number(i)) : [];
+      if (!indexes.length) throw new AppError('Each split must include at least one item', 400);
+      const splitItems = indexes.map((index) => {
+        if (!Number.isInteger(index) || index < 0 || index >= items.length) {
+          throw new AppError('Split contains an invalid item selection', 400);
+        }
+        if (usedIndexes.has(index)) throw new AppError('An item cannot be assigned to more than one split', 400);
+        usedIndexes.add(index);
+        return items[index];
+      });
+      const totalAmount = splitItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
+      const { data: child, error } = await supabase
+        .from('pos_shift_orders')
+        .insert({
+          shift_id: shiftId,
+          outlet_id: shift.outlet_id,
+          source_type: 'manual',
+          source_id: order.id,
+          order_number: `${order.order_number || 'POS'}-${childOrders.length + 1}`,
+          customer_name: split.customer_name || order.customer_name || 'Walk-in',
+          waiter_id: order.waiter_id || req.user.id,
+          waiter_name: order.waiter_name ||
+          `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
+          status: 'open',
+          payment_status: 'unpaid',
+          total_amount: totalAmount,
+          amount_paid: 0,
+          balance_amount: totalAmount,
+          items: splitItems,
+          split_parent_order_id: order.id,
+          split_type: 'by_items',
+          created_by: req.user.id
+        })
+        .select('*')
+        .single();
+      if (error || !child) throw error || new AppError('Failed to create split bill', 500);
+      childOrders.push(child);
+    }
+
+    if (usedIndexes.size !== items.length) throw new AppError('Every item must be assigned to a split bill', 400);
+
+    const { error: updateError } = await supabase
+      .from('pos_shift_orders')
+      .update({
+        is_split: true,
+        status: 'cancelled',
+        payment_status: 'voided',
+        balance_amount: 0,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId);
+    if (updateError) throw updateError;
+
+    res.status(201).json({ success: true, data: childOrders });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const mergeShiftOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId } = req.params;
+    const shift = await ensureShiftAccess(req, shiftId);
+    if (shift.status !== 'open') throw new AppError('Bills can only be merged on an open shift', 400);
+
+    const orderIds = Array.isArray(req.body.order_ids) ? req.body.order_ids.map((id: unknown) => String(id)) : [];
+    if (orderIds.length < 2) throw new AppError('At least two bills are required to merge', 400);
+
+    const { data: orders, error } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .eq('shift_id', shiftId)
+      .in('id', orderIds);
+    if (error) throw error;
+    if (!orders || orders.length !== orderIds.length) throw new AppError('One or more bills were not found', 404);
+    orders.forEach((order: any) => ensureEditableOrder(order, 'merge'));
+
+    const mergedItems = orders.flatMap((order: any) => Array.isArray(order.items) ? order.items : []);
+    const totalAmount = mergedItems.reduce((sum: number, item: any) => sum + numberValue(item.line_total), 0);
+    const customerName = req.body.customer_name || orders.map((order: any) => order.customer_name).filter(Boolean).join(' / ') || 'Merged bill';
+
+    const { data: target, error: targetError } = await supabase
+      .from('pos_shift_orders')
+      .insert({
+        shift_id: shiftId,
+        outlet_id: shift.outlet_id,
+        source_type: 'manual',
+        order_number: req.body.order_number || `MERGE-${Date.now()}`,
+        customer_name: customerName,
+        waiter_id: req.user.id,
+        waiter_name: `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
+        status: 'open',
+        payment_status: 'unpaid',
+        total_amount: totalAmount,
+        amount_paid: 0,
+        balance_amount: totalAmount,
+        items: mergedItems,
+        created_by: req.user.id
+      })
+      .select('*')
+      .single();
+    if (targetError || !target) throw targetError || new AppError('Failed to create merged bill', 500);
+
+    const { error: sourceUpdateError } = await supabase
+      .from('pos_shift_orders')
+      .update({
+        is_merged: true,
+        merged_into: target.id,
+        status: 'cancelled',
+        payment_status: 'voided',
+        balance_amount: 0,
+        updated_at: new Date().toISOString()
+      })
+      .in('id', orderIds);
+    if (sourceUpdateError) throw sourceUpdateError;
+
+    res.status(201).json({ success: true, data: target });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestVoidShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    const reason = String(req.body.reason || '').trim();
+    if (!reason) throw new AppError('Void reason is required', 400);
+    const shift = await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureEditableOrder(order, 'void');
+
+    const { data: existing, error: existingError } = await supabase
+      .from('pos_void_requests')
+      .select('id')
+      .eq('order_id', orderId)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) throw new AppError('A pending void request already exists for this bill', 409);
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_void_requests')
+      .insert({
+        shift_id: shiftId,
+        outlet_id: shift.outlet_id,
+        order_id: orderId,
+        order_number: order.order_number,
+        branch_id: shift.branch_id,
+        requested_by: req.user.id,
+        reason,
+        status: 'pending'
+      })
+      .select('*')
+      .single();
+    if (error || !requestRow) throw error || new AppError('Failed to create void request', 500);
+
+    await supabase
+      .from('pos_shift_orders')
+      .update({ void_request_status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+
+    await notificationService.notifyRole(
+      'branch_accountant',
+      'POS void approval required',
+      `${order.order_number || 'A POS bill'} needs void approval.`,
+      {
+        type: 'warning',
+        category: 'pos_void_request',
+        priority: 'high',
+        branchId: shift.branch_id,
+        metadata: { request_id: requestRow.id, order_id: orderId, shift_id: shiftId }
+      }
+    );
+
+    res.status(201).json({ success: true, data: requestRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPendingPosVoidRequests = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant approval required', 403);
+    let query = supabase
+      .from('pos_void_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    const branchId = req.query.branch_id ?? branchIdFor(req);
+    if (branchId && !isGlobalUser(req)) query = query.eq('branch_id', Number(branchId));
+    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const orderIds = [...new Set(rows.map((row: any) => row.order_id).filter(Boolean))];
+    const outletIds = [...new Set(rows.map((row: any) => row.outlet_id).filter(Boolean))];
+    const branchIds = [...new Set(rows.map((row: any) => row.branch_id).filter(Boolean))];
+    const userIds = [...new Set(rows.map((row: any) => row.requested_by).filter(Boolean))];
+
+    const [ordersResult, outletsResult, branchesResult, usersResult] = await Promise.all([
+      orderIds.length
+        ? supabase.from('pos_shift_orders').select('id, order_number, customer_name, total_amount, amount_paid, balance_amount').in('id', orderIds)
+        : Promise.resolve({ data: [], error: null }),
+      outletIds.length
+        ? supabase.from('pos_outlets').select('id, name').in('id', outletIds)
+        : Promise.resolve({ data: [], error: null }),
+      branchIds.length
+        ? supabase.from('branches').select('id, name').in('id', branchIds)
+        : Promise.resolve({ data: [], error: null }),
+      userIds.length
+        ? supabase.from('users').select('id, email, first_name, last_name').in('id', userIds)
+        : Promise.resolve({ data: [], error: null })
+    ]);
+
+    if (ordersResult.error) throw ordersResult.error;
+    if (outletsResult.error) throw outletsResult.error;
+    if (branchesResult.error) throw branchesResult.error;
+    if (usersResult.error) throw usersResult.error;
+
+    const ordersById = new Map((ordersResult.data || []).map((order: any) => [order.id, order]));
+    const outletsById = new Map((outletsResult.data || []).map((outlet: any) => [outlet.id, outlet]));
+    const branchesById = new Map((branchesResult.data || []).map((branch: any) => [branch.id, branch]));
+    const usersById = new Map((usersResult.data || []).map((user: any) => [user.id, user]));
+    const enriched = rows.map((row: any) => {
+      const order = ordersById.get(row.order_id) || {};
+      const outlet = outletsById.get(row.outlet_id) || {};
+      const branch = branchesById.get(row.branch_id) || {};
+      const user = usersById.get(row.requested_by) || {};
+      const requestedByName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+      return {
+        ...row,
+        order_number: row.order_number || order.order_number,
+        customer_name: order.customer_name,
+        total_amount: order.total_amount,
+        amount_paid: order.amount_paid,
+        balance_amount: order.balance_amount,
+        outlet_name: outlet.name,
+        branch_name: branch.name,
+        requested_by_email: user.email,
+        requested_by_name: requestedByName || user.email
+      };
+    });
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const reviewPosVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant approval required', 403);
+    const { requestId } = req.params;
+    const approved = req.body.approved === true || req.body.action === 'approve';
+    const rejectionReason = String(req.body.rejection_reason || req.body.reason || '').trim();
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_void_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    if (requestRow.status !== 'pending') throw new AppError('Void request already processed', 400);
+    ensureBranchAccess(req, requestRow.branch_id);
+
+    const order = await loadShiftOrder(requestRow.shift_id, requestRow.order_id);
+
+    const { error: updateRequestError } = await supabase
+      .from('pos_void_requests')
+      .update({
+        status: approved ? 'approved' : 'rejected',
+        reviewed_by: req.user.id,
+        reviewed_at: new Date().toISOString(),
+        rejection_reason: approved ? null : rejectionReason,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', requestId);
+    if (updateRequestError) throw updateRequestError;
+
+    if (approved) {
+      await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+      const { error: voidOrderError } = await supabase
+        .from('pos_shift_orders')
+        .update({
+          status: 'voided',
+          payment_status: 'voided',
+          balance_amount: 0,
+          void_request_status: 'approved',
+          voided_at: new Date().toISOString(),
+          voided_by: req.user.id,
+          void_reason: requestRow.reason,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', requestRow.order_id);
+      if (voidOrderError) throw voidOrderError;
+    } else {
+      await supabase
+        .from('pos_shift_orders')
+        .update({ void_request_status: 'rejected', updated_at: new Date().toISOString() })
+        .eq('id', requestRow.order_id);
+    }
+
+    res.json({ success: true, data: { id: requestId, status: approved ? 'approved' : 'rejected' } });
   } catch (error) {
     next(error);
   }
