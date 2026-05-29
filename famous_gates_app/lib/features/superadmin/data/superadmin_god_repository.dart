@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../../../core/utils/api_error_message.dart';
 
 class SuperadminGodException implements Exception {
   final String message;
@@ -15,6 +16,10 @@ class SuperadminGodRepository {
   String _friendlyError(DioException error) {
     final data = error.response?.data;
     final status = error.response?.statusCode;
+    final genericMessage = apiErrorMessage(
+      error,
+      fallback: 'The SuperAdmin API request failed. Try again.',
+    );
     String? serverMessage;
 
     if (data is Map) {
@@ -35,6 +40,9 @@ class SuperadminGodRepository {
       return serverMessage ?? 'The requested SuperAdmin record was not found.';
     }
     if (serverMessage != null && serverMessage.isNotEmpty) {
+      if (_isRawDioMessage(serverMessage)) {
+        return genericMessage;
+      }
       if (serverMessage.contains('Could not find a relationship') ||
           serverMessage.contains('schema cache')) {
         return 'The database schema is missing a required relationship. Run the latest migrations and retry.';
@@ -46,9 +54,16 @@ class SuperadminGodRepository {
       return serverMessage;
     }
     if (status != null && status >= 500) {
-      return 'The server could not complete this action. Check backend logs and try again.';
+      return genericMessage;
     }
-    return 'Network error while contacting the SuperAdmin API.';
+    return genericMessage;
+  }
+
+  bool _isRawDioMessage(String value) {
+    final normalized = value.toLowerCase();
+    return normalized.contains('dioexception') ||
+        normalized.contains('requestoptions.validatestatus') ||
+        normalized.contains('developer.mozilla.org/en-us/docs/web/http/status');
   }
 
   Future<T> _guard<T>(Future<T> Function() action) async {

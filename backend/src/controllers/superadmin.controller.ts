@@ -33,6 +33,18 @@ function parseAuditState(value: any) {
   }
 }
 
+function isMissingSchemaObject(error: any): boolean {
+  const code = error?.code;
+  const text = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return code === '42P01' ||
+    code === '42703' ||
+    code === 'PGRST204' ||
+    code === 'PGRST205' ||
+    text.includes('could not find the table') ||
+    text.includes('schema cache') ||
+    text.includes('does not exist');
+}
+
 async function auditLog(
   actorId: string,
   actionType: string,
@@ -528,15 +540,41 @@ export const toggleMaintenanceMode = async (req: Request, res: Response): Promis
       maintenance_message: message ?? null,
     }, req.user.id);
 
-    const { error: flagErr } = await supabase
+    const { data: updatedFlags, error: flagErr } = await supabase
       .from('feature_flags')
       .update({
         is_enabled: enabled,
         updated_by: req.user.id,
         updated_at: new Date().toISOString(),
       })
-      .eq('flag_key', 'maintenance_mode');
+      .eq('flag_key', 'maintenance_mode')
+      .select('id');
     if (flagErr) throw flagErr;
+
+    if (!updatedFlags || updatedFlags.length === 0) {
+      const { error: insertFlagErr } = await supabase.from('feature_flags').insert({
+        flag_key: 'maintenance_mode',
+        flag_name: 'Maintenance Mode',
+        description: 'Restrict non-admin access while the system is under maintenance.',
+        is_global: true,
+        is_enabled: enabled,
+        updated_by: req.user.id,
+        updated_at: new Date().toISOString(),
+      });
+      if (insertFlagErr) throw insertFlagErr;
+    }
+
+    const { error: legacySecurityConfigErr } = await supabase
+      .from('security_config')
+      .upsert({
+        id: 1,
+        maintenance_mode: enabled,
+        maintenance_message: message ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    if (legacySecurityConfigErr && !isMissingSchemaObject(legacySecurityConfigErr)) {
+      throw legacySecurityConfigErr;
+    }
 
     // Bust maintenance cache immediately
     try {

@@ -14,25 +14,32 @@ interface EmailOptions {
 }
 
 class BrevoEmailService {
-  private client: BrevoClient;
+  private client: BrevoClient | null;
   private fromEmail: string;
   private fromName: string;
 
   constructor() {
     const apiKey = process.env.BREVO_API_KEY;
-    if (!apiKey) {
-      throw new Error('BREVO_API_KEY environment variable is required');
-    }
-
-    this.client = new BrevoClient({ apiKey });
     this.fromEmail = 'info@famousgatehotels.com';
     this.fromName = 'FamousGate Hotels';
 
+    if (!apiKey) {
+      this.client = null;
+      logger.warn('BREVO_API_KEY is not configured. Email delivery is disabled, but the API will continue running.');
+      return;
+    }
+
+    this.client = new BrevoClient({ apiKey });
     logger.info(`Brevo Email Service initialized. FROM: ${this.fromName} <${this.fromEmail}>`);
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
     try {
+      if (!this.client) {
+        logger.warn(`Email not sent to ${options.to}: BREVO_API_KEY is not configured.`);
+        return;
+      }
+
       const emailData: any = {
         sender: {
           name: this.fromName,

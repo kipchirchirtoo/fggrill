@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/api_error_message.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
+import '../../data/superadmin_god_repository.dart';
 import '../../domain/superadmin_providers.dart';
 
 class EmergencyControlsSection extends ConsumerStatefulWidget {
@@ -56,11 +58,10 @@ class _EmergencyControlsSectionState
           const SizedBox(height: 24),
           securityAsync.when(
             data: (config) {
-              final serverMaintenance =
-                  config['maintenance_mode'] == true;
+              final serverMaintenance = config['maintenance_mode'] == true;
               if (_maintenanceEnabled != serverMaintenance) {
-                WidgetsBinding.instance.addPostFrameCallback(
-                    (_) => setState(() => _maintenanceEnabled = serverMaintenance));
+                WidgetsBinding.instance.addPostFrameCallback((_) =>
+                    setState(() => _maintenanceEnabled = serverMaintenance));
               }
               return _buildCards();
             },
@@ -68,7 +69,7 @@ class _EmergencyControlsSectionState
             error: (e, _) => Column(
               children: [
                 ErrorState(
-                  message: e.toString(),
+                  message: _friendlyError(e),
                   onRetry: () => ref.invalidate(godSecurityConfigProvider),
                 ),
                 const SizedBox(height: 24),
@@ -134,7 +135,8 @@ class _EmergencyControlsSectionState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor.withValues(alpha: 0.5), width: 1.5),
+        border:
+            Border.all(color: borderColor.withValues(alpha: 0.5), width: 1.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -257,8 +259,7 @@ class _EmergencyControlsSectionState
   void _onMaintenanceTap() {
     final just = _maintenanceJustCtrl.text.trim();
     if (just.length < 20) {
-      AppNotifier.show(
-          context, 'Justification must be at least 20 characters.',
+      AppNotifier.show(context, 'Justification must be at least 20 characters.',
           isError: true);
       return;
     }
@@ -291,7 +292,7 @@ class _EmergencyControlsSectionState
       }
     } catch (e) {
       if (mounted) {
-        AppNotifier.show(context, 'Failed: $e', isError: true);
+        AppNotifier.show(context, _friendlyError(e), isError: true);
       }
     }
   }
@@ -319,8 +320,7 @@ class _EmergencyControlsSectionState
                 child: Text(
                   'All active user sessions will be immediately terminated. '
                   'Users will need to log in again.',
-                  style: TextStyle(
-                      fontSize: 12, color: Colors.red.shade800),
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade800),
                 ),
               ),
             ]),
@@ -356,8 +356,7 @@ class _EmergencyControlsSectionState
   void _onForceLogoutAllTap() {
     final just = _logoutAllJustCtrl.text.trim();
     if (just.length < 20) {
-      AppNotifier.show(
-          context, 'Justification must be at least 20 characters.',
+      AppNotifier.show(context, 'Justification must be at least 20 characters.',
           isError: true);
       return;
     }
@@ -379,7 +378,7 @@ class _EmergencyControlsSectionState
       }
     } catch (e) {
       if (mounted) {
-        AppNotifier.show(context, 'Failed: $e', isError: true);
+        AppNotifier.show(context, _friendlyError(e), isError: true);
       }
     }
   }
@@ -439,9 +438,8 @@ class _EmergencyControlsSectionState
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _selectedLogoutUserId == null
-                  ? null
-                  : _onForceLogoutUserTap,
+              onPressed:
+                  _selectedLogoutUserId == null ? null : _onForceLogoutUserTap,
               icon: Icon(PhosphorIcons.userMinus(), size: 16),
               label: const Text('Force Logout User'),
               style: ElevatedButton.styleFrom(
@@ -458,8 +456,7 @@ class _EmergencyControlsSectionState
   void _onForceLogoutUserTap() {
     final just = _logoutUserJustCtrl.text.trim();
     if (just.length < 20) {
-      AppNotifier.show(
-          context, 'Justification must be at least 20 characters.',
+      AppNotifier.show(context, 'Justification must be at least 20 characters.',
           isError: true);
       return;
     }
@@ -483,7 +480,7 @@ class _EmergencyControlsSectionState
       }
     } catch (e) {
       if (mounted) {
-        AppNotifier.show(context, 'Failed: $e', isError: true);
+        AppNotifier.show(context, _friendlyError(e), isError: true);
       }
     }
   }
@@ -555,8 +552,7 @@ class _EmergencyControlsSectionState
   void _onBranchLockdownTap() {
     final just = _lockdownJustCtrl.text.trim();
     if (just.length < 20) {
-      AppNotifier.show(
-          context, 'Justification must be at least 20 characters.',
+      AppNotifier.show(context, 'Justification must be at least 20 characters.',
           isError: true);
       return;
     }
@@ -581,9 +577,18 @@ class _EmergencyControlsSectionState
       }
     } catch (e) {
       if (mounted) {
-        AppNotifier.show(context, 'Failed: $e', isError: true);
+        AppNotifier.show(context, _friendlyError(e), isError: true);
       }
     }
+  }
+
+  String _friendlyError(Object error) {
+    if (error is SuperadminGodException) {
+      return error.message;
+    }
+    return apiErrorMessage(error,
+        fallback:
+            'The SuperAdmin action failed. Check backend logs and try again.');
   }
 
   // Shared double-confirmation dialog
