@@ -36,8 +36,9 @@ export class AggregationService {
                 other: 0,
             };
 
-            // Query the central payments table
-            // We need to join with related tables to get branch_id since it's not on the payments table directly
+            // Query payments — only join reservations (has FK in schema cache).
+            // restaurant_orders and bar_orders have no FK relationship to payments
+            // in the schema cache (PGRST200), so we batch-fetch them separately.
             const { data: payments, error } = await supabase
                 .from('payments')
                 .select(`
@@ -50,15 +51,44 @@ export class AggregationService {
                     reservations (
                         room_id,
                         rooms ( branch_id )
-                    ),
-                    restaurant_orders ( branch_id ),
-                    bar_orders ( branch_id )
+                    )
                 `)
-                .eq('status', 'completed') // Only count verified/completed payments
+                .eq('status', 'completed')
                 .gte('created_at', startDate)
                 .lte('created_at', endDate);
 
             if (error) throw error;
+
+            // Batch-fetch branch_ids for restaurant and bar orders
+            const restaurantOrderIds = [...new Set(
+                (payments || []).filter((p: any) => p.restaurant_order_id).map((p: any) => p.restaurant_order_id)
+            )];
+            const barOrderIds = [...new Set(
+                (payments || []).filter((p: any) => p.bar_order_id).map((p: any) => p.bar_order_id)
+            )];
+
+            const restaurantBranchMap: Record<string, number> = {};
+            const barBranchMap: Record<string, number> = {};
+
+            if (restaurantOrderIds.length > 0) {
+                const { data: restOrders } = await supabase
+                    .from('restaurant_orders')
+                    .select('id, branch_id')
+                    .in('id', restaurantOrderIds);
+                (restOrders || []).forEach((o: any) => {
+                    if (o.branch_id) restaurantBranchMap[o.id] = o.branch_id;
+                });
+            }
+
+            if (barOrderIds.length > 0) {
+                const { data: barOrders } = await supabase
+                    .from('bar_orders')
+                    .select('id, branch_id')
+                    .in('id', barOrderIds);
+                (barOrders || []).forEach((o: any) => {
+                    if (o.branch_id) barBranchMap[o.id] = o.branch_id;
+                });
+            }
 
             if (payments) {
                 for (const payment of payments) {
@@ -76,24 +106,12 @@ export class AggregationService {
                         paymentBranchId = (payment.reservations as any).rooms.branch_id;
                     }
 
-                    if (!paymentBranchId) {
-                        if (Array.isArray(payment.restaurant_orders) && payment.restaurant_orders[0]?.branch_id) {
-                            // @ts-ignore
-                            paymentBranchId = payment.restaurant_orders[0].branch_id;
-                        } else if (payment.restaurant_orders && !Array.isArray(payment.restaurant_orders) && (payment.restaurant_orders as any).branch_id) {
-                            // @ts-ignore
-                            paymentBranchId = (payment.restaurant_orders as any).branch_id;
-                        }
+                    if (!paymentBranchId && (payment as any).restaurant_order_id) {
+                        paymentBranchId = restaurantBranchMap[(payment as any).restaurant_order_id];
                     }
 
-                    if (!paymentBranchId) {
-                        if (Array.isArray(payment.bar_orders) && payment.bar_orders[0]?.branch_id) {
-                            // @ts-ignore
-                            paymentBranchId = payment.bar_orders[0].branch_id;
-                        } else if (payment.bar_orders && !Array.isArray(payment.bar_orders) && (payment.bar_orders as any).branch_id) {
-                            // @ts-ignore
-                            paymentBranchId = (payment.bar_orders as any).branch_id;
-                        }
+                    if (!paymentBranchId && (payment as any).bar_order_id) {
+                        paymentBranchId = barBranchMap[(payment as any).bar_order_id];
                     }
 
                     // Filter by branch if requested - STRICT FILTERING

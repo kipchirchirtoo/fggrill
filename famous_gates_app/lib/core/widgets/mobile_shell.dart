@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
+import 'app_update_button.dart';
+import 'notification_button.dart';
 
 /// Holds the current selected bottom tab index for the mobile shell.
 final mobileShellTabProvider = StateProvider<int>((ref) => 0);
@@ -66,14 +68,19 @@ class _MobileShellState extends ConsumerState<MobileShell> {
             Text(
               tab.label,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.75),
+                color: Colors.white.withValues(alpha: 0.75),
                 fontSize: 11,
                 fontFamily: 'SF Pro Display',
               ),
             ),
           ],
         ),
-        actions: widget.actions,
+        actions: [
+          ...?widget.actions,
+          const AppUpdateButton(iconColor: Colors.white),
+          const AppNotificationButton(iconColor: Colors.white),
+          const SizedBox(width: 4),
+        ],
       ),
       body: IndexedStack(
         index: selectedIndex.clamp(0, widget.tabs.length - 1),
@@ -88,7 +95,7 @@ class _MobileShellState extends ConsumerState<MobileShell> {
         type: BottomNavigationBarType.fixed,
         backgroundColor: AppColors.kPrimary,
         selectedItemColor: AppColors.kAccent,
-        unselectedItemColor: Colors.white.withOpacity(0.6),
+        unselectedItemColor: Colors.white.withValues(alpha: 0.6),
         selectedFontSize: 11,
         unselectedFontSize: 10,
         items: widget.tabs
@@ -152,7 +159,7 @@ class MobileStatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -164,7 +171,7 @@ class MobileStatCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: c.withOpacity(0.1),
+              color: c.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: c, size: 20),
@@ -268,7 +275,9 @@ class MobileEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: AppColors.kTextSecondary.withOpacity(0.4)),
+            Icon(icon,
+                size: 56,
+                color: AppColors.kTextSecondary.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text(
               title,

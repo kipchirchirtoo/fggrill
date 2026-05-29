@@ -98,13 +98,19 @@ export const getPnLs = async (
 
     const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-    const result = await getShiftPnLs(branchId, {
-      status: status as any,
-      startDate: startDate as string,
-      endDate: endDate as string,
-      limit: parseInt(limit as string),
-      offset
-    });
+    let result: { data: any[]; total: number } = { data: [], total: 0 };
+    try {
+      result = await getShiftPnLs(branchId, {
+        status: status as any,
+        startDate: startDate as string,
+        endDate: endDate as string,
+        limit: parseInt(limit as string),
+        offset
+      });
+    } catch (svcErr: any) {
+      // shift_financials table may not exist in all environments — return empty
+      logger.warn('getShiftPnLs failed (table may not exist):', svcErr.message);
+    }
 
     res.json({
       success: true,

@@ -69,17 +69,29 @@ class _NotificationDrawerState extends ConsumerState<NotificationDrawer>
 
   IconData _iconForType(String type) {
     switch (type) {
+      case 'update':
+      case 'app_update':
+      case 'desktop_update':
+        return PhosphorIcons.downloadSimple();
+      case 'success':
+        return PhosphorIcons.checkCircle();
       case 'warning':
         return PhosphorIcons.warning();
       case 'error':
         return PhosphorIcons.warningCircle();
       default:
-        return PhosphorIcons.info();
+        return PhosphorIcons.bellRinging();
     }
   }
 
   Color _colorForType(String type) {
     switch (type) {
+      case 'update':
+      case 'app_update':
+      case 'desktop_update':
+        return AppColors.kAccent;
+      case 'success':
+        return AppColors.kSuccess;
       case 'warning':
         return AppColors.kWarning;
       case 'error':
@@ -159,6 +171,16 @@ class _NotificationDrawerState extends ConsumerState<NotificationDrawer>
                                   icon: _iconForType(notif.type),
                                   color: _colorForType(notif.type),
                                   timeAgo: _timeAgo(notif.createdAt),
+                                  onTap: () async {
+                                    if (!notif.isRead) {
+                                      await ref
+                                          .read(adminRepositoryProvider)
+                                          .markNotificationRead(notif.id);
+                                      ref.invalidate(
+                                          adminNotificationsProvider);
+                                      ref.invalidate(unreadNotifCountProvider);
+                                    }
+                                  },
                                 );
                               },
                             );
@@ -234,69 +256,78 @@ class _NotificationItem extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String timeAgo;
+  final VoidCallback? onTap;
 
   const _NotificationItem({
     required this.notification,
     required this.icon,
     required this.color,
     required this.timeAgo,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return InkWell(
+      onTap: onTap,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, size: 16, color: color),
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, size: 16, color: color),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        notification.title,
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.kTextPrimary),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 12, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          notification.title,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.kTextPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                    if (!notification.isRead)
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                            color: AppColors.kPrimary, shape: BoxShape.circle),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  notification.message,
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.kTextSecondary),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(timeAgo,
+                      if (!notification.isRead)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                              color: AppColors.kPrimary,
+                              shape: BoxShape.circle),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    notification.message,
                     style: const TextStyle(
-                        fontSize: 11, color: AppColors.kDivider)),
-              ],
+                        fontSize: 12, color: AppColors.kTextSecondary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(timeAgo,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.kDivider)),
+                ],
+              ),
             ),
           ),
         ],

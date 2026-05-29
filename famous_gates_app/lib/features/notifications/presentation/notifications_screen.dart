@@ -150,9 +150,13 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                               ? AppColors.kSurface
                               : AppColors.kPrimary.withValues(alpha: 0.1),
                           child: Icon(
-                            n.type == 'alert' || n.type == 'warning'
-                                ? PhosphorIcons.warning()
-                                : PhosphorIcons.bell(),
+                            n.type == 'update' ||
+                                    n.type == 'app_update' ||
+                                    n.type == 'desktop_update'
+                                ? PhosphorIcons.downloadSimple()
+                                : n.type == 'alert' || n.type == 'warning'
+                                    ? PhosphorIcons.warning()
+                                    : PhosphorIcons.bellRinging(),
                             color: n.isRead
                                 ? AppColors.kTextSecondary
                                 : AppColors.kPrimary,

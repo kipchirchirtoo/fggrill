@@ -71,10 +71,15 @@ export const validateModuleAccess = (allowedModules: SourceModule[]) => {
                 throw new AppError('Authentication required', 401);
             }
 
-            // Get requested module from query, body, or default to first allowed
-            const requestedModule = 
-                req.query.source_module as string || 
+            // Get requested module from query/body, or default to the first module
+            // the caller's role actually has access to (prevents spurious 403 when
+            // a branch_accountant calls without source_module and the first allowed
+            // module happens to be central_store which they cannot access).
+            const userModulesForDefault = ROLE_MODULE_ACCESS[user?.role] || [];
+            const requestedModule =
+                req.query.source_module as string ||
                 req.body.source_module as string ||
+                allowedModules.find(m => userModulesForDefault.includes(m)) ||
                 allowedModules[0];
 
             // Check if requested module is in allowed list for this endpoint

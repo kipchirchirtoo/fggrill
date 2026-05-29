@@ -214,7 +214,7 @@ class SystemService extends BaseApiService {
   }) async {
     final query = {
       if (type != null) 'type': type,
-      if (isRead != null) 'isRead': isRead,
+      if (isRead != null) 'is_read': isRead.toString(),
       'page': page,
       'limit': limit,
     };
@@ -237,10 +237,10 @@ class SystemService extends BaseApiService {
     return response;
   }
 
-  // PATCH /api/notifications/read-all
+  // PATCH /api/notifications/mark-all-read
   Future<Map<String, dynamic>> markAllAsRead() async {
     final response =
-        await patch<Map<String, dynamic>>('/notifications/read-all');
+        await patch<Map<String, dynamic>>('/notifications/mark-all-read');
     return response;
   }
 

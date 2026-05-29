@@ -8,6 +8,8 @@ import '../../features/auth/domain/models.dart';
 import '../network/dio_client.dart';
 import '../storage/secure_storage_provider.dart';
 import '../theme/app_theme.dart';
+import 'app_update_button.dart';
+import 'notification_button.dart';
 import 'safe_avatar.dart';
 import 'sync_status_badge.dart';
 
@@ -185,6 +187,10 @@ class _TopBar extends StatelessWidget {
           const Spacer(),
           if (actions != null) ...actions!,
           if (actions != null) const SizedBox(width: 16),
+          const AppUpdateButton(),
+          const SizedBox(width: 4),
+          const AppNotificationButton(),
+          const SizedBox(width: 12),
           const SyncStatusBadge(compact: true),
           const SizedBox(width: 16),
           Container(

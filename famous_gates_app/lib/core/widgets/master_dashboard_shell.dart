@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../features/auth/domain/auth_notifier.dart';
 import '../theme/app_theme.dart';
+import 'app_update_button.dart';
+import 'notification_button.dart';
 
 class MasterNavItem<T> {
   const MasterNavItem({
@@ -385,13 +386,8 @@ class _MasterTopBar extends ConsumerWidget {
           const Spacer(),
           if (!isCompact) _SearchBox(hint: searchHint),
           if (!isCompact) const SizedBox(width: 16),
-          IconButton(
-            onPressed: () => AppNotifier.showSnackBar(
-              context,
-              const SnackBar(content: Text('No new notifications')),
-            ),
-            icon: Icon(PhosphorIcons.bell(), color: Colors.grey.shade700),
-          ),
+          AppUpdateButton(iconColor: Colors.grey.shade700),
+          AppNotificationButton(iconColor: Colors.grey.shade700),
           const SizedBox(width: 12),
           PopupMenuButton<String>(
             offset: const Offset(0, 42),

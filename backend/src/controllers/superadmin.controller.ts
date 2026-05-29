@@ -4,18 +4,110 @@ import { supabase } from '../config/database';
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
+const SECURITY_CONFIG_DEFAULTS: Record<string, any> = {
+  maintenance_mode: false,
+  maintenance_message: null,
+  session_timeout_minutes: 60,
+  max_failed_login_attempts: 5,
+  two_factor_required: false,
+  password_expiry_days: 90,
+};
+
+const SECURITY_CONFIG_KEYS: Record<string, string> = {
+  maintenance_mode: 'maintenanceMode',
+  maintenance_message: 'maintenanceMessage',
+  session_timeout_minutes: 'sessionTimeoutMinutes',
+  max_failed_login_attempts: 'maxFailedLoginAttempts',
+  two_factor_required: 'twoFactorRequired',
+  password_expiry_days: 'passwordExpiryDays',
+};
+
+function parseAuditState(value: any) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 async function auditLog(
   actorId: string,
   actionType: string,
-  description: string,
+  justification: string,
   extra: Record<string, any> = {}
 ) {
-  await supabase.from('superadmin_audit_log').insert({
+  const row: Record<string, any> = {
     actor_id: actorId,
     action_type: actionType,
-    description,
-    ...extra,
-  });
+    target_type: extra.target_type,
+    target_id: extra.target_id,
+    before_state: parseAuditState(extra.before_state ?? extra.old_value),
+    after_state: parseAuditState(extra.after_state ?? extra.new_value),
+    justification: justification || 'SuperAdmin system action',
+    ip_address: extra.ip_address,
+    session_id: extra.session_id,
+  };
+
+  Object.keys(row).forEach((key) => row[key] === undefined && delete row[key]);
+
+  const { error } = await supabase.from('superadmin_audit_log').insert(row);
+  if (error) throw error;
+}
+
+async function readSecurityConfig() {
+  const config = { ...SECURITY_CONFIG_DEFAULTS };
+  const keys = Object.values(SECURITY_CONFIG_KEYS);
+  const { data, error } = await supabase
+    .from('system_config_values')
+    .select('key,value')
+    .in('key', keys);
+
+  if (error) throw error;
+
+  const reverseKeys = Object.fromEntries(
+    Object.entries(SECURITY_CONFIG_KEYS).map(([apiKey, storageKey]) => [storageKey, apiKey])
+  );
+
+  for (const row of data || []) {
+    const apiKey = reverseKeys[row.key];
+    if (apiKey) config[apiKey] = row.value;
+  }
+
+  return config;
+}
+
+async function writeSecurityConfig(fields: Record<string, any>, userId: string) {
+  const rows = Object.entries(fields)
+    .filter(([key]) => SECURITY_CONFIG_KEYS[key])
+    .map(([key, value]) => ({
+      key: SECURITY_CONFIG_KEYS[key],
+      value,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    }));
+
+  if (rows.length === 0) return;
+
+  const { error } = await supabase
+    .from('system_config_values')
+    .upsert(rows, { onConflict: 'key' });
+  if (error) throw error;
+}
+
+async function fetchUsersByIds(ids: string[]) {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  if (uniqueIds.length === 0) return new Map<string, any>();
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, email')
+    .in('id', uniqueIds);
+  if (error) throw error;
+
+  return new Map((data || []).map((user: any) => [user.id, user]));
 }
 
 // ─── Feature Flags ────────────────────────────────────────────────────────────
@@ -38,7 +130,11 @@ export const createFeatureFlag = async (req: Request, res: Response): Promise<vo
   try {
     const { data, error } = await supabase
       .from('feature_flags')
-      .insert(req.body)
+      .insert({
+        ...req.body,
+        updated_by: req.user.id,
+        updated_at: new Date().toISOString(),
+      })
       .select()
       .single();
     if (error) throw error;
@@ -46,7 +142,7 @@ export const createFeatureFlag = async (req: Request, res: Response): Promise<vo
     await auditLog(req.user.id, 'create', `Created feature flag: ${data.flag_key}`, {
       target_type: 'feature_flag',
       target_id: String(data.id),
-      new_value: JSON.stringify(data),
+      after_state: data,
     });
 
     res.status(201).json({ success: true, data });
@@ -68,7 +164,11 @@ export const updateFeatureFlag = async (req: Request, res: Response): Promise<vo
 
     const { data, error } = await supabase
       .from('feature_flags')
-      .update(req.body)
+      .update({
+        ...req.body,
+        updated_by: req.user.id,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
@@ -77,8 +177,8 @@ export const updateFeatureFlag = async (req: Request, res: Response): Promise<vo
     await auditLog(req.user.id, 'update', `Updated feature flag: ${data.flag_key}`, {
       target_type: 'feature_flag',
       target_id: String(id),
-      old_value: JSON.stringify(old),
-      new_value: JSON.stringify(data),
+      before_state: old,
+      after_state: data,
     });
 
     res.json({ success: true, data });
@@ -103,7 +203,7 @@ export const deleteFeatureFlag = async (req: Request, res: Response): Promise<vo
     await auditLog(req.user.id, 'delete', `Deleted feature flag id: ${id}`, {
       target_type: 'feature_flag',
       target_id: String(id),
-      old_value: JSON.stringify(old),
+      before_state: old,
     });
 
     res.json({ success: true, message: 'Feature flag deleted' });
@@ -118,10 +218,17 @@ export const getAnnouncements = async (req: Request, res: Response): Promise<voi
   try {
     const { data, error } = await supabase
       .from('announcements')
-      .select('*, created_by_user:users!announcements_created_by_fkey(first_name, last_name, email)')
+      .select('*')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    res.json({ success: true, data });
+
+    const userMap = await fetchUsersByIds((data || []).map((row: any) => row.created_by));
+    const enriched = (data || []).map((row: any) => ({
+      ...row,
+      created_by_user: userMap.get(row.created_by) || null,
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -144,6 +251,13 @@ export const createAnnouncement = async (req: Request, res: Response): Promise<v
       .select()
       .single();
     if (error) throw error;
+
+    await auditLog(req.user.id, 'create', `Created announcement: ${title}`, {
+      target_type: 'announcement',
+      target_id: String(data.id),
+      after_state: data,
+    });
+
     res.status(201).json({ success: true, data });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -153,8 +267,16 @@ export const createAnnouncement = async (req: Request, res: Response): Promise<v
 export const deleteAnnouncement = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const { data: before } = await supabase.from('announcements').select('*').eq('id', id).single();
     const { error } = await supabase.from('announcements').delete().eq('id', id);
     if (error) throw error;
+
+    await auditLog(req.user.id, 'delete', `Deleted announcement: ${id}`, {
+      target_type: 'announcement',
+      target_id: String(id),
+      before_state: before,
+    });
+
     res.json({ success: true, message: 'Announcement deleted' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -165,12 +287,7 @@ export const deleteAnnouncement = async (req: Request, res: Response): Promise<v
 
 export const getSecurityConfig = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { data, error } = await supabase
-      .from('security_config')
-      .select('*')
-      .eq('id', 1)
-      .single();
-    if (error) throw error;
+    const data = await readSecurityConfig();
     res.json({ success: true, data });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -185,21 +302,18 @@ export const updateSecurityConfig = async (req: Request, res: Response): Promise
       return;
     }
 
-    // Fetch current config to detect changed fields
-    const { data: current, error: fetchErr } = await supabase
-      .from('security_config')
-      .select('*')
-      .eq('id', 1)
-      .single();
-    if (fetchErr) throw fetchErr;
+    const current = await readSecurityConfig();
+    const normalizedFields = Object.fromEntries(
+      Object.entries(fields).filter(([key]) => SECURITY_CONFIG_KEYS[key])
+    );
 
     // Insert history rows for each changed field
-    const historyRows = Object.entries(fields)
+    const historyRows = Object.entries(normalizedFields)
       .filter(([key, val]) => (current as any)[key] !== val)
       .map(([key, val]) => ({
         field_path: `security_config.${key}`,
-        old_value: JSON.stringify((current as any)[key]),
-        new_value: JSON.stringify(val),
+        old_value: (current as any)[key],
+        new_value: val,
         changed_by: req.user.id,
         justification,
       }));
@@ -211,19 +325,14 @@ export const updateSecurityConfig = async (req: Request, res: Response): Promise
       if (histErr) throw histErr;
     }
 
-    const { data, error } = await supabase
-      .from('security_config')
-      .update(fields)
-      .eq('id', 1)
-      .select()
-      .single();
-    if (error) throw error;
+    await writeSecurityConfig(normalizedFields, req.user.id);
+    const data = await readSecurityConfig();
 
     await auditLog(req.user.id, 'update', 'Updated security config', {
       target_type: 'security_config',
-      target_id: '1',
-      old_value: JSON.stringify(current),
-      new_value: JSON.stringify(data),
+      target_id: 'system_config_values',
+      before_state: current,
+      after_state: data,
     });
 
     res.json({ success: true, data });
@@ -236,9 +345,20 @@ export const updateSecurityConfig = async (req: Request, res: Response): Promise
 
 export const triggerBackup = async (req: Request, res: Response): Promise<void> => {
   try {
-    await auditLog(req.user.id, 'backup', 'Manual backup triggered', {
+    const { justification = 'Manual Supabase backup requested' } = req.body || {};
+    await auditLog(req.user.id, 'backup', justification, {
       target_type: 'system',
+      target_id: 'backup',
     });
+
+    await supabase.from('system_config_history').insert({
+      field_path: 'backup.trigger',
+      old_value: null,
+      new_value: { status: 'requested', requested_at: new Date().toISOString() },
+      changed_by: req.user.id,
+      justification,
+    });
+
     res.json({ success: true, message: 'Backup triggered (managed by Supabase)' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -313,9 +433,10 @@ export const startImpersonation = async (req: Request, res: Response): Promise<v
       jwtSecret
     );
 
-    await auditLog(req.user.id, 'impersonation_start', `Started impersonating user: ${targetUser.email}`, {
+    await auditLog(req.user.id, 'impersonation_start', justification, {
       target_type: 'user',
       target_id: String(userId),
+      after_state: { email: targetUser.email, role: targetUser.role },
     });
 
     res.status(201).json({
@@ -351,6 +472,7 @@ export const endImpersonation = async (req: Request, res: Response): Promise<voi
     await auditLog(req.user.id, 'impersonation_end', `Ended impersonation session: ${sessionId}`, {
       target_type: 'impersonation_session',
       target_id: String(sessionId),
+      after_state: data,
     });
 
     res.json({ success: true, data });
@@ -389,20 +511,30 @@ export const getSuperadminAuditLog = async (req: Request, res: Response): Promis
 
 export const toggleMaintenanceMode = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { enabled, message } = req.body as { enabled: boolean; message?: string };
+    const { enabled, message, justification } = req.body as {
+      enabled: boolean;
+      message?: string;
+      justification?: string;
+    };
 
-    const { error: cfgErr } = await supabase
-      .from('security_config')
-      .update({
-        maintenance_mode: enabled,
-        maintenance_message: message ?? null,
-      })
-      .eq('id', 1);
-    if (cfgErr) throw cfgErr;
+    if (!justification) {
+      res.status(400).json({ success: false, message: 'justification is required' });
+      return;
+    }
+
+    const before = await readSecurityConfig();
+    await writeSecurityConfig({
+      maintenance_mode: enabled,
+      maintenance_message: message ?? null,
+    }, req.user.id);
 
     const { error: flagErr } = await supabase
       .from('feature_flags')
-      .update({ is_enabled: enabled })
+      .update({
+        is_enabled: enabled,
+        updated_by: req.user.id,
+        updated_at: new Date().toISOString(),
+      })
       .eq('flag_key', 'maintenance_mode');
     if (flagErr) throw flagErr;
 
@@ -417,8 +549,17 @@ export const toggleMaintenanceMode = async (req: Request, res: Response): Promis
     await auditLog(
       req.user.id,
       'emergency',
-      `Maintenance mode set to ${enabled}`,
-      { target_type: 'system' }
+      justification,
+      {
+        target_type: 'system',
+        target_id: 'maintenance_mode',
+        before_state: before,
+        after_state: {
+          ...before,
+          maintenance_mode: enabled,
+          maintenance_message: message ?? null,
+        },
+      }
     );
 
     res.json({ success: true, maintenance_mode: enabled });
@@ -443,9 +584,9 @@ export const forceLogoutAll = async (req: Request, res: Response): Promise<void>
 
     if (error) throw error;
 
-    await auditLog(req.user.id, 'emergency', 'Force logout all non-superadmin users', {
+    await auditLog(req.user.id, 'emergency', justification, {
       target_type: 'all_users',
-      description_extra: justification,
+      after_state: { affected_count: data?.length ?? 0 },
     });
 
     res.json({ success: true, affected_count: data?.length ?? 0 });
@@ -457,6 +598,12 @@ export const forceLogoutAll = async (req: Request, res: Response): Promise<void>
 export const forceLogoutUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
+    const { justification } = req.body;
+
+    if (!justification) {
+      res.status(400).json({ success: false, message: 'justification is required' });
+      return;
+    }
 
     const { error } = await supabase
       .from('users')
@@ -464,9 +611,10 @@ export const forceLogoutUser = async (req: Request, res: Response): Promise<void
       .eq('id', userId);
     if (error) throw error;
 
-    await auditLog(req.user.id, 'emergency', `Force logout user: ${userId}`, {
+    await auditLog(req.user.id, 'emergency', justification, {
       target_type: 'user',
       target_id: String(userId),
+      after_state: { force_logout_at: new Date().toISOString() },
     });
 
     res.json({ success: true });
@@ -478,6 +626,12 @@ export const forceLogoutUser = async (req: Request, res: Response): Promise<void
 export const lockdownBranch = async (req: Request, res: Response): Promise<void> => {
   try {
     const { branchId } = req.params;
+    const { justification } = req.body;
+
+    if (!justification) {
+      res.status(400).json({ success: false, message: 'justification is required' });
+      return;
+    }
 
     const { error } = await supabase
       .from('branches')
@@ -485,9 +639,10 @@ export const lockdownBranch = async (req: Request, res: Response): Promise<void>
       .eq('id', branchId);
     if (error) throw error;
 
-    await auditLog(req.user.id, 'emergency', `Locked down branch: ${branchId}`, {
+    await auditLog(req.user.id, 'emergency', justification, {
       target_type: 'branch',
       target_id: String(branchId),
+      after_state: { status: 'maintenance' },
     });
 
     res.json({ success: true, branch_id: branchId, status: 'maintenance' });
@@ -504,6 +659,13 @@ const ALLOWED_APPROVAL_TABLES = [
   'purchase_orders',
   'store_purchase_orders',
 ];
+
+const APPROVAL_UPDATE_BY_TABLE: Record<string, (userId: string, now: string) => Record<string, any>> = {
+  staff_leave: (userId, now) => ({ status: 'approved', approved_by: userId, approved_at: now }),
+  stock_requests: (userId, now) => ({ status: 'APPROVED', reviewed_by: userId, reviewed_at: now }),
+  purchase_orders: (userId, now) => ({ status: 'APPROVED', approved_by: userId, approved_at: now }),
+  store_purchase_orders: (userId, now) => ({ status: 'approved', approved_by_id: userId, approved_at: now }),
+};
 
 export const forceApproveRecord = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -523,26 +685,30 @@ export const forceApproveRecord = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    const { data: before } = await supabase.from(table_name).select('*').eq('id', id).single();
+    const { data: before, error: fetchErr } = await supabase
+      .from(table_name)
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const now = new Date().toISOString();
+    const updatePayload = APPROVAL_UPDATE_BY_TABLE[table_name](req.user.id, now);
 
     const { data, error } = await supabase
       .from(table_name)
-      .update({
-        status: 'approved',
-        approved_by: req.user.id,
-        approved_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
 
-    await auditLog(req.user.id, 'override', `Force-approved record in ${table_name} id: ${id}`, {
+    await auditLog(req.user.id, 'override', justification, {
       target_type: table_name,
       target_id: String(id),
-      old_value: JSON.stringify(before),
-      new_value: JSON.stringify(data),
+      before_state: before,
+      after_state: data,
     });
 
     res.json({ success: true, table_name, record_id: id });
@@ -554,6 +720,12 @@ export const forceApproveRecord = async (req: Request, res: Response): Promise<v
 export const unlockUserAccount = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const { justification } = req.body;
+
+    if (!justification) {
+      res.status(400).json({ success: false, message: 'justification is required' });
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -565,9 +737,10 @@ export const unlockUserAccount = async (req: Request, res: Response): Promise<vo
       // Columns may not exist — proceed gracefully
     }
 
-    await auditLog(req.user.id, 'override', `Unlocked user account: ${id}`, {
+    await auditLog(req.user.id, 'override', justification, {
       target_type: 'user',
       target_id: String(id),
+      after_state: { is_locked: false, failed_login_attempts: 0 },
     });
 
     res.json({ success: true });

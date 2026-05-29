@@ -822,7 +822,10 @@ const seedStockCountItemsFromBranchStock = async (
     .lte('created_at', end)
     .in('item_sku', skus);
 
-  if (movementError) throw movementError;
+  // Non-fatal: if branch_stock_movements is missing or has schema issues, proceed with empty movements
+  if (movementError) {
+    logger.warn('branch_stock_movements query failed (using empty movements):', movementError.message);
+  }
 
   const movementBySku = new Map<string, any[]>();
   (movements || []).forEach((movement: any) => {
@@ -1204,6 +1207,7 @@ export const getStockTake = async (req: Request, res: Response) => {
 
     res.json({ success: true, data: enrichedResult });
   } catch (error: any) {
+    logger.error('getStockTake error:', error.message, error.details || '');
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -1263,12 +1267,18 @@ export const createStockTake = async (req: Request, res: Response) => {
 
     if (countError) throw countError;
 
-    await seedStockCountItemsFromBranchStock(count.id, Number(branch_id), storeType, countDate);
-    await recalculateStockCountTotals(count.id);
+    try {
+      await seedStockCountItemsFromBranchStock(count.id, Number(branch_id), storeType, countDate);
+      await recalculateStockCountTotals(count.id);
+    } catch (seedErr: any) {
+      // Non-fatal: stock take header was created; items can be seeded on next GET
+      logger.warn(`Stock count ${count.id} item seeding failed (will retry on first GET): ${seedErr.message}`);
+    }
 
     res.status(201).json({ success: true, data: count });
     logger.info(`Stock count session created: ${count.id} for branch ${branch_id}`);
   } catch (error: any) {
+    logger.error('createStockTake error:', error.message, error.details || '');
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -1281,6 +1291,7 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
 
     res.json({ success: true, data: mergedData });
   } catch (error: any) {
+    logger.error('getStockTakeItems error:', error.message, error.details || '');
     res.status(500).json({ success: false, message: error.message });
   }
 };

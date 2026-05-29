@@ -62,16 +62,14 @@ export const migratePendingBills = async (branchId?: number) => {
             try {
                 logger.info(`Checking ${target.table} for pending migrations...`);
 
+                // pos_transactions.cashier_id has no FK to users in the schema cache,
+                // so skip the users join for that table (staff profile resolved below anyway).
+                const selectClause = target.table === 'pos_transactions'
+                    ? '*'
+                    : `*, waiter:users!${target.waiterField}(id, first_name, last_name)`;
                 let query = (supabase
                     .from(target.table)
-                    .select(`
-                        *,
-                        waiter:users!${target.waiterField}(
-                            id,
-                            first_name,
-                            last_name
-                        )
-                    `) as any)
+                    .select(selectClause) as any)
                     .eq('status', target.statusValue)
                     .eq('migrated_to_credit_bill', false)
                     .not(target.waiterField, 'is', null);
