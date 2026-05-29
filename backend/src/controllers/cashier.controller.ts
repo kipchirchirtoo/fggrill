@@ -3045,7 +3045,7 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
 export const recordBillPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
-        const { payment_amount, payment_method, payment_reference } = req.body;
+        const { payment_amount, payment_method, payment_reference, credit_bill_id } = req.body;
         const paymentAmount = Number(payment_amount || 0);
 
         if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
@@ -3101,6 +3101,7 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
                 revenue_type: bill.bill_type,
                 reference_type: 'unpaid_bill',
                 reference_id: bill.id,
+                credit_bill_id: credit_bill_id || null,
                 payment_method,
                 amount: paymentAmount,
                 payment_reference,
@@ -5527,7 +5528,10 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
         const {
             payment_method = 'cash',
             payment_amount,
-            payment_reference
+            payment_reference,
+            credit_bill_id,
+            staff_credit_bill_id,
+            skip_credit_bill_creation = false
         } = req.body;
 
         const normalizedSource = String(source || '').toLowerCase();
@@ -5573,7 +5577,9 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
             orderBranchId = shift?.branch_id;
         }
 
-        if (normalizedMethod === 'credit_bill') {
+        let linkedStaffCreditBillId = staff_credit_bill_id || null;
+
+        if (normalizedMethod === 'credit_bill' && !linkedStaffCreditBillId && !skip_credit_bill_creation) {
             const waiterUserId = (order as any)[waiterField] || (order as any).created_by;
             const { data: staffProfile } = await supabase
                 .from('staff_profiles')
@@ -5594,12 +5600,20 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                 }).select('id').single();
 
                 if (isPosCaptainOrder && staffCreditBill?.id) {
+                    linkedStaffCreditBillId = staffCreditBill.id;
                     await supabase
                         .from('pos_shift_orders')
                         .update({ staff_credit_bill_id: staffCreditBill.id, updated_at: new Date().toISOString() })
                         .eq('id', id);
                 }
             }
+        }
+
+        if (isPosCaptainOrder && linkedStaffCreditBillId) {
+            await supabase
+                .from('pos_shift_orders')
+                .update({ staff_credit_bill_id: linkedStaffCreditBillId, updated_at: new Date().toISOString() })
+                .eq('id', id);
         }
 
         const updatePayload: Record<string, any> = {
@@ -5630,6 +5644,8 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                     payment_method: normalizedMethod,
                     amount: amountPaid,
                     reference: payment_reference || `${normalizedMethod}-${Date.now()}`,
+                    credit_bill_id: credit_bill_id || null,
+                    staff_credit_bill_id: linkedStaffCreditBillId || null,
                     received_by: req.user?.id
                 });
             } catch (posPaymentErr) {
@@ -5651,6 +5667,7 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                 payment_method,
                 amount: amountPaid,
                 payment_reference,
+                credit_bill_id: credit_bill_id || null,
                 customer_name: (order as any)[customerField] || (order as any).order_number
             });
         } catch (txErr) {

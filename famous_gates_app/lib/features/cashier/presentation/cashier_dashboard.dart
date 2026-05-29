@@ -1122,7 +1122,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
               rows: rows,
               emptyMessage: 'No unpaid bills found for $_date',
               onPay: (row) => _recordPayment(row),
-              onConfirm: (row, role) => _confirm(row, role),
+              onMigrateToCredit: (row) => _migrateToCreditBill(row),
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(message: apiErrorMessage(error)),
@@ -1167,13 +1167,17 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
 
   Future<void> _recordPayment(Map<String, dynamic> row) async {
     final body = await _paymentPayload(
-        context, _num(row['balance_amount'] ?? row['balance']));
+      context,
+      _num(row['balance_amount'] ?? row['balance']),
+      title: 'Confirm Payment',
+      allowCreditBill: false,
+    );
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
     try {
       final source = _text(row, ['source']);
       if (row['is_waiter_order'] == true &&
-          (source == 'restaurant' || source == 'bar')) {
+          (source == 'restaurant' || source == 'bar' || source == 'pos')) {
         for (final payment in payments) {
           await ref
               .read(cashierRepositoryProvider)
@@ -1195,15 +1199,80 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
     }
   }
 
-  Future<void> _confirm(Map<String, dynamic> row, String role) async {
+  Future<void> _migrateToCreditBill(Map<String, dynamic> row) async {
+    final balance = _num(row['balance_amount'] ?? row['balance']);
+    if (balance <= 0) {
+      _snack('This bill has no balance to migrate.');
+      return;
+    }
+
+    final staff = await ref
+        .read(cashierRepositoryProvider)
+        .getBranchStaff()
+        .catchError((_) => <Map<String, dynamic>>[]);
+    if (!mounted) return;
+
+    final credit = await _creditBillPayload(
+      context,
+      balance,
+      staffMembers: staff,
+    );
+    if (credit == null) return;
+
     try {
-      await ref
-          .read(cashierRepositoryProvider)
-          .confirmUnpaidBill(_text(row, ['id']), role);
+      final source = _text(row, ['source']);
+      final createdCredit =
+          await ref.read(cashierRepositoryProvider).createCreditBill({
+        ...credit,
+        'reference_type':
+            _text(row, ['bill_type', 'source', 'reference_type']).isEmpty
+                ? 'unpaid_bill'
+                : _text(row, ['bill_type', 'source', 'reference_type']),
+        'reference_id': _text(row, ['id']),
+        'remarks': [
+          _text(credit, ['remarks']),
+          'Migrated from unpaid bill ${_text(row, [
+                'order_number',
+                'bill_number',
+                'short_code',
+                'scan_reference',
+                'id'
+              ])}',
+        ].where((part) => part.trim().isNotEmpty).join(' | '),
+      });
+      final createdCreditData = _payload(createdCredit);
+      final creditNumber = _text(createdCreditData, ['credit_number', 'id']);
+      final payment = {
+        'payment_amount': balance,
+        'payment_method': 'credit_bill',
+        'payment_reference': creditNumber.isEmpty
+            ? 'MIGRATED-CREDIT-${DateTime.now().millisecondsSinceEpoch}'
+            : creditNumber,
+        if (_text(createdCreditData, ['id']).isNotEmpty)
+          'credit_bill_id': _text(createdCreditData, ['id']),
+        if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
+          'staff_credit_bill_id':
+              _text(createdCreditData, ['staff_credit_bill_id']),
+        'skip_credit_bill_creation': true,
+      };
+
+      if (row['is_waiter_order'] == true &&
+          (source == 'restaurant' || source == 'bar' || source == 'pos')) {
+        await ref
+            .read(cashierRepositoryProvider)
+            .clearWaiterOrder(source, _text(row, ['id']), payment);
+      } else {
+        await ref
+            .read(cashierRepositoryProvider)
+            .recordUnpaidBillPayment(_text(row, ['id']), payment);
+      }
+
       ref.invalidate(cashierUnpaidBillsProvider);
-      _snack('Confirmed by $role');
+      ref.invalidate(cashierCreditBillsProvider);
+      ref.invalidate(cashierStatsProvider);
+      _snack('Bill migrated to credit bill.');
     } catch (error) {
-      _snack('Confirm failed: ${apiErrorMessage(error)}');
+      _snack('Migration failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1277,7 +1346,6 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
               rows: rows,
               emptyMessage: 'No credit bills found for $_date',
               onPay: (row) => _recordPayment(row),
-              onConfirm: (row, role) => _confirm(row, role),
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(message: apiErrorMessage(error)),
@@ -1327,18 +1395,6 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
           : 'Credit payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
-    }
-  }
-
-  Future<void> _confirm(Map<String, dynamic> row, String role) async {
-    try {
-      await ref
-          .read(cashierRepositoryProvider)
-          .confirmCreditBill(_text(row, ['id']), role);
-      ref.invalidate(cashierCreditBillsProvider);
-      _snack('Confirmed by $role');
-    } catch (error) {
-      _snack('Confirm failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -2643,13 +2699,13 @@ class _BillList extends StatelessWidget {
     required this.rows,
     required this.emptyMessage,
     required this.onPay,
-    required this.onConfirm,
+    this.onMigrateToCredit,
   });
 
   final List<Map<String, dynamic>> rows;
   final String emptyMessage;
   final ValueChanged<Map<String, dynamic>> onPay;
-  final void Function(Map<String, dynamic>, String) onConfirm;
+  final ValueChanged<Map<String, dynamic>>? onMigrateToCredit;
 
   @override
   Widget build(BuildContext context) {
@@ -2736,18 +2792,14 @@ class _BillList extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: () => onPay(row),
                     icon: const Icon(Icons.payments, size: 16),
-                    label: const Text('Record Payment'),
+                    label: const Text('Confirm Payment'),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => onConfirm(row, 'accountant'),
-                    icon: const Icon(Icons.account_balance, size: 16),
-                    label: const Text('Accountant Confirm'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => onConfirm(row, 'auditor'),
-                    icon: const Icon(Icons.verified_user, size: 16),
-                    label: const Text('Auditor Confirm'),
-                  ),
+                  if (onMigrateToCredit != null)
+                    OutlinedButton.icon(
+                      onPressed: () => onMigrateToCredit!(row),
+                      icon: const Icon(Icons.credit_score, size: 16),
+                      label: const Text('Migrate to Credit Bill'),
+                    ),
                 ],
               ),
             ],
@@ -2985,6 +3037,7 @@ Future<Map<String, dynamic>?> _paymentPayload(
   BuildContext context,
   num amount, {
   String title = 'Record Payment',
+  bool allowCreditBill = true,
 }) {
   final lines = <_PaymentDraftLine>[
     _PaymentDraftLine(amount: amount > 0 ? amount.toStringAsFixed(0) : ''),
@@ -3081,6 +3134,7 @@ Future<Map<String, dynamic>?> _paymentPayload(
                     _PaymentLineEditor(
                       line: lines[index],
                       canRemove: lines.length > 1,
+                      allowCreditBill: allowCreditBill,
                       onChanged: () => setState(() {}),
                       onRemove: () {
                         setState(() {
@@ -3137,12 +3191,14 @@ class _PaymentLineEditor extends StatelessWidget {
   const _PaymentLineEditor({
     required this.line,
     required this.canRemove,
+    required this.allowCreditBill,
     required this.onChanged,
     required this.onRemove,
   });
 
   final _PaymentDraftLine line;
   final bool canRemove;
+  final bool allowCreditBill;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
@@ -3180,12 +3236,14 @@ class _PaymentLineEditor extends StatelessWidget {
                     labelText: 'Method',
                     isDense: true,
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                    DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-                    DropdownMenuItem(value: 'card', child: Text('Card')),
-                    DropdownMenuItem(
-                        value: 'credit_bill', child: Text('Credit Bill')),
+                  items: [
+                    const DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                    const DropdownMenuItem(
+                        value: 'mpesa', child: Text('M-Pesa')),
+                    const DropdownMenuItem(value: 'card', child: Text('Card')),
+                    if (allowCreditBill)
+                      const DropdownMenuItem(
+                          value: 'credit_bill', child: Text('Credit Bill')),
                   ],
                   onChanged: (value) {
                     line.method = value ?? 'cash';
