@@ -598,9 +598,7 @@ export const getExpenses = async (
       .select(`
         *,
         branch:branches(id, name),
-        department:departments(id, name),
-        created_by:users!created_by(id, first_name, last_name),
-        approved_by:users!approved_by(id, first_name, last_name)
+        department:departments(id, name)
       `)
       .order('created_at', { ascending: false });
 
@@ -630,10 +628,37 @@ export const getExpenses = async (
 
     if (error) throw error;
 
+    const userIds = [
+      ...new Set(
+        (data || [])
+          .flatMap((expense: any) => [expense.created_by, expense.approved_by])
+          .filter(Boolean)
+      )
+    ];
+
+    const usersById: Record<string, any> = {};
+    if (userIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+
+      if (usersError) throw usersError;
+      (users || []).forEach((user: any) => {
+        usersById[user.id] = user;
+      });
+    }
+
+    const enrichedData = (data || []).map((expense: any) => ({
+      ...expense,
+      created_by: expense.created_by ? usersById[expense.created_by] || null : null,
+      approved_by: expense.approved_by ? usersById[expense.approved_by] || null : null,
+    }));
+
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
-      data
+      count: enrichedData.length,
+      data: enrichedData
     });
   } catch (error) {
     next(error);
@@ -1736,4 +1761,3 @@ export const updateDailyLogStatus = async (req: Request, res: Response, next: Ne
     next(error);
   }
 };
-
