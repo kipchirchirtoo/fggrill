@@ -3,6 +3,9 @@ name: Flutter Desktop Release
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -39,7 +42,7 @@ jobs:
         working-directory: famous_gates_app
         run: |
           flutter config --enable-linux-desktop
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.event.release.tag_name || github.ref_name }}"
           VERSION="${VERSION#v}"
           VERSION="${VERSION:-1.0.0}"
           IFS='.' read -r -a VERSION_PARTS <<< "$VERSION"
@@ -118,7 +121,7 @@ jobs:
         shell: pwsh
         run: |
           flutter config --enable-windows-desktop
-          $version = "${{ github.event.release.tag_name }}".TrimStart("v")
+          $version = "${{ github.event.release.tag_name || github.ref_name }}".TrimStart("v")
           if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
           $parts = $version.Split(".")
           if ($parts.Length -eq 1) {
@@ -144,7 +147,7 @@ jobs:
       - name: Build Windows installer
         shell: pwsh
         run: |
-          $version = "${{ github.event.release.tag_name }}".TrimStart("v")
+          $version = "${{ github.event.release.tag_name || github.ref_name }}".TrimStart("v")
           if ([string]::IsNullOrWhiteSpace($version)) { $version = "1.0.0" }
           $parts = $version.Split(".")
           if ($parts.Length -eq 1) {
@@ -189,7 +192,7 @@ jobs:
       - name: Build Android APK
         working-directory: famous_gates_app
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.event.release.tag_name || github.ref_name }}"
           VERSION="${VERSION#v}"
           VERSION="${VERSION:-1.0.0}"
           IFS='.' read -r -a VERSION_PARTS <<< "$VERSION"
@@ -230,6 +233,9 @@ jobs:
         shell: bash
         run: |
           TAG="${{ github.event.release.tag_name }}"
+          if [ -z "${TAG}" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Download release artifacts
@@ -243,6 +249,8 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
+          gh release view "${TAG}" >/dev/null 2>&1 || \
+            gh release create "${TAG}" --title "${TAG}" --notes ""
           gh release upload "${TAG}" \
             release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.deb \
             release-artifacts/famous-gates-linux-x64/FamousGates-*-linux-x64.tar.gz \
