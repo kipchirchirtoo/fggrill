@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../../core/utils/api_error_message.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../domain/models.dart';
@@ -292,8 +293,6 @@ class AuthRepository {
   }
 
   String _messageFromDio(DioException error) {
-    final data = error.response?.data;
-    if (data is Map && data['message'] != null) return '${data['message']}';
-    return error.message ?? 'Request failed';
+    return apiErrorMessage(error, fallback: 'Authentication failed');
   }
 }

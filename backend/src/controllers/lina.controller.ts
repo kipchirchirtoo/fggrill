@@ -14,8 +14,8 @@ import { logger } from '../utils/logger';
 const groq   = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-const GROQ_MODEL   = 'llama-3.1-70b-versatile';
-const GEMINI_MODEL = 'gemini-1.5-pro';
+const GROQ_MODEL   = process.env.GROQ_MODEL || 'llama-3.1-70b-versatile';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 // ── Safety settings for Gemini (permissive for enterprise analytics) ──────────
 const GEMINI_SAFETY = [
@@ -307,6 +307,202 @@ function buildContextBlock(ctx: Record<string, any>): string {
   return `\n\n════════════ LIVE SYSTEM CONTEXT [${ctx.snapshot_date_local}] ════════════\n${JSON.stringify(ctx, null, 2)}\n════════════ END CONTEXT ════════════\n`;
 }
 
+function formatKes(value: number): string {
+  return `KES ${Math.round(value || 0).toLocaleString('en-KE')}`;
+}
+
+function aiFallbackMeta(reason: string) {
+  return {
+    model: 'local-fallback',
+    ai_available: false,
+    fallback_reason: reason,
+    generated_at: new Date().toISOString(),
+  };
+}
+
+function aiFailureReason(err: any): string {
+  const message = `${err?.message || err || 'AI provider unavailable'}`;
+  if (/api key|key not valid|permission|unauthorized|forbidden/i.test(message)) {
+    return 'AI provider credentials are not configured or were rejected.';
+  }
+  if (/model|not found|deprecated/i.test(message)) {
+    return 'Configured AI model is unavailable. Set GEMINI_MODEL/GROQ_MODEL to a supported model.';
+  }
+  if (/quota|rate limit|resource exhausted/i.test(message)) {
+    return 'AI provider quota or rate limit was reached.';
+  }
+  return message;
+}
+
+function localExecutiveSummary(ctx: Record<string, any>, reason: string) {
+  const revenue = ctx.revenue || {};
+  const branches = ctx.branches || {};
+  const anomalies = ctx.anomalies || {};
+  const staff = ctx.staff_today || {};
+  const security = ctx.security || {};
+  const summary = [
+    `## Executive Briefing - ${ctx.snapshot_date_local}`,
+    '',
+    `AI narrative generation is unavailable, so Lina is showing a live system-data briefing. Reason: ${reason}`,
+    '',
+    `### Revenue Performance`,
+    `- Revenue in the last 24 hours: **${formatKes(revenue.total_24h || 0)}**`,
+    `- Revenue in the last 7 days: **${formatKes(revenue.total_7d || 0)}**`,
+    `- Open cashier shifts now: **${revenue.open_shifts_now || 0}**`,
+    '',
+    `### Operations`,
+    `- Active branches: **${branches.active || 0} / ${branches.total || 0}**`,
+    `- Confirmed bookings in 7 days: **${ctx.bookings?.active || 0}**`,
+    '',
+    `### Risk Signals`,
+    `- Critical anomalies: **${anomalies.critical_count || 0}**`,
+    `- High anomalies: **${anomalies.high_count || 0}**`,
+    `- Suspicious logins in 24 hours: **${security.suspicious_logins_24h || 0}**`,
+    '',
+    `### Staff`,
+    `- Present today: **${staff.present || 0}**`,
+    `- Absent today: **${staff.absent || 0}**`,
+    `- Late today: **${staff.late || 0}**`,
+    '',
+    `### Recommended Actions`,
+    `1. Review critical and high anomalies first.`,
+    `2. Reconcile open shifts and void bills before close of business.`,
+    `3. Restore AI provider configuration if narrative intelligence is required.`,
+  ].join('\n');
+
+  return { summary, context: ctx, ...aiFallbackMeta(reason) };
+}
+
+function localAnomalyReport(ctx: Record<string, any>, reason: string) {
+  const anomalies = ctx.anomalies || {};
+  const top = Array.isArray(anomalies.top_10) ? anomalies.top_10 : [];
+  const findings = top.length
+    ? top.map((a: any, i: number) =>
+        `${i + 1}. **${a.severity || 'UNKNOWN'}** ${a.type || 'anomaly'} - ${a.description || 'No description'} (${formatKes(a.amount || 0)})`
+      ).join('\n')
+    : 'No anomaly rows are visible in the current snapshot.';
+  const report = [
+    `## Lina Anomaly Audit - ${ctx.snapshot_date_local}`,
+    '',
+    `AI narrative generation is unavailable. Reason: ${reason}`,
+    '',
+    `### Risk Summary`,
+    `- Critical findings: **${anomalies.critical_count || 0}**`,
+    `- High findings: **${anomalies.high_count || 0}**`,
+    `- Total findings in 7 days: **${anomalies.total_7d || 0}**`,
+    '',
+    `### Top Findings`,
+    findings,
+    '',
+    `### Recommended Actions`,
+    `- Start with critical/high findings and assign owners.`,
+    `- Re-run Lina after restoring AI provider credentials for deeper narrative analysis.`,
+  ].join('\n');
+  return { report, raw_context: ctx, ...aiFallbackMeta(reason) };
+}
+
+function localEmployeeAnalysis(ctx: Record<string, any>, employeeData: Record<string, any>, reason: string) {
+  const staff = ctx.staff_today || {};
+  const hr = ctx.hr || {};
+  const analysis = [
+    `## Employee Intelligence Report - ${ctx.snapshot_date_local}`,
+    '',
+    `AI narrative generation is unavailable. Reason: ${reason}`,
+    '',
+    `### Attendance Snapshot`,
+    `- Present: **${staff.present || 0}**`,
+    `- Absent: **${staff.absent || 0}**`,
+    `- Late: **${staff.late || 0}**`,
+    `- On overtime: **${staff.overtime || 0}**`,
+    '',
+    `### HR Snapshot`,
+    `- Pending leave requests: **${hr.pending_leaves || 0}**`,
+    `- Performance records loaded: **${employeeData.performance?.length || 0}**`,
+    `- Staff audit actions loaded: **${employeeData.staff_audit_actions?.length || 0}**`,
+    '',
+    `### Recommended Actions`,
+    `- Review absences, lateness, and overtime exceptions by branch.`,
+    `- Confirm pending leave approvals before shift planning.`,
+  ].join('\n');
+  return { analysis, raw_context: employeeData, ...aiFallbackMeta(reason) };
+}
+
+function localFinancialAnalysis(ctx: Record<string, any>, financialData: Record<string, any>, reason: string) {
+  const revenue = ctx.revenue || {};
+  const analysis = [
+    `## Financial Intelligence Report - 30-Day Analysis`,
+    '',
+    `AI narrative generation is unavailable. Reason: ${reason}`,
+    '',
+    `### Revenue Snapshot`,
+    `- 24-hour revenue: **${formatKes(revenue.total_24h || 0)}**`,
+    `- 7-day revenue: **${formatKes(revenue.total_7d || 0)}**`,
+    `- Void bill value in 7 days: **${formatKes(revenue.void_amount_7d || 0)}**`,
+    '',
+    `### Records Loaded`,
+    `- Shift records: **${financialData.shifts_30d?.length || 0}**`,
+    `- Expense records: **${financialData.expenses_30d?.length || 0}**`,
+    `- Credit bill exceptions: **${financialData.credit_bills_30d?.length || 0}**`,
+    `- Purchase orders: **${financialData.purchase_orders_30d?.length || 0}**`,
+    '',
+    `### Recommended Actions`,
+    `- Reconcile shift discrepancies and void bills.`,
+    `- Review unpaid expenses and pending purchase orders.`,
+  ].join('\n');
+  return { analysis, raw_context: financialData, ...aiFallbackMeta(reason) };
+}
+
+function localRecommendations(ctx: Record<string, any>, reason: string) {
+  const revenue = ctx.revenue || {};
+  const anomalies = ctx.anomalies || {};
+  const security = ctx.security || {};
+  return {
+    recommendations: [
+      {
+        title: 'Restore Lina AI provider configuration',
+        severity: 'HIGH',
+        impact: 'AI narrative reports are unavailable and screens fall back to live aggregate data.',
+        suggested_action: reason,
+        remediation_level: 'APPROVAL_REQUIRED',
+        estimated_effort: 'minutes',
+        module: 'Lina AI Service',
+        kpi_impact: 'operations',
+      },
+      {
+        title: 'Review critical and high anomalies',
+        severity: (anomalies.critical_count || 0) > 0 ? 'CRITICAL' : 'MEDIUM',
+        impact: `${anomalies.critical_count || 0} critical and ${anomalies.high_count || 0} high anomalies are visible.`,
+        suggested_action: 'Open the Audit tab and assign owners to unresolved exceptions.',
+        remediation_level: 'MANUAL_ONLY',
+        estimated_effort: 'hours',
+        module: 'Audit',
+        kpi_impact: 'compliance',
+      },
+      {
+        title: 'Reconcile cashier shifts and void bills',
+        severity: (revenue.void_bills_7d || 0) > 0 ? 'HIGH' : 'LOW',
+        impact: `${revenue.void_bills_7d || 0} void bills with value ${formatKes(revenue.void_amount_7d || 0)} are visible in 7 days.`,
+        suggested_action: 'Branch accountants should verify void reasons and close open shifts.',
+        remediation_level: 'MANUAL_ONLY',
+        estimated_effort: 'hours',
+        module: 'Finance',
+        kpi_impact: 'revenue',
+      },
+      {
+        title: 'Check suspicious login activity',
+        severity: (security.suspicious_logins_24h || 0) > 0 ? 'HIGH' : 'LOW',
+        impact: `${security.suspicious_logins_24h || 0} suspicious logins detected in 24 hours.`,
+        suggested_action: 'Review Security Center and terminate risky sessions if needed.',
+        remediation_level: 'APPROVAL_REQUIRED',
+        estimated_effort: 'minutes',
+        module: 'Security',
+        kpi_impact: 'security',
+      },
+    ],
+    ...aiFallbackMeta(reason),
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONTROLLERS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -335,6 +531,16 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
 
   try {
     const ctx = await gatherSystemContext();
+    if (!process.env.GROQ_API_KEY?.trim()) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      const fallback = localExecutiveSummary(ctx, 'GROQ_API_KEY is not configured.').summary;
+      res.write(`data: ${JSON.stringify({ type: 'delta', text: fallback, model: 'local-fallback' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done', full_text: fallback })}\n\n`);
+      res.end();
+      return;
+    }
     const systemPrompt = GROQ_CHAT_SYSTEM + buildContextBlock(ctx);
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -372,9 +578,20 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
   } catch (err: any) {
     logger.error('Lina Groq chat error', err);
     if (!res.headersSent) {
-      res.status(500).json({ success: false, message: err.message });
+      try {
+        const ctx = await gatherSystemContext();
+        const fallback = localExecutiveSummary(ctx, aiFailureReason(err)).summary;
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.write(`data: ${JSON.stringify({ type: 'delta', text: fallback, model: 'local-fallback' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', full_text: fallback })}\n\n`);
+        res.end();
+      } catch {
+        res.status(500).json({ success: false, message: aiFailureReason(err) });
+      }
     } else {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', message: aiFailureReason(err) })}\n\n`);
       res.end();
     }
   }
@@ -382,8 +599,13 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
 
 // ── GEMINI: Executive Summary ─────────────────────────────────────────────────
 export const getExecutiveSummary = async (req: Request, res: Response): Promise<void> => {
+  let ctx: Record<string, any> | null = null;
   try {
-    const ctx = await gatherSystemContext();
+    ctx = await gatherSystemContext();
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+      res.json({ success: true, data: localExecutiveSummary(ctx, 'GEMINI_API_KEY is not configured.') });
+      return;
+    }
     const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
 
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
@@ -416,17 +638,26 @@ Be specific with KES amounts, percentages, and counts. Reference actual branch n
     const result = await model.generateContent(prompt);
     const summary = result.response.text();
 
-    res.json({ success: true, data: { summary, model: 'gemini-1.5-pro', context: ctx, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { summary, model: GEMINI_MODEL, context: ctx, generated_at: new Date().toISOString() } });
   } catch (err: any) {
     logger.error('Lina Gemini executive summary error', err);
-    res.status(500).json({ success: false, message: err.message });
+    if (ctx) {
+      res.json({ success: true, data: localExecutiveSummary(ctx, aiFailureReason(err)) });
+      return;
+    }
+    res.status(500).json({ success: false, message: aiFailureReason(err) });
   }
 };
 
 // ── GEMINI: Anomaly Report ────────────────────────────────────────────────────
 export const getAnomalyReport = async (req: Request, res: Response): Promise<void> => {
+  let ctx: Record<string, any> | null = null;
   try {
-    const ctx = await gatherSystemContext();
+    ctx = await gatherSystemContext();
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+      res.json({ success: true, data: localAnomalyReport(ctx, 'GEMINI_API_KEY is not configured.') });
+      return;
+    }
     const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
 
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
@@ -455,16 +686,23 @@ For each finding:
 [Top 5 things to fix right now, in order]`;
 
     const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { report: result.response.text(), model: 'gemini-1.5-pro', generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { report: result.response.text(), model: GEMINI_MODEL, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    logger.error('Lina Gemini anomaly report error', err);
+    if (ctx) {
+      res.json({ success: true, data: localAnomalyReport(ctx, aiFailureReason(err)) });
+      return;
+    }
+    res.status(500).json({ success: false, message: aiFailureReason(err) });
   }
 };
 
 // ── GEMINI: Employee Intelligence ─────────────────────────────────────────────
 export const getEmployeeIntelligence = async (req: Request, res: Response): Promise<void> => {
+  let ctx: Record<string, any> | null = null;
+  let employeeData: Record<string, any> | null = null;
   try {
-    const ctx = await gatherSystemContext();
+    ctx = await gatherSystemContext();
     const today = new Date().toISOString().split('T')[0];
 
     // Fetch deeper employee data
@@ -473,12 +711,17 @@ export const getEmployeeIntelligence = async (req: Request, res: Response): Prom
       supabase.from('audit_trail').select('user_id,action,entity_type,performed_at').eq('entity_type', 'staff').gte('performed_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()).limit(100),
     ]);
 
-    const employeeData = {
+    employeeData = {
       snapshot_context: ctx.staff_today,
       hr_context: ctx.hr,
       performance: perfRes.status === 'fulfilled' ? (perfRes.value.data || []) : [],
       staff_audit_actions: disciplineRes.status === 'fulfilled' ? (disciplineRes.value.data || []) : [],
     };
+
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+      res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, 'GEMINI_API_KEY is not configured.') });
+      return;
+    }
 
     const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
@@ -512,16 +755,23 @@ TASK: Deep employee intelligence analysis.
 [Priority recommendations for HR/management]`;
 
     const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { analysis: result.response.text(), model: 'gemini-1.5-pro', raw_context: employeeData, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: employeeData, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    logger.error('Lina Gemini employee intelligence error', err);
+    if (ctx && employeeData) {
+      res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, aiFailureReason(err)) });
+      return;
+    }
+    res.status(500).json({ success: false, message: aiFailureReason(err) });
   }
 };
 
 // ── GEMINI: Financial Intelligence ────────────────────────────────────────────
 export const getFinancialIntelligence = async (req: Request, res: Response): Promise<void> => {
+  let ctx: Record<string, any> | null = null;
+  let financialData: Record<string, any> | null = null;
   try {
-    const ctx = await gatherSystemContext();
+    ctx = await gatherSystemContext();
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const [shifts30dRes, expensesRes, creditRes, pettyCashRes] = await Promise.allSettled([
@@ -533,13 +783,18 @@ export const getFinancialIntelligence = async (req: Request, res: Response): Pro
 
     const extract = (r: PromiseSettledResult<any>) => r.status === 'fulfilled' ? (r.value.data ?? []) : [];
 
-    const financialData = {
+    financialData = {
       shifts_30d: extract(shifts30dRes),
       expenses_30d: extract(expensesRes),
       credit_bills_30d: extract(creditRes),
       purchase_orders_30d: extract(pettyCashRes),
       revenue_context: ctx.revenue,
     };
+
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+      res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, 'GEMINI_API_KEY is not configured.') });
+      return;
+    }
 
     const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
@@ -573,16 +828,26 @@ TASK: Comprehensive financial intelligence analysis.
 [Ranked by financial impact — CRITICAL first]`;
 
     const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { analysis: result.response.text(), model: 'gemini-1.5-pro', raw_context: financialData, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: financialData, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    logger.error('Lina Gemini financial intelligence error', err);
+    if (ctx && financialData) {
+      res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, aiFailureReason(err)) });
+      return;
+    }
+    res.status(500).json({ success: false, message: aiFailureReason(err) });
   }
 };
 
 // ── GEMINI: Recommendations ───────────────────────────────────────────────────
 export const getRecommendations = async (req: Request, res: Response): Promise<void> => {
+  let ctx: Record<string, any> | null = null;
   try {
-    const ctx = await gatherSystemContext();
+    ctx = await gatherSystemContext();
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+      res.json({ success: true, data: localRecommendations(ctx, 'GEMINI_API_KEY is not configured.') });
+      return;
+    }
     const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
 
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
@@ -618,9 +883,14 @@ Format:
       recommendations = [{ title: 'AI analysis unavailable', severity: 'LOW', remediation_level: 'MANUAL_ONLY', suggested_action: 'Retry recommendation engine' }];
     }
 
-    res.json({ success: true, data: { recommendations, model: 'gemini-1.5-pro', generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { recommendations, model: GEMINI_MODEL, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    logger.error('Lina Gemini recommendations error', err);
+    if (ctx) {
+      res.json({ success: true, data: localRecommendations(ctx, aiFailureReason(err)) });
+      return;
+    }
+    res.status(500).json({ success: false, message: aiFailureReason(err) });
   }
 };
 

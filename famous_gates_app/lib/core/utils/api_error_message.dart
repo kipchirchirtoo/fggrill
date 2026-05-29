@@ -9,6 +9,9 @@ String apiErrorMessage(Object error, {String fallback = 'Request failed'}) {
     final data = error.response?.data;
     final serverMessage = _messageFromResponseData(data);
     if (serverMessage != null && serverMessage.isNotEmpty) {
+      if (_isServiceSuspendedMessage(serverMessage)) {
+        return 'The Famous Gates server is currently suspended or unavailable. Restore the backend service, then try again.';
+      }
       return serverMessage;
     }
     if (statusCode == 401) {
@@ -21,6 +24,9 @@ String apiErrorMessage(Object error, {String fallback = 'Request failed'}) {
       return 'The requested record or route was not found.';
     }
     if (statusCode != null && statusCode >= 500) {
+      if (statusCode == 503) {
+        return 'The Famous Gates server is currently unavailable. Try again after the backend service is restored.';
+      }
       return 'The server could not complete the request. Try again.';
     }
     return error.message ?? fallback;
@@ -30,6 +36,12 @@ String apiErrorMessage(Object error, {String fallback = 'Request failed'}) {
     return text.substring(11);
   }
   return text.isEmpty ? fallback : text;
+}
+
+bool _isServiceSuspendedMessage(String value) {
+  final normalized = value.toLowerCase();
+  return normalized.contains('service suspended') ||
+      normalized.contains('this service has been suspended');
 }
 
 String? _messageFromResponseData(dynamic data) {
