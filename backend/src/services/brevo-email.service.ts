@@ -19,17 +19,16 @@ class BrevoEmailService {
   private fromName: string;
 
   constructor() {
-    // HARDCODED API key - the Render env var BREVO_API_KEY is set to an OLD invalid key
-    // which overrides any fallback. We must use the correct key directly.
-    const apiKey = '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';
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+      throw new Error('BREVO_API_KEY environment variable is required');
+    }
 
-    // Initialize Brevo client
     this.client = new BrevoClient({ apiKey });
-    this.fromEmail = 'info@famousgatehotels.com'; // Fixed typo: removed 's' after gate
+    this.fromEmail = 'info@famousgatehotels.com';
     this.fromName = 'FamousGate Hotels';
 
-    logger.info('Brevo Email Service initialized with HARDCODED API key');
-    logger.info(`FROM: ${this.fromName} <${this.fromEmail}>`);
+    logger.info(`Brevo Email Service initialized. FROM: ${this.fromName} <${this.fromEmail}>`);
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {

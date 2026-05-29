@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 
 SUPABASE_URL = "https://utsvlihpudfraxzcmtle.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0c3ZsaWhwdWRmcmF4emNtdGxlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzkxNjMzMiwiZXhwIjoyMDc5NDkyMzMyfQ.AhnRNBw6l3HBOTEIMrlUbGQEf9FJdyTaQrRQJW7IBNY"
+SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
 
 def check_columns():
     headers = {

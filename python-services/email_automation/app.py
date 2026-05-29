@@ -26,7 +26,7 @@ CORS(app)
 SMTP_HOST = os.getenv('SMTP_HOST', 'smtp-relay.brevo.com')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_USER = os.getenv('SMTP_USER', '96a507001@smtp-brevo.com')
-SMTP_PASS = os.getenv('SMTP_PASS', 'xsmtpsib-38bcbdb899aab096feabd5c17c1e566d5c057251501891a77b64bc74ba87ad06-XPa8Pw5mp819KU2E')
+SMTP_PASS = os.getenv('SMTP_PASS', '')
 SMTP_FROM_NAME = os.getenv('SMTP_FROM_NAME', 'FG Grill Hotel')
 SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', '96a507001@smtp-brevo.com')
 

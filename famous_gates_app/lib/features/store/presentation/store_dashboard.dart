@@ -10,7 +10,6 @@ import '../domain/providers.dart';
 import '../domain/models.dart';
 
 final _storeSearchProvider = StateProvider<String>((ref) => '');
-final _storeRequestFilterProvider = StateProvider<String?>((ref) => null);
 
 class StoreDashboard extends ConsumerStatefulWidget {
   const StoreDashboard({super.key, this.isCentral = false});
@@ -714,12 +713,48 @@ class _StoreResourceTab extends ConsumerWidget {
       .join(' ');
 }
 
-class _StockRequestsTab extends ConsumerWidget {
+// Uses raw map data via storeResourceProvider so we get all fields
+// (request_number, branch_name, items[], status, priority).
+// The old StockRequest model only had itemName/quantity (single item) — insufficient.
+final _centralRequestsRawProvider =
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String?>(
+  (ref, status) {
+    final path = status != null && status.isNotEmpty
+        ? '/store/stock-requests?status=$status'
+        : '/store/stock-requests';
+    return ref.read(storeRepositoryProvider).getResource(path);
+  },
+);
+
+class _StockRequestsTab extends ConsumerStatefulWidget {
   const _StockRequestsTab();
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filter = ref.watch(_storeRequestFilterProvider);
-    final requestsAsync = ref.watch(stockRequestsProvider(filter));
+  ConsumerState<_StockRequestsTab> createState() => _StockRequestsTabState();
+}
+
+class _StockRequestsTabState extends ConsumerState<_StockRequestsTab> {
+  String? _statusFilter;
+
+  static Color _statusColor(String? status) {
+    final s = (status ?? '').toUpperCase();
+    if (s == 'APPROVED' ||
+        s == 'RECEIVED' ||
+        s == 'DELIVERED' ||
+        s == 'FULFILLED') {
+      return AppColors.kSuccess;
+    }
+    if (s == 'DISPATCHED' || s == 'IN_TRANSIT') {
+      return AppColors.kPrimary;
+    }
+    if (s == 'REJECTED' || s == 'CANCELLED') {
+      return AppColors.kError;
+    }
+    return AppColors.kWarning;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final requestsAsync = ref.watch(_centralRequestsRawProvider(_statusFilter));
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -728,30 +763,29 @@ class _StockRequestsTab extends ConsumerWidget {
           Row(
             children: [
               Expanded(
-                  child: Text('Stock Requests',
+                  child: Text('Branch Requisitions',
                       style: Theme.of(context).textTheme.displaySmall)),
               DropdownButton<String?>(
-                value: filter,
+                value: _statusFilter,
                 hint: const Text('All Statuses'),
                 items: const [
                   DropdownMenuItem(value: null, child: Text('All')),
-                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                  DropdownMenuItem(value: 'approved', child: Text('Approved')),
+                  DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
+                  DropdownMenuItem(value: 'APPROVED', child: Text('Approved')),
                   DropdownMenuItem(
-                      value: 'dispatched', child: Text('Dispatched')),
-                  DropdownMenuItem(value: 'received', child: Text('Received')),
+                      value: 'DISPATCHED', child: Text('Dispatched')),
+                  DropdownMenuItem(
+                      value: 'DELIVERED', child: Text('Delivered')),
+                  DropdownMenuItem(value: 'REJECTED', child: Text('Rejected')),
                 ],
-                onChanged: (v) =>
-                    ref.read(_storeRequestFilterProvider.notifier).state = v,
+                onChanged: (v) => setState(() => _statusFilter = v),
               ),
               const SizedBox(width: 12),
-              PermissionGuard(
-                permission: Permission.canManageInventory,
-                child: ElevatedButton.icon(
-                  onPressed: () => _showCreateRequestDialog(context, ref),
-                  icon: Icon(PhosphorIcons.plus()),
-                  label: const Text('New Request'),
-                ),
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+                onPressed: () =>
+                    ref.invalidate(_centralRequestsRawProvider(_statusFilter)),
               ),
             ],
           ),
@@ -765,34 +799,58 @@ class _StockRequestsTab extends ConsumerWidget {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final r = requests[i];
-                        final statusColor =
-                            r.status == 'approved' || r.status == 'received'
-                                ? AppColors.kSuccess
-                                : r.status == 'dispatched'
-                                    ? AppColors.kPrimary
-                                    : AppColors.kWarning;
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: statusColor.withValues(alpha: 0.1),
-                            child: Icon(PhosphorIcons.gitPullRequest(),
-                                color: statusColor, size: 18),
-                          ),
-                          title: Text(r.itemName ?? 'Request #${r.id}',
+                        final status = '${r['status'] ?? ''}';
+                        final statusColor = _statusColor(status);
+                        final items = r['items'];
+                        final itemCount = items is List ? items.length : 0;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 4),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  statusColor.withValues(alpha: 0.1),
+                              child: Icon(PhosphorIcons.gitPullRequest(),
+                                  color: statusColor, size: 18),
+                            ),
+                            title: Text(
+                              '${r['request_number'] ?? r['id']}  —  ${r['branch_name'] ?? r['requesting_branch'] ?? '—'}',
                               style:
-                                  const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text(
-                              'Qty: ${r.quantity} ${r.unit ?? ''}  •  ${r.requestedBy ?? ''}'),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12)),
-                            child: Text((r.status ?? 'pending').toUpperCase(),
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: statusColor,
-                                    fontWeight: FontWeight.bold)),
+                                  const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('$itemCount items  •  '
+                                    '${(r['created_at'] ?? '').toString().split('T').first}'),
+                                if (items is List && items.isNotEmpty)
+                                  Text(
+                                    items
+                                        .take(3)
+                                        .whereType<Map>()
+                                        .map((item) =>
+                                            '${item['item_name'] ?? item['item_sku']} (${item['requested_quantity'] ?? 0})')
+                                        .join(', '),
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.kTextSecondary),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: Text(status.toUpperCase(),
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: statusColor,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                            onTap: () => _showRequestDetail(context, r),
                           ),
                         );
                       },
@@ -800,7 +858,8 @@ class _StockRequestsTab extends ConsumerWidget {
               loading: () => const LoadingSkeleton(type: SkeletonType.list),
               error: (e, _) => ErrorState(
                   message: '$e',
-                  onRetry: () => ref.invalidate(stockRequestsProvider(filter))),
+                  onRetry: () => ref
+                      .invalidate(_centralRequestsRawProvider(_statusFilter))),
             ),
           ),
         ],
@@ -808,74 +867,72 @@ class _StockRequestsTab extends ConsumerWidget {
     );
   }
 
-  void _showCreateRequestDialog(BuildContext context, WidgetRef ref) {
-    final itemCtrl = TextEditingController();
-    final qtyCtrl = TextEditingController();
-    final unitCtrl = TextEditingController(text: 'units');
-    final notesCtrl = TextEditingController();
-    showDialog(
+  void _showRequestDetail(BuildContext context, Map<String, dynamic> request) {
+    final items = request['items'];
+    final itemList = items is List
+        ? items
+            .whereType<Map>()
+            .map((i) => Map<String, dynamic>.from(i))
+            .toList()
+        : <Map<String, dynamic>>[];
+    final status = '${request['status'] ?? ''}';
+
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('New Stock Request'),
+        title: Text('Request ${request['request_number'] ?? request['id']}'),
         content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                  controller: itemCtrl,
-                  decoration: const InputDecoration(labelText: 'Item Name *')),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                    child: TextField(
-                        controller: qtyCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration:
-                            const InputDecoration(labelText: 'Quantity'))),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: TextField(
-                        controller: unitCtrl,
-                        decoration: const InputDecoration(labelText: 'Unit'))),
-              ]),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: notesCtrl,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                  maxLines: 2),
-            ],
+          width: 600,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  Chip(
+                      label: Text(status.toUpperCase(),
+                          style: const TextStyle(fontSize: 10))),
+                  Chip(
+                      label: Text(
+                          'Branch: ${request['branch_name'] ?? request['requesting_branch'] ?? '—'}',
+                          style: const TextStyle(fontSize: 10))),
+                  if (request['priority'] != null)
+                    Chip(
+                        label: Text('Priority: ${request['priority']}',
+                            style: const TextStyle(fontSize: 10))),
+                ]),
+                const SizedBox(height: 12),
+                const Text('Items',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...itemList.map((item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(children: [
+                        Expanded(
+                            child: Text(
+                                '${item['item_name'] ?? item['item_sku']}')),
+                        Text('Req: ${item['requested_quantity'] ?? 0}',
+                            style: const TextStyle(fontSize: 12)),
+                        const SizedBox(width: 8),
+                        if (item['approved_quantity'] != null)
+                          Text('App: ${item['approved_quantity']}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.kSuccess)),
+                      ]),
+                    )),
+                if (request['review_notes'] != null) ...[
+                  const SizedBox(height: 12),
+                  Text('Notes: ${request['review_notes']}',
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 12)),
+                ],
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (itemCtrl.text.isEmpty) return;
-              Navigator.pop(ctx);
-              try {
-                await ref.read(storeRepositoryProvider).createStockRequest({
-                  'item_name': itemCtrl.text,
-                  'quantity': double.tryParse(qtyCtrl.text) ?? 1,
-                  'unit': unitCtrl.text,
-                  'notes': notesCtrl.text,
-                });
-                final f = ref.read(_storeRequestFilterProvider);
-                ref.invalidate(stockRequestsProvider(f));
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(context,
-                      const SnackBar(content: Text('Stock request submitted')));
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(
-                      context, SnackBar(content: Text('Error: $e')));
-                }
-              }
-            },
-            child: const Text('Submit'),
-          ),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
         ],
       ),
     );
@@ -1033,53 +1090,23 @@ class _DispatchTabState extends ConsumerState<_DispatchTab> {
   }
 
   void _showNewDispatchDialog(BuildContext context) {
-    final destCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-    showDialog(
+    // Dispatch notes originate from the Packing Station tab.
+    // This dialog informs the user of the correct workflow.
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('New Dispatch Order'),
-        content: SizedBox(
-          width: 320,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-                controller: destCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Destination Branch/Location')),
-            const SizedBox(height: 12),
-            TextField(
-                controller: notesCtrl,
-                decoration: const InputDecoration(labelText: 'Notes'),
-                maxLines: 2),
-          ]),
+        title: const Text('New Dispatch'),
+        content: const SizedBox(
+          width: 380,
+          child: Text(
+            'To create a dispatch note, go to the Packing Station tab, select an approved request, and tap "Pack & Dispatch". '
+            'This will create the dispatch note and mark it as IN_TRANSIT.',
+            style: TextStyle(color: AppColors.kTextSecondary),
+          ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (destCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              try {
-                await ref.read(storeRepositoryProvider).createDispatchOrder({
-                  'destination': destCtrl.text.trim(),
-                  'notes': notesCtrl.text,
-                  'status': 'pending',
-                });
-                ref.invalidate(dispatchOrdersProvider(null));
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(context,
-                      const SnackBar(content: Text('Dispatch order created')));
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(
-                      context, SnackBar(content: Text('Error: $e')));
-                }
-              }
-            },
-            child: const Text('Create'),
-          ),
+              onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
         ],
       ),
     );
@@ -1354,58 +1381,200 @@ class _SpoilageTabState extends ConsumerState<_SpoilageTab> {
   }
 
   void _showSpoilageDialog(BuildContext context) {
-    final itemCtrl = TextEditingController();
-    final qtyCtrl = TextEditingController();
-    final reasonCtrl = TextEditingController();
+    // POST /wastage with proper fields
+    String? itemSku;
+    String reason = 'SPOILED';
+    String disposalMethod = 'DISPOSED';
+    String storeType = 'foodstuffs';
+    final qtyCtrl = TextEditingController(text: '1');
+    final reasonDetailsCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final dateCtrl = TextEditingController(
+        text: DateTime.now().toIso8601String().split('T').first);
+
+    // Load central stock items for the dropdown
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Record Spoilage'),
-        content: SizedBox(
-          width: 300,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-                controller: itemCtrl,
-                decoration: const InputDecoration(labelText: 'Item Name')),
-            const SizedBox(height: 12),
-            TextField(
-                controller: qtyCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Quantity')),
-            const SizedBox(height: 12),
-            TextField(
-                controller: reasonCtrl,
-                decoration: const InputDecoration(labelText: 'Reason')),
-          ]),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (itemCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              try {
-                await ref.read(storeRepositoryProvider).recordSpoilage({
-                  'item_name': itemCtrl.text.trim(),
-                  'quantity': int.tryParse(qtyCtrl.text.trim()) ?? 0,
-                  'reason': reasonCtrl.text.trim(),
-                });
-                ref.invalidate(spoilageRecordsProvider);
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(context,
-                      const SnackBar(content: Text('Spoilage recorded')));
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(
-                      context, SnackBar(content: Text('Error: $e')));
-                }
-              }
-            },
-            child: const Text('Record'),
-          ),
-        ],
+      builder: (ctx) => FutureBuilder<List<Map<String, dynamic>>>(
+        future: ref.read(storeRepositoryProvider).getResource('/store/items'),
+        builder: (ctx, snap) {
+          final items = snap.data ?? [];
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) => AlertDialog(
+              title: const Text('Record Central Store Spoilage'),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    if (snap.connectionState == ConnectionState.waiting)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration:
+                            const InputDecoration(labelText: 'Item (SKU) *'),
+                        items: items
+                            .map((i) => DropdownMenuItem(
+                                  value: '${i['sku'] ?? i['item_sku']}',
+                                  child: Text(
+                                    '${i['item_name'] ?? i['name'] ?? i['sku']} (${i['sku'] ?? ''})',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setDialogState(() => itemSku = v),
+                      ),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: storeType,
+                          decoration:
+                              const InputDecoration(labelText: 'Store Type'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'foodstuffs', child: Text('Foodstuffs')),
+                            DropdownMenuItem(
+                                value: 'bar_store', child: Text('Bar Store')),
+                          ],
+                          onChanged: (v) =>
+                              setDialogState(() => storeType = v!),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: qtyCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Quantity *'),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: reason,
+                      decoration: const InputDecoration(labelText: 'Reason *'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'EXPIRED', child: Text('Expired')),
+                        DropdownMenuItem(
+                            value: 'DAMAGED', child: Text('Damaged')),
+                        DropdownMenuItem(
+                            value: 'SPOILED', child: Text('Spoiled')),
+                        DropdownMenuItem(
+                            value: 'QUALITY_ISSUE',
+                            child: Text('Quality Issue')),
+                        DropdownMenuItem(
+                            value: 'THEFT', child: Text('Theft/Loss')),
+                        DropdownMenuItem(
+                            value: 'BREAKAGE', child: Text('Breakage')),
+                        DropdownMenuItem(
+                            value: 'CONTAMINATION',
+                            child: Text('Contamination')),
+                        DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                      ],
+                      onChanged: (v) => setDialogState(() => reason = v!),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: disposalMethod,
+                      decoration:
+                          const InputDecoration(labelText: 'Disposal Method'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'DISPOSED', child: Text('Disposed')),
+                        DropdownMenuItem(
+                            value: 'RETURNED_SUPPLIER',
+                            child: Text('Returned to Supplier')),
+                        DropdownMenuItem(
+                            value: 'DONATED', child: Text('Donated')),
+                        DropdownMenuItem(
+                            value: 'RECYCLED', child: Text('Recycled')),
+                        DropdownMenuItem(
+                            value: 'DESTROYED', child: Text('Destroyed')),
+                      ],
+                      onChanged: (v) =>
+                          setDialogState(() => disposalMethod = v!),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: dateCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Spoilage Date (YYYY-MM-DD)'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonDetailsCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'Reason Details'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesCtrl,
+                      decoration: const InputDecoration(labelText: 'Notes'),
+                    ),
+                  ]),
+                ),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.kError,
+                      foregroundColor: Colors.white),
+                  onPressed: itemSku == null
+                      ? null
+                      : () async {
+                          Navigator.pop(ctx);
+                          try {
+                            await ref
+                                .read(storeRepositoryProvider)
+                                .recordSpoilage({
+                              'item_sku': itemSku,
+                              'quantity':
+                                  int.tryParse(qtyCtrl.text.trim()) ?? 1,
+                              'reason': reason,
+                              'disposal_method': disposalMethod,
+                              'store_type': storeType,
+                              'spoilage_date': dateCtrl.text,
+                              if (reasonDetailsCtrl.text.isNotEmpty)
+                                'reason_details': reasonDetailsCtrl.text,
+                              if (notesCtrl.text.isNotEmpty)
+                                'notes': notesCtrl.text,
+                            });
+                            ref.invalidate(spoilageRecordsProvider);
+                            if (context.mounted) {
+                              AppNotifier.showSnackBar(
+                                context,
+                                const SnackBar(
+                                    content: Text(
+                                        'Spoilage recorded — stock deducted')),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              AppNotifier.showSnackBar(
+                                context,
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
+                  child: const Text('Record Spoilage'),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1413,14 +1582,32 @@ class _SpoilageTabState extends ConsumerState<_SpoilageTab> {
 
 // ─── Packing Tab ───────────────────────────────────────────────────────────────
 
-class _PackingTab extends ConsumerWidget {
+class _PackingTab extends ConsumerStatefulWidget {
   const _PackingTab();
+  @override
+  ConsumerState<_PackingTab> createState() => _PackingTabState();
+}
+
+class _PackingTabState extends ConsumerState<_PackingTab> {
+  // Correct endpoint: GET /store/stock-requests?status=APPROVED
+  static const _approvedKey = '/store/stock-requests?status=APPROVED';
+  static const _partialKey = '/store/stock-requests?status=PARTIALLY_APPROVED';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Fetch stock requests that are APPROVED (ready to be packed by central store)
-    const resourceKey = '/store/stock-requests/approved';
-    final packsAsync = ref.watch(storeResourceProvider(resourceKey));
+  Widget build(BuildContext context) {
+    final approvedAsync = ref.watch(storeResourceProvider(_approvedKey));
+    final partialAsync = ref.watch(storeResourceProvider(_partialKey));
+
+    final combinedAsync = approvedAsync.when(
+      data: (approved) => partialAsync.when(
+        data: (partial) => AsyncValue.data([...approved, ...partial]),
+        loading: () => const AsyncValue<List<Map<String, dynamic>>>.loading(),
+        error: (e, s) => AsyncValue<List<Map<String, dynamic>>>.error(e, s),
+      ),
+      loading: () => const AsyncValue<List<Map<String, dynamic>>>.loading(),
+      error: (e, s) => AsyncValue<List<Map<String, dynamic>>>.error(e, s),
+    );
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(children: [
@@ -1432,15 +1619,17 @@ class _PackingTab extends ConsumerWidget {
             IconButton(
               tooltip: 'Refresh',
               icon: const Icon(Icons.refresh),
-              onPressed: () =>
-                  ref.invalidate(storeResourceProvider(resourceKey)),
+              onPressed: () {
+                ref.invalidate(storeResourceProvider(_approvedKey));
+                ref.invalidate(storeResourceProvider(_partialKey));
+              },
             ),
           ],
         ),
         const SizedBox(height: 12),
         Expanded(
           child: AsyncValueWidget(
-            value: packsAsync,
+            value: combinedAsync,
             data: (requests) {
               if (requests.isEmpty) {
                 return const EmptyState(
@@ -1451,6 +1640,8 @@ class _PackingTab extends ConsumerWidget {
                 itemBuilder: (_, i) {
                   final r = requests[i];
                   final status = '${r['status'] ?? 'APPROVED'}';
+                  final items = r['items'];
+                  final itemCount = items is List ? items.length : 0;
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
@@ -1461,12 +1652,28 @@ class _PackingTab extends ConsumerWidget {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
-                          'Items: ${(r['items'] as List?)?.length ?? r['items_count'] ?? '—'}  •  ${(r['created_at'] ?? '').toString().split('T').first}'),
-                      trailing: Chip(
-                        label: Text(status.toUpperCase(),
-                            style: const TextStyle(fontSize: 10)),
-                        backgroundColor:
-                            AppColors.kSuccess.withValues(alpha: 0.1),
+                          'Items: $itemCount  •  ${(r['created_at'] ?? '').toString().split('T').first}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Chip(
+                            label: Text(status.toUpperCase(),
+                                style: const TextStyle(fontSize: 10)),
+                            backgroundColor:
+                                AppColors.kSuccess.withValues(alpha: 0.1),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.kPrimary,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(100, 36),
+                            ),
+                            onPressed: () => _showPackAndDispatch(context, r),
+                            child: const Text('Pack & Dispatch',
+                                style: TextStyle(fontSize: 11)),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -1476,6 +1683,154 @@ class _PackingTab extends ConsumerWidget {
           ),
         ),
       ]),
+    );
+  }
+
+  void _showPackAndDispatch(
+      BuildContext context, Map<String, dynamic> request) {
+    String? vehicleId;
+    String? driverId;
+    final notesCtrl = TextEditingController(
+        text: 'Packed from request ${request['request_number'] ?? ''}');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => FutureBuilder<List<List<Map<String, dynamic>>>>(
+        future: Future.wait([
+          ref.read(storeRepositoryProvider).getFleetVehicles(),
+          ref.read(storeRepositoryProvider).getFleetDrivers(),
+        ]),
+        builder: (ctx, snap) {
+          final vehicles = snap.data?[0] ?? [];
+          final drivers = snap.data?[1] ?? [];
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) => AlertDialog(
+              title:
+                  Text('Pack & Dispatch — ${request['request_number'] ?? ''}'),
+              content: SizedBox(
+                width: 480,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (snap.connectionState == ConnectionState.waiting)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(),
+                      )
+                    else ...[
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: 'Vehicle (optional)'),
+                        items: vehicles
+                            .map((v) => DropdownMenuItem(
+                                  value: '${v['id']}',
+                                  child: Text(
+                                      '${v['registration_number'] ?? v['model'] ?? v['id']}'),
+                                ))
+                            .toList(),
+                        onChanged: (val) =>
+                            setDialogState(() => vehicleId = val),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: 'Driver (optional)'),
+                        items: drivers
+                            .map((d) => DropdownMenuItem(
+                                  value: '${d['id']}',
+                                  child: Text('${d['name'] ?? d['id']}'),
+                                ))
+                            .toList(),
+                        onChanged: (val) =>
+                            setDialogState(() => driverId = val),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: notesCtrl,
+                        decoration: const InputDecoration(labelText: 'Notes'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.kPrimary,
+                      foregroundColor: Colors.white),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    try {
+                      final items = request['items'];
+                      final lineItems = items is List
+                          ? items
+                              .whereType<Map>()
+                              .map((item) => {
+                                    'item_sku':
+                                        item['item_sku'] ?? item['sku'] ?? '',
+                                    'dispatched_quantity':
+                                        item['approved_quantity'] ??
+                                            item['requested_quantity'] ??
+                                            0,
+                                  })
+                              .toList()
+                          : <Map<String, dynamic>>[];
+
+                      final toBranchId = request['requesting_branch_id'] ??
+                          request['to_branch_id'];
+
+                      final result = await ref
+                          .read(storeRepositoryProvider)
+                          .createDispatchNote({
+                        'request_id': request['id'],
+                        if (toBranchId != null) 'to_branch_id': toBranchId,
+                        'items': lineItems,
+                        'notes': notesCtrl.text,
+                        if (vehicleId != null) 'vehicle_id': vehicleId,
+                        if (driverId != null) 'driver_id': driverId,
+                      });
+
+                      final dispatchId = result['id'] ?? result['dispatch_id'];
+                      if (dispatchId != null) {
+                        await ref.read(storeRepositoryProvider).markDispatched(
+                              '$dispatchId',
+                              vehicleId: vehicleId,
+                              driverId: driverId,
+                            );
+                      }
+
+                      ref.invalidate(storeResourceProvider(_approvedKey));
+                      ref.invalidate(storeResourceProvider(_partialKey));
+                      ref.invalidate(dispatchOrdersProvider(null));
+
+                      if (context.mounted) {
+                        AppNotifier.showSnackBar(
+                          context,
+                          const SnackBar(
+                              content: Text('Items packed and dispatched')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        AppNotifier.showSnackBar(
+                          context,
+                          SnackBar(content: Text('Dispatch failed: $e')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Confirm Pack & Dispatch'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -1495,9 +1850,9 @@ class _CentralStockTakesTabState extends ConsumerState<_CentralStockTakesTab> {
   @override
   Widget build(BuildContext context) {
     final filter = _statusFilter;
-    final resourceKey = filter == null
-        ? '/store/central-stock-takes'
-        : '/store/central-stock-takes?status=$filter';
+    // Real route: GET /stock-takes (mounted at /stock-takes in index.ts)
+    final resourceKey =
+        filter == null ? '/stock-takes' : '/stock-takes?status=$filter';
     final takesAsync = ref.watch(storeResourceProvider(resourceKey));
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1607,8 +1962,9 @@ class _CentralStockTakesTabState extends ConsumerState<_CentralStockTakesTab> {
               onPressed: () async {
                 Navigator.pop(ctx);
                 try {
+                  // Real route: POST /stock-takes
                   await ref.read(storeRepositoryProvider).createResource(
-                    '/store/central-stock-takes',
+                    '/stock-takes',
                     {'store_type': storeType, 'count_type': 'daily'},
                   );
                   ref.invalidate(storeResourceProvider(resourceKey));

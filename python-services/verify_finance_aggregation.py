@@ -4,7 +4,7 @@ import json
 
 # Set env vars manually
 os.environ['SUPABASE_URL'] = 'https://utsvlihpudfraxzcmtle.supabase.co'
-os.environ['SUPABASE_SERVICE_KEY'] = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0c3ZsaWhwdWRmcmF4emNtdGxlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzkxNjMzMiwiZXhwIjoyMDc5NDkyMzMyfQ.AhnRNBw6l3HBOTEIMrlUbGQEf9FJdyTaQrRQJW7IBNY'
+# SUPABASE_SERVICE_KEY must be set in environment — do not hardcode
 
 from finance.service import FinanceService
 

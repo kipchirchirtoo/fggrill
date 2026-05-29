@@ -144,13 +144,26 @@ class StoreRepository {
   }
 
   // Spoilage / Packing
-  Future<List<Map<String, dynamic>>> getSpoilageRecords() async {
-    final response = await _dio.get('/store/central-spoilage');
+  Future<List<Map<String, dynamic>>> getSpoilageRecords({
+    String? reason,
+    String? status,
+    String? storeType,
+  }) async {
+    final response = await _dio.get('/wastage', queryParameters: {
+      if (reason != null && reason.isNotEmpty) 'reason': reason,
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (storeType != null && storeType.isNotEmpty) 'store_type': storeType,
+    });
     return _parseList(response.data, (j) => j);
   }
 
   Future<void> recordSpoilage(Map<String, dynamic> data) async {
-    await _dio.post('/store/central-spoilage', data: data);
+    await _dio.post('/wastage', data: data);
+  }
+
+  Future<void> updateSpoilageStatus(
+      String id, Map<String, dynamic> data) async {
+    await _dio.put('/wastage/$id', data: data);
   }
 
   Future<List<Map<String, dynamic>>> getPackingRecords() async {
@@ -158,6 +171,35 @@ class StoreRepository {
       'status': 'APPROVED',
     });
     return _parseList(response.data, (j) => j);
+  }
+
+  Future<Map<String, dynamic>> reviewStockRequest(
+    String id, {
+    required String action,
+    String? reviewNotes,
+    List<Map<String, dynamic>>? approvedItems,
+  }) async {
+    final response = await _dio.put('/store/stock-requests/$id/review', data: {
+      'action': action,
+      if (reviewNotes != null && reviewNotes.isNotEmpty)
+        'review_notes': reviewNotes,
+      if (approvedItems != null) 'approved_items': approvedItems,
+    });
+    return _unwrap(response.data);
+  }
+
+  Future<Map<String, dynamic>> createDispatchNote(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/store/dispatch-notes', data: data);
+    return _unwrap(response.data);
+  }
+
+  Future<void> markDispatched(String id,
+      {String? vehicleId, String? driverId}) async {
+    await _dio.put('/store/dispatch-notes/$id/dispatch', data: {
+      if (vehicleId != null && vehicleId.isNotEmpty) 'vehicle_id': vehicleId,
+      if (driverId != null && driverId.isNotEmpty) 'driver_id': driverId,
+    });
   }
 
   // Supplier CRUD

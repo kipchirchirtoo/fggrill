@@ -74,3 +74,8 @@ bundle-analyzer-report.html
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# Env files with secrets - set via CI/CD or hosting platform
+.env.production
+.env.production.local
+.env.development

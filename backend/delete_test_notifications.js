@@ -3,7 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 // Initialize Supabase client
 const supabase = createClient(
     'https://utsvlihpudfraxzcmtle.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0c3ZsaWhwdWRmcmF4emNtdGxlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzkxNjMzMiwiZXhwIjoyMDc5NDkyMzMyfQ.AhnRNBw6l3HBOTEIMrlUbGQEf9FJdyTaQrRQJW7IBNY'
+    process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 async function deleteTestNotifications() {
