@@ -15,7 +15,7 @@ const groq   = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 const GROQ_MODEL   = process.env.GROQ_MODEL || 'llama-3.1-70b-versatile';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || process.env.GOOGLE_GEMINI_MODEL || 'gemini-2.0-flash';
 
 // ── Safety settings for Gemini (permissive for enterprise analytics) ──────────
 const GEMINI_SAFETY = [
@@ -640,7 +640,10 @@ Be specific with KES amounts, percentages, and counts. Reference actual branch n
 
     res.json({ success: true, data: { summary, model: GEMINI_MODEL, context: ctx, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.error('Lina Gemini executive summary error', err);
+    logger.warn('Lina Gemini executive summary unavailable; serving local analysis', {
+      error: aiFailureReason(err),
+      model: GEMINI_MODEL
+    });
     if (ctx) {
       res.json({ success: true, data: localExecutiveSummary(ctx, aiFailureReason(err)) });
       return;
@@ -688,7 +691,10 @@ For each finding:
     const result = await model.generateContent(prompt);
     res.json({ success: true, data: { report: result.response.text(), model: GEMINI_MODEL, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.error('Lina Gemini anomaly report error', err);
+    logger.warn('Lina Gemini anomaly report unavailable; serving local analysis', {
+      error: aiFailureReason(err),
+      model: GEMINI_MODEL
+    });
     if (ctx) {
       res.json({ success: true, data: localAnomalyReport(ctx, aiFailureReason(err)) });
       return;
@@ -757,7 +763,10 @@ TASK: Deep employee intelligence analysis.
     const result = await model.generateContent(prompt);
     res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: employeeData, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.error('Lina Gemini employee intelligence error', err);
+    logger.warn('Lina Gemini employee intelligence unavailable; serving local analysis', {
+      error: aiFailureReason(err),
+      model: GEMINI_MODEL
+    });
     if (ctx && employeeData) {
       res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, aiFailureReason(err)) });
       return;
@@ -830,7 +839,10 @@ TASK: Comprehensive financial intelligence analysis.
     const result = await model.generateContent(prompt);
     res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: financialData, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.error('Lina Gemini financial intelligence error', err);
+    logger.warn('Lina Gemini financial intelligence unavailable; serving local analysis', {
+      error: aiFailureReason(err),
+      model: GEMINI_MODEL
+    });
     if (ctx && financialData) {
       res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, aiFailureReason(err)) });
       return;
@@ -885,7 +897,10 @@ Format:
 
     res.json({ success: true, data: { recommendations, model: GEMINI_MODEL, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.error('Lina Gemini recommendations error', err);
+    logger.warn('Lina Gemini recommendations unavailable; serving local recommendations', {
+      error: aiFailureReason(err),
+      model: GEMINI_MODEL
+    });
     if (ctx) {
       res.json({ success: true, data: localRecommendations(ctx, aiFailureReason(err)) });
       return;

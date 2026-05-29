@@ -4,6 +4,7 @@ import { supabase } from '../config/database';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const GEMINI_MODEL = process.env.GEMINI_MODEL || process.env.GOOGLE_GEMINI_MODEL || 'gemini-2.0-flash';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ function buildAnomaliesFromData(data: Awaited<ReturnType<typeof fetchDashboardDa
 
 async function callGemini(prompt: string): Promise<string> {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent(prompt);
     return result.response.text();
   } catch (err: any) {

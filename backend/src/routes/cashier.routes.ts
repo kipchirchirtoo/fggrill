@@ -28,6 +28,7 @@ import {
     createPOSTransaction,
     initiatePOSTransactionPayment,
     getPOSReconciliation,
+    getRecentTransactions,
     getUnpaidWaiterOrders,
     markWaiterOrderPaid
 } from '../controllers/cashier.controller';
@@ -114,6 +115,7 @@ router.route('/pos/transactions')
 
 router.post('/pos/transactions/:id/pay', initiatePOSTransactionPayment);
 router.get('/pos/reconciliation', getPOSReconciliation);
+router.get('/recent-transactions', getRecentTransactions);
 
 // ============================================
 // UNPAID WAITER ORDERS ROUTES

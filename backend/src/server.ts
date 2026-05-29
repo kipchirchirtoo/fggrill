@@ -67,6 +67,10 @@ initializeApp().then(({ app, httpServer }) => {
     res.status(200).json({ ok: true, timestamp: new Date().toISOString() });
   });
 
+  app.head('/', (_req, res) => {
+    res.status(200).end();
+  });
+
   app.get('/', (_req, res) => {
     res.status(200).json({
       success: true,
@@ -76,7 +80,7 @@ initializeApp().then(({ app, httpServer }) => {
     });
   });
 
-  app.get(['/favicon.ico', '/favicon.png'], (_req, res) => {
+  app.get(['/favicon.ico', '/favicon.png', '/robots.txt'], (_req, res) => {
     res.status(204).end();
   });
 
@@ -258,4 +262,3 @@ initializeApp().then(({ app, httpServer }) => {
   }
   process.exit(1);
 });
-

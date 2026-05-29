@@ -82,6 +82,36 @@ type CashierCreditStaffProfile = {
     branchId: number | null;
 };
 
+function cashierUserName(user: any): string {
+    return [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() ||
+        user?.email ||
+        'Unknown cashier';
+}
+
+async function fetchCashierUsersById(ids: unknown[]): Promise<Map<string, any>> {
+    const userIds = Array.from(new Set(
+        ids
+            .map((id) => String(id || '').trim())
+            .filter(Boolean)
+    ));
+
+    if (!userIds.length) {
+        return new Map();
+    }
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .in('id', userIds);
+
+    if (error) {
+        logger.warn('Unable to attach cashier user details', { error: error.message });
+        return new Map();
+    }
+
+    return new Map((data || []).map((user: any) => [String(user.id), user]));
+}
+
 async function resolveCashierCreditStaffProfile(
     staffId: unknown,
     effectiveBranchId?: number | null
@@ -4595,7 +4625,6 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
             .select(`
                 *,
                 branch:branches(id, name),
-                cashier:users!cashier_id(id, first_name, last_name, email),
                 lines:cashier_logbook_lines!logbook_id(id, section, customer_name, amount, reference)
             `)
             .eq('status', status)
@@ -4620,9 +4649,15 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
 
         if (error) throw error;
 
+        const usersById = await fetchCashierUsersById((logbooks || []).map((logbook: any) => logbook.cashier_id));
+        const decoratedLogbooks = (logbooks || []).map((logbook: any) => ({
+            ...logbook,
+            cashier: usersById.get(String(logbook.cashier_id || '')) || null
+        }));
+
         res.json({
             success: true,
-            data: logbooks
+            data: decoratedLogbooks
         });
 
     } catch (error) {
@@ -5205,6 +5240,58 @@ export const getPOSReconciliation = async (req: Request, res: Response, next: Ne
                 summary: totals,
                 gross_total: Object.values(totals).reduce((sum, t) => sum + t.total, 0)
             }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * POS: Recent branch transactions for branch manager dashboard
+ */
+export const getRecentTransactions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit || '10'), 10) || 10, 1), 50);
+        const effectiveBranchId = resolveCashierBranchId(req, req.query.branch_id);
+
+        const { data: transactions, error } = await supabase
+            .from('pos_transactions')
+            .select('*')
+            .eq('branch_id', effectiveBranchId)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error) throw error;
+
+        const usersById = await fetchCashierUsersById((transactions || []).map((tx: any) => tx.cashier_id));
+        const rows = (transactions || []).map((tx: any) => {
+            const cashier = usersById.get(String(tx.cashier_id || ''));
+            const amount = Number(tx.total_amount ?? tx.amount ?? tx.total ?? 0);
+            const paymentMethod = String(tx.payment_method || '').replace(/_/g, ' ').trim();
+            const status = String(tx.status || '').toLowerCase();
+            const reference = tx.transaction_ref || tx.reference || tx.id;
+
+            return {
+                id: tx.id,
+                description: [
+                    status ? `${status.charAt(0).toUpperCase()}${status.slice(1)}` : 'POS',
+                    paymentMethod || 'transaction',
+                    reference ? `#${reference}` : ''
+                ].filter(Boolean).join(' '),
+                user_name: cashierUserName(cashier),
+                cashier: cashierUserName(cashier),
+                amount,
+                status: tx.status,
+                payment_method: tx.payment_method,
+                branch_id: tx.branch_id,
+                created_at: tx.created_at,
+                time_ago: tx.created_at
+            };
+        });
+
+        res.json({
+            success: true,
+            data: rows
         });
     } catch (error) {
         next(error);

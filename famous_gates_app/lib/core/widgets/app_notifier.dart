@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/api_error_message.dart';
 
 class AppNotifier {
   static const MethodChannel _audioProbeChannel =
@@ -184,7 +185,12 @@ class AppNotifier {
     if (text.contains('DioException')) {
       final match = RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(text);
       if (match != null) return match.group(1) ?? 'Request failed';
-      return 'Request failed. Check the details and try again.';
+      return apiErrorMessage(Exception(text));
+    }
+    if (text.contains('RequestOptions.validateStatus') ||
+        text.contains('Read more about status codes') ||
+        text.contains('developer.mozilla.org/en-US/docs/Web/HTTP/Status')) {
+      return apiErrorMessage(Exception(text));
     }
     return text;
   }

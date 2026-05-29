@@ -2,6 +2,41 @@ import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 import { updateFloatOnTransaction } from './float-tracking.controller';
 
+async function fetchUsersById(ids: unknown[]): Promise<Map<string, any>> {
+  const userIds = Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (!userIds.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, email, employee_id')
+    .in('id', userIds);
+
+  if (error) {
+    console.warn('Kyogong transaction user lookup failed:', error.message);
+    return new Map();
+  }
+
+  return new Map((data || []).map((user: any) => [String(user.id), user]));
+}
+
+function attachTransactionUsers<T extends Record<string, any>>(transaction: T, usersById: Map<string, any>): T {
+  const servedBy = String(transaction.served_by || '');
+  const voidedBy = String(transaction.voided_by || '');
+  const cashierId = String(transaction.shift?.cashier_id || '');
+
+  return {
+    ...transaction,
+    served_by_user: usersById.get(servedBy) || null,
+    voided_by_user: usersById.get(voidedBy) || null,
+    shift: transaction.shift
+      ? {
+          ...transaction.shift,
+          cashier: usersById.get(cashierId) || null
+        }
+      : transaction.shift
+  };
+}
+
 /**
  * Create a new transaction within a shift
  * POST /api/kyogong/shifts/:shift_id/transactions
@@ -174,16 +209,17 @@ export const createTransaction = async (req: Request, res: Response) => {
       .from('shift_transactions')
       .select(`
         *,
-        items:shift_transaction_items(*),
-        served_by_user:users!served_by(id, first_name, last_name)
+        items:shift_transaction_items(*)
       `)
       .eq('id', transaction.id)
       .single();
 
+    const usersById = await fetchUsersById([completeTransaction?.served_by]);
+
     res.json({
       success: true,
       message: 'Transaction created successfully',
-      data: completeTransaction
+      data: completeTransaction ? attachTransactionUsers(completeTransaction, usersById) : completeTransaction
     });
   } catch (error: any) {
     console.error('Create transaction error:', error);
@@ -206,18 +242,21 @@ export const getShiftTransactions = async (req: Request, res: Response) => {
       .from('shift_transactions')
       .select(`
         *,
-        items:shift_transaction_items(*),
-        served_by_user:users!served_by(id, first_name, last_name),
-        voided_by_user:users!voided_by(id, first_name, last_name)
+        items:shift_transaction_items(*)
       `)
       .eq('shift_id', shift_id)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
+    const usersById = await fetchUsersById([
+      ...(transactions || []).map((tx: any) => tx.served_by),
+      ...(transactions || []).map((tx: any) => tx.voided_by)
+    ]);
+
     res.json({
       success: true,
-      data: transactions || []
+      data: (transactions || []).map((tx: any) => attachTransactionUsers(tx, usersById))
     });
   } catch (error: any) {
     console.error('Get shift transactions error:', error);
@@ -340,13 +379,11 @@ export const getTransactionDetails = async (req: Request, res: Response) => {
       .select(`
         *,
         items:shift_transaction_items(*),
-        served_by_user:users!served_by(id, first_name, last_name, employee_id),
-        voided_by_user:users!voided_by(id, first_name, last_name),
         shift:cashier_shifts(
           id,
           shift_number,
           status,
-          cashier:users!cashier_id(id, first_name, last_name)
+          cashier_id
         )
       `)
       .eq('id', id)
@@ -361,9 +398,15 @@ export const getTransactionDetails = async (req: Request, res: Response) => {
       });
     }
 
+    const usersById = await fetchUsersById([
+      transaction.served_by,
+      transaction.voided_by,
+      transaction.shift?.cashier_id
+    ]);
+
     res.json({
       success: true,
-      data: transaction
+      data: attachTransactionUsers(transaction, usersById)
     });
   } catch (error: any) {
     console.error('Get transaction details error:', error);

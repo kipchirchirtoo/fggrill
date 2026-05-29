@@ -375,9 +375,9 @@ export const getBranchSales = async (req: Request, res: Response): Promise<void>
 
     res.status(200).json(response.data);
   } catch (error: any) {
-    logger.error('Error fetching branch sales analytics', {
+    logger.warn('Branch sales analytics service unavailable; attempting backend fallback', {
       error: error.message,
-      stack: error.stack,
+      status: error.response?.status,
       user_id: (req as any).user?.id
     });
 

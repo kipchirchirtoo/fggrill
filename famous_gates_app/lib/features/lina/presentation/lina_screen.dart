@@ -1,31 +1,29 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../domain/lina_providers.dart';
-import '../data/lina_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
-import '../../../core/services/services.dart';
+import '../../../core/utils/api_error_message.dart';
 
 // ── Lina accent colors (used sparingly on white bg) ───────────────────────────
-const _kLinaAccent  = Color(0xFF6C63FF); // electric purple
-const _kLinaTeal    = Color(0xFF00C4A0); // teal
-const _kLinaCard    = Colors.white;
-const _kLinaBorder  = Color(0xFFE8E8F0);
+const _kLinaAccent = Color(0xFF6C63FF); // electric purple
+const _kLinaTeal = Color(0xFF00C4A0); // teal
+const _kLinaCard = Colors.white;
+const _kLinaBorder = Color(0xFFE8E8F0);
 
 // ── Tab labels ────────────────────────────────────────────────────────────────
 final _tabs = [
-  ('Executive',       PhosphorIcons.buildings()),
-  ('Chat',            PhosphorIcons.chatCircle()),
-  ('Monitoring',      PhosphorIcons.activity()),
-  ('Audit',           PhosphorIcons.shieldWarning()),
-  ('Financial',       PhosphorIcons.currencyDollar()),
-  ('Employee',        PhosphorIcons.users()),
+  ('Executive', PhosphorIcons.buildings()),
+  ('Chat', PhosphorIcons.chatCircle()),
+  ('Monitoring', PhosphorIcons.activity()),
+  ('Audit', PhosphorIcons.shieldWarning()),
+  ('Financial', PhosphorIcons.currencyDollar()),
+  ('Employee', PhosphorIcons.users()),
   ('Recommendations', PhosphorIcons.brain()),
-  ('Timeline',        PhosphorIcons.clockCounterClockwise()),
-  ('Fix Center',      PhosphorIcons.wrench()),
+  ('Timeline', PhosphorIcons.clockCounterClockwise()),
+  ('Fix Center', PhosphorIcons.wrench()),
 ];
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -45,10 +43,11 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: _tabs.length, vsync: this);
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
+    _pulse = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1000))
       ..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.5, end: 1.0).animate(
-        CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
+    _pulseAnim = Tween<double>(begin: 0.5, end: 1.0)
+        .animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
   }
 
   @override
@@ -131,19 +130,26 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
             builder: (_, __) => Opacity(
               opacity: _pulseAnim.value,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.kSuccess.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.kSuccess.withValues(alpha: 0.4)),
+                  border: Border.all(
+                      color: AppColors.kSuccess.withValues(alpha: 0.4)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(width: 6, height: 6,
-                      decoration: const BoxDecoration(color: AppColors.kSuccess, shape: BoxShape.circle)),
+                  Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                          color: AppColors.kSuccess, shape: BoxShape.circle)),
                   const SizedBox(width: 5),
                   const Text('LIVE',
                       style: TextStyle(
-                          color: AppColors.kSuccess, fontSize: 11, fontWeight: FontWeight.w700)),
+                          color: AppColors.kSuccess,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700)),
                 ]),
               ),
             ),
@@ -159,12 +165,17 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
             ),
             child: const Text('GROQ · GEMINI',
                 style: TextStyle(
-                    color: _kLinaAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+                    color: _kLinaAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
           ),
           const Spacer(),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text('Central Intelligence System',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700)),
             Text('Famous Gates Hotels',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
           ]),
@@ -185,15 +196,18 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
         indicatorColor: _kLinaAccent,
         indicatorWeight: 2.5,
         labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
+        unselectedLabelStyle:
+            const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        tabs: _tabs.map((t) => Tab(
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(t.$2, size: 15),
-            const SizedBox(width: 6),
-            Text(t.$1),
-          ]),
-        )).toList(),
+        tabs: _tabs
+            .map((t) => Tab(
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(t.$2, size: 15),
+                    const SizedBox(width: 6),
+                    Text(t.$1),
+                  ]),
+                ))
+            .toList(),
       ),
     );
   }
@@ -207,7 +221,12 @@ Widget _card({required Widget child, EdgeInsets? padding, Color? border}) {
       color: _kLinaCard,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: border ?? _kLinaBorder),
-      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+      boxShadow: [
+        BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2))
+      ],
     ),
     child: child,
   );
@@ -220,14 +239,23 @@ Widget _kpiCard(String label, String value, IconData icon, Color color) {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10)),
           child: Icon(icon, color: color, size: 20),
         ),
         const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.kTextPrimary)),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.kTextPrimary)),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary)),
         ])),
       ]),
     ),
@@ -238,11 +266,19 @@ Widget _sectionHeader(String title, {String? subtitle, Widget? action}) {
   return Padding(
     padding: const EdgeInsets.only(bottom: 16),
     child: Row(children: [
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.kTextPrimary)),
+      Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title,
+            style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.kTextPrimary)),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
-          Text(subtitle, style: const TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
+          Text(subtitle,
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.kTextSecondary)),
         ],
       ])),
       if (action != null) action,
@@ -260,31 +296,46 @@ Widget _severityBadge(String severity) {
   final c = colors[severity.toUpperCase()] ?? Colors.grey;
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+    decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6)),
     child: Text(severity.toUpperCase(),
         style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w700)),
   );
 }
 
-Widget _loadingCard() => _card(child: const SizedBox(
-  height: 120,
-  child: Center(child: CircularProgressIndicator(color: _kLinaAccent, strokeWidth: 2)),
-));
+Widget _loadingCard() => _card(
+        child: const SizedBox(
+      height: 120,
+      child: Center(
+          child:
+              CircularProgressIndicator(color: _kLinaAccent, strokeWidth: 2)),
+    ));
 
-Widget _errorCard(String msg, VoidCallback retry) => _card(child: Column(children: [
-  Icon(PhosphorIcons.warning(), color: AppColors.kError, size: 28),
-  const SizedBox(height: 8),
-  Text('Failed to load', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.kTextPrimary)),
-  const SizedBox(height: 4),
-  Text(msg, style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary), textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis),
-  const SizedBox(height: 12),
-  OutlinedButton.icon(
-    onPressed: retry,
-    icon: Icon(PhosphorIcons.clockClockwise(), size: 14),
-    label: const Text('Retry'),
-    style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
-  ),
-]));
+Widget _errorCard(Object error, VoidCallback retry) {
+  final msg = apiErrorMessage(error);
+  return _card(
+      child: Column(children: [
+    Icon(PhosphorIcons.warning(), color: AppColors.kError, size: 28),
+    const SizedBox(height: 8),
+    Text('Failed to load',
+        style: const TextStyle(
+            fontWeight: FontWeight.w600, color: AppColors.kTextPrimary)),
+    const SizedBox(height: 4),
+    Text(msg,
+        style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
+        textAlign: TextAlign.center,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis),
+    const SizedBox(height: 12),
+    OutlinedButton.icon(
+      onPressed: retry,
+      icon: Icon(PhosphorIcons.clockClockwise(), size: 14),
+      label: const Text('Retry'),
+      style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
+    ),
+  ]));
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. Executive Tab
@@ -315,8 +366,13 @@ class _ExecutiveTab extends ConsumerWidget {
         // KPI row from context
         ctxAsync.when(
           data: (ctx) => _buildKpiRow(ctx),
-          loading: () => const SizedBox(height: 96, child: Center(child: CircularProgressIndicator(color: _kLinaAccent, strokeWidth: 2))),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaContextProvider)),
+          loading: () => const SizedBox(
+              height: 96,
+              child: Center(
+                  child: CircularProgressIndicator(
+                      color: _kLinaAccent, strokeWidth: 2))),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaContextProvider)),
         ),
 
         const SizedBox(height: 20),
@@ -324,33 +380,46 @@ class _ExecutiveTab extends ConsumerWidget {
         // AI summary
         summaryAsync.when(
           data: (data) => _card(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Icon(PhosphorIcons.sparkle(), size: 18, color: _kLinaAccent),
                 const SizedBox(width: 8),
                 const Text('Lina Executive Briefing',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.kTextPrimary)),
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.kTextPrimary)),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: _kLinaAccent.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Text('Gemini 1.5 Pro',
-                      style: TextStyle(color: _kLinaAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          color: _kLinaAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600)),
                 ),
               ]),
               const Divider(height: 24),
               Text(data['summary'] ?? 'No summary available',
-                  style: const TextStyle(fontSize: 13.5, height: 1.7, color: AppColors.kTextPrimary)),
+                  style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.7,
+                      color: AppColors.kTextPrimary)),
               const SizedBox(height: 8),
               Text('Generated: ${data['generated_at'] ?? ''}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.kTextSecondary)),
             ]),
           ),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaExecutiveSummaryProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaExecutiveSummaryProvider)),
         ),
       ]),
     );
@@ -363,13 +432,17 @@ class _ExecutiveTab extends ConsumerWidget {
     final staff = ctx['staff_today'] as Map<String, dynamic>? ?? {};
     final revenue24h = (rev['total_24h'] as num?)?.toDouble() ?? 0;
     return Row(children: [
-      _kpiCard('Active Branches', '${branches['active'] ?? 0}', PhosphorIcons.buildings(), AppColors.kPrimary),
+      _kpiCard('Active Branches', '${branches['active'] ?? 0}',
+          PhosphorIcons.buildings(), AppColors.kPrimary),
       const SizedBox(width: 12),
-      _kpiCard('Revenue 24h', 'KES ${(revenue24h / 1000).toStringAsFixed(1)}K', PhosphorIcons.currencyDollar(), _kLinaTeal),
+      _kpiCard('Revenue 24h', 'KES ${(revenue24h / 1000).toStringAsFixed(1)}K',
+          PhosphorIcons.currencyDollar(), _kLinaTeal),
       const SizedBox(width: 12),
-      _kpiCard('Critical Alerts', '${anomalies['critical_count'] ?? 0}', PhosphorIcons.warning(), AppColors.kError),
+      _kpiCard('Critical Alerts', '${anomalies['critical_count'] ?? 0}',
+          PhosphorIcons.warning(), AppColors.kError),
       const SizedBox(width: 12),
-      _kpiCard('Staff Present', '${staff['present'] ?? 0}', PhosphorIcons.users(), AppColors.kSuccess),
+      _kpiCard('Staff Present', '${staff['present'] ?? 0}',
+          PhosphorIcons.users(), AppColors.kSuccess),
     ]);
   }
 }
@@ -415,13 +488,15 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
     _scrollBottom();
 
     try {
-      final history = ref.read(chatProvider)
+      final history = ref
+          .read(chatProvider)
           .where((m) => !m.isStreaming)
           .map((m) => {'role': m.role, 'content': m.content})
           .toList();
 
       final repo = ref.read(linaRepositoryProvider);
-      await for (final delta in repo.chatStream(msg, history.cast<Map<String, String>>())) {
+      await for (final delta
+          in repo.chatStream(msg, history.cast<Map<String, String>>())) {
         notifier.appendToLastAssistant(delta);
         _scrollBottom();
       }
@@ -479,21 +554,32 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
           child: Icon(PhosphorIcons.sparkle(), size: 40, color: _kLinaAccent),
         ),
         const SizedBox(height: 20),
-        const Text('Ask Lina anything', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.kTextPrimary)),
+        const Text('Ask Lina anything',
+            style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.kTextPrimary)),
         const SizedBox(height: 8),
-        const Text('Lina has live access to all Famous Gates data — staff, revenue, branches, anomalies.',
-            style: TextStyle(fontSize: 13, color: AppColors.kTextSecondary), textAlign: TextAlign.center),
+        const Text(
+            'Lina has live access to all Famous Gates data — staff, revenue, branches, anomalies.',
+            style: TextStyle(fontSize: 13, color: AppColors.kTextSecondary),
+            textAlign: TextAlign.center),
         const SizedBox(height: 32),
-        Wrap(spacing: 10, runSpacing: 10, alignment: WrapAlignment.center,
-          children: _suggestions.map((s) => ActionChip(
-            label: Text(s, style: const TextStyle(fontSize: 12)),
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: _kLinaBorder),
-            onPressed: () {
-              _controller.text = s;
-              _send();
-            },
-          )).toList(),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          alignment: WrapAlignment.center,
+          children: _suggestions
+              .map((s) => ActionChip(
+                    label: Text(s, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: _kLinaBorder),
+                    onPressed: () {
+                      _controller.text = s;
+                      _send();
+                    },
+                  ))
+              .toList(),
         ),
       ]),
     );
@@ -508,7 +594,8 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
         right: isUser ? 0 : 64,
       ),
       child: Column(
-        crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           // Role label
           Padding(
@@ -531,7 +618,12 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
                 bottomRight: Radius.circular(isUser ? 4 : 16),
               ),
               border: isUser ? null : Border.all(color: _kLinaBorder),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2))
+              ],
             ),
             child: msg.isStreaming && msg.content.isEmpty
                 ? _TypingIndicator()
@@ -560,7 +652,8 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
         // Clear
         IconButton(
           onPressed: () => ref.read(chatProvider.notifier).clear(),
-          icon: Icon(PhosphorIcons.trash(), size: 18, color: Colors.grey.shade400),
+          icon: Icon(PhosphorIcons.trash(),
+              size: 18, color: Colors.grey.shade400),
           tooltip: 'Clear chat',
         ),
         const SizedBox(width: 8),
@@ -587,7 +680,8 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
                 borderRadius: BorderRadius.circular(24),
                 borderSide: const BorderSide(color: _kLinaAccent, width: 1.5),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             ),
           ),
         ),
@@ -603,8 +697,13 @@ class _ChatTabState extends ConsumerState<_ChatTab> {
               padding: const EdgeInsets.all(14),
             ),
             child: _loading
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : Icon(PhosphorIcons.paperPlaneTilt(), size: 18, color: Colors.white),
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Icon(PhosphorIcons.paperPlaneTilt(),
+                    size: 18, color: Colors.white),
           ),
         ),
       ]),
@@ -617,17 +716,23 @@ class _TypingIndicator extends StatefulWidget {
   State<_TypingIndicator> createState() => _TypingIndicatorState();
 }
 
-class _TypingIndicatorState extends State<_TypingIndicator> with TickerProviderStateMixin {
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with TickerProviderStateMixin {
   late List<AnimationController> _controllers;
   late List<Animation<double>> _animations;
 
   @override
   void initState() {
     super.initState();
-    _controllers = List.generate(3, (i) =>
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 600))
-          ..repeat(reverse: true, period: Duration(milliseconds: 600 + i * 200)));
-    _animations = _controllers.map((c) => CurvedAnimation(parent: c, curve: Curves.easeInOut)).toList();
+    _controllers = List.generate(
+        3,
+        (i) => AnimationController(
+            vsync: this, duration: const Duration(milliseconds: 600))
+          ..repeat(
+              reverse: true, period: Duration(milliseconds: 600 + i * 200)));
+    _animations = _controllers
+        .map((c) => CurvedAnimation(parent: c, curve: Curves.easeInOut))
+        .toList();
     for (var i = 0; i < 3; i++) {
       Future.delayed(Duration(milliseconds: i * 150), () {
         if (mounted) _controllers[i].repeat(reverse: true);
@@ -643,18 +748,23 @@ class _TypingIndicatorState extends State<_TypingIndicator> with TickerProviderS
 
   @override
   Widget build(BuildContext context) {
-    return Row(mainAxisSize: MainAxisSize.min, children: List.generate(3, (i) =>
-        AnimatedBuilder(
-          animation: _animations[i],
-          builder: (_, __) => Container(
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            width: 7, height: 7,
-            decoration: BoxDecoration(
-              color: _kLinaAccent.withValues(alpha: 0.3 + _animations[i].value * 0.7),
-              shape: BoxShape.circle,
-            ),
-          ),
-        )));
+    return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(
+            3,
+            (i) => AnimatedBuilder(
+                  animation: _animations[i],
+                  builder: (_, __) => Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _kLinaAccent.withValues(
+                          alpha: 0.3 + _animations[i].value * 0.7),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                )));
   }
 }
 
@@ -702,7 +812,8 @@ class _MonitoringTabState extends ConsumerState<_MonitoringTab> {
         monAsync.when(
           data: (data) => _buildMonitoring(data),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaMonitoringProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaMonitoringProvider)),
         ),
       ]),
     );
@@ -720,44 +831,87 @@ class _MonitoringTabState extends ConsumerState<_MonitoringTab> {
 
     return Column(children: [
       Row(children: [
-        _statusCard('Database', dbOk ? 'Healthy' : 'Degraded', '${db['latency_ms'] ?? 0}ms latency', dbOk ? AppColors.kSuccess : AppColors.kError),
+        _statusCard(
+            'Database',
+            dbOk ? 'Healthy' : 'Degraded',
+            '${db['latency_ms'] ?? 0}ms latency',
+            dbOk ? AppColors.kSuccess : AppColors.kError),
         const SizedBox(width: 12),
-        _statusCard('System', 'Running', '${(system['uptime_seconds'] as int? ?? 0) ~/ 3600}h uptime · ${system['memory_mb'] ?? 0}MB RAM', AppColors.kSuccess),
+        _statusCard(
+            'System',
+            'Running',
+            '${(system['uptime_seconds'] as int? ?? 0) ~/ 3600}h uptime · ${system['memory_mb'] ?? 0}MB RAM',
+            AppColors.kSuccess),
         const SizedBox(width: 12),
-        _statusCard('Groq AI', groq['status'] == 'configured' ? 'Connected' : 'No Key', groq['model'] ?? '', groq['status'] == 'configured' ? _kLinaAccent : AppColors.kWarning),
+        _statusCard(
+            'Groq AI',
+            groq['status'] == 'configured' ? 'Connected' : 'No Key',
+            groq['model'] ?? '',
+            groq['status'] == 'configured' ? _kLinaAccent : AppColors.kWarning),
         const SizedBox(width: 12),
-        _statusCard('Gemini AI', geminiProv['status'] == 'configured' ? 'Connected' : 'No Key', geminiProv['model'] ?? '', geminiProv['status'] == 'configured' ? _kLinaAccent : AppColors.kWarning),
+        _statusCard(
+            'Gemini AI',
+            geminiProv['status'] == 'configured' ? 'Connected' : 'No Key',
+            geminiProv['model'] ?? '',
+            geminiProv['status'] == 'configured'
+                ? _kLinaAccent
+                : AppColors.kWarning),
       ]),
       const SizedBox(height: 16),
       Row(children: [
-        Expanded(child: _card(child: Row(children: [
-          Icon(PhosphorIcons.warning(), color: maintenance ? AppColors.kError : AppColors.kSuccess, size: 20),
+        Expanded(
+            child: _card(
+                child: Row(children: [
+          Icon(PhosphorIcons.warning(),
+              color: maintenance ? AppColors.kError : AppColors.kSuccess,
+              size: 20),
           const SizedBox(width: 10),
           Text('Maintenance Mode: ${maintenance ? "ACTIVE" : "OFF"}',
-              style: TextStyle(fontWeight: FontWeight.w600, color: maintenance ? AppColors.kError : AppColors.kSuccess)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: maintenance ? AppColors.kError : AppColors.kSuccess)),
         ]))),
         const SizedBox(width: 12),
-        Expanded(child: _card(child: Row(children: [
-          Icon(PhosphorIcons.wrench(), color: pending > 0 ? AppColors.kWarning : AppColors.kSuccess, size: 20),
+        Expanded(
+            child: _card(
+                child: Row(children: [
+          Icon(PhosphorIcons.wrench(),
+              color: pending > 0 ? AppColors.kWarning : AppColors.kSuccess,
+              size: 20),
           const SizedBox(width: 10),
           Text('Pending Remediations: $pending',
-              style: TextStyle(fontWeight: FontWeight.w600, color: pending > 0 ? AppColors.kWarning : AppColors.kTextPrimary)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: pending > 0
+                      ? AppColors.kWarning
+                      : AppColors.kTextPrimary)),
         ]))),
       ]),
     ]);
   }
 
   Widget _statusCard(String title, String status, String sub, Color color) {
-    return Expanded(child: _card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return Expanded(
+        child: _card(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 8),
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        Text(title,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
       ]),
       const SizedBox(height: 6),
-      Text(status, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color)),
+      Text(status,
+          style: TextStyle(
+              fontSize: 16, fontWeight: FontWeight.w700, color: color)),
       const SizedBox(height: 2),
-      Text(sub, style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
+      Text(sub,
+          style:
+              const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
     ])));
   }
 }
@@ -783,25 +937,45 @@ class _AuditTab extends ConsumerWidget {
               style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
             )),
         reportAsync.when(
-          data: (data) => _card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(PhosphorIcons.shieldWarning(), size: 18, color: _kLinaAccent),
-              const SizedBox(width: 8),
-              const Text('Anomaly Audit Report', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: _kLinaAccent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-                child: const Text('Gemini 1.5 Pro', style: TextStyle(color: _kLinaAccent, fontSize: 11, fontWeight: FontWeight.w600)),
-              ),
-            ]),
-            const Divider(height: 24),
-            Text(data['report'] ?? '', style: const TextStyle(fontSize: 13.5, height: 1.7, color: AppColors.kTextPrimary)),
-            const SizedBox(height: 8),
-            Text('Generated: ${data['generated_at'] ?? ''}', style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
-          ])),
+          data: (data) => _card(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Row(children: [
+                  Icon(PhosphorIcons.shieldWarning(),
+                      size: 18, color: _kLinaAccent),
+                  const SizedBox(width: 8),
+                  const Text('Anomaly Audit Report',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                        color: _kLinaAccent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(6)),
+                    child: const Text('Gemini 1.5 Pro',
+                        style: TextStyle(
+                            color: _kLinaAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ]),
+                const Divider(height: 24),
+                Text(data['report'] ?? '',
+                    style: const TextStyle(
+                        fontSize: 13.5,
+                        height: 1.7,
+                        color: AppColors.kTextPrimary)),
+                const SizedBox(height: 8),
+                Text('Generated: ${data['generated_at'] ?? ''}',
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.kTextSecondary)),
+              ])),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaAnomalyReportProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaAnomalyReportProvider)),
         ),
       ]),
     );
@@ -825,7 +999,10 @@ class _FinancialTab extends ConsumerWidget {
         _sectionHeader('Financial Intelligence',
             subtitle: '30-day revenue analysis and cash flow signals',
             action: OutlinedButton.icon(
-              onPressed: () { ref.invalidate(linaFinancialIntelProvider); ref.invalidate(linaContextProvider); },
+              onPressed: () {
+                ref.invalidate(linaFinancialIntelProvider);
+                ref.invalidate(linaContextProvider);
+              },
               icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
               label: const Text('Refresh'),
               style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
@@ -837,35 +1014,60 @@ class _FinancialTab extends ConsumerWidget {
             final r7d = (rev['total_7d'] as num?)?.toDouble() ?? 0;
             final voids = rev['void_bills_7d'] ?? 0;
             return Row(children: [
-              _kpiCard('Revenue 24h', 'KES ${(r24 / 1000).toStringAsFixed(1)}K', PhosphorIcons.currencyDollar(), _kLinaTeal),
+              _kpiCard('Revenue 24h', 'KES ${(r24 / 1000).toStringAsFixed(1)}K',
+                  PhosphorIcons.currencyDollar(), _kLinaTeal),
               const SizedBox(width: 12),
-              _kpiCard('Revenue 7d', 'KES ${(r7d / 1000).toStringAsFixed(1)}K', PhosphorIcons.trendUp(), AppColors.kSuccess),
+              _kpiCard('Revenue 7d', 'KES ${(r7d / 1000).toStringAsFixed(1)}K',
+                  PhosphorIcons.trendUp(), AppColors.kSuccess),
               const SizedBox(width: 12),
-              _kpiCard('Void Bills 7d', '$voids', PhosphorIcons.prohibit(), AppColors.kError),
+              _kpiCard('Void Bills 7d', '$voids', PhosphorIcons.prohibit(),
+                  AppColors.kError),
             ]);
           },
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(color: _kLinaAccent, strokeWidth: 2))),
+          loading: () => const SizedBox(
+              height: 80,
+              child: Center(
+                  child: CircularProgressIndicator(
+                      color: _kLinaAccent, strokeWidth: 2))),
           error: (_, __) => const SizedBox.shrink(),
         ),
         const SizedBox(height: 20),
         finAsync.when(
-          data: (data) => _card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(PhosphorIcons.currencyDollar(), size: 18, color: _kLinaAccent),
-              const SizedBox(width: 8),
-              const Text('Financial Analysis', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: _kLinaAccent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-                child: const Text('Gemini 1.5 Pro', style: TextStyle(color: _kLinaAccent, fontSize: 11, fontWeight: FontWeight.w600)),
-              ),
-            ]),
-            const Divider(height: 24),
-            Text(data['analysis'] ?? '', style: const TextStyle(fontSize: 13.5, height: 1.7, color: AppColors.kTextPrimary)),
-          ])),
+          data: (data) => _card(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Row(children: [
+                  Icon(PhosphorIcons.currencyDollar(),
+                      size: 18, color: _kLinaAccent),
+                  const SizedBox(width: 8),
+                  const Text('Financial Analysis',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                        color: _kLinaAccent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(6)),
+                    child: const Text('Gemini 1.5 Pro',
+                        style: TextStyle(
+                            color: _kLinaAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ]),
+                const Divider(height: 24),
+                Text(data['analysis'] ?? '',
+                    style: const TextStyle(
+                        fontSize: 13.5,
+                        height: 1.7,
+                        color: AppColors.kTextPrimary)),
+              ])),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaFinancialIntelProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaFinancialIntelProvider)),
         ),
       ]),
     );
@@ -889,7 +1091,10 @@ class _EmployeeTab extends ConsumerWidget {
         _sectionHeader('Employee Intelligence',
             subtitle: 'Staff attendance, payroll signals and anomalies',
             action: OutlinedButton.icon(
-              onPressed: () { ref.invalidate(linaEmployeeIntelProvider); ref.invalidate(linaContextProvider); },
+              onPressed: () {
+                ref.invalidate(linaEmployeeIntelProvider);
+                ref.invalidate(linaContextProvider);
+              },
               icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
               label: const Text('Refresh'),
               style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
@@ -898,37 +1103,62 @@ class _EmployeeTab extends ConsumerWidget {
           data: (ctx) {
             final staff = ctx['staff_today'] as Map<String, dynamic>? ?? {};
             return Row(children: [
-              _kpiCard('Present Today', '${staff['present'] ?? 0}', PhosphorIcons.checkCircle(), AppColors.kSuccess),
+              _kpiCard('Present Today', '${staff['present'] ?? 0}',
+                  PhosphorIcons.checkCircle(), AppColors.kSuccess),
               const SizedBox(width: 12),
-              _kpiCard('Absent Today', '${staff['absent'] ?? 0}', PhosphorIcons.xCircle(), AppColors.kError),
+              _kpiCard('Absent Today', '${staff['absent'] ?? 0}',
+                  PhosphorIcons.xCircle(), AppColors.kError),
               const SizedBox(width: 12),
-              _kpiCard('Late Today', '${staff['late'] ?? 0}', PhosphorIcons.clockCounterClockwise(), AppColors.kWarning),
+              _kpiCard('Late Today', '${staff['late'] ?? 0}',
+                  PhosphorIcons.clockCounterClockwise(), AppColors.kWarning),
               const SizedBox(width: 12),
-              _kpiCard('On Overtime', '${staff['overtime'] ?? 0}', PhosphorIcons.clockCountdown(), _kLinaAccent),
+              _kpiCard('On Overtime', '${staff['overtime'] ?? 0}',
+                  PhosphorIcons.clockCountdown(), _kLinaAccent),
             ]);
           },
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(color: _kLinaAccent, strokeWidth: 2))),
+          loading: () => const SizedBox(
+              height: 80,
+              child: Center(
+                  child: CircularProgressIndicator(
+                      color: _kLinaAccent, strokeWidth: 2))),
           error: (_, __) => const SizedBox.shrink(),
         ),
         const SizedBox(height: 20),
         empAsync.when(
-          data: (data) => _card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(PhosphorIcons.users(), size: 18, color: _kLinaAccent),
-              const SizedBox(width: 8),
-              const Text('Staff Intelligence Report', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: _kLinaAccent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-                child: const Text('Gemini 1.5 Pro', style: TextStyle(color: _kLinaAccent, fontSize: 11, fontWeight: FontWeight.w600)),
-              ),
-            ]),
-            const Divider(height: 24),
-            Text(data['analysis'] ?? '', style: const TextStyle(fontSize: 13.5, height: 1.7, color: AppColors.kTextPrimary)),
-          ])),
+          data: (data) => _card(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Row(children: [
+                  Icon(PhosphorIcons.users(), size: 18, color: _kLinaAccent),
+                  const SizedBox(width: 8),
+                  const Text('Staff Intelligence Report',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                        color: _kLinaAccent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(6)),
+                    child: const Text('Gemini 1.5 Pro',
+                        style: TextStyle(
+                            color: _kLinaAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ]),
+                const Divider(height: 24),
+                Text(data['analysis'] ?? '',
+                    style: const TextStyle(
+                        fontSize: 13.5,
+                        height: 1.7,
+                        color: AppColors.kTextPrimary)),
+              ])),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaEmployeeIntelProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaEmployeeIntelProvider)),
         ),
       ]),
     );
@@ -959,16 +1189,25 @@ class _RecommendationsTab extends ConsumerWidget {
         recsAsync.when(
           data: (recs) => Column(
             children: recs.isEmpty
-                ? [_card(child: const Center(child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text('No recommendations at this time.', style: TextStyle(color: AppColors.kTextSecondary)))))]
-                : recs.map((r) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _buildRecCard(r, context),
-                  )).toList(),
+                ? [
+                    _card(
+                        child: const Center(
+                            child: Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Text('No recommendations at this time.',
+                                    style: TextStyle(
+                                        color: AppColors.kTextSecondary)))))
+                  ]
+                : recs
+                    .map((r) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildRecCard(r, context),
+                        ))
+                    .toList(),
           ),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaRecommendationsProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaRecommendationsProvider)),
         ),
       ]),
     );
@@ -984,34 +1223,52 @@ class _RecommendationsTab extends ConsumerWidget {
     final levelColor = levelColors[level] ?? Colors.grey;
     final isActionable = level != 'MANUAL_ONLY';
 
-    return _card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return _card(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         _severityBadge(r['severity'] ?? 'LOW'),
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(color: levelColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+          decoration: BoxDecoration(
+              color: levelColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6)),
           child: Text(level.replaceAll('_', ' '),
-              style: TextStyle(color: levelColor, fontSize: 11, fontWeight: FontWeight.w600)),
+              style: TextStyle(
+                  color: levelColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
         ),
         const Spacer(),
         if (r['module'] != null)
           Text(r['module'].toString(),
-              style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.kTextSecondary)),
       ]),
       const SizedBox(height: 10),
-      Text(r['title'] ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.kTextPrimary)),
+      Text(r['title'] ?? '',
+          style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.kTextPrimary)),
       const SizedBox(height: 4),
-      Text(r['impact'] ?? '', style: const TextStyle(fontSize: 13, color: AppColors.kTextSecondary, height: 1.5)),
+      Text(r['impact'] ?? '',
+          style: const TextStyle(
+              fontSize: 13, color: AppColors.kTextSecondary, height: 1.5)),
       const SizedBox(height: 10),
       Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+            color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8)),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(PhosphorIcons.brain(), size: 14, color: _kLinaAccent),
           const SizedBox(width: 8),
-          Expanded(child: Text(r['suggested_action'] ?? '',
-              style: const TextStyle(fontSize: 12.5, height: 1.5, color: AppColors.kTextPrimary))),
+          Expanded(
+              child: Text(r['suggested_action'] ?? '',
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      height: 1.5,
+                      color: AppColors.kTextPrimary))),
         ]),
       ),
       if (isActionable) ...[
@@ -1044,7 +1301,8 @@ class _TimelineTab extends ConsumerWidget {
       padding: const EdgeInsets.all(24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sectionHeader('Incident Timeline',
-            subtitle: 'Live event stream — audit, anomalies, security, admin actions',
+            subtitle:
+                'Live event stream — audit, anomalies, security, admin actions',
             action: OutlinedButton.icon(
               onPressed: () => ref.invalidate(linaIncidentTimelineProvider),
               icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
@@ -1054,15 +1312,25 @@ class _TimelineTab extends ConsumerWidget {
         tlAsync.when(
           data: (data) {
             final events = (data['events'] as List<dynamic>?) ?? [];
-            if (events.isEmpty) return _card(child: const Center(
-                child: Padding(padding: EdgeInsets.all(32),
-                    child: Text('No events in the last 24h', style: TextStyle(color: AppColors.kTextSecondary)))));
-            return _card(child: Column(
-              children: events.take(80).map<Widget>((e) => _buildEvent(e as Map<String, dynamic>)).toList(),
+            if (events.isEmpty)
+              return _card(
+                  child: const Center(
+                      child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Text('No events in the last 24h',
+                              style: TextStyle(
+                                  color: AppColors.kTextSecondary)))));
+            return _card(
+                child: Column(
+              children: events
+                  .take(80)
+                  .map<Widget>((e) => _buildEvent(e as Map<String, dynamic>))
+                  .toList(),
             ));
           },
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaIncidentTimelineProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaIncidentTimelineProvider)),
         ),
       ]),
     );
@@ -1071,10 +1339,10 @@ class _TimelineTab extends ConsumerWidget {
   Widget _buildEvent(Map<String, dynamic> e) {
     final type = e['event_type'] ?? '';
     final configs = {
-      'audit':      (AppColors.kPrimary,     PhosphorIcons.clipboardText()),
-      'anomaly':    (AppColors.kError,        PhosphorIcons.warning()),
-      'superadmin': (Color(0xFFEA580C),       PhosphorIcons.sparkle()),
-      'auth':       (AppColors.kWarning,      PhosphorIcons.key()),
+      'audit': (AppColors.kPrimary, PhosphorIcons.clipboardText()),
+      'anomaly': (AppColors.kError, PhosphorIcons.warning()),
+      'superadmin': (Color(0xFFEA580C), PhosphorIcons.sparkle()),
+      'auth': (AppColors.kWarning, PhosphorIcons.key()),
     };
     final (color, icon) = configs[type] ?? (Colors.grey, PhosphorIcons.info());
 
@@ -1082,38 +1350,56 @@ class _TimelineTab extends ConsumerWidget {
     String timeStr = ts;
     try {
       final dt = DateTime.parse(ts).toLocal();
-      timeStr = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      timeStr =
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     } catch (_) {}
 
-    final desc = e['description'] ?? e['action'] ?? e['action_type'] ?? e['email'] ?? '';
-    final entity = e['entity_type'] ?? e['exception_type'] ?? e['target_type'] ?? '';
+    final desc =
+        e['description'] ?? e['action'] ?? e['action_type'] ?? e['email'] ?? '';
+    final entity =
+        e['entity_type'] ?? e['exception_type'] ?? e['target_type'] ?? '';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
           padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
+          decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
           child: Icon(icon, size: 14, color: color),
         ),
         const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(4)),
-              child: Text(type.toUpperCase(), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+              decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(4)),
+              child: Text(type.toUpperCase(),
+                  style: TextStyle(
+                      color: color, fontSize: 10, fontWeight: FontWeight.w700)),
             ),
             if (entity.isNotEmpty) ...[
               const SizedBox(width: 6),
-              Text(entity, style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
+              Text(entity,
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.kTextSecondary)),
             ],
             const Spacer(),
-            Text(timeStr, style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
+            Text(timeStr,
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.kTextSecondary)),
           ]),
           if (desc.isNotEmpty) ...[
             const SizedBox(height: 3),
-            Text(desc.toString(), style: const TextStyle(fontSize: 12.5, color: AppColors.kTextPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
+            Text(desc.toString(),
+                style: const TextStyle(
+                    fontSize: 12.5, color: AppColors.kTextPrimary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
           ],
         ])),
       ]),
@@ -1144,28 +1430,43 @@ class _FixCenterTab extends ConsumerWidget {
             )),
         remsAsync.when(
           data: (rems) => rems.isEmpty
-              ? _card(child: Center(child: Padding(
-                  padding: EdgeInsets.all(40),
-                  child: Column(children: [
-                    Icon(PhosphorIcons.checkCircle(), size: 40, color: AppColors.kSuccess),
-                    SizedBox(height: 12),
-                    Text('No pending remediations', style: TextStyle(color: AppColors.kTextSecondary, fontSize: 15)),
-                  ]))))
-              : Column(children: rems.map((r) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _buildRemCard(r, context, ref),
-                )).toList()),
+              ? _card(
+                  child: Center(
+                      child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Column(children: [
+                            Icon(PhosphorIcons.checkCircle(),
+                                size: 40, color: AppColors.kSuccess),
+                            SizedBox(height: 12),
+                            Text('No pending remediations',
+                                style: TextStyle(
+                                    color: AppColors.kTextSecondary,
+                                    fontSize: 15)),
+                          ]))))
+              : Column(
+                  children: rems
+                      .map((r) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildRemCard(r, context, ref),
+                          ))
+                      .toList()),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(e.toString(), () => ref.invalidate(linaPendingRemediationsProvider)),
+          error: (e, _) => _errorCard(
+              e, () => ref.invalidate(linaPendingRemediationsProvider)),
         ),
       ]),
     );
   }
 
-  Widget _buildRemCard(Map<String, dynamic> r, BuildContext context, WidgetRef ref) {
+  Widget _buildRemCard(
+      Map<String, dynamic> r, BuildContext context, WidgetRef ref) {
     final level = r['level'] ?? '';
     final isManual = level == 'MANUAL_ONLY';
-    final levelColors = {'SAFE_AUTO': AppColors.kSuccess, 'APPROVAL_REQUIRED': AppColors.kWarning, 'MANUAL_ONLY': AppColors.kError};
+    final levelColors = {
+      'SAFE_AUTO': AppColors.kSuccess,
+      'APPROVAL_REQUIRED': AppColors.kWarning,
+      'MANUAL_ONLY': AppColors.kError
+    };
     final lc = levelColors[level] ?? Colors.grey;
 
     return _card(
@@ -1174,36 +1475,60 @@ class _FixCenterTab extends ConsumerWidget {
         Row(children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: lc.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-            child: Text(level.replaceAll('_', ' '), style: TextStyle(color: lc, fontSize: 11, fontWeight: FontWeight.w700)),
+            decoration: BoxDecoration(
+                color: lc.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6)),
+            child: Text(level.replaceAll('_', ' '),
+                style: TextStyle(
+                    color: lc, fontSize: 11, fontWeight: FontWeight.w700)),
           ),
           const Spacer(),
-          Text(r['proposed_at'] ?? '', style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
+          Text(r['proposed_at'] ?? '',
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.kTextSecondary)),
         ]),
         const SizedBox(height: 10),
-        Text(r['action'] ?? r['description'] ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.kTextPrimary)),
+        Text(r['action'] ?? r['description'] ?? '',
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.kTextPrimary)),
         if ((r['description'] ?? '').toString().isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text(r['description'].toString(), style: const TextStyle(fontSize: 13, color: AppColors.kTextSecondary, height: 1.5)),
+          Text(r['description'].toString(),
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.kTextSecondary, height: 1.5)),
         ],
         const SizedBox(height: 14),
         Row(children: [
-          Expanded(child: OutlinedButton(
+          Expanded(
+              child: OutlinedButton(
             onPressed: () async {
-              final confirmed = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
-                title: const Text('Reject remediation?'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Reject', style: TextStyle(color: AppColors.kError))),
-                ],
-              ));
+              final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                        title: const Text('Reject remediation?'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel')),
+                          TextButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text('Reject',
+                                  style: TextStyle(color: AppColors.kError))),
+                        ],
+                      ));
               if (confirmed == true) {
                 try {
-                  await ref.read(linaRepositoryProvider).rejectRemediation(r['id']);
+                  await ref
+                      .read(linaRepositoryProvider)
+                      .rejectRemediation(r['id']);
                   ref.invalidate(linaPendingRemediationsProvider);
-                  AppNotifier.showSnackBar(context, const SnackBar(content: Text('Remediation rejected')));
+                  AppNotifier.showSnackBar(context,
+                      const SnackBar(content: Text('Remediation rejected')));
                 } catch (e) {
-                  AppNotifier.showSnackBar(context, SnackBar(content: Text(e.toString())));
+                  AppNotifier.showSnackBar(
+                      context, SnackBar(content: Text(e.toString())));
                 }
               }
             },
@@ -1211,18 +1536,31 @@ class _FixCenterTab extends ConsumerWidget {
             child: const Text('Reject'),
           )),
           const SizedBox(width: 12),
-          Expanded(child: FilledButton(
-            onPressed: isManual ? null : () async {
-              try {
-                await ref.read(linaRepositoryProvider).approveRemediation(r['id']);
-                ref.invalidate(linaPendingRemediationsProvider);
-                AppNotifier.showSnackBar(context, const SnackBar(content: Text('✅ Remediation approved and queued')));
-              } catch (e) {
-                AppNotifier.showSnackBar(context, SnackBar(content: Text(e.toString())));
-              }
-            },
-            style: FilledButton.styleFrom(backgroundColor: isManual ? Colors.grey.shade300 : AppColors.kSuccess),
-            child: Text(isManual ? 'Manual Only' : 'Approve', style: const TextStyle(color: Colors.white)),
+          Expanded(
+              child: FilledButton(
+            onPressed: isManual
+                ? null
+                : () async {
+                    try {
+                      await ref
+                          .read(linaRepositoryProvider)
+                          .approveRemediation(r['id']);
+                      ref.invalidate(linaPendingRemediationsProvider);
+                      AppNotifier.showSnackBar(
+                          context,
+                          const SnackBar(
+                              content:
+                                  Text('✅ Remediation approved and queued')));
+                    } catch (e) {
+                      AppNotifier.showSnackBar(
+                          context, SnackBar(content: Text(e.toString())));
+                    }
+                  },
+            style: FilledButton.styleFrom(
+                backgroundColor:
+                    isManual ? Colors.grey.shade300 : AppColors.kSuccess),
+            child: Text(isManual ? 'Manual Only' : 'Approve',
+                style: const TextStyle(color: Colors.white)),
           )),
         ]),
       ]),

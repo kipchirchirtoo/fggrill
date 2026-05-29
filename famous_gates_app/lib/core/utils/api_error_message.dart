@@ -9,6 +9,9 @@ String apiErrorMessage(Object error, {String fallback = 'Request failed'}) {
     final data = error.response?.data;
     final serverMessage = _messageFromResponseData(data);
     if (serverMessage != null && serverMessage.isNotEmpty) {
+      if (_isRawDioExceptionMessage(serverMessage)) {
+        return _statusMessage(statusCode, fallback);
+      }
       if (_isServiceSuspendedMessage(serverMessage)) {
         return 'The Famous Gates server is currently suspended or unavailable. Restore the backend service, then try again.';
       }
@@ -32,8 +35,17 @@ String apiErrorMessage(Object error, {String fallback = 'Request failed'}) {
     return error.message ?? fallback;
   }
   final text = error.toString();
+  if (_isRawDioExceptionMessage(text)) {
+    final statusCode = _statusCodeFromRawText(text);
+    return _statusMessage(statusCode, fallback);
+  }
   if (text.startsWith('Exception: ')) {
-    return text.substring(11);
+    final message = text.substring(11);
+    if (_isRawDioExceptionMessage(message)) {
+      final statusCode = _statusCodeFromRawText(message);
+      return _statusMessage(statusCode, fallback);
+    }
+    return message;
   }
   return text.isEmpty ? fallback : text;
 }
@@ -42,6 +54,43 @@ bool _isServiceSuspendedMessage(String value) {
   final normalized = value.toLowerCase();
   return normalized.contains('service suspended') ||
       normalized.contains('this service has been suspended');
+}
+
+bool _isRawDioExceptionMessage(String value) {
+  final normalized = value.toLowerCase();
+  return normalized.contains('dioexception') ||
+      normalized.contains('requestoptions.validatestatus') ||
+      normalized.contains('read more about status codes') ||
+      normalized.contains('developer.mozilla.org/en-us/docs/web/http/status');
+}
+
+int? _statusCodeFromRawText(String value) {
+  final match = RegExp(r'status code of (\d{3})|status code (\d{3})')
+      .firstMatch(value.toLowerCase());
+  if (match == null) return null;
+  return int.tryParse(match.group(1) ?? match.group(2) ?? '');
+}
+
+String _statusMessage(int? statusCode, String fallback) {
+  if (statusCode == 401) {
+    return 'Your session has expired. Sign in again.';
+  }
+  if (statusCode == 403) {
+    return 'You do not have permission to perform this action.';
+  }
+  if (statusCode == 404) {
+    return 'The requested record or route was not found.';
+  }
+  if (statusCode == 400) {
+    return 'The request could not be completed. Check the entered details and try again.';
+  }
+  if (statusCode == 503) {
+    return 'The Famous Gates server is currently unavailable. Try again after the backend service is restored.';
+  }
+  if (statusCode != null && statusCode >= 500) {
+    return 'The server could not complete the request. Try again.';
+  }
+  return fallback;
 }
 
 String? _messageFromResponseData(dynamic data) {
