@@ -34,38 +34,25 @@ export const connectDB = async (): Promise<void> => {
   logger.info('Attempting to connect to Supabase...');
 
   try {
-    // SECURITY FIX: Use getUser() instead of getSession() to prevent client-side spoofing
-    // Test the connection by verifying auth configuration
-    const { data: userData, error: configError } = await supabase.auth.getUser();
-
-    // Note: getUser() may return null user if no session exists, which is fine for connection test
-    if (configError) {
-      throw configError;
-    }
-
-    // Test database access
-    const { data: dbData, error: dbError } = await supabase
+    // Test database access with the service-role client. Calling auth.getUser()
+    // here is invalid because startup has no bearer token/session.
+    const { count, error: dbError } = await supabase
       .from('users')
-      .select('count')
-      .limit(1)
-      .single();
+      .select('id', { count: 'exact', head: true });
 
-    // Ignore "no rows returned" error, but fail on anything else
-    if (dbError && dbError.code !== 'PGRST116') {
+    if (dbError) {
       throw dbError;
     }
 
     logger.info('Supabase Connected successfully');
-    logger.debug('Connection test result:', { user: userData?.user?.id || 'no session', dbTest: dbData });
+    logger.debug('Connection test result:', { usersCount: count });
   } catch (error) {
-    if (error instanceof Error) {
-      logger.error('Error connecting to Supabase:', error.message);
-      if ('code' in error) {
-        logger.error('Error code:', (error as any).code);
-      }
-    } else {
-      logger.error('Unknown error connecting to Supabase:', error);
-    }
+    logger.error('Error connecting to Supabase:', {
+      message: (error as any)?.message || String(error),
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+    });
 
     // In production, we log the error but don't necessarily crash immediately
     // to allow health checks to function. However, the app will be degraded.

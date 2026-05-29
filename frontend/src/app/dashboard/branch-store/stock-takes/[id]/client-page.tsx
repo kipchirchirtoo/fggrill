@@ -57,6 +57,7 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   const [stockTake, setStockTake] = useState<StockTake | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editedStocks, setEditedStocks] = useState<Record<string, number>>({});
+  const [editedReasons, setEditedReasons] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -123,23 +124,52 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
     }));
   };
 
+  const handleReasonChange = (itemId: string, value: string) => {
+    setEditedReasons(prev => ({
+      ...prev,
+      [itemId]: value
+    }));
+  };
+
+  const getEffectiveCount = (item: StockTakeItem) =>
+    editedStocks[item.id] !== undefined ? editedStocks[item.id] : item.counted_quantity;
+
+  const getEffectiveReason = (item: StockTakeItem) =>
+    editedReasons[item.id] !== undefined ? editedReasons[item.id] : (item.variance_reason || item.notes || '');
+
+  const getEffectiveVariance = (item: StockTakeItem) => {
+    const counted = getEffectiveCount(item);
+    if (counted === null || counted === undefined) return null;
+    return counted - Number(item.system_quantity || 0);
+  };
+
   const handleSaveProgress = async () => {
     setIsSaving(true);
     try {
-      const itemsToUpdate = Object.entries(editedStocks).map(([itemId, quantity]) => ({
-        id: itemId,
-        counted_quantity: quantity
-      }));
+      const changedItemIds = Array.from(new Set([
+        ...Object.keys(editedStocks),
+        ...Object.keys(editedReasons)
+      ]));
 
-      if (itemsToUpdate.length === 0) {
+      if (changedItemIds.length === 0) {
         toast.info('No changes to save');
         return;
       }
+
+      const itemsToUpdate = changedItemIds.map((itemId) => {
+        const item = items.find((row) => row.id === itemId);
+        return {
+          id: itemId,
+          counted_quantity: editedStocks[itemId] !== undefined ? editedStocks[itemId] : item?.counted_quantity,
+          variance_reason: editedReasons[itemId] !== undefined ? editedReasons[itemId] : item?.variance_reason
+        };
+      });
 
       const result = await stockTakeAPI.updateStockTake(id, { items: itemsToUpdate });
       if (result.success) {
         toast.success('Progress saved successfully');
         setEditedStocks({});
+        setEditedReasons({});
         fetchStockTake();
       } else {
         toast.error(result.message || 'Failed to save progress');
@@ -181,6 +211,21 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   };
 
   const handleSubmitToAuditor = async () => {
+    const missingCounts = items.filter(item => getEffectiveCount(item) === null || getEffectiveCount(item) === undefined);
+    if (missingCounts.length > 0) {
+      toast.error(`Count all items before submitting. Missing counts: ${missingCounts.length}`);
+      return;
+    }
+
+    const missingReasons = items.filter((item) => {
+      const variance = getEffectiveVariance(item);
+      return variance !== null && variance !== 0 && !getEffectiveReason(item).trim();
+    });
+    if (missingReasons.length > 0) {
+      toast.error(`Add reasons for all variances before submitting. Missing reasons: ${missingReasons.length}`);
+      return;
+    }
+
     if (!confirm('Are you sure you want to submit this stock take to the auditor? You will not be able to edit it further.')) {
       return;
     }
@@ -188,11 +233,20 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
     setIsSubmitting(true);
     try {
       // First save any unsaved changes
-      if (Object.keys(editedStocks).length > 0) {
-        const itemsToUpdate = Object.entries(editedStocks).map(([itemId, quantity]) => ({
-          id: itemId,
-          counted_quantity: quantity
-        }));
+      const changedItemIds = Array.from(new Set([
+        ...Object.keys(editedStocks),
+        ...Object.keys(editedReasons)
+      ]));
+
+      if (changedItemIds.length > 0) {
+        const itemsToUpdate = changedItemIds.map((itemId) => {
+          const item = items.find((row) => row.id === itemId);
+          return {
+            id: itemId,
+            counted_quantity: editedStocks[itemId] !== undefined ? editedStocks[itemId] : item?.counted_quantity,
+            variance_reason: editedReasons[itemId] !== undefined ? editedReasons[itemId] : item?.variance_reason
+          };
+        });
         await stockTakeAPI.updateStockTake(id, { items: itemsToUpdate });
       }
 
@@ -203,8 +257,8 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
       } else {
         toast.error(result.message || 'Failed to submit');
       }
-    } catch (error) {
-      toast.error('Error submitting stock take');
+    } catch (error: any) {
+      toast.error(error?.message || 'Error submitting stock take');
     } finally {
       setIsSubmitting(false);
     }
@@ -261,8 +315,12 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
   }
 
   const items = stockTake.items || [];
-  const countedItems = items.filter(i => i.counted_quantity !== null);
-  const itemsWithVariance = items.filter(i => i.variance !== 0);
+  const countedItems = items.filter(i => getEffectiveCount(i) !== null && getEffectiveCount(i) !== undefined);
+  const itemsWithVariance = items.filter(i => {
+    const variance = getEffectiveVariance(i);
+    return variance !== null && variance !== 0;
+  });
+  const hasUnsavedChanges = Object.keys(editedStocks).length > 0 || Object.keys(editedReasons).length > 0;
   
   // Filter items by search term
   const filteredItems = items.filter(item => 
@@ -321,7 +379,7 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                     onClick={handleSaveProgress}
                     leftIcon={<Save className="h-4 w-4" />}
                     loading={isSaving}
-                    disabled={Object.keys(editedStocks).length === 0}
+                    disabled={!hasUnsavedChanges}
                   >
                     Save Progress
                   </IOSButton>
@@ -472,6 +530,7 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                       <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Counted Qty</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Variance</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Value Impact</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Variance Reason</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Status</th>
                     </tr>
                   </thead>
@@ -511,16 +570,35 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                         </td>
 
                         <td className="text-right py-3 px-4">
-                          <p className={`font-bold ${getVarianceColor(item.variance)}`}>
-                            {item.variance > 0 && '+'}
-                            {item.variance}
+                          {(() => {
+                            const effectiveVariance = getEffectiveVariance(item);
+                            const displayVariance = effectiveVariance !== null ? effectiveVariance : item.variance;
+                            return (
+                          <p className={`font-bold ${getVarianceColor(displayVariance)}`}>
+                            {displayVariance > 0 && '+'}
+                            {displayVariance}
                           </p>
+                            );
+                          })()}
                         </td>
                         <td className="text-right py-3 px-4">
                           <p className={`font-bold ${getVarianceColor(item.variance_value)}`}>
                             {item.variance_value >= 0 && '+'}
                             {item.variance_value.toFixed(2)}
                           </p>
+                        </td>
+                        <td className="py-3 px-4">
+                          {(stockTake.status?.toLowerCase() === 'draft' || stockTake.status?.toLowerCase() === 'in_progress') ? (
+                            <input
+                              type="text"
+                              className="w-48 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              value={editedReasons[item.id] !== undefined ? editedReasons[item.id] : (item.variance_reason || '')}
+                              onChange={(e) => handleReasonChange(item.id, e.target.value)}
+                              placeholder="Required if variance"
+                            />
+                          ) : (
+                            <p className="text-sm text-gray-700">{item.variance_reason || '-'}</p>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           <IOSBadge className={`${item.status === 'COUNTED' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-600'
