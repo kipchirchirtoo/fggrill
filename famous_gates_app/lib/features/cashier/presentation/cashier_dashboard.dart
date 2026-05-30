@@ -1212,11 +1212,21 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
         .catchError((_) => <Map<String, dynamic>>[]);
     if (!mounted) return;
 
-    final credit = await _creditBillPayload(
-      context,
-      balance,
-      staffMembers: staff,
-    );
+    final staffOptions = _shiftStaffMembers(staff);
+    final matchedStaff = _staffMemberForBill(row, staffOptions);
+    final migrationRemark = _migrationRemark(row);
+    final credit = matchedStaff == null
+        ? await _creditBillPayload(
+            context,
+            balance,
+            staffMembers: staff,
+            initialRemarks: migrationRemark,
+          )
+        : _creditBillPayloadFromStaff(
+            matchedStaff,
+            balance,
+            remarks: migrationRemark,
+          );
     if (credit == null) return;
 
     try {
@@ -1231,13 +1241,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
         'reference_id': _text(row, ['id']),
         'remarks': [
           _text(credit, ['remarks']),
-          'Migrated from unpaid bill ${_text(row, [
-                'order_number',
-                'bill_number',
-                'short_code',
-                'scan_reference',
-                'id'
-              ])}',
         ].where((part) => part.trim().isNotEmpty).join(' | '),
       });
       final createdCreditData = _payload(createdCredit);
@@ -1631,15 +1634,19 @@ class _ShiftCreditEntry {
 class _ShiftStaffMember {
   const _ShiftStaffMember({
     required this.id,
+    required this.userId,
     required this.name,
     required this.employeeId,
     required this.department,
+    required this.email,
   });
 
   final String id;
+  final String userId;
   final String name;
   final String employeeId;
   final String department;
+  final String email;
 }
 
 class _ShiftStockEntry {
@@ -2084,8 +2091,15 @@ List<_ShiftStaffMember> _shiftStaffMembers(
   List<Map<String, dynamic>> rows,
 ) {
   final members = rows
-      .map((row) {
+      .map<_ShiftStaffMember?>((row) {
         final user = _payload(row['user']);
+        final id = _text(row, ['id']);
+        final userId = _text(row, ['user_id']).isNotEmpty
+            ? _text(row, ['user_id'])
+            : _text(user, ['id']);
+        if (id.isNotEmpty && userId.isNotEmpty && id == userId) {
+          return null;
+        }
         final firstName = _text(row, ['first_name']).isNotEmpty
             ? _text(row, ['first_name'])
             : _text(user, ['first_name']);
@@ -2097,13 +2111,18 @@ List<_ShiftStaffMember> _shiftStaffMembers(
             .join(' ')
             .trim();
         return _ShiftStaffMember(
-          id: _text(row, ['id']),
+          id: id,
+          userId: userId,
           name:
               name.isEmpty ? _text(row, ['name', 'full_name', 'email']) : name,
           employeeId: _text(row, ['employee_id', 'id_number']),
           department: _text(row, ['department', 'role']),
+          email: _text(row, ['email']).isNotEmpty
+              ? _text(row, ['email'])
+              : _text(user, ['email']),
         );
       })
+      .whereType<_ShiftStaffMember>()
       .where((staff) => staff.id.isNotEmpty && staff.name.isNotEmpty)
       .toList();
   members.sort((a, b) => a.name.compareTo(b.name));
@@ -2118,6 +2137,101 @@ _ShiftStaffMember? _shiftStaffById(
     if (member.id == id) return member;
   }
   return null;
+}
+
+_ShiftStaffMember? _staffMemberForBill(
+  Map<String, dynamic> bill,
+  List<_ShiftStaffMember> members,
+) {
+  if (members.isEmpty) return null;
+
+  final waiter = _asMap(bill['waiter']);
+  final directIds = [
+    _text(bill, [
+      'waiter_staff_id',
+      'staff_profile_id',
+      'staff_id',
+      'waiter_id',
+      'created_by',
+      'created_by_id',
+    ]),
+    _text(waiter, ['staff_id', 'staff_profile_id', 'id', 'user_id']),
+  ].where((value) => value.trim().isNotEmpty).toSet();
+
+  for (final id in directIds) {
+    for (final member in members) {
+      if (member.id == id || member.userId == id || member.employeeId == id) {
+        return member;
+      }
+    }
+  }
+
+  final emails = [
+    _text(bill, ['waiter_email', 'staff_email', 'created_by_email', 'email']),
+    _text(waiter, ['email']),
+  ]
+      .map((value) => value.trim().toLowerCase())
+      .where((value) => value.isNotEmpty)
+      .toSet();
+
+  for (final email in emails) {
+    for (final member in members) {
+      if (member.email.toLowerCase() == email) return member;
+    }
+  }
+
+  final names = [
+    _text(bill, ['waiter_name', 'staff_name']),
+    _text(waiter, ['name', 'full_name']),
+    [
+      _text(waiter, ['first_name']),
+      _text(waiter, ['last_name']),
+    ].where((part) => part.trim().isNotEmpty).join(' '),
+  ].map(_normaliseName).where((value) => value.isNotEmpty).toSet();
+
+  for (final name in names) {
+    final matches =
+        members.where((member) => _normaliseName(member.name) == name).toList();
+    if (matches.length == 1) return matches.first;
+  }
+
+  return null;
+}
+
+String _normaliseName(String value) =>
+    value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+String _migrationRemark(Map<String, dynamic> bill) {
+  final reference = _text(bill, [
+    'order_number',
+    'bill_number',
+    'short_code',
+    'scan_reference',
+    'id',
+  ]);
+  return reference.isEmpty
+      ? 'Migrated from unpaid bill'
+      : 'Migrated from unpaid bill $reference';
+}
+
+Map<String, dynamic> _creditBillPayloadFromStaff(
+  _ShiftStaffMember staff,
+  num amount, {
+  String? remarks,
+}) {
+  return {
+    'staff_id': staff.id,
+    'staff_name': staff.name,
+    'employee_id': staff.employeeId,
+    'department': staff.department,
+    'bill_type': 'cashier_payment',
+    'reference_type': 'cashier_payment',
+    'total_amount': amount,
+    'due_date': _dateOnly(DateTime.now().add(const Duration(days: 30))),
+    'payment_method': 'credit_bill',
+    'deduction_months': 1,
+    'remarks': remarks ?? '',
+  };
 }
 
 List<_ShiftCreditEntry> _shiftCreditEntries(
@@ -3407,6 +3521,8 @@ Future<Map<String, dynamic>?> _creditBillPayload(
   num amount, {
   bool allowAmountEdit = false,
   List<Map<String, dynamic>> staffMembers = const [],
+  _ShiftStaffMember? initialStaff,
+  String? initialRemarks,
 }) {
   final staffIdController = TextEditingController();
   final staffNameController = TextEditingController();
@@ -3415,10 +3531,17 @@ Future<Map<String, dynamic>?> _creditBillPayload(
   final amountController =
       TextEditingController(text: amount > 0 ? amount.toStringAsFixed(0) : '');
   final monthsController = TextEditingController(text: '1');
-  final remarksController = TextEditingController();
+  final remarksController = TextEditingController(text: initialRemarks ?? '');
   final staffOptions = _shiftStaffMembers(staffMembers);
   String billType = 'cashier_payment';
   String? errorText;
+  final initialStaffId = initialStaff?.id ?? '';
+  if (initialStaff != null) {
+    staffIdController.text = initialStaff.id;
+    staffNameController.text = initialStaff.name;
+    employeeIdController.text = initialStaff.employeeId;
+    departmentController.text = initialStaff.department;
+  }
   return showDialog<Map<String, dynamic>>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -3452,7 +3575,11 @@ Future<Map<String, dynamic>?> _creditBillPayload(
                           const InputDecoration(labelText: 'Staff profile ID'))
                 else
                   DropdownButtonFormField<String>(
-                    initialValue: null,
+                    initialValue: staffOptions.any(
+                      (staff) => staff.id == initialStaffId,
+                    )
+                        ? initialStaffId
+                        : null,
                     isExpanded: true,
                     menuMaxHeight: 360,
                     decoration:
