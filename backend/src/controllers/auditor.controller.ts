@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
+import * as BranchInventoryService from '../services/branch-inventory.service';
 
 // ============ NIGHT AUDIT ============
 
@@ -305,11 +306,36 @@ export const verifyAnomaly = async (req: Request, res: Response, next: NextFunct
         break;
 
       case 'stock_request':
+        const { data: stockRequestItems, error: stockItemsError } = await supabase
+          .from('stock_request_items')
+          .select('*')
+          .eq('request_id', id);
+
+        if (stockItemsError) {
+          error = stockItemsError;
+          break;
+        }
+
+        if (!stockRequestItems?.length) {
+          res.status(400).json({ success: false, message: 'No items found on this stock request to approve' });
+          return;
+        }
+
+        await BranchInventoryService.approveStockRequest(
+          id,
+          auditorId!,
+          stockRequestItems.map((item: any) => ({
+            id: item.id,
+            approved_quantity: Number(item.requested_quantity ?? item.quantity_requested ?? item.quantity ?? 0),
+            status: 'APPROVED'
+          })),
+          notes || 'Verified from Branch Orders audit'
+        );
+
         const { data: reqData, error: reqError } = await supabase
           .from('stock_requests')
-          .update({ auditor_id: auditorId, audited_at: timestamp, audit_notes: notes })
+          .select('*')
           .eq('id', id)
-          .select()
           .single();
         result = reqData;
         error = reqError;

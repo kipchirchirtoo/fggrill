@@ -2431,15 +2431,11 @@ class _AuditorBranchOrdersSectionState
 
   Future<void> _verifyRequest(Map<String, dynamic> request) async {
     try {
-      await ref.read(auditorRepositoryProvider).submitAction(
-        'POST',
-        '/auditor/verify/clear',
-        data: {
-          'id': _rowId(request),
-          'type': 'stock_request',
-          'notes': 'Verified from Branch Orders audit',
-        },
-      );
+      await ref.read(auditorRepositoryProvider).reviewStockRequest(
+            _rowId(request),
+            'APPROVE',
+            notes: 'Verified from Branch Orders audit',
+          );
       _refresh();
       if (mounted) {
         AppNotifier.showSnackBar(
