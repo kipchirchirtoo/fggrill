@@ -21,32 +21,32 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
   @override
   Widget build(BuildContext context) {
     return DashboardShell(
-      title: 'Auditor Oversight',
+      title: 'Audit Control',
       currentTab: _tab,
       onTabChanged: (i) => setState(() => _tab = i),
       tabs: [
         DashboardTab(
-            label: 'Overview',
-            icon: PhosphorIcons.chartBar(),
+            label: 'Audit Control',
+            icon: PhosphorIcons.shieldCheck(),
             content: const _AuditorOverviewTab()),
         DashboardTab(
-            label: 'Branch Orders',
-            icon: PhosphorIcons.package(),
+            label: 'Order Tracking',
+            icon: PhosphorIcons.shoppingCart(),
             content: const BranchOrdersTab()),
         DashboardTab(
             label: 'Audit Logs',
             icon: PhosphorIcons.listBullets(),
             content: const _AuditLogsTab()),
         DashboardTab(
-            label: 'Cashier Reports',
-            icon: PhosphorIcons.receipt(),
+            label: 'Financial Sync',
+            icon: PhosphorIcons.creditCard(),
             content: const _CashierReportsTab()),
         DashboardTab(
             label: 'Reconciliation',
             icon: PhosphorIcons.arrowsClockwise(),
             content: const _ReconciliationTab()),
         DashboardTab(
-            label: 'Lina(Ai Service)',
+            label: 'Lina AI',
             icon: PhosphorIcons.sparkle(),
             content: const LinaScreen()),
       ],
@@ -69,19 +69,19 @@ class _AuditorOverviewTab extends ConsumerWidget {
             data: (stats) => Row(
               children: [
                 _AuditStatCard(
-                    label: 'Void Bills',
+                    label: 'Voided Orders',
                     value: '${stats.voidBills}',
                     icon: PhosphorIcons.prohibit(),
                     color: AppColors.kError),
                 const SizedBox(width: 16),
                 _AuditStatCard(
-                    label: 'Price Overrides',
+                    label: 'High Risk Findings',
                     value: '${stats.priceOverrides}',
                     icon: PhosphorIcons.pencilLine(),
                     color: AppColors.kWarning),
                 const SizedBox(width: 16),
                 _AuditStatCard(
-                    label: 'Large Discounts',
+                    label: 'Pending Reviews',
                     value: '${stats.largeDiscounts}',
                     icon: PhosphorIcons.tag(),
                     color: AppColors.kWarning),
@@ -120,7 +120,7 @@ class _ExceptionsList extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Critical Exceptions',
+                const Text('Recent Exceptions',
                     style:
                         TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ElevatedButton.icon(
@@ -150,7 +150,9 @@ class _ExceptionsList extends ConsumerWidget {
             const SizedBox(height: 24),
             discrepanciesAsync.when(
               data: (items) => items.isEmpty
-                  ? const EmptyState(message: 'No exceptions found')
+                  ? const EmptyState(
+                      message:
+                          'No critical findings. The system is currently operating within normal parameters.')
                   : ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),

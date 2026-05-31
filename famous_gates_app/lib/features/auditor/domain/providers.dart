@@ -1,18 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../admin/domain/admin_providers.dart';
 import '../data/repository.dart';
 import 'models.dart';
 
 final auditOverviewProvider = FutureProvider<AuditOverview>((ref) async {
+  ref.watch(adminSelectedBranchProvider);
   final repo = ref.read(auditorRepositoryProvider);
   return repo.getAuditOverview();
 });
 
 final auditLogsProvider = FutureProvider<List<AuditLogEntry>>((ref) async {
+  ref.watch(adminSelectedBranchProvider);
   final repo = ref.read(auditorRepositoryProvider);
   return repo.getAuditLogs();
 });
 
 final discrepanciesProvider = FutureProvider<List<Discrepancy>>((ref) async {
+  ref.watch(adminSelectedBranchProvider);
   final repo = ref.read(auditorRepositoryProvider);
   return repo.getDiscrepancies();
 });
@@ -20,6 +24,7 @@ final discrepanciesProvider = FutureProvider<List<Discrepancy>>((ref) async {
 final auditorCashierClearancesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, Map<String, String?>>(
         (ref, filters) async {
+  ref.watch(adminSelectedBranchProvider);
   final repo = ref.read(auditorRepositoryProvider);
   return repo.getCashierClearances(
     startDate: filters['start_date'],
@@ -31,6 +36,7 @@ final auditorCashierClearancesProvider =
 final auditorReconciliationProvider =
     FutureProvider.family<List<Map<String, dynamic>>, Map<String, String?>>(
         (ref, filters) async {
+  ref.watch(adminSelectedBranchProvider);
   final repo = ref.read(auditorRepositoryProvider);
   return repo.getReconciliation(
     startDate: filters['start_date'],
@@ -49,6 +55,7 @@ final branchOrdersFiltersProvider = StateProvider<Map<String, String?>>((ref) {
 final branchOrdersProvider =
     FutureProvider.family<BranchOrdersData, Map<String, String?>>(
         (ref, filters) {
+  ref.watch(adminSelectedBranchProvider);
   return ref.read(auditorRepositoryProvider).getBranchOrders(
         startDate: filters['start_date'],
         endDate: filters['end_date'],
@@ -58,6 +65,7 @@ final branchOrdersProvider =
 final auditLogsFilteredProvider =
     FutureProvider.family<List<AuditLogEntry>, Map<String, String?>>(
         (ref, filters) async {
+  ref.watch(adminSelectedBranchProvider);
   final repo = ref.read(auditorRepositoryProvider);
   return repo.getAuditLogsPaged(
     severity: filters['severity'],

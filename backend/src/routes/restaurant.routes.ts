@@ -44,6 +44,16 @@ const normalizeKitchenStatus = (value: any): string => {
   return ['pending', 'confirmed'].includes(status) ? 'pending' : status;
 };
 
+const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'void_requested']);
+
+const resolveKitchenBranchId = (req: express.Request): number | undefined => {
+  const queryBranch = Number(req.query.branch_id);
+  if (Number.isFinite(queryBranch) && queryBranch > 0) return queryBranch;
+  const userBranch = Number((req.user as any)?.branch_id ?? (req.user as any)?.branchId);
+  if (Number.isFinite(userBranch) && userBranch > 0) return userBranch;
+  return undefined;
+};
+
 const posItemKey = (item: any, index: number): string =>
   String(item?.outlet_item_id || item?.id || item?.menu_item_id || item?.sku || item?.name || index);
 
@@ -180,8 +190,7 @@ router.get('/kitchen/orders',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN]),
   async (req, res) => {
     try {
-      const branchIdRaw = req.query.branch_id as string;
-      const branchId = branchIdRaw && !['true', 'false', 'null', 'undefined'].includes(branchIdRaw) ? branchIdRaw : undefined;
+      const branchId = resolveKitchenBranchId(req);
 
       let ordersQuery = supabase
         .from('restaurant_orders')
@@ -259,6 +268,7 @@ router.get('/kitchen/orders',
             return String(outlet?.outlet_type || '').toLowerCase() === 'restaurant';
           })
           .map((shift: any) => shift.id);
+        const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
         if (restaurantShiftIds.length) {
           const { data: posOrders, error: posOrdersError } = await supabase
@@ -272,6 +282,7 @@ router.get('/kitchen/orders',
           if (posOrdersError) throw posOrdersError;
 
           posOrdersWithTime = (posOrders || []).map((order: any) => {
+            const shift = shiftsById.get(order.shift_id) || {};
             const orderItems = Array.isArray(order.items) ? order.items : [];
             const tableMatch = String(order.customer_name || '').match(/^Table\s+(\d+)/i);
             return {
@@ -280,6 +291,9 @@ router.get('/kitchen/orders',
               source_id: order.id,
               order_number: order.order_number,
               short_code: order.short_code,
+              branch_id: shift.branch_id,
+              outlet_id: order.outlet_id,
+              shift_id: order.shift_id,
               order_type: tableMatch ? 'dine_in' : 'takeaway',
               table_number: tableMatch ? Number(tableMatch[1]) : null,
               waiter_name: order.waiter_name,
@@ -287,6 +301,7 @@ router.get('/kitchen/orders',
               status: normalizeKitchenStatus(order.kitchen_status || order.status),
               order_status: order.status,
               payment_status: order.payment_status,
+              void_request_status: order.void_request_status,
               created_at: order.created_at,
               elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
               items_count: orderItems.length,
@@ -311,7 +326,9 @@ router.get('/kitchen/orders',
         console.warn('Failed to fetch POS captain orders for kitchen display:', posError?.message || posError);
       }
 
-      res.json({ success: true, data: [...ordersWithTime, ...posOrdersWithTime] });
+      const activeOrders = [...ordersWithTime, ...posOrdersWithTime]
+        .filter((order: any) => activeKitchenStatuses.has(normalizeKitchenStatus(order.status)));
+      res.json({ success: true, data: activeOrders });
     } catch (error) {
       console.error('Kitchen orders error:', error);
       res.status(500).json({ success: false, error: 'Failed to fetch kitchen orders' });
@@ -324,8 +341,7 @@ router.get('/kitchen/orders/history',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.AUDITOR]),
   async (req, res) => {
     try {
-      const branchIdRaw = req.query.branch_id as string;
-      const branchId = branchIdRaw && !['true', 'false', 'null', 'undefined'].includes(branchIdRaw) ? branchIdRaw : undefined;
+      const branchId = resolveKitchenBranchId(req);
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 250);
 
       let ordersQuery = supabase

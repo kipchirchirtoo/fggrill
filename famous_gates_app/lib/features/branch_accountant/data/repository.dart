@@ -371,6 +371,47 @@ class BranchAccountantRepository {
     await _dio.post('/cashier/credit-bills/$id/payment', data: data);
   }
 
+  // ── Customer credit bills (unpaid bills) ──────────────────────────────────
+  Future<List<Map<String, dynamic>>> getCustomerUnpaidBills() async {
+    final branchId = await getBranchId();
+    return _getList('/cashier/unpaid-bills', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<Map<String, dynamic>> createCustomerUnpaidBill(
+      Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/cashier/unpaid-bills', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...data,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<void> recordUnpaidBillPayment(
+      String id, Map<String, dynamic> data) async {
+    await _dio.post('/cashier/unpaid-bills/$id/payment', data: data);
+  }
+
+  Future<File> downloadUnpaidBillInvoice(String id) async {
+    final res = await _dio.get<List<int>>(
+      '/cashier/unpaid-bills/$id/pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(res.data ?? const [], 'Customer_Credit_$id.pdf');
+  }
+
+  Future<File> downloadOutstandingCustomerCredits() async {
+    final branchId = await getBranchId();
+    final res = await _dio.get<List<int>>(
+      '/cashier/unpaid-bills/outstanding/pdf',
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(res.data ?? const [], 'Outstanding_Customer_Credits.pdf');
+  }
+
   Future<List<Map<String, dynamic>>> getFinanceInvoices() async {
     final branchId = await getBranchId();
     return _getList('/finance/invoices', query: {
@@ -406,17 +447,32 @@ class BranchAccountantRepository {
     String status = 'all',
   }) async {
     final branchId = await getBranchId();
-    return _getList('/finance/shift-pnl', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-      if (status != 'all') 'status': status,
-    });
+    try {
+      return await _getList('/finance/shift-pnl', query: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        if (status != 'all') 'status': status,
+      });
+    } on DioException catch (e) {
+      // Shift P&L is optional for this role/deployment — degrade to empty
+      if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
+        return [];
+      }
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getShiftPnLSummary() async {
     final branchId = await getBranchId();
-    return _getMap('/finance/shift-pnl/summary', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
+    try {
+      return await _getMap('/finance/shift-pnl/summary', query: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
+        return {};
+      }
+      rethrow;
+    }
   }
 
   Future<void> reviewShiftPnL(String shiftId, String notes) async {
@@ -432,8 +488,42 @@ class BranchAccountantRepository {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getPurchaseOrders() {
-    return _getList('/procurement/purchase-orders');
+  Future<Map<String, dynamic>> createStockTake({
+    String countType = 'monthly',
+    String? notes,
+  }) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/stock-takes', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      'count_type': countType,
+      if (notes != null) 'notes': notes,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<File> downloadStockTakeWorksheet({String? stockTakeId}) async {
+    final branchId = await getBranchId();
+    final path = stockTakeId != null
+        ? '/stock-takes/$stockTakeId/worksheet'
+        : '/stock-takes/worksheet';
+    final res = await _dio.get<List<int>>(
+      path,
+      queryParameters: {
+        if (stockTakeId == null && branchId.isNotEmpty) 'branch_id': branchId,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(
+      res.data ?? const [],
+      'Stock_Take_Worksheet_${stockTakeId ?? DateTime.now().millisecondsSinceEpoch}.pdf',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPurchaseOrders({String? status}) {
+    return _getList('/procurement/purchase-orders', query: {
+      'source_module': 'branch_accounting',
+      if (status != null && status.isNotEmpty) 'status': status,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getSupplierInvoices() {
@@ -442,6 +532,32 @@ class BranchAccountantRepository {
 
   Future<List<Map<String, dynamic>>> getSupplierPayments() {
     return _getList('/procurement/payments');
+  }
+
+  // Suppliers (branch-scoped) for PO/invoice creation
+  Future<List<Map<String, dynamic>>> getSuppliers() {
+    return _getList('/store/suppliers', query: {'scope': 'branch'});
+  }
+
+  // Catalog items for PO line selection
+  Future<List<Map<String, dynamic>>> getStoreItems() {
+    return _getList('/store/items', query: {'limit': 1000});
+  }
+
+  Future<Map<String, dynamic>> getInvoiceDetail(String id) {
+    return _getMap('/procurement/invoices/$id');
+  }
+
+  Future<Map<String, dynamic>> createPurchaseOrder(
+      Map<String, dynamic> data) async {
+    final res = await _dio.post('/procurement/purchase-orders', data: data);
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> createSupplierInvoice(
+      Map<String, dynamic> data) async {
+    final res = await _dio.post('/procurement/invoices', data: data);
+    return _asMap(res.data);
   }
 
   Future<List<Map<String, dynamic>>> getBuffets() {

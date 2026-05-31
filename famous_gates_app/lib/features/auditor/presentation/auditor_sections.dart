@@ -5,13 +5,41 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'dart:io';
 
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/api_error_message.dart';
+import '../../admin/domain/admin_providers.dart';
 import '../data/repository.dart';
 
+const _allBranchesMenuValue = '__all_branches__';
+
+class _AuditorRawRequest {
+  const _AuditorRawRequest(this.endpoint, this.branchId);
+
+  final String endpoint;
+  final String? branchId;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _AuditorRawRequest &&
+          endpoint == other.endpoint &&
+          branchId == other.branchId;
+
+  @override
+  int get hashCode => Object.hash(endpoint, branchId);
+}
+
+_AuditorRawRequest _auditorRequest(WidgetRef ref, String endpoint) =>
+    _AuditorRawRequest(endpoint, ref.watch(adminSelectedBranchProvider));
+
+_AuditorRawRequest _currentAuditorRequest(WidgetRef ref, String endpoint) =>
+    _AuditorRawRequest(endpoint, ref.read(adminSelectedBranchProvider));
+
 final _auditorRawProvider =
-    FutureProvider.family<dynamic, String>((ref, endpoint) {
-  return ref.read(auditorRepositoryProvider).getRaw(endpoint);
+    FutureProvider.family<dynamic, _AuditorRawRequest>((ref, request) {
+  ref.watch(adminSelectedBranchProvider);
+  return ref.read(auditorRepositoryProvider).getRaw(request.endpoint);
 });
 
 class _AuditorDataSection extends ConsumerWidget {
@@ -24,8 +52,11 @@ class _AuditorDataSection extends ConsumerWidget {
     this.listKeys = const [],
     this.summaryKeys = const [],
     this.actions = const [],
-    this.enableExceptionCreation = true,
     this.enableExport = false,
+    this.searchPlaceholder,
+    this.emptyTitle,
+    this.emptySubtitle,
+    this.syncLabel = 'Refresh',
   });
 
   final String title;
@@ -36,12 +67,16 @@ class _AuditorDataSection extends ConsumerWidget {
   final List<String> listKeys;
   final List<String> summaryKeys;
   final List<_AuditorRowAction> actions;
-  final bool enableExceptionCreation;
   final bool enableExport;
+  final String? searchPlaceholder;
+  final String? emptyTitle;
+  final String? emptySubtitle;
+  final String syncLabel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref.watch(_auditorRawProvider(endpoint));
+    final request = _auditorRequest(ref, endpoint);
+    final value = ref.watch(_auditorRawProvider(request));
     return Column(
       children: [
         _sectionHeader(context, ref),
@@ -74,7 +109,8 @@ class _AuditorDataSection extends ConsumerWidget {
                 style: const TextStyle(color: AppColors.kTextSecondary)),
             const SizedBox(height: 16),
             OutlinedButton.icon(
-              onPressed: () => ref.invalidate(_auditorRawProvider(endpoint)),
+              onPressed: () => ref.invalidate(
+                  _auditorRawProvider(_currentAuditorRequest(ref, endpoint))),
               icon: const Icon(Icons.refresh, size: 16),
               label: const Text('Retry'),
             ),
@@ -86,48 +122,61 @@ class _AuditorDataSection extends ConsumerWidget {
 
   Widget _sectionHeader(BuildContext context, WidgetRef ref) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.kDivider)),
-      ),
+      padding: const EdgeInsets.fromLTRB(28, 28, 28, 8),
+      color: Colors.white,
       child: Row(children: [
         Container(
-          width: 40,
-          height: 40,
+          width: 52,
+          height: 52,
           decoration: BoxDecoration(
-            color: AppColors.kPrimary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
+            color: const Color(0xFF1D1917),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-          child: Icon(icon, color: AppColors.kPrimary, size: 20),
+          child: Icon(icon, color: Colors.white, size: 24),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 18),
         Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(title,
                 style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 27,
+                    fontWeight: FontWeight.w800,
                     color: AppColors.kTextPrimary)),
+            const SizedBox(height: 4),
             Text(subtitle,
                 style: const TextStyle(
-                    fontSize: 12, color: AppColors.kTextSecondary)),
+                    fontSize: 14, color: AppColors.kTextSecondary)),
           ]),
         ),
-        IconButton(
-          tooltip: 'Refresh',
-          onPressed: () => ref.invalidate(_auditorRawProvider(endpoint)),
+        const _AuditorBranchScopeChip(),
+        const SizedBox(width: 10),
+        FilledButton.icon(
+          onPressed: () => ref.invalidate(
+              _auditorRawProvider(_currentAuditorRequest(ref, endpoint))),
           icon: const Icon(Icons.refresh),
-        ),
-        if (enableExceptionCreation) ...[
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: () => _showCreateExceptionDialog(context, ref),
-            icon: const Icon(Icons.report_problem_outlined, size: 16),
-            label: const Text('Exception'),
+          label: Text(syncLabel),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF1D1917),
+            foregroundColor: Colors.white,
+            minimumSize: const Size(112, 44),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-        ],
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: () => _showCreateExceptionDialog(context, ref),
+          icon: const Icon(Icons.report_problem_outlined, size: 16),
+          label: const Text('Exception'),
+        ),
         if (enableExport) ...[
           const SizedBox(width: 8),
           OutlinedButton.icon(
@@ -145,7 +194,8 @@ class _AuditorDataSection extends ConsumerWidget {
     final summary = _summary(root);
     final rows = _rows(root);
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(_auditorRawProvider(endpoint)),
+      onRefresh: () async => ref.invalidate(
+          _auditorRawProvider(_currentAuditorRequest(ref, endpoint))),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(24),
@@ -172,38 +222,70 @@ class _AuditorDataSection extends ConsumerWidget {
       children: [
         for (var i = 0; i < entries.length; i++) ...[
           if (i > 0) const SizedBox(width: 12),
-          Expanded(
-            child: Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                    color: AppColors.kDivider.withValues(alpha: 0.5)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(icon, color: AppColors.kPrimary, size: 18),
-                    const SizedBox(height: 8),
-                    Text('${entries[i].value}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.w800)),
-                    Text(_label(entries[i].key),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.kTextSecondary)),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          Expanded(child: _auditStatCard(entries[i].key, entries[i].value)),
         ],
       ],
+    );
+  }
+
+  Widget _auditStatCard(String key, dynamic value) {
+    final color = _statAccent(key);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 132),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Stack(children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: Container(width: 4, color: color),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 21),
+              ),
+              const SizedBox(height: 18),
+              Text(_format(value),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.w900, color: color)),
+              const SizedBox(height: 4),
+              Text(_label(key).toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.kTextSecondary,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  )),
+            ],
+          ),
+        ),
+      ]),
     );
   }
 
@@ -236,11 +318,13 @@ class _AuditorDataSection extends ConsumerWidget {
           ),
           const Divider(height: 1),
           if (rows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(28),
-              child: Center(
-                  child: Text('No records found',
-                      style: TextStyle(color: AppColors.kTextSecondary))),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+              child: _auditEmptyState(
+                title: emptyTitle ?? 'No matching records found',
+                subtitle: emptySubtitle ?? 'All records are current.',
+                icon: icon,
+              ),
             )
           else
             SingleChildScrollView(
@@ -342,7 +426,8 @@ class _AuditorDataSection extends ConsumerWidget {
             path,
             data: action.body(row, notes.trim()),
           );
-      ref.invalidate(_auditorRawProvider(endpoint));
+      ref.invalidate(
+          _auditorRawProvider(_currentAuditorRequest(ref, endpoint)));
       if (context.mounted) {
         AppNotifier.showSnackBar(
             context,
@@ -600,7 +685,7 @@ class _AuditorDataSection extends ConsumerWidget {
         'reference_id': referenceCtrl.text.trim(),
       },
     );
-    ref.invalidate(_auditorRawProvider(endpoint));
+    ref.invalidate(_auditorRawProvider(_currentAuditorRequest(ref, endpoint)));
     if (context.mounted) {
       AppNotifier.showSnackBar(
           context,
@@ -646,6 +731,93 @@ Widget _header(String title, IconData icon, {required String subtitle}) {
   );
 }
 
+class _AuditorBranchScopeChip extends ConsumerWidget {
+  const _AuditorBranchScopeChip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(adminSelectedBranchProvider);
+    final branchesAsync = ref.watch(adminBranchesProvider);
+    return branchesAsync.when(
+      data: (branches) {
+        final selected = selectedId == null
+            ? null
+            : branches.where((branch) => branch.id == selectedId).firstOrNull;
+        return PopupMenuButton<String>(
+          tooltip: 'Filter by branch',
+          initialValue: selectedId ?? _allBranchesMenuValue,
+          onSelected: (value) => ref
+              .read(adminSelectedBranchProvider.notifier)
+              .state = value == _allBranchesMenuValue ? null : value,
+          itemBuilder: (context) => [
+            const PopupMenuItem<String>(
+              value: _allBranchesMenuValue,
+              child: Text('All Branches'),
+            ),
+            for (final branch in branches)
+              PopupMenuItem<String>(
+                value: branch.id,
+                child: Text(branch.name),
+              ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: AppColors.kPrimary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(999),
+              border:
+                  Border.all(color: AppColors.kPrimary.withValues(alpha: 0.12)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Text(
+                'Branch:',
+                style: TextStyle(
+                  color: AppColors.kTextPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(PhosphorIcons.buildings(),
+                  size: 14, color: AppColors.kPrimary),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 160),
+                child: Text(
+                  selected?.name ?? 'All Branches',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.kPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(PhosphorIcons.caretDown(),
+                  size: 12, color: AppColors.kPrimary),
+            ]),
+          ),
+        );
+      },
+      loading: () => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.kSurface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.kDivider),
+        ),
+        child: const Text(
+          'Loading branches...',
+          style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
 String _label(String value) => value
     .replaceAll('_', ' ')
     .split(' ')
@@ -659,37 +831,224 @@ bool _isRenderableSummaryValue(dynamic value) {
   return '$value'.trim().isNotEmpty;
 }
 
+Color _statAccent(String key) {
+  final normalized = key.toLowerCase();
+  if (normalized.contains('variance') ||
+      normalized.contains('shortage') ||
+      normalized.contains('alert') ||
+      normalized.contains('leakage')) {
+    return AppColors.kError;
+  }
+  if (normalized.contains('pending') ||
+      normalized.contains('interaction') ||
+      normalized.contains('live')) {
+    return AppColors.kWarning;
+  }
+  if (normalized.contains('branch') ||
+      normalized.contains('node') ||
+      normalized.contains('count')) {
+    return const Color(0xFF2563EB);
+  }
+  if (normalized.contains('surplus') ||
+      normalized.contains('collected') ||
+      normalized.contains('verified')) {
+    return AppColors.kSuccess;
+  }
+  return const Color(0xFF1D1917);
+}
+
+Widget _auditEmptyState({
+  required String title,
+  required String subtitle,
+  required IconData icon,
+}) {
+  return Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Container(
+        width: 74,
+        height: 74,
+        decoration: BoxDecoration(
+          color: AppColors.kSurface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.5)),
+        ),
+        child: Icon(icon,
+            size: 34, color: AppColors.kTextSecondary.withValues(alpha: 0.35)),
+      ),
+      const SizedBox(height: 16),
+      Text(title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.kTextPrimary)),
+      const SizedBox(height: 6),
+      Text(subtitle.toUpperCase(),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.kTextSecondary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8)),
+    ],
+  );
+}
+
 String _format(dynamic value) {
   if (value is Map) {
-    final name = value['name'] ??
+    final name = _nestedName(value) ??
+        value['display_name'] ??
+        value['name'] ??
         value['title'] ??
-        value['full_name'] ??
-        value['staff_name'] ??
-        value['employee_name'] ??
-        value['first_name'] ??
         value['branch_name'] ??
+        value['code'] ??
         value['id'];
     return name == null ? '—' : '$name';
   }
   if (value is List) return '${value.length} items';
-  return '$value';
+  final text = '$value';
+  return _isUuidLike(text) ? _shortReference(text) : text;
+}
+
+bool _isUuidLike(String value) => RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    .hasMatch(value.trim());
+
+String _shortReference(String value) {
+  final trimmed = value.trim();
+  if (trimmed.length <= 12) return trimmed;
+  return '${trimmed.substring(0, 8)}...${trimmed.substring(trimmed.length - 4)}';
+}
+
+String _detailLabel(String key) {
+  if (key == 'id') return 'Reference';
+  if (key.endsWith('_user')) return _label(key.substring(0, key.length - 5));
+  if (key.endsWith('_id')) return _label(key.substring(0, key.length - 3));
+  return _label(key);
+}
+
+List<MapEntry<String, dynamic>> _detailEntries(Map<String, dynamic> raw,
+    {int limit = 30}) {
+  final row = _normalizeRow(Map<String, dynamic>.from(raw));
+  return row.entries
+      .where((entry) =>
+          !entry.key.startsWith('_') &&
+          entry.value != null &&
+          '${entry.value}'.trim().isNotEmpty &&
+          !_hideRawRelationshipField(row, entry.key))
+      .take(limit)
+      .toList();
+}
+
+bool _hideRawRelationshipField(Map<String, dynamic> row, String key) {
+  if (key == 'branch_id' ||
+      key == 'requesting_branch_id' ||
+      key == 'from_branch_id' ||
+      key == 'to_branch_id') {
+    return _relatedName(row, key) != null;
+  }
+  if (_isUserReferenceKey(key)) return _relatedName(row, key) != null;
+  return false;
+}
+
+bool _isUserReferenceKey(String key) {
+  return {
+    'created_by',
+    'created_by_id',
+    'requested_by',
+    'requested_by_id',
+    'approved_by',
+    'approved_by_id',
+    'reviewed_by',
+    'reviewed_by_id',
+    'verified_by',
+    'verified_by_id',
+    'counted_by',
+    'counted_by_id',
+    'auditor_id',
+    'cashier_id',
+    'user_id',
+    'staff_id',
+    'employee_id',
+  }.contains(key);
+}
+
+String? _relatedName(Map<String, dynamic> row, String key) {
+  if (key == 'branch_id' || key == 'requesting_branch_id') {
+    return row['branch_name'] ??
+        _nestedName(row['branch']) ??
+        _nestedName(row['requesting_branch']);
+  }
+  if (key == 'from_branch_id') {
+    return row['from_branch_name'] ?? _nestedName(row['from_branch']);
+  }
+  if (key == 'to_branch_id') {
+    return row['to_branch_name'] ?? _nestedName(row['to_branch']);
+  }
+
+  final base = key.endsWith('_id') ? key.substring(0, key.length - 3) : key;
+  final candidates = <dynamic>[
+    row['${base}_user'],
+    row[base],
+    row['${base}_name'],
+    if (base == 'auditor') row['auditor'],
+    if (base == 'cashier') row['cashier'],
+    if (base == 'staff' || base == 'employee') row['staff'],
+    if (base == 'staff' || base == 'employee') row['employee'],
+    if (base == 'user') row['user'],
+  ];
+  for (final candidate in candidates) {
+    if (candidate is Map) {
+      final name = _nestedName(candidate) ?? candidate['display_name'];
+      if (name != null && '$name'.trim().isNotEmpty) return '$name';
+    } else if (candidate != null &&
+        '$candidate'.trim().isNotEmpty &&
+        !_isUuidLike('$candidate')) {
+      return '$candidate';
+    }
+  }
+  return null;
+}
+
+String _formatDetailValue(Map<String, dynamic> row, String key, dynamic value) {
+  final related = _relatedName(row, key);
+  if (related != null) return related;
+  if (key == 'id' && value != null) return _shortReference('$value');
+  if (value is String && _isUuidLike(value)) return _shortReference(value);
+  return _format(value);
+}
+
+String _displayReference(Map<String, dynamic> row) {
+  final candidate = row['request_number'] ??
+      row['request_no'] ??
+      row['dispatch_number'] ??
+      row['item_name'] ??
+      row['branch_name'] ??
+      row['name'] ??
+      _rowId(row);
+  if (candidate == null || '$candidate'.trim().isEmpty) return '—';
+  return _format(candidate);
 }
 
 String? _sourceType(String sourceKey) {
   return switch (sourceKey) {
-    'credit_bills' || 'bills' => 'credit_bill',
+    'credit_bills' => 'credit_bill',
+    'bills' => 'bill',
+    'invoices' => 'invoice',
     'employee_bills' => 'employee',
     'guest_bills' => 'guest',
     'advances' => 'advance',
     'loans' => 'loan',
     'exceptions' => 'exception',
     'analysis' || 'sold_items' => 'sold_item',
-    'usage' || 'entries' => 'usage',
+    'usage' || 'entries' => 'kitchen_usage',
     'wastage' => 'wastage',
-    'deliveries' => 'delivery',
-    'requests' || 'approvals' => 'approval',
+    'deliveries' => 'dispatch_note',
+    'requests' || 'approvals' || 'requisitions' => 'stock_request',
     'stock_takes' || 'audits' => 'stock_audit',
-    'transactions' || 'payments' => 'payment',
+    'transactions' || 'payments' || 'recent_transactions' => 'payment',
+    'cashier_summaries' || 'branch_summaries' => 'logbook',
     'logbooks' || 'logs' => 'logbook',
     _ => null,
   };
@@ -698,6 +1057,13 @@ String? _sourceType(String sourceKey) {
 dynamic _derivedValue(Map<String, dynamic> row, String key) {
   if (key == 'request_number') {
     return row['request_no'] ?? row['reference_number'] ?? row['id'];
+  }
+  if (key == 'reference') {
+    return row['reference'] ??
+        row['reference_number'] ??
+        row['bill_number'] ??
+        row['order_number'] ??
+        row['id'];
   }
   if (key == 'staff_name' || key == 'employee_name') {
     return _nestedName(row['staff']) ??
@@ -721,7 +1087,13 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
     return row['action'] ?? row['type'] ?? row['description'];
   }
   if (key == 'supplier_name') {
-    return _nestedName(row['supplier']);
+    return row['counterparty_name'] ??
+        row['supplier_name'] ??
+        row['vendor_name'] ??
+        row['customer_name'] ??
+        _nestedName(row['supplier']) ??
+        _nestedName(row['vendor']) ??
+        _nestedName(row['customer']);
   }
   if (key == 'branch_name') {
     return _nestedName(row['branch']) ??
@@ -734,6 +1106,13 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
     return _nestedName(row['item']) ??
         _nestedName(row['inventory_item']) ??
         _nestedName(row['drink']) ??
+        row['name'] ??
+        row['item_sku'];
+  }
+  if (key == 'item_details') {
+    return row['item_details'] ??
+        row['item_name'] ??
+        _nestedName(row['item']) ??
         row['name'] ??
         row['item_sku'];
   }
@@ -761,6 +1140,31 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
         row['loan_amount'] ??
         row['credit_amount'];
   }
+  if (key == 'total_amount') {
+    return row['total_amount'] ??
+        row['amount'] ??
+        row['total'] ??
+        row['bill_total'] ??
+        row['invoice_total'] ??
+        row['balance'];
+  }
+  if (key == 'total_sales') {
+    final direct = row['total_sales'] ?? row['sales_total'];
+    if (direct != null) return direct;
+    final lines = row['lines'];
+    if (lines is List) {
+      return lines.whereType<Map>().fold<num>(0, (sum, line) {
+        final amount = line['amount'];
+        return sum + (amount is num ? amount : num.tryParse('$amount') ?? 0);
+      });
+    }
+  }
+  if (key == 'total_cash') {
+    return row['total_cash'] ??
+        row['cash_total'] ??
+        row['closing_float'] ??
+        row['cash_sales'];
+  }
   if (key == 'expected_amount') {
     return row['expected_closing_float'] ??
         row['expected_cash'] ??
@@ -776,6 +1180,31 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
   }
   if (key == 'quantity_sold') {
     return row['quantity'] ?? row['sold_quantity'];
+  }
+  if (key == 'gross_revenue') {
+    return row['gross_revenue'] ??
+        row['revenue'] ??
+        row['total_revenue'] ??
+        row['total_amount'];
+  }
+  if (key == 'stock_requested') {
+    return row['stock_requested'] ??
+        row['requested_quantity'] ??
+        row['stock_request_quantity'] ??
+        row['quantity_requested'] ??
+        row['request_count'];
+  }
+  if (key == 'efficiency') {
+    final value = row['efficiency'] ?? row['efficiency_score'];
+    if (value != null) return value;
+    final qty =
+        num.tryParse('${row['quantity_sold'] ?? row['quantity'] ?? 0}') ?? 0;
+    final requested = num.tryParse(
+            '${row['stock_requested'] ?? row['requested_quantity'] ?? 0}') ??
+        0;
+    if (requested > 0) {
+      return '${((qty / requested) * 100).toStringAsFixed(0)}%';
+    }
   }
   if (key == 'bar_name') {
     return row['bar_name'] ??
@@ -829,7 +1258,8 @@ Map<String, dynamic> _normalizeRow(Map<String, dynamic> row) {
 
   final requestedBy = _nestedName(row['requester']) ??
       _nestedName(row['requested_by_user']) ??
-      _nestedName(row['created_by_user']);
+      _nestedName(row['created_by_user']) ??
+      _nestedName(row['created_by']);
   if (requestedBy != null) row.putIfAbsent('requested_by', () => requestedBy);
 
   final staffName = _nestedName(row['staff']) ??
@@ -840,9 +1270,27 @@ Map<String, dynamic> _normalizeRow(Map<String, dynamic> row) {
     row.putIfAbsent('employee_name', () => staffName);
   }
 
+  final counterpartyName = row['counterparty_name'] ??
+      row['supplier_name'] ??
+      row['vendor_name'] ??
+      row['customer_name'] ??
+      _nestedName(row['supplier']) ??
+      _nestedName(row['vendor']) ??
+      _nestedName(row['customer']);
+  if (counterpartyName != null) {
+    row.putIfAbsent('supplier_name', () => counterpartyName);
+    row.putIfAbsent('counterparty_name', () => counterpartyName);
+  }
+
   row.putIfAbsent('role', () => row['staff_role'] ?? row['position']);
   row.putIfAbsent('action', () => row['type'] ?? row['description']);
   row.putIfAbsent('created_at', () => row['date']);
+  row.putIfAbsent('invoice_number',
+      () => row['bill_number'] ?? row['number'] ?? row['reference']);
+  row.putIfAbsent(
+      'total_amount', () => row['amount'] ?? row['total'] ?? row['bill_total']);
+  row.putIfAbsent('total_sales', () => _derivedValue(row, 'total_sales'));
+  row.putIfAbsent('total_cash', () => _derivedValue(row, 'total_cash'));
   row.putIfAbsent('request_number',
       () => row['request_no'] ?? row['reference_number'] ?? row['id']);
   row.putIfAbsent('sku', () => row['item_sku']);
@@ -856,6 +1304,12 @@ Map<String, dynamic> _normalizeRow(Map<String, dynamic> row) {
     return null;
   });
   row.putIfAbsent('quantity_sold', () => row['quantity']);
+  row.putIfAbsent(
+      'item_details', () => row['item_name'] ?? row['name'] ?? row['item_sku']);
+  row.putIfAbsent('gross_revenue',
+      () => row['gross_revenue'] ?? row['revenue'] ?? row['total_revenue']);
+  row.putIfAbsent('stock_requested',
+      () => row['requested_quantity'] ?? row['quantity_requested']);
   row.putIfAbsent('expected_quantity',
       () => row['theoretical_quantity'] ?? row['system_closing_stock']);
   row.putIfAbsent('expected_amount',
@@ -927,6 +1381,9 @@ class _AuditorTableShellState extends ConsumerState<_AuditorTableShell> {
         filtered.isEmpty ? 1 : ((filtered.length - 1) ~/ _pageSize) + 1;
     final page = _page.clamp(0, pageCount - 1);
     final visible = filtered.skip(page * _pageSize).take(_pageSize).toList();
+    final statusOptions = _statusOptions();
+    // Guard against a stale selection when the dataset (e.g. branch) changes.
+    final statusValue = statusOptions.contains(_status) ? _status : 'all';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -938,55 +1395,59 @@ class _AuditorTableShellState extends ConsumerState<_AuditorTableShell> {
             side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             child: Wrap(
               spacing: 12,
               runSpacing: 12,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 SizedBox(
-                  width: 260,
+                  width: 360,
                   child: TextField(
                     controller: _searchCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Search records',
-                      prefixIcon: Icon(Icons.search),
+                    decoration: InputDecoration(
+                      labelText: 'Search',
+                      hintText: widget.section.searchPlaceholder ??
+                          'Search by reference, branch, staff or item...',
+                      prefixIcon: const Icon(Icons.search, size: 18),
                     ),
                     onChanged: (_) => setState(() => _page = 0),
                   ),
                 ),
-                SizedBox(
-                  width: 220,
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _status,
-                    decoration: const InputDecoration(labelText: 'Status'),
-                    items: _statusOptions()
-                        .map((value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(
-                                _label(value),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ))
-                        .toList(),
-                    selectedItemBuilder: (context) => _statusOptions()
-                        .map((value) => Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                _label(value),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ))
-                        .toList(),
-                    onChanged: (value) => setState(() {
-                      _status = value ?? 'all';
-                      _page = 0;
-                    }),
+                const _AuditorBranchScopeChip(),
+                if (statusOptions.length > 1)
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: statusValue,
+                      decoration: const InputDecoration(labelText: 'Status'),
+                      items: statusOptions
+                          .map((value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(
+                                  _label(value),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      selectedItemBuilder: (context) => statusOptions
+                          .map((value) => Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _label(value),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (value) => setState(() {
+                        _status = value ?? 'all';
+                        _page = 0;
+                      }),
+                    ),
                   ),
-                ),
                 OutlinedButton.icon(
                   onPressed: () => _pickDate(isFrom: true),
                   icon: const Icon(Icons.date_range, size: 16),
@@ -1017,10 +1478,20 @@ class _AuditorTableShellState extends ConsumerState<_AuditorTableShell> {
                     label: const Text('Clear'),
                   ),
                 if (widget.section.enableExport)
-                  OutlinedButton.icon(
+                  FilledButton.icon(
                     onPressed: () => _exportCsv(filtered),
                     icon: const Icon(Icons.file_download, size: 16),
-                    label: const Text('CSV'),
+                    label: Text(
+                        widget.section.title == 'Branch Sales Performance'
+                            ? 'Export Ledger'
+                            : 'Export'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.kWarning,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(118, 44),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
                   ),
               ],
             ),
@@ -1057,10 +1528,32 @@ class _AuditorTableShellState extends ConsumerState<_AuditorTableShell> {
     );
   }
 
+  /// Status-bearing keys vary across auditor endpoints — read whichever the
+  /// row actually carries so the dropdown populates for every section.
+  static const _statusKeys = [
+    'status',
+    'state',
+    'approval_status',
+    'payment_status',
+    'verification_status',
+    'audit_status',
+    'review_status',
+    'order_status',
+    'reconciliation_status',
+  ];
+
+  String _statusOf(Map<String, dynamic> row) {
+    for (final key in _statusKeys) {
+      final value = widget.section._value(row, key);
+      if (value != '—' && value.trim().isNotEmpty) return value;
+    }
+    return '';
+  }
+
   List<String> _statusOptions() {
     final values = widget.rows
-        .map((row) => widget.section._value(row, 'status'))
-        .where((value) => value != '—' && value.trim().isNotEmpty)
+        .map(_statusOf)
+        .where((value) => value.trim().isNotEmpty)
         .map((value) => value.toLowerCase())
         .toSet()
         .toList()
@@ -1070,13 +1563,15 @@ class _AuditorTableShellState extends ConsumerState<_AuditorTableShell> {
 
   List<Map<String, dynamic>> _filteredRows() {
     final query = _searchCtrl.text.trim().toLowerCase();
+    // Ignore a stale status selection that no longer exists in the dataset.
+    final activeStatus = _statusOptions().contains(_status) ? _status : 'all';
     return widget.rows.where((row) {
       if (query.isNotEmpty &&
           !row.values.any((value) => '$value'.toLowerCase().contains(query))) {
         return false;
       }
-      if (_status != 'all' &&
-          widget.section._value(row, 'status').toLowerCase() != _status) {
+      if (activeStatus != 'all' &&
+          _statusOf(row).toLowerCase() != activeStatus) {
         return false;
       }
       final date = _rowDate(row);
@@ -1254,6 +1749,10 @@ bool _isPending(Map<String, dynamic> row) {
       status == 'open' ||
       status == 'pending_audit' ||
       status == 'pending_review' ||
+      status == 'pending_verification' ||
+      status == 'draft' ||
+      status == 'unverified' ||
+      status == 'unreviewed' ||
       status == 'flagged' ||
       status == 'completed' ||
       status == 'submitted';
@@ -1326,7 +1825,7 @@ Widget _investigationBanner(Map<String, dynamic> row) {
       const SizedBox(width: 10),
       Expanded(
         child: Text(
-          'Entity: ${_rowEntityType(row)}  •  ID: ${_rowId(row).isEmpty ? '—' : _rowId(row)}  •  Amount/Variance: ${amount ?? '—'}',
+          'Entity: ${_rowEntityType(row)}  •  Reference: ${_displayReference(row)}  •  Amount/Variance: ${amount ?? '—'}',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
@@ -1356,18 +1855,18 @@ Widget _detailBlock(String title, Map<String, dynamic> row) {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        for (final entry in row.entries.take(30))
+        for (final entry in _detailEntries(row))
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SizedBox(
                 width: 170,
-                child: Text(_label(entry.key),
+                child: Text(_detailLabel(entry.key),
                     style: const TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 12)),
               ),
               Expanded(
-                  child: Text(_format(entry.value),
+                  child: Text(_formatDetailValue(row, entry.key, entry.value),
                       style: const TextStyle(fontSize: 12))),
             ]),
           ),
@@ -1421,27 +1920,22 @@ Future<String?> _showNotesDialog(BuildContext context, _AuditorRowAction action,
 }
 
 void _showDetailDialog(BuildContext context, Map<String, dynamic> row) {
-  final visibleEntries = row.entries
-      .where((entry) =>
-          !entry.key.startsWith('_') &&
-          entry.value != null &&
-          entry.value is! List &&
-          entry.value is! Map &&
-          '${entry.value}'.trim().isNotEmpty)
-      .take(40)
+  final detailRow = _normalizeRow(Map<String, dynamic>.from(row));
+  final visibleEntries = _detailEntries(detailRow, limit: 40)
+      .where((entry) => entry.value is! List)
       .toList();
-  final itemLists = row.entries
+  final itemLists = detailRow.entries
       .where((entry) => entry.value is List)
       .map((entry) => MapEntry(entry.key, (entry.value as List)))
       .where((entry) => entry.value.isNotEmpty)
       .toList();
-  final title = row['title'] ??
-      row['request_number'] ??
-      row['dispatch_number'] ??
-      row['item_name'] ??
-      row['branch_name'] ??
-      row['name'] ??
-      row['id'] ??
+  final title = detailRow['title'] ??
+      detailRow['request_number'] ??
+      detailRow['dispatch_number'] ??
+      detailRow['item_name'] ??
+      detailRow['branch_name'] ??
+      detailRow['name'] ??
+      detailRow['id'] ??
       'Record';
   showDialog<void>(
     context: context,
@@ -1471,14 +1965,14 @@ void _showDetailDialog(BuildContext context, Map<String, dynamic> row) {
                       SizedBox(
                         width: 170,
                         child: Text(
-                          _label(entry.key),
+                          _detailLabel(entry.key),
                           style: const TextStyle(
                               fontWeight: FontWeight.w700, fontSize: 12),
                         ),
                       ),
                       Expanded(
                         child: Text(
-                          _format(entry.value),
+                          _formatDetailValue(detailRow, entry.key, entry.value),
                           style: const TextStyle(
                               color: AppColors.kTextSecondary, fontSize: 12),
                         ),
@@ -1502,6 +1996,43 @@ void _showDetailDialog(BuildContext context, Map<String, dynamic> row) {
       ],
     ),
   );
+}
+
+Future<void> _createRowException(
+  BuildContext context,
+  WidgetRef ref,
+  Map<String, dynamic> row, {
+  String fallbackType = 'record',
+  VoidCallback? onDone,
+}) async {
+  final action = _raiseExceptionAction(fallbackType: fallbackType);
+  final notes = await _showNotesDialog(context, action, row);
+  if (notes == null || notes.trim().isEmpty) return;
+  try {
+    await ref.read(auditorRepositoryProvider).submitAction(
+          action.method,
+          action.endpoint,
+          data: action.body(row, notes.trim()),
+        );
+    onDone?.call();
+    if (context.mounted) {
+      AppNotifier.showSnackBar(
+          context,
+          const SnackBar(
+            content: Text('Exception created'),
+            backgroundColor: AppColors.kSuccess,
+          ));
+    }
+  } catch (error) {
+    if (context.mounted) {
+      AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+            content: Text('Exception failed: $error'),
+            backgroundColor: AppColors.kError,
+          ));
+    }
+  }
 }
 
 String _inferAuditEntityType(Map<String, dynamic> row) {
@@ -1685,6 +2216,29 @@ _AuditorRowAction _flagAction({String fallbackType = 'record'}) =>
       visible: _isPending,
     );
 
+_AuditorRowAction _raiseExceptionAction({String fallbackType = 'record'}) =>
+    _AuditorRowAction(
+      label: 'Exception',
+      icon: Icons.report_problem_outlined,
+      endpoint: '/auditor/exceptions',
+      color: AppColors.kError,
+      requiresNotes: true,
+      body: (row, notes) {
+        final entityType = _normalizeAuditEntityType(
+            _rowEntityType(row, fallback: fallbackType));
+        return {
+          'exception_type': entityType,
+          'reference_type': entityType,
+          'reference_id': _rowId(row),
+          'description': notes,
+          'severity': 'medium',
+          'status': 'open',
+          'metadata': row,
+          if (row['branch_id'] != null) 'branch_id': row['branch_id'],
+        };
+      },
+    );
+
 _AuditorRowAction _approvalAction(String label, String status, Color color) =>
     _AuditorRowAction(
       label: label,
@@ -1725,6 +2279,32 @@ _AuditorRowAction _dailyLogAction(String label, String action, Color color) =>
         'action': action,
         if (notes.isNotEmpty) 'notes': notes,
       },
+      visible: _isPending,
+    );
+
+_AuditorRowAction _cashierLogbookAction(
+        String label, String action, Color color) =>
+    _AuditorRowAction(
+      label: label,
+      icon: action == 'approve' ? Icons.verified_outlined : Icons.cancel,
+      endpoint: '/cashier/logbook/:id/audit',
+      color: color,
+      requiresNotes: action == 'reject',
+      body: (_, notes) => {
+        'action': action,
+        if (notes.isNotEmpty) 'notes': notes,
+      },
+      visible: _isPending,
+    );
+
+_AuditorRowAction _resolveExceptionAction() => _AuditorRowAction(
+      label: 'Resolve',
+      icon: Icons.task_alt,
+      endpoint: '/auditor/exceptions/:id/resolve',
+      method: 'PUT',
+      color: AppColors.kSuccess,
+      requiresNotes: true,
+      body: (_, notes) => {'resolution_notes': notes},
       visible: _isPending,
     );
 
@@ -1771,32 +2351,636 @@ _AuditorRowAction _creditBillStatusAction(
       visible: _isPending,
     );
 
-Map<String, dynamic> _approveLogbookBody(
-        Map<String, dynamic> _, String notes) =>
-    {'action': 'approve', if (notes.isNotEmpty) 'notes': notes};
-
-Map<String, dynamic> _rejectLogbookBody(Map<String, dynamic> _, String notes) =>
-    {'action': 'reject', 'notes': notes};
-
-class AuditorOverviewSection extends StatelessWidget {
+class AuditorOverviewSection extends ConsumerWidget {
   const AuditorOverviewSection({super.key});
+
   @override
-  Widget build(BuildContext context) => _AuditorDataSection(
-        title: 'Auditor Overview',
-        subtitle: 'Audit activity, exceptions and recent system events',
-        icon: PhosphorIcons.clipboardText(),
-        endpoint: '/audit/logs',
-        listKeys: const ['logs', 'items'],
-        columns: const [
-          'created_at',
-          'user_name',
-          'action',
-          'resource',
-          'severity'
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logsRequest = _auditorRequest(ref, '/audit/logs');
+    final exceptionsRequest = _auditorRequest(ref, '/auditor/exceptions');
+    final voidsRequest = _auditorRequest(ref, '/auditor/void-bills');
+    final logsAsync = ref.watch(_auditorRawProvider(logsRequest));
+    final exceptionsAsync = ref.watch(_auditorRawProvider(exceptionsRequest));
+    final voidsAsync = ref.watch(_auditorRawProvider(voidsRequest));
+
+    final logs = logsAsync.maybeWhen(
+      data: _overviewRows,
+      orElse: () => <Map<String, dynamic>>[],
+    );
+    final exceptions = exceptionsAsync.maybeWhen(
+      data: _overviewRows,
+      orElse: () => <Map<String, dynamic>>[],
+    );
+    final voids = voidsAsync.maybeWhen(
+      data: _overviewRows,
+      orElse: () => <Map<String, dynamic>>[],
+    );
+    final highRisk = logs
+        .where((row) => '${row['severity'] ?? ''}'.toLowerCase() == 'high')
+        .length;
+    final mediumRisk = logs
+        .where((row) => '${row['severity'] ?? ''}'.toLowerCase() == 'medium')
+        .length;
+    final complianceScore = logs.isEmpty
+        ? 100
+        : (100 - (highRisk * 10) - (mediumRisk * 2)).clamp(60, 100);
+    final pendingReviews = exceptions
+        .where((row) => !{'resolved', 'closed', 'approved', 'verified'}
+            .contains(
+                '${row['status'] ?? row['review_status'] ?? ''}'.toLowerCase()))
+        .length;
+    final isLoading = logsAsync.isLoading ||
+        exceptionsAsync.isLoading ||
+        voidsAsync.isLoading;
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(
+            _auditorRawProvider(_currentAuditorRequest(ref, '/audit/logs')));
+        ref.invalidate(_auditorRawProvider(
+            _currentAuditorRequest(ref, '/auditor/exceptions')));
+        ref.invalidate(_auditorRawProvider(
+            _currentAuditorRequest(ref, '/auditor/void-bills')));
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _AuditControlHeader(isLoading: isLoading),
+          const SizedBox(height: 24),
+          LayoutBuilder(builder: (context, constraints) {
+            final columns = constraints.maxWidth < 760 ? 2 : 4;
+            final width =
+                (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+            final stats = [
+              _OverviewStat(
+                label: 'Compliance Score',
+                value: '$complianceScore%',
+                icon: PhosphorIcons.chartPie(),
+                color: AppColors.kPrimary,
+              ),
+              _OverviewStat(
+                label: 'High Risk Findings',
+                value: '$highRisk',
+                icon: PhosphorIcons.warning(),
+                color: AppColors.kError,
+              ),
+              _OverviewStat(
+                label: 'Pending Reviews',
+                value: '$pendingReviews',
+                icon: PhosphorIcons.clock(),
+                color: AppColors.kWarning,
+              ),
+              _OverviewStat(
+                label: 'Voided Orders',
+                value: '${voids.length}',
+                icon: PhosphorIcons.trash(),
+                color: Colors.blue,
+              ),
+            ];
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final stat in stats)
+                  SizedBox(width: width, child: _OverviewStatCard(stat: stat)),
+              ],
+            );
+          }),
+          const SizedBox(height: 28),
+          LayoutBuilder(builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 980;
+            final modules = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _OverviewSectionHeader(
+                  title: 'Audit Modules',
+                  subtitle: 'System verification and oversight modules',
+                ),
+                const SizedBox(height: 12),
+                _ModuleGrid(modules: _auditControlModules),
+                const SizedBox(height: 28),
+                const _OverviewSectionHeader(
+                  title: 'Personnel & HR Oversight',
+                  subtitle: 'Staff management and payroll auditing',
+                ),
+                const SizedBox(height: 12),
+                _ModuleGrid(modules: _hrOversightModules),
+              ],
+            );
+            final exceptionsCard =
+                _RecentExceptionsCard(exceptions: exceptions);
+            if (!wide) {
+              return Column(children: [
+                modules,
+                const SizedBox(height: 24),
+                exceptionsCard,
+              ]);
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: modules),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: exceptionsCard,
+                ),
+              ],
+            );
+          }),
+        ]),
+      ),
+    );
+  }
+}
+
+class _AuditControlHeader extends ConsumerWidget {
+  const _AuditControlHeader({required this.isLoading});
+
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: AppColors.kPrimary,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Icon(PhosphorIcons.shieldCheck(), color: Colors.white, size: 24),
+      ),
+      const SizedBox(width: 16),
+      const Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+            'Audit Control',
+            style: TextStyle(
+              color: AppColors.kTextPrimary,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'High-integrity verification and system compliance oversight',
+            style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+          ),
+        ]),
+      ),
+      const _AuditorBranchScopeChip(),
+      const SizedBox(width: 8),
+      OutlinedButton.icon(
+        onPressed: () {
+          ref.invalidate(
+              _auditorRawProvider(_currentAuditorRequest(ref, '/audit/logs')));
+          ref.invalidate(_auditorRawProvider(
+              _currentAuditorRequest(ref, '/auditor/exceptions')));
+          ref.invalidate(_auditorRawProvider(
+              _currentAuditorRequest(ref, '/auditor/void-bills')));
+        },
+        icon: Icon(
+          PhosphorIcons.arrowsClockwise(),
+          size: 16,
+        ),
+        label: Text(isLoading ? 'Refreshing' : 'Refresh'),
+      ),
+    ]);
+  }
+}
+
+class _OverviewStat {
+  const _OverviewStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+}
+
+class _OverviewStatCard extends StatelessWidget {
+  const _OverviewStatCard({required this.stat});
+
+  final _OverviewStat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: stat.color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(stat.icon, color: stat.color, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                stat.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              ),
+              Text(
+                stat.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.kTextSecondary,
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _OverviewSectionHeader extends StatelessWidget {
+  const _OverviewSectionHeader({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(
+        title,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          color: AppColors.kTextPrimary,
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        subtitle,
+        style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
+      ),
+    ]);
+  }
+}
+
+class _AuditModule {
+  const _AuditModule({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.route,
+    this.badge,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+  final String route;
+  final String? badge;
+}
+
+final _auditControlModules = <_AuditModule>[
+  _AuditModule(
+      title: 'Shift Verification',
+      description: 'Verify reconciled shifts',
+      icon: PhosphorIcons.clipboardText(),
+      route: '/auditor/shift-verification',
+      badge: 'New'),
+  _AuditModule(
+      title: 'Inventory Flow',
+      description: 'Physical vs theoretical audit',
+      icon: PhosphorIcons.package(),
+      route: '/auditor/stock',
+      badge: 'Critical'),
+  _AuditModule(
+      title: 'Revenue Audit',
+      description: 'Transaction verification',
+      icon: PhosphorIcons.currencyDollar(),
+      route: '/auditor/sales',
+      badge: 'Live'),
+  _AuditModule(
+      title: 'Banking Review',
+      description: 'Approve banking transactions',
+      icon: PhosphorIcons.bank(),
+      route: '/auditor/banking',
+      badge: 'New'),
+  _AuditModule(
+      title: 'Invoice Verification',
+      description: 'Review & verify invoices',
+      icon: PhosphorIcons.fileText(),
+      route: '/auditor/invoices',
+      badge: 'New'),
+  _AuditModule(
+      title: 'Order Tracking',
+      description: 'Branch requisition audit',
+      icon: PhosphorIcons.shoppingCart(),
+      route: '/auditor/orders'),
+  _AuditModule(
+      title: 'Item Analytics',
+      description: 'Volume & performance',
+      icon: PhosphorIcons.chartBar(),
+      route: '/auditor/sold-items'),
+  _AuditModule(
+      title: 'Leakage Control',
+      description: 'Wastage & usage oversight',
+      icon: PhosphorIcons.warning(),
+      route: '/auditor/audit-reports'),
+  _AuditModule(
+      title: 'Kitchen Flow',
+      description: 'Back-of-house requests',
+      icon: PhosphorIcons.shoppingBag(),
+      route: '/auditor/kitchen-requisitions'),
+  _AuditModule(
+      title: 'Financial Sync',
+      description: 'Gateway reconciliation',
+      icon: PhosphorIcons.creditCard(),
+      route: '/auditor/financial-verification'),
+  _AuditModule(
+      title: 'Search',
+      description: 'Find any record',
+      icon: PhosphorIcons.magnifyingGlass(),
+      route: '/auditor/search'),
+];
+
+final _hrOversightModules = <_AuditModule>[
+  _AuditModule(
+      title: 'HR Command',
+      description: 'Personnel Dashboard',
+      icon: PhosphorIcons.users(),
+      route: '/auditor/hr'),
+  _AuditModule(
+      title: 'Employee Repo',
+      description: 'Staff directory & records',
+      icon: PhosphorIcons.userCheck(),
+      route: '/auditor/hr/employees'),
+  _AuditModule(
+      title: 'Payroll Audit',
+      description: 'Verify salary processing',
+      icon: PhosphorIcons.currencyDollar(),
+      route: '/auditor/hr/payroll'),
+];
+
+class _ModuleGrid extends StatelessWidget {
+  const _ModuleGrid({required this.modules});
+
+  final List<_AuditModule> modules;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth < 560 ? 2 : 3;
+      final width = (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final module in modules)
+            SizedBox(width: width, child: _ModuleCard(module: module)),
         ],
-        enableExceptionCreation: false,
-        actions: const [_viewAction, _investigateAction],
       );
+    });
+  }
+}
+
+class _ModuleCard extends StatelessWidget {
+  const _ModuleCard({required this.module});
+
+  final _AuditModule module;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => context.go(module.route),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppColors.kSurface,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(module.icon, size: 19, color: AppColors.kPrimary),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              module.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              module.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.kTextSecondary),
+            ),
+            if (module.badge != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.kSurface,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  module.badge!.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.kTextSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentExceptionsCard extends StatelessWidget {
+  const _RecentExceptionsCard({required this.exceptions});
+
+  final List<Map<String, dynamic>> exceptions;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = exceptions.take(8).toList();
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const _OverviewSectionHeader(
+            title: 'Recent Exceptions',
+            subtitle: 'Latest critical system flags',
+          ),
+          const SizedBox(height: 16),
+          if (visible.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 28),
+              child: Column(children: [
+                Icon(Icons.verified_user_outlined,
+                    color: AppColors.kTextSecondary, size: 26),
+                SizedBox(height: 10),
+                Text('No critical findings',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                SizedBox(height: 4),
+                Text(
+                  'The system is currently operating within normal parameters.',
+                  textAlign: TextAlign.center,
+                  style:
+                      TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
+                ),
+              ]),
+            )
+          else
+            for (final item in visible) ...[
+              _ExceptionTile(item: item),
+              if (item != visible.last) const Divider(height: 18),
+            ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => context.go('/auditor/revenue-oversight'),
+            icon: const Icon(Icons.arrow_forward, size: 16),
+            label: const Text('View Audit Watchlist'),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ExceptionTile extends StatelessWidget {
+  const _ExceptionTile({required this.item});
+
+  final Map<String, dynamic> item;
+
+  @override
+  Widget build(BuildContext context) {
+    final severity = '${item['severity'] ?? ''}'.toUpperCase();
+    final color = severity == 'HIGH' || severity == 'CRITICAL'
+        ? AppColors.kError
+        : severity == 'MEDIUM'
+            ? AppColors.kWarning
+            : AppColors.kTextSecondary;
+    return InkWell(
+      onTap: () {
+        final id = _rowId(item);
+        if (id.isNotEmpty) {
+          context.go('/auditor/revenue-oversight/details/$id?type=exception');
+        }
+      },
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.only(top: 7),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              '${item['detail'] ?? item['description'] ?? item['exception_type'] ?? 'Audit exception'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${_label('${item['type'] ?? item['exception_type'] ?? 'exception'}')} • ${_format(item['created_at'] ?? item['time'] ?? '')}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.kTextSecondary),
+            ),
+          ]),
+        ),
+        Icon(PhosphorIcons.caretRight(),
+            size: 16, color: AppColors.kTextSecondary),
+      ]),
+    );
+  }
+}
+
+List<Map<String, dynamic>> _overviewRows(dynamic raw) {
+  final data = raw is Map && raw['success'] == true && raw.containsKey('data')
+      ? raw['data']
+      : raw;
+  if (data is List) {
+    return data
+        .whereType<Map>()
+        .map((row) => _normalizeRow(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+  if (data is Map) {
+    for (final key in [
+      'items',
+      'logs',
+      'records',
+      'exceptions',
+      'voids',
+      'bills',
+      'data',
+    ]) {
+      final value = data[key];
+      if (value is List) {
+        return value
+            .whereType<Map>()
+            .map((row) => _normalizeRow(Map<String, dynamic>.from(row)))
+            .toList();
+      }
+    }
+  }
+  return const [];
 }
 
 class AuditorFinancialVerificationSection extends StatelessWidget {
@@ -1804,23 +2988,32 @@ class AuditorFinancialVerificationSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
         title: 'Financial Verification',
-        subtitle: 'Daily cash reconciliation and financial verification',
+        subtitle:
+            'Reconciling daily collection gateways against operational sales records',
         icon: PhosphorIcons.currencyDollar(),
-        endpoint: '/auditor/verify/finances',
-        listKeys: const ['clearances', 'records', 'payments', 'items'],
+        endpoint: '/cashier/logbook/pending',
+        listKeys: const ['logbooks', 'records', 'data', 'items'],
         summaryKeys: const ['summary', 'stats'],
         columns: const [
           'branch_name',
           'cashier_name',
-          'total_amount',
-          'payment_count',
+          'log_date',
+          'total_sales',
+          'total_cash',
           'status'
         ],
         enableExport: true,
+        syncLabel: 'Sync Records',
+        searchPlaceholder: 'Search logbook, cashier, branch or payment...',
+        emptyTitle: 'No logbooks pending verification',
+        emptySubtitle: 'All records are current',
         actions: [
           _viewAction,
           _investigateAction,
+          _cashierLogbookAction('Approve', 'approve', AppColors.kSuccess),
+          _cashierLogbookAction('Reject', 'reject', AppColors.kError),
           _flagAction(),
+          _raiseExceptionAction(fallbackType: 'logbook'),
         ],
       );
 }
@@ -1830,7 +3023,7 @@ class AuditorShiftVerificationSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
         title: 'Shift Verification',
-        subtitle: 'Verify shift summaries and operational close-outs',
+        subtitle: 'Verify reconciled shifts for audit compliance',
         icon: PhosphorIcons.clockClockwise(),
         endpoint: '/finance/shift-pnl/summary',
         listKeys: const ['shifts', 'summaries', 'items'],
@@ -1844,7 +3037,15 @@ class AuditorShiftVerificationSection extends StatelessWidget {
           'status'
         ],
         enableExport: true,
-        actions: const [_viewAction, _investigateAction],
+        searchPlaceholder: 'Search shift, cashier, branch or date...',
+        emptyTitle: 'All shifts processed',
+        emptySubtitle: 'Select a shift to review',
+        actions: [
+          _viewAction,
+          _investigateAction,
+          _flagAction(fallbackType: 'shift'),
+          _raiseExceptionAction(fallbackType: 'shift'),
+        ],
       );
 }
 
@@ -1853,7 +3054,8 @@ class AuditorRevenueOversightSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
         title: 'Revenue Oversight',
-        subtitle: 'Revenue stream verification across branches',
+        subtitle:
+            'Real-time yield monitoring and departmental performance audit',
         icon: PhosphorIcons.trendUp(),
         endpoint: '/auditor/verify/revenue',
         listKeys: const ['branch_summaries', 'revenue', 'records', 'items'],
@@ -1866,40 +3068,616 @@ class AuditorRevenueOversightSection extends StatelessWidget {
           'status'
         ],
         enableExport: true,
-        actions: const [_viewAction],
-      );
-}
-
-class AuditorSalesAuditSection extends StatelessWidget {
-  const AuditorSalesAuditSection({super.key});
-  @override
-  Widget build(BuildContext context) => _AuditorDataSection(
-        title: 'Sales Audit',
-        subtitle: 'Restaurant, bar, POS and pool sales verification',
-        icon: PhosphorIcons.receipt(),
-        endpoint: '/auditor/verify/sales',
-        listKeys: const ['branch_summaries', 'orders', 'payments'],
-        summaryKeys: const ['summary'],
-        columns: const [
-          'branch_name',
-          'total_orders',
-          'total_value',
-          'voided',
-          'status'
-        ],
+        syncLabel: 'Sync',
+        searchPlaceholder: 'Search department, branch or revenue stream...',
+        emptyTitle: 'No logbooks pending verification',
+        emptySubtitle: 'All records are current',
         actions: [
           _viewAction,
           _investigateAction,
-          _flagAction(fallbackType: 'restaurant_order')
+          _flagAction(fallbackType: 'revenue'),
+          _raiseExceptionAction(fallbackType: 'revenue'),
         ],
       );
+}
+
+class AuditorSalesAuditSection extends ConsumerStatefulWidget {
+  const AuditorSalesAuditSection({super.key});
+
+  @override
+  ConsumerState<AuditorSalesAuditSection> createState() =>
+      _AuditorSalesAuditSectionState();
+}
+
+class _AuditorSalesAuditSectionState
+    extends ConsumerState<AuditorSalesAuditSection> {
+  String _activeTab = 'restaurant';
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedBranchId = ref.watch(adminSelectedBranchProvider);
+    final request = _auditorRequest(ref, '/auditor/verify/sales');
+    final value = ref.watch(_auditorRawProvider(request));
+    return Column(children: [
+      _salesHeader(selectedBranchId),
+      Expanded(
+        child: value.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => _salesError(error),
+          data: (raw) {
+            final payload = _salesPayload(raw);
+            return selectedBranchId == null
+                ? _branchOverview(payload)
+                : _branchDrillDown(payload, selectedBranchId);
+          },
+        ),
+      ),
+    ]);
+  }
+
+  Widget _salesHeader(String? selectedBranchId) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
+      color: Colors.white,
+      child: Row(children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1D1917),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(PhosphorIcons.receipt(), color: Colors.white, size: 24),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              selectedBranchId == null ? 'Revenue Audit' : 'Branch Sales Audit',
+              style: const TextStyle(
+                fontSize: 27,
+                fontWeight: FontWeight.w800,
+                color: AppColors.kTextPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Transaction verification across operational sales channels',
+              style: TextStyle(fontSize: 14, color: AppColors.kTextSecondary),
+            ),
+          ]),
+        ),
+        if (selectedBranchId != null) ...[
+          OutlinedButton.icon(
+            onPressed: () =>
+                ref.read(adminSelectedBranchProvider.notifier).state = null,
+            icon: const Icon(Icons.arrow_back, size: 16),
+            label: const Text('All Branches'),
+          ),
+          const SizedBox(width: 8),
+        ],
+        const _AuditorBranchScopeChip(),
+        const SizedBox(width: 10),
+        FilledButton.icon(
+          onPressed: () => ref.invalidate(_auditorRawProvider(
+              _currentAuditorRequest(ref, '/auditor/verify/sales'))),
+          icon: const Icon(Icons.refresh),
+          label: const Text('Refresh'),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF1D1917),
+            foregroundColor: Colors.white,
+            minimumSize: const Size(112, 44),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: () => _showSalesExceptionDialog(),
+          icon: const Icon(Icons.report_problem_outlined, size: 16),
+          label: const Text('Exception'),
+        ),
+      ]),
+    );
+  }
+
+  Widget _salesError(Object error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(PhosphorIcons.warning(), color: AppColors.kError, size: 32),
+          const SizedBox(height: 12),
+          const Text('Failed to load Revenue Audit',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(apiErrorMessage(error),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.kTextSecondary)),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => ref.invalidate(_auditorRawProvider(
+                _currentAuditorRequest(ref, '/auditor/verify/sales'))),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Retry'),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _branchOverview(Map<String, dynamic> payload) {
+    final branches = _salesList(payload['branch_summaries']);
+    final totalRevenue =
+        branches.fold<num>(0, (sum, row) => sum + _branchTotal(row));
+    final restaurant = branches.fold<num>(
+        0, (sum, row) => sum + _nestedNum(row, 'restaurant', 'total_value'));
+    final bar = branches.fold<num>(
+        0, (sum, row) => sum + _nestedNum(row, 'bar', 'total_value'));
+    final pool = branches.fold<num>(
+        0,
+        (sum, row) =>
+            sum +
+            (_nestedNum(row, 'pool', 'total_value') == 0
+                ? _nestedNum(row, 'pool', 'total_sales')
+                : _nestedNum(row, 'pool', 'total_value')));
+    final voided =
+        branches.fold<num>(0, (sum, row) => sum + _branchVoidCount(row));
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(_auditorRawProvider(
+          _currentAuditorRequest(ref, '/auditor/verify/sales'))),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            _salesMetric('Total Revenue', _money(totalRevenue),
+                PhosphorIcons.trendUp(), const Color(0xFF1D1917)),
+            _salesMetric('Restaurant', _money(restaurant),
+                PhosphorIcons.forkKnife(), AppColors.kSuccess),
+            _salesMetric('Bar & Lounge', _money(bar), PhosphorIcons.wine(),
+                AppColors.kWarning),
+            _salesMetric('Pool Table', _money(pool), Icons.sports_esports,
+                const Color(0xFF4F46E5)),
+            _salesMetric('Voided Orders', _wholeNumber(voided),
+                PhosphorIcons.warning(), AppColors.kError),
+          ]),
+          const SizedBox(height: 22),
+          _branchPerformanceTable(branches),
+        ]),
+      ),
+    );
+  }
+
+  Widget _branchDrillDown(Map<String, dynamic> payload, String branchId) {
+    final branchName = _selectedBranchName(branchId);
+    final restaurant = _sectionSummary(payload, 'restaurant');
+    final bar = _sectionSummary(payload, 'bar');
+    final pos = _sectionSummary(payload, 'pos');
+    final totalRevenue = _nestedNum(payload, 'data', 'total_value') +
+        _num(payload['total_revenue']);
+    final calculatedTotal = totalRevenue == 0
+        ? _num(restaurant['total_value']) +
+            _num(bar['total_value']) +
+            _num(pos['total_value'])
+        : totalRevenue;
+    final voided = _num(restaurant['voided']) + _num(bar['voided']);
+    final rows = _activeRows(payload);
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(_auditorRawProvider(
+          _currentAuditorRequest(ref, '/auditor/verify/sales'))),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(
+            branchName == null
+                ? 'Comprehensive branch financial verification'
+                : 'Comprehensive financial verification for $branchName',
+            style: const TextStyle(
+              color: AppColors.kTextSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            _salesMetric('Total Revenue', _money(calculatedTotal),
+                PhosphorIcons.trendUp(), const Color(0xFF1D1917)),
+            _salesMetric(
+                'Restaurant Orders',
+                _wholeNumber(_num(restaurant['total_orders'])),
+                PhosphorIcons.forkKnife(),
+                AppColors.kSuccess),
+            _salesMetric('Bar Orders', _wholeNumber(_num(bar['total_orders'])),
+                PhosphorIcons.wine(), AppColors.kWarning),
+            _salesMetric('Voids', _wholeNumber(voided), PhosphorIcons.warning(),
+                voided > 0 ? AppColors.kError : AppColors.kSuccess),
+          ]),
+          const SizedBox(height: 22),
+          _salesTabs(payload),
+          const SizedBox(height: 12),
+          _transactionTable(rows),
+        ]),
+      ),
+    );
+  }
+
+  Widget _salesMetric(
+      String label, String value, IconData icon, Color accentColor) {
+    return SizedBox(
+      width: 260,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.6)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.025),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: accentColor, size: 21),
+          ),
+          const SizedBox(height: 16),
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: accentColor,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text(label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.kTextSecondary,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              )),
+        ]),
+      ),
+    );
+  }
+
+  Widget _branchPerformanceTable(List<Map<String, dynamic>> branches) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(18, 16, 18, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Branch Performance',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              SizedBox(height: 2),
+              Text('Comparative revenue analysis across operational nodes',
+                  style:
+                      TextStyle(color: AppColors.kTextSecondary, fontSize: 12)),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        if (branches.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+            child: _auditEmptyState(
+              title: 'No branch revenue records found',
+              subtitle: 'Try another date range or refresh the audit feed.',
+              icon: PhosphorIcons.receipt(),
+            ),
+          )
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(AppColors.kSurface),
+              columns: const [
+                DataColumn(label: Text('Branch')),
+                DataColumn(label: Text('Restaurant')),
+                DataColumn(label: Text('Bar & Lounge')),
+                DataColumn(label: Text('Pool Table')),
+                DataColumn(label: Text('Voided')),
+                DataColumn(label: Text('Gross Total')),
+                DataColumn(label: Text('Action')),
+              ],
+              rows: [
+                for (final branch in branches)
+                  DataRow(
+                    cells: [
+                      DataCell(Text(
+                          '${branch['branch_name'] ?? branch['name'] ?? 'Branch ${branch['branch_id'] ?? ''}'}')),
+                      DataCell(_departmentCell(branch, 'restaurant', 'orders')),
+                      DataCell(_departmentCell(branch, 'bar', 'orders')),
+                      DataCell(_departmentCell(branch, 'pool', 'sales')),
+                      DataCell(Text(_wholeNumber(_branchVoidCount(branch)))),
+                      DataCell(Text(_money(_branchTotal(branch)))),
+                      DataCell(TextButton(
+                        onPressed: () {
+                          final id = branch['branch_id'] ?? branch['id'];
+                          if (id == null || '$id'.isEmpty) return;
+                          ref.read(adminSelectedBranchProvider.notifier).state =
+                              '$id';
+                          setState(() => _activeTab = 'restaurant');
+                        },
+                        child: const Text('Open branch'),
+                      )),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Widget _departmentCell(
+      Map<String, dynamic> branch, String key, String countLabel) {
+    final value = _nestedNum(branch, key, 'total_value') == 0
+        ? _nestedNum(branch, key, 'total_sales')
+        : _nestedNum(branch, key, 'total_value');
+    final count = _nestedNum(branch, key, 'total_orders') == 0
+        ? _nestedNum(branch, key, 'total_sales_count')
+        : _nestedNum(branch, key, 'total_orders');
+    return SizedBox(
+      width: 130,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_money(value),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+          Text('${_wholeNumber(count)} $countLabel',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.kTextSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _salesTabs(Map<String, dynamic> payload) {
+    final tabs = [
+      ('restaurant', 'Restaurant', PhosphorIcons.forkKnife()),
+      ('bar', 'Bar & Lounge', PhosphorIcons.wine()),
+      ('pos', 'POS Transactions', Icons.smartphone),
+      ('payments', 'Payments', PhosphorIcons.creditCard()),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (final tab in tabs)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              selected: _activeTab == tab.$1,
+              avatar: Icon(tab.$3, size: 16),
+              label:
+                  Text('${tab.$2} (${_activeRowsFor(payload, tab.$1).length})'),
+              onSelected: (_) => setState(() => _activeTab = tab.$1),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Widget _transactionTable(List<Map<String, dynamic>> rows) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+          child: Text(_label(_activeTab),
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+        ),
+        const Divider(height: 1),
+        if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+            child: _auditEmptyState(
+              title: 'No records found',
+              subtitle: 'This branch has no records in the selected channel.',
+              icon: PhosphorIcons.receipt(),
+            ),
+          )
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowColor: WidgetStateProperty.all(AppColors.kSurface),
+              columns: const [
+                DataColumn(label: Text('Reference')),
+                DataColumn(label: Text('Guest / Description')),
+                DataColumn(label: Text('Type')),
+                DataColumn(label: Text('Amount')),
+                DataColumn(label: Text('Status')),
+                DataColumn(label: Text('Action')),
+              ],
+              rows: [
+                for (final row in rows)
+                  DataRow(cells: [
+                    DataCell(Text(_salesReference(row))),
+                    DataCell(Text(_salesDescription(row))),
+                    DataCell(Text(_salesType(row))),
+                    DataCell(Text(_money(_salesAmount(row)))),
+                    DataCell(Text(_format(row['status'] ??
+                        row['payment_status'] ??
+                        row['order_status'] ??
+                        'Recorded'))),
+                    DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                      TextButton(
+                        onPressed: () => _showDetailDialog(context, row),
+                        child: const Text('Review'),
+                      ),
+                      TextButton(
+                        onPressed: () => _createRowException(
+                          context,
+                          ref,
+                          row,
+                          fallbackType: _salesType(row),
+                        ),
+                        child: const Text('Exception'),
+                      ),
+                    ])),
+                  ]),
+              ],
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Map<String, dynamic> _salesPayload(dynamic raw) {
+    final payload = <String, dynamic>{};
+    if (raw is Map) {
+      final data = raw['data'];
+      if (data is Map) payload.addAll(Map<String, dynamic>.from(data));
+      raw.forEach((key, value) {
+        if (key == 'success' || key == 'data') return;
+        payload.putIfAbsent('$key', () => value);
+      });
+    } else if (raw is List) {
+      payload['items'] = raw;
+    }
+    return payload;
+  }
+
+  List<Map<String, dynamic>> _salesList(dynamic value) => value is List
+      ? value.whereType<Map>().map((e) {
+          final row = Map<String, dynamic>.from(e);
+          return _normalizeRow(row);
+        }).toList()
+      : <Map<String, dynamic>>[];
+
+  Map<String, dynamic> _sectionSummary(
+      Map<String, dynamic> payload, String key) {
+    final direct = payload[key];
+    if (direct is Map) return Map<String, dynamic>.from(direct);
+    final data = payload['data'];
+    if (data is Map && data[key] is Map) {
+      return Map<String, dynamic>.from(data[key] as Map);
+    }
+    return {};
+  }
+
+  List<Map<String, dynamic>> _activeRows(Map<String, dynamic> payload) =>
+      _activeRowsFor(payload, _activeTab);
+
+  List<Map<String, dynamic>> _activeRowsFor(
+      Map<String, dynamic> payload, String tab) {
+    final orders = payload['orders'];
+    final source = switch (tab) {
+      'restaurant' =>
+        orders is Map ? orders['restaurant'] : payload['restaurant_orders'],
+      'bar' => orders is Map ? orders['bar'] : payload['bar_orders'],
+      'pos' => payload['pos_transactions'] ?? payload['transactions'],
+      'payments' => payload['payments'],
+      _ => const [],
+    };
+    return _salesList(source).map((row) {
+      row.putIfAbsent('type', () => tab);
+      return row;
+    }).toList();
+  }
+
+  num _branchTotal(Map<String, dynamic> row) {
+    final direct = _num(row['total_revenue']) + _num(row['total_value']);
+    if (direct != 0) return direct;
+    return _nestedNum(row, 'restaurant', 'total_value') +
+        _nestedNum(row, 'bar', 'total_value') +
+        _nestedNum(row, 'pool', 'total_value') +
+        _nestedNum(row, 'pool', 'total_sales');
+  }
+
+  num _branchVoidCount(Map<String, dynamic> row) =>
+      _nestedNum(row, 'restaurant', 'voided') +
+      _nestedNum(row, 'bar', 'voided');
+
+  num _nestedNum(Map<String, dynamic> row, String objectKey, String valueKey) {
+    final value = row[objectKey];
+    if (value is Map) return _num(value[valueKey]);
+    return 0;
+  }
+
+  num _num(dynamic value) => value is num ? value : num.tryParse('$value') ?? 0;
+
+  num _salesAmount(Map<String, dynamic> row) => _num(
+      row['total_amount'] ?? row['total'] ?? row['amount'] ?? row['value']);
+
+  String _salesReference(Map<String, dynamic> row) =>
+      _format(row['order_number'] ??
+          row['transaction_id'] ??
+          row['payment_reference'] ??
+          row['short_code'] ??
+          row['id'] ??
+          '—');
+
+  String _salesDescription(Map<String, dynamic> row) =>
+      _format(row['guest_name'] ??
+          row['customer_name'] ??
+          row['description'] ??
+          row['payment_type'] ??
+          row['payment_method'] ??
+          'Walk-in');
+
+  String _salesType(Map<String, dynamic> row) => _label(
+      '${row['type'] ?? row['order_type'] ?? row['payment_method'] ?? _activeTab}');
+
+  String? _selectedBranchName(String branchId) {
+    final branches = ref.read(adminBranchesProvider).valueOrNull ?? const [];
+    for (final branch in branches) {
+      if (branch.id == branchId) return branch.name;
+    }
+    return null;
+  }
+
+  Future<void> _showSalesExceptionDialog() async {
+    AppNotifier.showSnackBar(
+      context,
+      const SnackBar(
+        content: Text('Use the Exception button from any record review panel.'),
+        backgroundColor: AppColors.kPrimary,
+      ),
+    );
+  }
 }
 
 class AuditorBankingLogsSection extends StatelessWidget {
   const AuditorBankingLogsSection({super.key});
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
-        title: 'Banking Logs',
+        title: 'Banking Review',
         subtitle: 'Daily logs, deposits and banking verification',
         icon: PhosphorIcons.bank(),
         endpoint: '/auditor/daily-logs',
@@ -1914,7 +3692,8 @@ class AuditorBankingLogsSection extends StatelessWidget {
           _viewAction,
           _investigateAction,
           _dailyLogAction('Verify', 'verified', AppColors.kSuccess),
-          _dailyLogAction('Reject', 'rejected', AppColors.kError)
+          _dailyLogAction('Reject', 'rejected', AppColors.kError),
+          _raiseExceptionAction(fallbackType: 'logbook'),
         ],
       );
 }
@@ -1923,23 +3702,28 @@ class AuditorInvoicesSection extends StatelessWidget {
   const AuditorInvoicesSection({super.key});
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
-        title: 'Invoices',
+        title: 'Invoice Verification',
         subtitle: 'Supplier and customer invoices pending audit review',
         icon: PhosphorIcons.receipt(),
-        endpoint: '/auditor/verify/finances',
-        listKeys: const ['invoices', 'bills', 'records'],
+        endpoint: '/auditor/invoice-verification',
+        listKeys: const ['records', 'invoices', 'bills', 'data'],
+        summaryKeys: const ['summary', 'stats'],
         columns: const [
           'invoice_number',
           'branch_name',
           'supplier_name',
           'total_amount',
+          'balance',
           'status'
         ],
+        enableExport: true,
+        searchPlaceholder: 'Search invoice, supplier, customer or branch...',
         actions: [
           _viewAction,
           _investigateAction,
           _verifyAnomalyAction(fallbackType: 'invoice'),
-          _flagAction(fallbackType: 'invoice')
+          _flagAction(fallbackType: 'invoice'),
+          _raiseExceptionAction(fallbackType: 'invoice'),
         ],
       );
 }
@@ -1979,10 +3763,13 @@ class _AuditorBranchOrdersSectionState
     );
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(adminSelectedBranchProvider, (_, __) => _refresh());
     return Column(
       children: [
         _headerBar(),
@@ -2036,6 +3823,8 @@ class _AuditorBranchOrdersSectionState
                     TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
           ]),
         ),
+        const _AuditorBranchScopeChip(),
+        const SizedBox(width: 8),
         IconButton(
           tooltip: 'Refresh',
           onPressed: _refresh,
@@ -2354,7 +4143,7 @@ class _AuditorBranchOrdersSectionState
 
   Widget _requestActions(Map<String, dynamic> request) {
     return SizedBox(
-      width: 150,
+      width: 230,
       child: Row(children: [
         TextButton(
           onPressed: () => _showRequestDetail(request),
@@ -2365,6 +4154,16 @@ class _AuditorBranchOrdersSectionState
             onPressed: () => _verifyRequest(request),
             child: const Text('Verify'),
           ),
+        TextButton(
+          onPressed: () => _createRowException(
+            context,
+            ref,
+            request,
+            fallbackType: 'stock_request',
+            onDone: _refresh,
+          ),
+          child: const Text('Exception'),
+        ),
       ]),
     );
   }
@@ -2563,7 +4362,7 @@ class AuditorStockAuditSection extends StatelessWidget {
   const AuditorStockAuditSection({super.key});
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
-        title: 'Stock Audit',
+        title: 'Inventory Flow',
         subtitle: 'Physical stock, theoretical stock and variance review',
         icon: PhosphorIcons.package(),
         endpoint: '/auditor/verify/stock-levels',
@@ -2577,10 +4376,12 @@ class AuditorStockAuditSection extends StatelessWidget {
           'variance'
         ],
         enableExport: true,
+        searchPlaceholder: 'Search stock item, SKU, branch or variance...',
         actions: [
           _viewAction,
           _investigateAction,
           _flagAction(fallbackType: 'stock_item'),
+          _raiseExceptionAction(fallbackType: 'stock_item'),
         ],
       );
 }
@@ -2589,23 +4390,30 @@ class AuditorSoldItemsSection extends StatelessWidget {
   const AuditorSoldItemsSection({super.key});
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
-        title: 'Sold Items',
-        subtitle: 'Item-level sales audit and leakage review',
-        icon: PhosphorIcons.shoppingCart(),
+        title: 'Branch Sales Performance',
+        subtitle:
+            'Compare item movement and consumption efficiency across departments',
+        icon: PhosphorIcons.chartBar(),
         endpoint: '/auditor/verify/sold-items',
         listKeys: const ['analysis', 'items', 'sold_items', 'records'],
         summaryKeys: const ['summary', 'totals'],
         columns: const [
-          'item_name',
-          'category',
+          'item_details',
           'quantity_sold',
-          'revenue',
-          'branch_name'
+          'gross_revenue',
+          'stock_requested',
+          'efficiency'
         ],
+        enableExport: true,
+        syncLabel: 'Sync',
+        searchPlaceholder: 'Search by item name...',
+        emptyTitle: 'No matching items found',
+        emptySubtitle: 'Adjust filters or date range',
         actions: [
           _viewAction,
           _investigateAction,
           _flagAction(fallbackType: 'sold_item'),
+          _raiseExceptionAction(fallbackType: 'sold_item'),
         ],
       );
 }
@@ -2627,7 +4435,13 @@ class AuditorBarStockSection extends StatelessWidget {
           'variance_count',
           'status'
         ],
-        actions: [_viewAction, _investigateAction, _barStockVerifyAction()],
+        actions: [
+          _viewAction,
+          _investigateAction,
+          _barStockVerifyAction(),
+          _flagAction(fallbackType: 'bar_stock'),
+          _raiseExceptionAction(fallbackType: 'bar_stock'),
+        ],
       );
 }
 
@@ -2652,6 +4466,7 @@ class AuditorPurchasesSection extends StatelessWidget {
           _viewAction,
           _investigateAction,
           _flagAction(fallbackType: 'purchase'),
+          _raiseExceptionAction(fallbackType: 'purchase'),
         ],
       );
 }
@@ -2661,24 +4476,29 @@ class AuditorStaffAuditSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
         title: 'Staff Audit',
-        subtitle: 'Staff activity, attendance and critical action review',
+        subtitle: 'Audit staff credit bills, advances, and loans',
         icon: PhosphorIcons.users(),
         endpoint: '/auditor/staff-audit',
         listKeys: const ['staff', 'audit_trail', 'records', 'items'],
         summaryKeys: const ['summary', 'stats'],
         columns: const [
-          'staff_name',
+          'date',
+          'reference',
           'type',
           'amount',
-          'outstanding_amount',
+          'staff_name',
+          'description',
           'status',
-          'branch_name',
-          'date'
         ],
+        enableExport: true,
+        searchPlaceholder: 'Search staff, reference or description...',
+        emptyTitle: 'No staff audit transactions found',
+        emptySubtitle: 'Try a different branch, staff member, or date range',
         actions: [
           _viewAction,
           _investigateAction,
           _flagAction(fallbackType: 'staff_audit'),
+          _raiseExceptionAction(fallbackType: 'staff_audit'),
         ],
       );
 }
@@ -2703,7 +4523,9 @@ class AuditorApprovalsSection extends StatelessWidget {
           _viewAction,
           _investigateAction,
           _approvalAction('Approve', 'approved', AppColors.kSuccess),
-          _approvalAction('Reject', 'rejected', AppColors.kError)
+          _approvalAction('Reject', 'rejected', AppColors.kError),
+          _flagAction(fallbackType: 'approval'),
+          _raiseExceptionAction(fallbackType: 'approval'),
         ],
       );
 }
@@ -2715,19 +4537,24 @@ class AuditorKitchenRequisitionsSection extends StatelessWidget {
         title: 'Kitchen Requisitions',
         subtitle: 'Kitchen requisitions and approval trail',
         icon: PhosphorIcons.chefHat(),
-        endpoint: '/auditor/approvals/pending',
+        endpoint: '/kitchen/requisitions',
+        listKeys: const ['requisitions', 'data', 'items'],
+        summaryKeys: const ['summary', 'stats'],
         columns: const [
-          'request_type',
+          'requisition_number',
           'branch_name',
           'requested_by',
           'status',
           'created_at'
         ],
+        searchPlaceholder: 'Search requisition, branch or requester...',
+        emptyTitle: 'No kitchen requisitions found',
+        emptySubtitle: 'Requisitions will appear here once submitted',
         actions: [
           _viewAction,
           _investigateAction,
-          _approvalAction('Approve', 'approved', AppColors.kSuccess),
-          _approvalAction('Reject', 'rejected', AppColors.kError)
+          _flagAction(fallbackType: 'kitchen_requisition'),
+          _raiseExceptionAction(fallbackType: 'kitchen_requisition'),
         ],
       );
 }
@@ -2756,6 +4583,7 @@ class AuditorKitchenUsageSection extends StatelessWidget {
           _kitchenAuditAction('/kitchen/usage/:id/audit', 'Reject', 'rejected',
               AppColors.kError),
           _flagAction(fallbackType: 'consumption'),
+          _raiseExceptionAction(fallbackType: 'kitchen_usage'),
         ],
       );
 }
@@ -2784,6 +4612,7 @@ class AuditorKitchenWastageSection extends StatelessWidget {
           _kitchenAuditAction('/kitchen/wastage/:id/audit', 'Reject',
               'rejected', AppColors.kError),
           _flagAction(fallbackType: 'wastage'),
+          _raiseExceptionAction(fallbackType: 'wastage'),
         ],
       );
 }
@@ -2807,7 +4636,8 @@ class AuditorDeliveriesSection extends StatelessWidget {
           _viewAction,
           _investigateAction,
           _deliveryAction('Approve', 'approve', AppColors.kSuccess),
-          _deliveryAction('Flag', 'flag', AppColors.kWarning)
+          _deliveryAction('Flag', 'flag', AppColors.kWarning),
+          _raiseExceptionAction(fallbackType: 'dispatch_note'),
         ],
       );
 }
@@ -2828,7 +4658,12 @@ class AuditorKitchenLedgerSection extends StatelessWidget {
           'created_at'
         ],
         enableExport: true,
-        actions: const [_viewAction, _investigateAction],
+        actions: [
+          _viewAction,
+          _investigateAction,
+          _flagAction(fallbackType: 'stock_movement'),
+          _raiseExceptionAction(fallbackType: 'stock_movement'),
+        ],
       );
 }
 
@@ -2895,11 +4730,14 @@ class _AuditorPayrollWorkspaceState
   }
 
   void _refresh() {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(adminSelectedBranchProvider, (_, __) => _refresh());
     return Column(children: [
       _sectionHeader(),
       Expanded(
@@ -2955,13 +4793,12 @@ class _AuditorPayrollWorkspaceState
         const Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Payroll Approvals',
+            Text('FamousGate Hotels Payroll',
                 style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: AppColors.kTextPrimary)),
-            Text(
-                'Payroll run review, payslips, loans, advances and credit bills',
+            Text('Universal Payroll Management System',
                 style:
                     TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
           ]),
@@ -3036,6 +4873,7 @@ class _AuditorPayrollWorkspaceState
                         },
                 ),
               ),
+              const _AuditorBranchScopeChip(),
               ElevatedButton.icon(
                 onPressed: _busy ? null : _generatePayroll,
                 icon: const Icon(Icons.calculate, size: 16),
@@ -3045,7 +4883,7 @@ class _AuditorPayrollWorkspaceState
                 OutlinedButton.icon(
                   onPressed: _busy ? null : () => _approvePayroll(run),
                   icon: const Icon(Icons.check_circle_outline, size: 16),
-                  label: const Text('Approve Payroll'),
+                  label: Text('Approve ${_months[_month - 1]} Payroll'),
                 ),
               if ('${run['id'] ?? ''}'.isNotEmpty) ...[
                 OutlinedButton.icon(
@@ -3056,7 +4894,7 @@ class _AuditorPayrollWorkspaceState
                 OutlinedButton.icon(
                   onPressed: _busy ? null : () => _downloadRun(run, 'zip'),
                   icon: const Icon(Icons.archive, size: 16),
-                  label: const Text('Payslips ZIP'),
+                  label: const Text('Download Payslips'),
                 ),
               ],
               OutlinedButton.icon(
@@ -3272,11 +5110,17 @@ class _AuditorPayrollWorkspaceState
   }
 
   Future<void> _generatePayroll() async {
+    final branchId =
+        await ref.read(auditorRepositoryProvider).getCurrentBranchId();
     await _runAction(
         () => ref.read(auditorRepositoryProvider).submitAction(
               'POST',
               '/payroll/generate',
-              data: {'month': _month, 'year': _year},
+              data: {
+                'month': _month,
+                'year': _year,
+                if (branchId.isNotEmpty) 'branch_id': branchId,
+              },
             ),
         'Payroll draft generated');
   }
@@ -3341,11 +5185,17 @@ class _AuditorPayrollWorkspaceState
   }
 
   Future<void> _approveAllPending() async {
+    final branchId =
+        await ref.read(auditorRepositoryProvider).getCurrentBranchId();
     await _runAction(
         () => ref.read(auditorRepositoryProvider).submitAction(
               'POST',
               '/staff/simple-payroll/approve-batch',
-              data: {'month': _month, 'year': _year},
+              data: {
+                'month': _month,
+                'year': _year,
+                if (branchId.isNotEmpty) 'branch_id': branchId,
+              },
             ),
         'Pending payroll batch approved');
   }
@@ -3354,6 +5204,8 @@ class _AuditorPayrollWorkspaceState
     final notes = await _showTextPrompt('Create Payroll Exception',
         required: true, hint: 'Describe the payroll exception');
     if (notes == null) return;
+    final branchId =
+        await ref.read(auditorRepositoryProvider).getCurrentBranchId();
     await _runAction(
       () => ref.read(auditorRepositoryProvider).submitAction(
         'POST',
@@ -3364,6 +5216,7 @@ class _AuditorPayrollWorkspaceState
           'description': notes,
           'reference_type': 'payroll',
           'reference_id': '$_year-${_month.toString().padLeft(2, '0')}',
+          if (branchId.isNotEmpty) 'branch_id': branchId,
         },
       ),
       'Payroll exception created',
@@ -3526,9 +5379,15 @@ Map<String, num> _payrollTotals(List<Map<String, dynamic>> records) {
 
 String _money(dynamic value) {
   final amount = value is num ? value : num.tryParse('$value') ?? 0;
-  if (amount >= 1000000) return 'KES ${(amount / 1000000).toStringAsFixed(1)}M';
-  if (amount >= 1000) return 'KES ${(amount / 1000).toStringAsFixed(1)}K';
-  return 'KES ${amount.toStringAsFixed(0)}';
+  return 'KES ${_wholeNumber(amount)}';
+}
+
+String _wholeNumber(num value) {
+  final rounded = value.round().toString();
+  return rounded.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
 }
 
 class AuditorDiscrepanciesSection extends StatelessWidget {
@@ -3536,31 +5395,35 @@ class AuditorDiscrepanciesSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
         title: 'Discrepancies',
-        subtitle: 'Branch finance discrepancies and resolution workflow',
+        subtitle: 'Branch finance discrepancy flags raised for resolution',
         icon: PhosphorIcons.warning(),
         endpoint: '/auditor/exceptions',
-        listKeys: const ['exceptions', 'items'],
-        columns: const [
-          'branch_name',
-          'type',
-          'amount',
-          'status',
-          'created_at'
+        listKeys: const [
+          'data',
+          'exceptions',
+          'discrepancies',
+          'flags',
+          'items'
         ],
+        summaryKeys: const ['summary', 'stats'],
+        columns: const [
+          'exception_type',
+          'severity',
+          'detected_at',
+          'description',
+          'status',
+        ],
+        enableExport: true,
+        searchPlaceholder: 'Search flag type, branch or description...',
+        emptyTitle: 'No discrepancy flags',
+        emptySubtitle: 'All branch finance flags are resolved',
         actions: [
           _viewAction,
           _investigateAction,
-          _AuditorRowAction(
-            label: 'Resolve',
-            icon: Icons.task_alt,
-            endpoint: '/auditor/exceptions/:id/resolve',
-            method: 'PUT',
-            color: AppColors.kSuccess,
-            body: (_, notes) => {
-              if (notes.isNotEmpty) 'resolution_notes': notes,
-            },
-            visible: _isPending,
-          ),
+          _resolveExceptionAction(),
+          _verifyAnomalyAction(fallbackType: 'exception'),
+          _flagAction(fallbackType: 'exception'),
+          _raiseExceptionAction(fallbackType: 'exception'),
         ],
       );
 }
@@ -3596,6 +5459,7 @@ class AuditorVoidBillsSection extends StatelessWidget {
             visible: _isPending,
           ),
           _flagAction(fallbackType: 'void_bill'),
+          _raiseExceptionAction(fallbackType: 'void_bill'),
         ],
       );
 }
@@ -3619,7 +5483,8 @@ class AuditorBusinessMpesaSection extends StatelessWidget {
         actions: [
           _viewAction,
           _investigateAction,
-          _flagAction(fallbackType: 'banking_transaction')
+          _flagAction(fallbackType: 'banking_transaction'),
+          _raiseExceptionAction(fallbackType: 'banking_transaction'),
         ],
       );
 }
@@ -3649,7 +5514,9 @@ class AuditorCreditBillsSection extends StatelessWidget {
           _viewAction,
           _investigateAction,
           _creditBillStatusAction('Approve', 'approved', AppColors.kSuccess),
-          _creditBillStatusAction('Reject', 'rejected', AppColors.kError)
+          _creditBillStatusAction('Reject', 'rejected', AppColors.kError),
+          _flagAction(fallbackType: 'credit_bill'),
+          _raiseExceptionAction(fallbackType: 'credit_bill'),
         ],
       );
 }
@@ -3670,26 +5537,13 @@ class AuditorCashierLogbooksSection extends StatelessWidget {
           'status',
           'created_at'
         ],
-        actions: const [
+        actions: [
           _viewAction,
           _investigateAction,
-          _AuditorRowAction(
-            label: 'Approve',
-            icon: Icons.check_circle_outline,
-            endpoint: '/cashier/logbook/:id/audit',
-            color: AppColors.kSuccess,
-            body: _approveLogbookBody,
-            visible: _isPending,
-          ),
-          _AuditorRowAction(
-            label: 'Reject',
-            icon: Icons.cancel,
-            endpoint: '/cashier/logbook/:id/audit',
-            color: AppColors.kError,
-            requiresNotes: true,
-            body: _rejectLogbookBody,
-            visible: _isPending,
-          ),
+          _cashierLogbookAction('Approve', 'approve', AppColors.kSuccess),
+          _cashierLogbookAction('Reject', 'reject', AppColors.kError),
+          _flagAction(fallbackType: 'logbook'),
+          _raiseExceptionAction(fallbackType: 'logbook'),
         ],
       );
 }
@@ -4030,7 +5884,9 @@ class _AuditorDetailScreenState extends ConsumerState<AuditorDetailScreen> {
         .getRaw(widget._endpoint, queryParameters: widget._queryParameters);
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {

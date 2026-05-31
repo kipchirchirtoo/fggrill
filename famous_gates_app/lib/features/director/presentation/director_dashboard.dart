@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart' hide DataColumn, DataRow;
 import '../data/repository.dart';
@@ -117,7 +118,9 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
   }
 
   void _refresh() {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   void _selectSection(DirectorSection section) {
@@ -2656,7 +2659,7 @@ String _pretty(String value) {
 
 String _cellValue(dynamic value) {
   if (value is num) return _fmt(value);
-  if (value is Map) return value.values.join(' ');
+  if (value is Map) return readableMapName(value) ?? 'Linked record';
   if (value is List) return '${value.length} items';
   return '${value ?? '-'}';
 }

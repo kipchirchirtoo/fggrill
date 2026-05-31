@@ -238,114 +238,140 @@ class AdminSideNavGroup {
         AdminSideNavGroup(title: 'AUDIT COMMAND', items: [
           AdminSideNavItem(
               section: AdminSection.auditLogs,
-              icon: PhosphorIcons.shield(),
-              label: 'Auditor Overview'),
+              icon: PhosphorIcons.shieldCheck(),
+              label: 'Audit Control',
+              routePath: '/auditor'),
           AdminSideNavItem(
               section: AdminSection.auditSearch,
               icon: PhosphorIcons.magnifyingGlass(),
-              label: 'Search'),
+              label: 'Search',
+              routePath: '/auditor/search'),
           AdminSideNavItem(
               section: AdminSection.financialVerification,
-              icon: PhosphorIcons.currencyDollar(),
-              label: 'Financial Verification'),
+              icon: PhosphorIcons.creditCard(),
+              label: 'Financial Sync',
+              routePath: '/auditor/financial-verification'),
           AdminSideNavItem(
               section: AdminSection.shiftVerification,
               icon: PhosphorIcons.clockClockwise(),
-              label: 'Shift Verification'),
+              label: 'Shift Verification',
+              routePath: '/auditor/shift-verification'),
           AdminSideNavItem(
               section: AdminSection.revenueOversight,
               icon: PhosphorIcons.trendUp(),
-              label: 'Revenue Oversight'),
+              label: 'Revenue Oversight',
+              routePath: '/auditor/revenue-oversight'),
           AdminSideNavItem(
               section: AdminSection.auditorSales,
-              icon: PhosphorIcons.receipt(),
-              label: 'Sales Audit'),
+              icon: PhosphorIcons.currencyDollar(),
+              label: 'Revenue Audit',
+              routePath: '/auditor/sales'),
           AdminSideNavItem(
               section: AdminSection.auditorBanking,
               icon: PhosphorIcons.bank(),
-              label: 'Banking Logs'),
+              label: 'Banking Review',
+              routePath: '/auditor/banking'),
           AdminSideNavItem(
               section: AdminSection.auditorInvoices,
-              icon: PhosphorIcons.receipt(),
-              label: 'Invoices'),
+              icon: PhosphorIcons.fileText(),
+              label: 'Invoice Verification',
+              routePath: '/auditor/invoices'),
           AdminSideNavItem(
               section: AdminSection.auditorDiscrepancies,
               icon: PhosphorIcons.warning(),
-              label: 'Discrepancies'),
+              label: 'Discrepancies',
+              routePath: '/auditor/discrepancies'),
         ]),
         AdminSideNavGroup(title: 'STOCK & OPERATIONS', items: [
           AdminSideNavItem(
               section: AdminSection.auditorOrders,
-              icon: PhosphorIcons.clipboardText(),
-              label: 'Branch Orders'),
+              icon: PhosphorIcons.shoppingCart(),
+              label: 'Order Tracking',
+              routePath: '/auditor/orders'),
           AdminSideNavItem(
               section: AdminSection.soldItemsAnalysis,
-              icon: PhosphorIcons.shoppingCart(),
-              label: 'Sold Items'),
+              icon: PhosphorIcons.chartBar(),
+              label: 'Item Analytics',
+              routePath: '/auditor/sold-items'),
           AdminSideNavItem(
               section: AdminSection.auditorStock,
               icon: PhosphorIcons.package(),
-              label: 'Stock Audit'),
+              label: 'Inventory Flow',
+              routePath: '/auditor/stock'),
           AdminSideNavItem(
               section: AdminSection.barStockAudits,
               icon: PhosphorIcons.wine(),
-              label: 'Bar Stock'),
+              label: 'Bar Stock',
+              routePath: '/auditor/bar-stock'),
           AdminSideNavItem(
               section: AdminSection.purchaseAudits,
               icon: PhosphorIcons.shoppingBag(),
-              label: 'Purchases'),
+              label: 'Purchases',
+              routePath: '/auditor/purchases'),
           AdminSideNavItem(
               section: AdminSection.auditorDeliveries,
               icon: PhosphorIcons.truck(),
-              label: 'Deliveries'),
+              label: 'Deliveries',
+              routePath: '/auditor/deliveries'),
           AdminSideNavItem(
               section: AdminSection.auditorLedger,
               icon: PhosphorIcons.bookOpen(),
-              label: 'Kitchen Ledger'),
+              label: 'Kitchen Ledger',
+              routePath: '/auditor/ledger'),
         ]),
         AdminSideNavGroup(title: 'BRANCH RECONCILIATION', items: [
           AdminSideNavItem(
               section: AdminSection.auditorBusinessMpesa,
               icon: PhosphorIcons.phone(),
-              label: 'Business & M-Pesa'),
+              label: 'Business & M-Pesa',
+              routePath: '/auditor/business-mpesa'),
           AdminSideNavItem(
               section: AdminSection.auditorCreditBills,
               icon: PhosphorIcons.creditCard(),
-              label: 'Credit Bills'),
+              label: 'Credit Bills',
+              routePath: '/auditor/credit-bills'),
           AdminSideNavItem(
               section: AdminSection.auditorVoidBills,
               icon: PhosphorIcons.prohibit(),
-              label: 'Void Bills'),
+              label: 'Void Bills',
+              routePath: '/auditor/void-bills'),
           AdminSideNavItem(
               section: AdminSection.auditorCashierLogbooks,
               icon: PhosphorIcons.notebook(),
-              label: 'Cashier Logbooks'),
+              label: 'Cashier Logbooks',
+              routePath: '/auditor/cashier-logbooks'),
         ]),
-        AdminSideNavGroup(title: 'PEOPLE & APPROVALS', items: [
+        AdminSideNavGroup(title: 'PERSONNEL & HR OVERSIGHT', items: [
           AdminSideNavItem(
               section: AdminSection.staffFinancials,
               icon: PhosphorIcons.wallet(),
-              label: 'Staff Audit'),
+              label: 'Staff Audit',
+              routePath: '/auditor/staff-audit'),
           AdminSideNavItem(
               section: AdminSection.auditorPayrollApprovals,
               icon: PhosphorIcons.money(),
-              label: 'Payroll Approvals'),
+              label: 'Payroll Audit',
+              routePath: '/auditor/hr/payroll'),
           AdminSideNavItem(
               section: AdminSection.stockRequestApprovals,
               icon: PhosphorIcons.checkCircle(),
-              label: 'Approvals'),
+              label: 'Approvals',
+              routePath: '/auditor/approvals'),
           AdminSideNavItem(
               section: AdminSection.auditorKitchenRequisitions,
               icon: PhosphorIcons.chefHat(),
-              label: 'Kitchen Requisitions'),
+              label: 'Kitchen Flow',
+              routePath: '/auditor/kitchen-requisitions'),
           AdminSideNavItem(
               section: AdminSection.auditorKitchenUsage,
               icon: PhosphorIcons.chartBar(),
-              label: 'Kitchen Usage'),
+              label: 'Kitchen Usage',
+              routePath: '/auditor/kitchen-usage'),
           AdminSideNavItem(
               section: AdminSection.auditorKitchenWastage,
               icon: PhosphorIcons.trash(),
-              label: 'Kitchen Wastage'),
+              label: 'Kitchen Wastage',
+              routePath: '/auditor/kitchen-wastage'),
         ]),
         AdminSideNavGroup(title: 'HR DASHBOARD', items: [
           AdminSideNavItem(
@@ -403,7 +429,8 @@ class AdminSideNavGroup {
           AdminSideNavItem(
               section: AdminSection.auditReports,
               icon: PhosphorIcons.fileSpreadsheet(),
-              label: 'Audit Reports'),
+              label: 'Leakage Control',
+              routePath: '/auditor/audit-reports'),
           AdminSideNavItem(
               section: AdminSection.notifications,
               icon: PhosphorIcons.bell(),

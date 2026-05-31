@@ -4,6 +4,57 @@ import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
 import * as BranchInventoryService from '../services/branch-inventory.service';
 
+const userDisplayName = (user: any): string | null => {
+  if (!user) return null;
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+  return user.full_name || user.name || fullName || user.email || null;
+};
+
+const fetchBranchesById = async (ids: any[]): Promise<Record<string, any>> => {
+  const cleanIds = [...new Set(ids.filter((id) => id !== null && id !== undefined && `${id}`.trim() !== ''))];
+  if (cleanIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('branches')
+    .select('id, name, code')
+    .in('id', cleanIds);
+  if (error) {
+    logger.warn('Unable to enrich branch names for audit detail', { error: error.message });
+    return {};
+  }
+  return Object.fromEntries((data || []).map((branch: any) => [`${branch.id}`, branch]));
+};
+
+const fetchUsersById = async (ids: any[]): Promise<Record<string, any>> => {
+  const cleanIds = [...new Set(ids.filter((id) => id !== null && id !== undefined && `${id}`.trim() !== ''))];
+  if (cleanIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, email, role')
+    .in('id', cleanIds);
+  if (error) {
+    logger.warn('Unable to enrich user names for audit detail', { error: error.message });
+    return {};
+  }
+  return Object.fromEntries((data || []).map((user: any) => [`${user.id}`, {
+    ...user,
+    display_name: userDisplayName(user),
+  }]));
+};
+
+const fetchSimpleItemsBySku = async (skus: any[]): Promise<Record<string, any>> => {
+  const cleanSkus = [...new Set(skus.filter((sku) => sku !== null && sku !== undefined && `${sku}`.trim() !== ''))];
+  if (cleanSkus.length === 0) return {};
+  const { data, error } = await supabase
+    .from('simple_items')
+    .select('sku, item_name, description, category, unit_of_measure')
+    .in('sku', cleanSkus);
+  if (error) {
+    logger.warn('Unable to enrich item names for audit detail', { error: error.message });
+    return {};
+  }
+  return Object.fromEntries((data || []).map((item: any) => [`${item.sku}`, item]));
+};
+
 // ============ NIGHT AUDIT ============
 
 export const startNightAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -2531,7 +2582,7 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
         break;
 
       case 'stock_audit':
-      case 'bar_stock':
+      case 'bar_stock': {
         const { data: stockAudit, error: stockAuditError } = await supabase
           .from('stock_counts')
           .select('*')
@@ -2541,12 +2592,47 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
           .from('stock_count_items')
           .select('*')
           .eq('stock_count_id', id);
-        data = stockAudit ? { ...stockAudit, items: stockAuditItems || [] } : null;
+        if (stockAudit) {
+          const [branchesById, usersById, itemsBySku] = await Promise.all([
+            fetchBranchesById([stockAudit.branch_id]),
+            fetchUsersById([
+              stockAudit.created_by,
+              stockAudit.counted_by,
+              stockAudit.approved_by,
+              stockAudit.verified_by,
+            ]),
+            fetchSimpleItemsBySku((stockAuditItems || []).map((item: any) => item.item_sku)),
+          ]);
+          const branch = branchesById[`${stockAudit.branch_id}`] || null;
+          const enrichedStockItems = (stockAuditItems || []).map((item: any) => {
+            const simpleItem = itemsBySku[`${item.item_sku}`] || null;
+            return {
+              ...item,
+              item: simpleItem,
+              item_name: simpleItem?.item_name || item.item_name || item.item_sku,
+              item_category: simpleItem?.category || item.item_category,
+              item_unit: simpleItem?.unit_of_measure || item.item_unit,
+            };
+          });
+          data = {
+            ...stockAudit,
+            branch,
+            branch_name: branch?.name || stockAudit.branch_name || null,
+            created_by_user: usersById[`${stockAudit.created_by}`] || null,
+            counted_by_user: usersById[`${stockAudit.counted_by}`] || null,
+            approved_by_user: usersById[`${stockAudit.approved_by}`] || null,
+            verified_by_user: usersById[`${stockAudit.verified_by}`] || null,
+            items: enrichedStockItems,
+          };
+        } else {
+          data = null;
+        }
         error = stockAuditError;
         break;
+      }
 
       case 'stock_request':
-      case 'approval':
+      case 'approval': {
         const { data: stockRequest, error: stockRequestError } = await supabase
           .from('stock_requests')
           .select('*')
@@ -2556,9 +2642,57 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
           .from('stock_request_items')
           .select('*')
           .eq('request_id', id);
-        data = stockRequest ? { ...stockRequest, items: stockRequestItems || [] } : null;
+        if (stockRequest) {
+          const [branchesById, usersById, itemsBySku] = await Promise.all([
+            fetchBranchesById([
+              stockRequest.requesting_branch_id,
+              stockRequest.branch_id,
+              stockRequest.from_branch_id,
+              stockRequest.to_branch_id,
+            ]),
+            fetchUsersById([
+              stockRequest.created_by,
+              stockRequest.requested_by,
+              stockRequest.approved_by,
+              stockRequest.reviewed_by,
+              stockRequest.verified_by,
+              stockRequest.auditor_id,
+            ]),
+            fetchSimpleItemsBySku((stockRequestItems || []).map((item: any) => item.item_sku || item.sku)),
+          ]);
+          const requestingBranch =
+            branchesById[`${stockRequest.requesting_branch_id}`] ||
+            branchesById[`${stockRequest.branch_id}`] ||
+            null;
+          const enrichedRequestItems = (stockRequestItems || []).map((item: any) => {
+            const sku = item.item_sku || item.sku;
+            const simpleItem = itemsBySku[`${sku}`] || null;
+            return {
+              ...item,
+              item: simpleItem,
+              item_name: simpleItem?.item_name || item.item_name || sku,
+              item_category: simpleItem?.category || item.item_category,
+              item_unit: simpleItem?.unit_of_measure || item.item_unit,
+            };
+          });
+          data = {
+            ...stockRequest,
+            requesting_branch: requestingBranch,
+            branch_name: requestingBranch?.name || stockRequest.branch_name || null,
+            created_by_user: usersById[`${stockRequest.created_by}`] || null,
+            requested_by_user: usersById[`${stockRequest.requested_by}`] || null,
+            approved_by_user: usersById[`${stockRequest.approved_by}`] || null,
+            reviewed_by_user: usersById[`${stockRequest.reviewed_by}`] || null,
+            verified_by_user: usersById[`${stockRequest.verified_by}`] || null,
+            auditor: usersById[`${stockRequest.auditor_id}`] || null,
+            items: enrichedRequestItems,
+          };
+        } else {
+          data = null;
+        }
         error = stockRequestError;
         break;
+      }
 
       case 'stock_item':
         const stockItemId = String(id);

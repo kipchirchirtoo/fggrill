@@ -7,6 +7,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart' hide Badge, DataColumn, DataRow;
 import '../../../core/widgets/permission_guard.dart';
 import '../../../core/config/permissions.dart';
+import '../../../core/config/user_roles.dart';
+import '../../auth/domain/auth_notifier.dart';
 import '../domain/providers.dart';
 import '../domain/models.dart';
 import '../data/repository.dart';
@@ -1309,7 +1311,9 @@ class _AttendanceViewState extends ConsumerState<_AttendanceView> {
         );
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -1645,9 +1649,10 @@ class _LeaveRequestsViewState extends ConsumerState<_LeaveRequestsView> {
                               child: CircleAvatar(
                                   child: Icon(PhosphorIcons.calendar())),
                             ),
-                            title: Text(lr.staffName ?? 'Request #${lr.id}'),
+                            title: Text(lr.staffName ?? 'Leave request'),
                             subtitle: Text(
-                                '${lr.leaveType ?? 'Leave'} • ${_fmtDate(lr.startDate)} - ${_fmtDate(lr.endDate)}'),
+                                '${lr.leaveType ?? 'Leave'} • ${_fmtDate(lr.startDate)} - ${_fmtDate(lr.endDate)}'
+                                '${lr.employeeId == null ? '' : ' • ${lr.employeeId}'}'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1688,21 +1693,47 @@ class _LeaveRequestsViewState extends ConsumerState<_LeaveRequestsView> {
                                     ),
                                   ),
                                 ],
-                                if (lr.status == 'approved') ...[
+                                if (lr.status == 'approved' &&
+                                    !lr.reportedToDuty) ...[
                                   const SizedBox(width: 8),
                                   TextButton(
                                     onPressed: () async {
-                                      await ref
-                                          .read(hrRepositoryProvider)
-                                          .reportToDuty(lr.id, {
-                                        'reported_at':
-                                            DateTime.now().toIso8601String(),
-                                      });
-                                      ref.invalidate(
-                                          leaveRequestsProvider(filter));
+                                      try {
+                                        await ref
+                                            .read(hrRepositoryProvider)
+                                            .reportToDuty(lr.id, {
+                                          'actual_return_date': DateTime.now()
+                                              .toIso8601String()
+                                              .split('T')
+                                              .first,
+                                          'report_notes':
+                                              'Reported from HR leave dashboard',
+                                        });
+                                        ref.invalidate(
+                                            leaveRequestsProvider(filter));
+                                        if (context.mounted) {
+                                          AppNotifier.showSnackBar(
+                                              context,
+                                              SnackBar(
+                                                  content: Text(
+                                                      '${lr.staffName ?? 'Staff'} marked as reported to duty')));
+                                        }
+                                      } catch (error) {
+                                        if (context.mounted) {
+                                          AppNotifier.showSnackBar(
+                                              context,
+                                              SnackBar(
+                                                  content: Text(
+                                                      'Report duty failed: $error')));
+                                        }
+                                      }
                                     },
                                     child: const Text('Report duty'),
                                   ),
+                                ],
+                                if (lr.reportedToDuty) ...[
+                                  const SizedBox(width: 8),
+                                  const _StatusChip('reported'),
                                 ],
                               ],
                             ),
@@ -1986,7 +2017,9 @@ class _PayrollViewState extends ConsumerState<_PayrollView> {
         .getPayrollDraft(month: _month, year: _year);
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -2326,11 +2359,7 @@ class _PayrollViewState extends ConsumerState<_PayrollView> {
 
   String _money(dynamic value) {
     final amount = value is num ? value : num.tryParse('$value') ?? 0;
-    if (amount >= 1000000) {
-      return 'KES ${(amount / 1000000).toStringAsFixed(1)}M';
-    }
-    if (amount >= 1000) return 'KES ${(amount / 1000).toStringAsFixed(1)}K';
-    return 'KES ${amount.toStringAsFixed(0)}';
+    return 'KES ${_wholeMoneyNumber(amount)}';
   }
 }
 
@@ -2716,27 +2745,15 @@ String _initials(String value) {
 }
 
 String _formatMoney(num value) {
-  if (value.abs() >= 1000000) {
-    return 'KES ${(value / 1000000).toStringAsFixed(1)}M';
-  }
-  if (value.abs() >= 1000) return 'KES ${(value / 1000).toStringAsFixed(1)}K';
-  return 'KES ${value.toStringAsFixed(0)}';
+  return 'KES ${_wholeMoneyNumber(value)}';
 }
 
-String _adjustmentStaffName(
-    Map<String, dynamic> adjustment, List<StaffMember> staff) {
-  for (final key in const ['staff_name', 'employee_name', 'employee', 'name']) {
-    final value = adjustment[key]?.toString().trim();
-    if (value != null && value.isNotEmpty && value != 'null') return value;
-  }
-  final id = adjustment['staff_id']?.toString();
-  if (id != null && id.isNotEmpty) {
-    for (final member in staff) {
-      if (member.id == id) return _staffName(member);
-    }
-    return id;
-  }
-  return 'Staff';
+String _wholeMoneyNumber(num value) {
+  final rounded = value.round().toString();
+  return rounded.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
 }
 
 class _TerminalView extends StatelessWidget {
@@ -2828,7 +2845,9 @@ class _PerformanceViewState extends ConsumerState<_PerformanceView> {
         .getStaffPerformanceMetrics(month: _month, year: _year);
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -3210,11 +3229,50 @@ class _SalaryAdjustmentsView extends ConsumerStatefulWidget {
 
 class _SalaryAdjustmentsViewState
     extends ConsumerState<_SalaryAdjustmentsView> {
+  static const _monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
+  ];
+  static const _deductionCategories = <String, String>{
+    'credit_bills': 'Credit Bills',
+    'absenteeism': 'Absenteeism Deduction',
+    'loan': 'Loans',
+    'advance': 'Advances',
+    'shif': 'SHIF',
+    'nssf': 'NSSF',
+    'uniform': 'Uniform',
+    'other': 'Other Deductions',
+  };
+  static const _additionCategories = <String, String>{
+    'bonus': 'Performance Bonus',
+    'overtime': 'Overtime',
+    'allowance': 'Allowance',
+    'extra_day': 'Extra Day',
+    'other': 'Other Addition',
+  };
+
   late int _month;
   late int _year;
-  String _status = 'all';
-  String _type = 'all';
-  late Future<List<Map<String, dynamic>>> _future;
+  String _staffSearch = '';
+  String? _selectedStaffId;
+  bool _showForm = false;
+  bool _submitting = false;
+  bool _updatingStatutory = false;
+  String _formType = 'deduction';
+  String _formCategory = 'other';
+  final _amountCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  Future<List<Map<String, dynamic>>>? _folioFuture;
 
   @override
   void initState() {
@@ -3222,435 +3280,701 @@ class _SalaryAdjustmentsViewState
     final now = DateTime.now();
     _month = now.month;
     _year = now.year;
-    _future = _load();
   }
 
-  Future<List<Map<String, dynamic>>> _load() {
-    return ref.read(hrRepositoryProvider).getSalaryAdjustments(
-          status: _status == 'all' ? null : _status,
-          type: _type == 'all' ? null : _type,
-          month: _month,
-          year: _year,
-        );
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _loadFolio() {
+    final id = _selectedStaffId;
+    _folioFuture = id == null
+        ? null
+        : ref
+            .read(hrRepositoryProvider)
+            .getSalaryAdjustments(staffId: id, month: _month, year: _year);
+  }
+
+  void _selectStaff(StaffMember staff) {
+    setState(() {
+      _selectedStaffId = staff.id;
+      _showForm = false;
+      _formType = 'deduction';
+      _formCategory = 'other';
+      _amountCtrl.clear();
+      _descCtrl.clear();
+      _loadFolio();
+    });
+  }
+
+  void _refresh() => setState(_loadFolio);
+
+  /// Mirrors the web/backend authorize list for managing adjustments.
+  static const _managerRoles = {
+    UserRole.hrManager,
+    UserRole.superAdmin,
+    UserRole.generalManager,
+    UserRole.branchManager,
+    UserRole.auditor,
+    UserRole.nightAuditor,
+  };
+
+  bool get _canManage {
+    final role = ref.watch(authNotifierProvider).valueOrNull?.role ?? '';
+    return _managerRoles.contains(UserRole.fromString(role));
+  }
+
+  String _money(num value) {
+    final whole = value.abs().round().toString();
+    final buffer = StringBuffer();
+    for (var i = 0; i < whole.length; i++) {
+      if (i > 0 && (whole.length - i) % 3 == 0) buffer.write(',');
+      buffer.write(whole[i]);
+    }
+    return 'KES ${value < 0 ? '-' : ''}$buffer';
+  }
+
+  String _categoryLabel(String category) =>
+      _deductionCategories[category] ??
+      _additionCategories[category] ??
+      category;
+
+  String _shortDate(dynamic value) {
+    final parsed = DateTime.tryParse('$value');
+    if (parsed == null) return '$value'.split('T').first;
+    return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _addAdjustment() async {
+    final amount = num.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) {
+      AppNotifier.showSnackBar(
+          context, const SnackBar(content: Text('Enter a valid amount')));
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await ref.read(hrRepositoryProvider).createSalaryAdjustment({
+        'staff_id': _selectedStaffId,
+        'type': _formType,
+        'category': _formCategory,
+        'amount': amount,
+        'description': _descCtrl.text.trim(),
+        'month': _month,
+        'year': _year,
+        'status': 'approved',
+      });
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+          context, const SnackBar(content: Text('Adjustment added')));
+      setState(() {
+        _showForm = false;
+        _amountCtrl.clear();
+        _descCtrl.clear();
+        _formType = 'deduction';
+        _formCategory = 'other';
+        _loadFolio();
+      });
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _voidAdjustment(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Void Adjustment'),
+        content: const Text('Void this adjustment? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.kError),
+              child: const Text('Void')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(hrRepositoryProvider).voidSalaryAdjustment(id);
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+          context, const SnackBar(content: Text('Adjustment voided')));
+      setState(_loadFolio);
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _toggleStatutory(
+      StaffMember staff, String field, bool current) async {
+    setState(() => _updatingStatutory = true);
+    try {
+      await ref
+          .read(hrRepositoryProvider)
+          .updateStaff(staff.id, {field: !current});
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+          context, const SnackBar(content: Text('Enrollment updated')));
+      ref.invalidate(staffListProvider(null));
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _updatingStatutory = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final staffAsync = ref.watch(staffListProvider(null));
     final staff = staffAsync.maybeWhen(
         data: (items) => items, orElse: () => const <StaffMember>[]);
+    StaffMember? selectedStaff;
+    for (final s in staff) {
+      if (s.id == _selectedStaffId) {
+        selectedStaff = s;
+        break;
+      }
+    }
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Salary Adjustments',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ElevatedButton.icon(
-            onPressed: () => _showNewAdjustmentDialog(context, ref, staff),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('New Adjustment'),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.kPrimary,
-                foregroundColor: Colors.white),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          const Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Payroll Adjustments',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('Select a staff member to open their folio',
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
+            ]),
+          ),
+          SizedBox(
+            width: 150,
+            child: DropdownButtonFormField<int>(
+              initialValue: _month,
+              decoration:
+                  const InputDecoration(labelText: 'Month', isDense: true),
+              items: List.generate(
+                12,
+                (i) =>
+                    DropdownMenuItem(value: i + 1, child: Text(_monthNames[i])),
+              ),
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() {
+                  _month = v;
+                  _loadFolio();
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 110,
+            child: DropdownButtonFormField<int>(
+              initialValue: _year,
+              decoration:
+                  const InputDecoration(labelText: 'Year', isDense: true),
+              items: const [2024, 2025, 2026, 2027]
+                  .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
+                  .toList(),
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() {
+                  _year = v;
+                  _loadFolio();
+                });
+              },
+            ),
           ),
         ]),
         const SizedBox(height: 16),
+        Expanded(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SizedBox(
+                width: 280, child: _staffPanel(staff, staffAsync.isLoading)),
+            const SizedBox(width: 16),
+            Expanded(child: _folioPanel(selectedStaff)),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  BoxDecoration _panelDecoration() => BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.5)),
+      );
+
+  Widget _staffPanel(List<StaffMember> staff, bool loading) {
+    final query = _staffSearch.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? staff
+        : staff
+            .where((s) => _staffName(s).toLowerCase().contains(query))
+            .toList();
+    return Container(
+      decoration: _panelDecoration(),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(10),
+          child: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Search staff...',
+              prefixIcon: Icon(Icons.search, size: 18),
+              isDense: true,
+            ),
+            onChanged: (v) => setState(() => _staffSearch = v),
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: loading
+              ? const Center(child: CircularProgressIndicator())
+              : filtered.isEmpty
+                  ? const Center(
+                      child: Text('No staff found',
+                          style: TextStyle(color: AppColors.kTextSecondary)))
+                  : ListView.separated(
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final s = filtered[i];
+                        final selected = s.id == _selectedStaffId;
+                        return ListTile(
+                          dense: true,
+                          selected: selected,
+                          selectedTileColor:
+                              AppColors.kPrimary.withValues(alpha: 0.08),
+                          leading: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: selected
+                                ? AppColors.kPrimary
+                                : AppColors.kSurface,
+                            child: Text(_initials(_staffName(s)),
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: selected
+                                        ? Colors.white
+                                        : AppColors.kTextSecondary)),
+                          ),
+                          title: Text(_staffName(s),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 13)),
+                          subtitle: Text(
+                              (s.role ?? s.department ?? '').toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 10)),
+                          trailing: const Icon(Icons.chevron_right, size: 16),
+                          onTap: () => _selectStaff(s),
+                        );
+                      },
+                    ),
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.all(10),
+          child: Text('${filtered.length} STAFF',
+              style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.kTextSecondary)),
+        ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _folioPanel(StaffMember? staff) {
+    if (staff == null) {
+      return Container(
+        decoration: _panelDecoration(),
+        child: const Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.person_outline,
+                size: 48, color: AppColors.kTextSecondary),
+            SizedBox(height: 8),
+            Text('Select a staff member',
+                style: TextStyle(color: AppColors.kTextSecondary)),
+          ]),
+        ),
+      );
+    }
+    return Container(
+      decoration: _panelDecoration(),
+      clipBehavior: Clip.antiAlias,
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _folioFuture,
+        builder: (context, snap) {
+          final adjustments = snap.data ?? const <Map<String, dynamic>>[];
+          final active =
+              adjustments.where((a) => '${a['status']}' != 'cancelled');
+          final deductions = active
+              .where((a) => a['type'] == 'deduction')
+              .fold<num>(
+                  0, (s, a) => s + (num.tryParse('${a['amount'] ?? 0}') ?? 0));
+          final additions = active
+              .where((a) => a['type'] == 'addition')
+              .fold<num>(
+                  0, (s, a) => s + (num.tryParse('${a['amount'] ?? 0}') ?? 0));
+          final pending =
+              adjustments.where((a) => '${a['status']}' == 'pending').length;
+          final loading = snap.connectionState == ConnectionState.waiting;
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _folioHeader(staff, additions - deductions),
+                if (_canManage) _statutoryRow(staff),
+                if (_canManage && _showForm) _adjustmentForm(),
+                _summaryPills(deductions, additions, pending, loading),
+                Expanded(
+                  child: loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : adjustments.isEmpty
+                          ? _emptyFolio()
+                          : _adjustmentsTable(adjustments),
+                ),
+              ]);
+        },
+      ),
+    );
+  }
+
+  Widget _folioHeader(StaffMember staff, num net) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.kDivider))),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: 12,
+        spacing: 12,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            CircleAvatar(
+                radius: 22,
+                backgroundColor: AppColors.kSurface,
+                child: Text(_initials(_staffName(staff)),
+                    style: const TextStyle(fontWeight: FontWeight.bold))),
+            const SizedBox(width: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_staffName(staff),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(
+                        '${(staff.role ?? staff.department ?? 'Staff').toUpperCase()} · ${_monthNames[_month - 1]} $_year',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.kTextSecondary,
+                            fontWeight: FontWeight.w600)),
+                  ]),
+            ),
+          ]),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              const Text('NET ADJUSTMENT',
+                  style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.kTextSecondary)),
+              Text('${net >= 0 ? '+' : '-'} ${_money(net.abs())}',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color:
+                          net >= 0 ? AppColors.kSuccess : AppColors.kError)),
+            ]),
+            if (_canManage) ...[
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: () => setState(() => _showForm = !_showForm),
+                icon: Icon(_showForm ? Icons.close : Icons.add, size: 16),
+                label: Text(_showForm ? 'Cancel' : 'Add Adjustment'),
+              ),
+            ],
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _statutoryRow(StaffMember staff) {
+    final items = [
+      ('shif_enabled', 'SHIF/SHA', staff.shifEnabled),
+      ('nssf_enabled', 'NSSF', staff.nssfEnabled),
+      ('uniform_enabled', 'Uniform', staff.uniformEnabled),
+    ];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.kDivider))),
+      child: Row(children: [
+        const Text('STATUTORY (OPT-IN):',
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: AppColors.kTextSecondary)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final item in items)
+              ChoiceChip(
+                label: Text(item.$2,
+                    style: const TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.bold)),
+                selected: item.$3,
+                onSelected: _updatingStatutory
+                    ? null
+                    : (_) => _toggleStatutory(staff, item.$1, item.$3),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _adjustmentForm() {
+    final categories =
+        _formType == 'deduction' ? _deductionCategories : _additionCategories;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+          color: AppColors.kSurface,
+          border: Border(bottom: BorderSide(color: AppColors.kDivider))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('NEW ADJUSTMENT',
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: AppColors.kTextSecondary)),
+        const SizedBox(height: 10),
         Wrap(
             spacing: 12,
             runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.end,
             children: [
               SizedBox(
-                width: 170,
-                child: DropdownButtonFormField<int>(
-                  initialValue: _month,
-                  decoration: const InputDecoration(labelText: 'Month'),
-                  items: List.generate(
-                    12,
-                    (index) => DropdownMenuItem(
-                      value: index + 1,
-                      child: Text(DateTime(0, index + 1).month.toString()),
-                    ),
-                  ),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _month = value;
-                      _future = _load();
-                    });
-                  },
+                width: 220,
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'deduction', label: Text('Deduction')),
+                    ButtonSegment(value: 'addition', label: Text('Addition')),
+                  ],
+                  selected: {_formType},
+                  onSelectionChanged: (v) => setState(() {
+                    _formType = v.first;
+                    _formCategory = _formType == 'addition' ? 'bonus' : 'other';
+                  }),
                 ),
               ),
               SizedBox(
-                width: 140,
-                child: TextFormField(
-                  initialValue: '$_year',
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Year'),
-                  onFieldSubmitted: (value) {
-                    setState(() {
-                      _year = int.tryParse(value) ?? _year;
-                      _future = _load();
-                    });
-                  },
+                width: 200,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _formCategory,
+                  decoration: const InputDecoration(
+                      labelText: 'Category', isDense: true),
+                  items: categories.entries
+                      .map((e) =>
+                          DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (v) =>
+                      setState(() => _formCategory = v ?? _formCategory),
                 ),
               ),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'all', label: Text('All')),
-                  ButtonSegment(value: 'pending', label: Text('Pending')),
-                  ButtonSegment(value: 'approved', label: Text('Approved')),
-                  ButtonSegment(value: 'applied', label: Text('Applied')),
-                  ButtonSegment(value: 'cancelled', label: Text('Cancelled')),
-                ],
-                selected: {_status},
-                onSelectionChanged: (value) {
-                  setState(() {
-                    _status = value.first;
-                    _future = _load();
-                  });
-                },
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Amount (KES)', isDense: true),
+                ),
               ),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'all', label: Text('All Types')),
-                  ButtonSegment(value: 'deduction', label: Text('Deductions')),
-                  ButtonSegment(value: 'addition', label: Text('Additions')),
-                ],
-                selected: {_type},
-                onSelectionChanged: (value) {
-                  setState(() {
-                    _type = value.first;
-                    _future = _load();
-                  });
-                },
+              SizedBox(
+                width: 240,
+                child: TextField(
+                  controller: _descCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Remarks', isDense: true),
+                ),
               ),
             ]),
-        const SizedBox(height: 16),
-        Expanded(
-          child: FutureBuilder<List<Map<String, dynamic>>>(
-            future: _future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Card(
-                    child: LoadingSkeleton(type: SkeletonType.list));
-              }
-              if (snapshot.hasError) {
-                return ErrorState(
-                    message: '${snapshot.error}', onRetry: _refresh);
-              }
-              final adjustments =
-                  snapshot.data ?? const <Map<String, dynamic>>[];
-              if (adjustments.isEmpty) {
-                return const EmptyState(message: 'No salary adjustments');
-              }
-              final additions = adjustments
-                  .where((a) => a['type'] == 'addition')
-                  .fold<num>(
-                      0,
-                      (sum, a) =>
-                          sum + (num.tryParse('${a['amount'] ?? 0}') ?? 0));
-              final deductions = adjustments
-                  .where((a) => a['type'] == 'deduction')
-                  .fold<num>(
-                      0,
-                      (sum, a) =>
-                          sum + (num.tryParse('${a['amount'] ?? 0}') ?? 0));
-              return ListView(
-                children: [
-                  LayoutBuilder(builder: (context, constraints) {
-                    final width = constraints.maxWidth;
-                    final columns = width < 720 ? 1 : 3;
-                    final cardWidth = (width - ((columns - 1) * 12)) / columns;
-                    final cards = [
-                      _OverviewCard(
-                          title: 'Additions',
-                          value: _money(additions),
-                          icon: Icons.add_circle,
-                          color: AppColors.kSuccess),
-                      _OverviewCard(
-                          title: 'Deductions',
-                          value: _money(deductions),
-                          icon: Icons.remove_circle,
-                          color: AppColors.kError),
-                      _OverviewCard(
-                          title: 'Net Impact',
-                          value: _money(additions - deductions),
-                          icon: Icons.account_balance_wallet,
-                          color: AppColors.kPrimary),
-                    ];
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: cards
-                          .map((card) => SizedBox(
-                                width: cardWidth,
-                                height: 104,
-                                child: card,
-                              ))
-                          .toList(),
-                    );
-                  }),
-                  const SizedBox(height: 12),
-                  ...adjustments.map((a) {
-                    final status = (a['status'] ?? 'pending').toString();
-                    final type = (a['type'] ?? 'deduction').toString();
-                    final isPending = status == 'pending';
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: Icon(
-                          type == 'addition'
-                              ? Icons.add_circle_outline
-                              : Icons.remove_circle_outline,
-                          color: type == 'addition'
-                              ? AppColors.kSuccess
-                              : AppColors.kError,
-                        ),
-                        title: Text(_adjustmentStaffName(a, staff),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text(
-                            '${a['category'] ?? 'other'} • ${a['description'] ?? a['reason'] ?? '—'} • ${a['month'] ?? _month}/${a['year'] ?? _year}'),
-                        trailing:
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                          _StatusChip(status),
-                          PermissionGuard(
-                            permission: Permission.canApproveSalaryAdjustments,
-                            child: PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                final id = (a['id'] ?? '').toString();
-                                if (id.isEmpty) return;
-                                if (value == 'approve') {
-                                  await ref
-                                      .read(hrRepositoryProvider)
-                                      .approveSalaryAdjustment(id);
-                                } else if (value == 'reject') {
-                                  await ref
-                                      .read(hrRepositoryProvider)
-                                      .rejectSalaryAdjustment(id);
-                                } else if (value == 'void') {
-                                  await ref
-                                      .read(hrRepositoryProvider)
-                                      .voidSalaryAdjustment(id);
-                                }
-                                _refresh();
-                              },
-                              itemBuilder: (_) => [
-                                if (isPending)
-                                  const PopupMenuItem(
-                                      value: 'approve', child: Text('Approve')),
-                                if (isPending)
-                                  const PopupMenuItem(
-                                      value: 'reject', child: Text('Reject')),
-                                if (status != 'applied' &&
-                                    status != 'cancelled')
-                                  const PopupMenuItem(
-                                      value: 'void', child: Text('Void')),
-                              ],
-                            ),
-                          ),
-                        ]),
-                      ),
-                    );
-                  }),
-                ],
-              );
-            },
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: _submitting ? null : _addAdjustment,
+            icon: _submitting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.check_circle, size: 16),
+            label: const Text('Save Adjustment'),
           ),
         ),
       ]),
     );
   }
 
-  void _showNewAdjustmentDialog(
-      BuildContext context, WidgetRef ref, List<StaffMember> staff) {
-    final amountCtrl = TextEditingController();
-    final reasonCtrl = TextEditingController();
-    StaffMember? selectedStaff;
-    String type = 'deduction';
-    String category = 'other';
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('New Salary Adjustment'),
-          content: SizedBox(
-            width: 420,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Autocomplete<StaffMember>(
-                displayStringForOption: _staffName,
-                optionsBuilder: (text) {
-                  final query = text.text.trim().toLowerCase();
-                  if (query.isEmpty) return staff.take(8);
-                  return staff.where((member) {
-                    final value = [
-                      _staffName(member),
-                      member.role,
-                      member.department,
-                      member.employeeId,
-                      member.email,
-                    ].whereType<String>().join(' ').toLowerCase();
-                    return value.contains(query);
-                  }).take(12);
-                },
-                onSelected: (member) => setState(() => selectedStaff = member),
-                fieldViewBuilder:
-                    (context, controller, focusNode, onFieldSubmitted) {
-                  return TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: InputDecoration(
-                      labelText: 'Search staff',
-                      prefixIcon: Icon(PhosphorIcons.magnifyingGlass()),
-                      suffixIcon: selectedStaff == null
-                          ? null
-                          : const Icon(Icons.check_circle,
-                              color: AppColors.kSuccess),
-                    ),
-                  );
-                },
-                optionsViewBuilder: (context, onSelected, options) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 8,
-                      borderRadius: BorderRadius.circular(12),
-                      child: ConstrainedBox(
-                        constraints:
-                            const BoxConstraints(maxHeight: 260, maxWidth: 420),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          itemCount: options.length,
-                          itemBuilder: (context, index) {
-                            final member = options.elementAt(index);
-                            return ListTile(
-                              leading: CircleAvatar(
-                                  child: Text(_initials(member.name))),
-                              title: Text(_staffName(member)),
-                              subtitle: Text(
-                                  '${_staffRole(member)} • ${member.department ?? 'general'}'),
-                              onTap: () => onSelected(member),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              if (selectedStaff != null) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Chip(
-                    avatar: CircleAvatar(
-                        child: Text(_initials(selectedStaff!.name))),
-                    label: Text(_staffName(selectedStaff!)),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'deduction', label: Text('Deduction')),
-                  ButtonSegment(value: 'addition', label: Text('Addition')),
-                ],
-                selected: {type},
-                onSelectionChanged: (value) => setState(() {
-                  type = value.first;
-                  category = type == 'addition' ? 'bonus' : 'other';
-                }),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: (type == 'addition'
-                        ? const [
-                            'bonus',
-                            'commission',
-                            'allowance',
-                            'overtime',
-                            'other'
-                          ]
-                        : const [
-                            'other',
-                            'advance',
-                            'uniform',
-                            'damage',
-                            'absence',
-                            'late'
-                          ])
-                    .map((value) =>
-                        DropdownMenuItem(value: value, child: Text(value)))
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => category = value ?? category),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Amount')),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: reasonCtrl,
-                  decoration: const InputDecoration(labelText: 'Description')),
+  Widget _summaryPills(
+      num deductions, num additions, int pending, bool loading) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.kDivider))),
+      child: Row(children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              _pill('- ${_money(deductions)}', AppColors.kError,
+                  Icons.arrow_circle_down),
+              const SizedBox(width: 8),
+              _pill('+ ${_money(additions)}', AppColors.kSuccess,
+                  Icons.arrow_circle_up),
+              const SizedBox(width: 8),
+              _pill('$pending pending', AppColors.kWarning, Icons.schedule),
             ]),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                if (selectedStaff == null) {
-                  AppNotifier.showSnackBar(context,
-                      const SnackBar(content: Text('Select a staff member')));
-                  return;
-                }
-                final amount = num.tryParse(amountCtrl.text.trim()) ?? 0;
-                if (amount <= 0) {
-                  AppNotifier.showSnackBar(context,
-                      const SnackBar(content: Text('Enter a valid amount')));
-                  return;
-                }
-                Navigator.pop(ctx);
-                try {
-                  await ref.read(hrRepositoryProvider).createSalaryAdjustment({
-                    'staff_id': selectedStaff!.id,
-                    'type': type,
-                    'category': category,
-                    'amount': amount,
-                    'description': reasonCtrl.text.trim(),
-                    'month': _month,
-                    'year': _year,
-                    'status': 'approved',
-                  });
-                  _refresh();
-                  if (context.mounted) {
-                    AppNotifier.showSnackBar(context,
-                        const SnackBar(content: Text('Adjustment created')));
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    AppNotifier.showSnackBar(
-                        context, SnackBar(content: Text('Error: $e')));
-                  }
-                }
-              },
-              child: const Text('Create'),
-            ),
+        ),
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _refresh,
+          icon: Icon(Icons.refresh,
+              size: 18,
+              color: loading ? AppColors.kPrimary : AppColors.kTextSecondary),
+        ),
+      ]),
+    );
+  }
+
+  Widget _pill(String text, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Text(text,
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+      ]),
+    );
+  }
+
+  Widget _emptyFolio() {
+    return const Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.schedule, size: 40, color: AppColors.kTextSecondary),
+        SizedBox(height: 8),
+        Text('No adjustments for this period',
+            style: TextStyle(
+                color: AppColors.kTextSecondary, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
+  Widget _adjustmentsTable(List<Map<String, dynamic>> adjustments) {
+    return SingleChildScrollView(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Category')),
+            DataColumn(label: Text('Description')),
+            DataColumn(label: Text('Amount')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Date')),
+            DataColumn(label: Text('')),
           ],
+          rows: adjustments.map((a) {
+            final type = '${a['type']}';
+            final status = '${a['status']}';
+            final amount = num.tryParse('${a['amount'] ?? 0}') ?? 0;
+            final canVoid = status != 'applied' && status != 'cancelled';
+            return DataRow(cells: [
+              DataCell(
+                  _categoryBadge(type, _categoryLabel('${a['category']}'))),
+              DataCell(ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: Text('${a['description'] ?? '—'}',
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+              )),
+              DataCell(Text(
+                  '${type == 'deduction' ? '-' : '+'} ${_money(amount)}',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: type == 'deduction'
+                          ? AppColors.kError
+                          : AppColors.kSuccess))),
+              DataCell(_StatusChip(status)),
+              DataCell(Text(_shortDate(a['created_at']),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.kTextSecondary))),
+              DataCell(canVoid && _canManage
+                  ? IconButton(
+                      tooltip: 'Void adjustment',
+                      onPressed: () => _voidAdjustment('${a['id']}'),
+                      icon: const Icon(Icons.cancel_outlined,
+                          size: 18, color: AppColors.kError),
+                    )
+                  : const SizedBox.shrink()),
+            ]);
+          }).toList(),
         ),
       ),
     );
   }
 
-  String _money(num value) => 'KES ${value.toStringAsFixed(0)}';
+  Widget _categoryBadge(String type, String label) {
+    final color = type == 'deduction' ? AppColors.kError : AppColors.kSuccess;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8)),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+    );
+  }
 }
 
 // ─── HR Reports View ─────────────────────────────────────────────────────────────
@@ -4137,7 +4461,9 @@ class _HRStaffAttendanceDetailScreenState
     );
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {

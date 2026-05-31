@@ -144,7 +144,9 @@ class _KitchenOperationsDashboardState
   }
 
   void _refresh() {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   void _selectSection(KitchenOperationsSection section) {

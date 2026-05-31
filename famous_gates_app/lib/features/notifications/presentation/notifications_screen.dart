@@ -31,7 +31,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   void _refresh() {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
     ref.invalidate(unreadNotifCountProvider);
   }
 

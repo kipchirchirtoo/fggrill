@@ -151,7 +151,9 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
   }
 
   void _refresh() {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   void _selectSection(ReceptionSection section) {
@@ -325,9 +327,12 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
       MaterialPageRoute(builder: (_) => const CreateReservationScreen()),
     );
     if (result != null && mounted) {
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reservation created: ${result.confirmationNumber}')),
+        SnackBar(
+            content: Text('Reservation created: ${result.confirmationNumber}')),
       );
     }
   }
@@ -337,7 +342,9 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
       MaterialPageRoute(builder: (_) => CheckInScreen(booking: booking)),
     );
     if (result == true && mounted) {
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Guest checked in successfully')),
       );
@@ -349,7 +356,9 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
       MaterialPageRoute(builder: (_) => CheckOutScreen(booking: booking)),
     );
     if (result == true && mounted) {
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Guest checked out successfully')),
       );
@@ -360,21 +369,33 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const GuestManagementScreen()),
     );
-    if (mounted) setState(() => _future = _load());
+    if (mounted) {
+      setState(() {
+        _future = _load();
+      });
+    }
   }
 
   Future<void> navigateToRoomManagement() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const RoomManagementScreen()),
     );
-    if (mounted) setState(() => _future = _load());
+    if (mounted) {
+      setState(() {
+        _future = _load();
+      });
+    }
   }
 
   Future<void> navigateToHousekeeping() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const HousekeepingScreen()),
     );
-    if (mounted) setState(() => _future = _load());
+    if (mounted) {
+      setState(() {
+        _future = _load();
+      });
+    }
   }
 }
 
@@ -1750,12 +1771,13 @@ class _ReceptionSnapshot {
   final List<Map<String, dynamic>> guestHistory;
   final Map<String, dynamic> guestLoyalty;
 
-  int get availableRooms => rooms.where((room) => room.status == 'available').length;
+  int get availableRooms =>
+      rooms.where((room) => room.status == 'available').length;
 
-  int get occupiedRooms => rooms.where((room) => room.status == 'occupied').length;
+  int get occupiedRooms =>
+      rooms.where((room) => room.status == 'occupied').length;
 
-  double get occupancyRate =>
-      rooms.isEmpty ? 0 : occupiedRooms / rooms.length;
+  double get occupancyRate => rooms.isEmpty ? 0 : occupiedRooms / rooms.length;
 
   int get vipGuestCount => guests.where((guest) => guest.isVip).length;
 
@@ -1767,13 +1789,9 @@ class _ReceptionSnapshot {
   int get dirtyRoomCount {
     final source = housekeepingRooms.isNotEmpty ? housekeepingRooms : roomRows;
     return source.where((room) {
-      final status = (_text(room, const [
-                'status',
-                'hk_status',
-                'cleaning_status'
-              ]) ??
-              '')
-          .toLowerCase();
+      final status =
+          (_text(room, const ['status', 'hk_status', 'cleaning_status']) ?? '')
+              .toLowerCase();
       return status == 'dirty' ||
           status == 'cleaning' ||
           status == 'inspecting' ||
@@ -2081,8 +2099,7 @@ class _OperationsPulseSection extends StatelessWidget {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
-                                  ?.copyWith(
-                                      color: AppColors.kTextSecondary),
+                                  ?.copyWith(color: AppColors.kTextSecondary),
                             ),
                           ],
                         ),

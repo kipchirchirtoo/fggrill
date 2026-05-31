@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { AttendanceService } from '../services/attendance.service';
-import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import { applyBranchFilter } from '../utils/branchIsolation';
 
 // Helper to sanitize UUID fields that might come as "null" string from frontend
 const sanitizeUUID = (val: any) => {
@@ -121,6 +121,10 @@ export const getRoles = async (
       { value: 'branch_accountant',              label: 'Branch Accountant',              description: 'Branch financial management' },
       { value: 'auditor',                        label: 'Auditor',                        description: 'Financial auditing' },
       { value: 'cashier',                        label: 'Cashier',                        description: 'Cash handling and POS' },
+      { value: 'restaurant_cashier',             label: 'Restaurant Cashier',             description: 'Restaurant station cashier' },
+      { value: 'main_bar_cashier',               label: 'Main Bar Cashier',               description: 'Main bar station cashier' },
+      { value: 'executive_bar_cashier',          label: 'Executive Bar Cashier',          description: 'Executive bar station cashier' },
+      { value: 'non_consumables_cashier',        label: 'Non-consumables Cashier',        description: 'Non-consumables station cashier' },
       { value: 'procurement',                    label: 'Procurement',                    description: 'Purchasing and procurement' },
       { value: 'purchasing_manager',             label: 'Purchasing Manager',             description: 'Procurement management' },
       // Reception
@@ -283,92 +287,13 @@ export const getStaff = async (
       };
     });
 
-    // ── Merge system users who are NOT already linked to a staff_profile ──
-    // Collect user_ids already covered by a staff_profile row
-    const linkedUserIds: string[] = (staff || [])
-      .filter((s: any) => s.user_id)
-      .map((s: any) => s.user_id as string);
-
-    // Build system-users query
-    let sysUsersQuery = supabase
-      .from('users')
-      .select('id, email, first_name, last_name, phone_number, role, avatar, status, branch_id, created_at, branches(id, name, code)')
-      .order('first_name', { ascending: true });
-
-    // Exclude users already in staff_profiles
-    if (linkedUserIds.length > 0) {
-      sysUsersQuery = sysUsersQuery.not('id', 'in', `(${linkedUserIds.join(',')})`);
-    }
-
-    // Apply search to system users too
-    if (req.query.search) {
-      const search = req.query.search as string;
-      sysUsersQuery = sysUsersQuery.or(
-        `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,role.ilike.%${search}%`
-      );
-    }
-
-    // Apply branch isolation to system users
-    if (!isGlobalRole(req.user?.role) && req.user?.branch_id) {
-      sysUsersQuery = sysUsersQuery.eq('branch_id', req.user.branch_id);
-    }
-
-    const { data: systemUsers } = await sysUsersQuery;
-
-    // Normalise system-user rows to match the staff_profiles shape
-    const normalizedSystemUsers = (systemUsers || []).map((u: any) => {
-      const branch = Array.isArray(u.branches) ? u.branches[0] : u.branches;
-      return {
-        id: u.id,
-        user_id: u.id,
-        branch_id: u.branch_id,
-        branch_name: branch?.name || '',
-        branch,
-        first_name: u.first_name || '',
-        last_name: u.last_name || '',
-        email: u.email || '',
-        phone: u.phone_number || '',
-        phone_number: u.phone_number || '',
-        role: u.role || '',
-        position: u.role || '',
-        department: null,
-        status: u.status || 'active',
-        start_date: null,
-        created_at: u.created_at,
-        updated_at: u.created_at,
-        national_id: null,
-        id_number: u.id.substring(0, 8).toUpperCase(),
-        employee_id: u.id.substring(0, 8).toUpperCase(),
-        basic_salary: null,
-        shift: null,
-        employment_type: null,
-        bank_name: null,
-        bank_branch: null,
-        account_number: null,
-        profile_photo: u.avatar || '',
-        avatar: u.avatar || '',
-        user: {
-          id: u.id,
-          email: u.email,
-          first_name: u.first_name,
-          last_name: u.last_name,
-          phone_number: u.phone_number,
-          role: u.role,
-          avatar: u.avatar,
-        },
-      };
-    });
-
-    const allStaff = [...formattedData, ...normalizedSystemUsers];
-    const totalCount = (count || 0) + (systemUsers?.length || 0);
-
     res.status(200).json({
       success: true,
-      count: allStaff.length,
-      total: totalCount,
+      count: formattedData.length,
+      total: count || formattedData.length,
       page,
-      pages: Math.ceil(totalCount / limit),
-      data: allStaff
+      pages: Math.ceil((count || formattedData.length) / limit),
+      data: formattedData
     });
   } catch (error) {
     next(error);
@@ -405,7 +330,7 @@ export const getStaffMember = async (
       `);
 
     if (isUUID) {
-      query = query.eq('id', id);
+      query = query.or(`id.eq.${id},user_id.eq.${id}`);
     } else {
       // Use double quotes for values in .or() to handle special characters (e.g. spaces, dots)
       // This matches PostgREST syntax requirements for strings with special characters
@@ -442,46 +367,6 @@ export const getStaffMember = async (
     }
 
     if (!staff) {
-      // Fallback: Try to find in users table directly (for staff without profiles)
-      logger.debug?.('Staff profile not found, checking users table', { lookupId: id });
-      
-      if (isUUID) {
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', id)
-          .maybeSingle();
-
-        if (userError) {
-          logger.error('Error querying users table:', userError);
-        }
-
-        if (user) {
-          // Return user data in a format compatible with staff profile
-          res.status(200).json({
-            success: true,
-            data: {
-              id: user.id,
-              user_id: user.id,
-              first_name: user.first_name,
-              last_name: user.last_name,
-              email: user.email,
-              phone: user.phone_number,
-              role: user.role,
-              department: user.department,
-              branch_id: user.branch_id,
-              branch_name: '',
-              status: user.status || 'active',
-              hire_date: user.created_at,
-              photo_url: user.avatar,
-              created_at: user.created_at,
-              user: user
-            }
-          });
-          return;
-        }
-      }
-
       logger.warn('Staff member not found in getStaffMember', { lookupId: id });
       res.status(404).json({
         success: false,
@@ -783,15 +668,23 @@ export const updateStaffMember = async (
       .single();
 
     if (getError || !staff) {
-      // If not in staff_profiles, check if they exist in the users table
-      const { data: userProfile, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', req.params.id)
-        .single();
+      const { data: linkedStaff, error: linkedStaffError } = await supabase
+        .from('staff_profiles')
+        .select('*, user_id')
+        .eq('user_id', req.params.id)
+        .maybeSingle();
 
-      if (userError || !userProfile) {
-        // Finally, check if it's a driver
+      if (linkedStaffError) {
+        logger.error('Failed to resolve staff profile by linked user_id:', linkedStaffError);
+        res.status(500).json({ success: false, message: 'Failed to resolve staff profile' });
+        return;
+      }
+
+      if (linkedStaff) {
+        staff = linkedStaff;
+      } else {
+        // Finally, check if it's a driver. Drivers are operational staff records,
+        // but system user accounts are not auto-promoted into staff_profiles.
         const { data: driverProfile, error: driverError } = await supabase
           .from('drivers')
           .select('*')
@@ -799,7 +692,6 @@ export const updateStaffMember = async (
           .single();
 
         if (driverProfile) {
-          // Update driver payroll fields directly
           const { data: updatedDriver, error: updateDriverError } = await supabase
             .from('drivers')
             .update({
@@ -822,156 +714,16 @@ export const updateStaffMember = async (
           return;
         }
 
-        logger.error('Staff member, user, or driver not found:', { getError, userError, driverError });
+        logger.error('Staff member or driver not found:', { getError, driverError, lookupId: req.params.id });
         res.status(404).json({
           success: false,
           message: 'Staff member not found'
         });
         return;
       }
-
-      // Map user roles to valid database departments
-      // Valid departments: 'housekeeping','restaurant','reception','maintenance','finance','management','security','bar_lounge','administration','general'
-      const roleToDept: Record<string, string> = {
-        // Management
-        'super_admin': 'management',
-        'admin': 'management',
-        'manager': 'management',
-        'general_manager': 'management',
-        'branch_manager': 'management',
-        'hr_manager': 'management',
-        'finance_manager': 'management',
-        'branch_operations_manager': 'management',
-        'central_operations_manager': 'management',
-        'facilities_manager': 'management',
-        'restaurant_manager': 'management',
-        'maintenance_supervisor': 'management',
-        'housekeeping_supervisor': 'management',
-        'front_desk_supervisor': 'management',
-        'security_supervisor': 'management',
-        // Finance
-        'accountant': 'finance',
-        'auditor': 'finance',
-        'branch_accountant': 'finance',
-        'night_auditor': 'finance',
-        'payroll_clerk': 'finance',
-        // Restaurant / F&B
-        'restaurant': 'restaurant',
-        'pos_kitchen': 'restaurant',
-        'kitchen': 'restaurant',
-        'kitchen_operations': 'restaurant',
-        'kitchen_helper': 'restaurant',
-        'head_chef': 'restaurant',
-        'sous_chef': 'restaurant',
-        'chef': 'restaurant',
-        'cook': 'restaurant',
-        'line_cook': 'restaurant',
-        'prep_cook': 'restaurant',
-        'waiter': 'restaurant',
-        'waitress': 'restaurant',
-        'head_waiter': 'restaurant',
-        'food_runner': 'restaurant',
-        'busser': 'restaurant',
-        'host_hostess': 'restaurant',
-        'dishwasher': 'restaurant',
-        // Bar & Lounge
-        'bartender': 'bar_lounge',
-        'barista': 'bar_lounge',
-        'barman': 'bar_lounge',
-        'barmaid': 'bar_lounge',
-        'bar_manager': 'bar_lounge',
-        // Reception
-        'receptionist': 'reception',
-        'concierge': 'reception',
-        'bell_captain': 'reception',
-        'bellhop': 'reception',
-        // Housekeeping
-        'housekeeping': 'housekeeping',
-        'room_attendant': 'housekeeping',
-        'laundry_attendant': 'housekeeping',
-        // Maintenance
-        'maintenance': 'maintenance',
-        'electrician': 'maintenance',
-        'plumber': 'maintenance',
-        'hvac_technician': 'maintenance',
-        'groundskeeper': 'maintenance',
-        // Security
-        'security': 'security',
-        'security_guard': 'security',
-        // Administration
-        'cashier': 'administration',
-        'kyogong_spa_cashier': 'administration',
-        'kyogong_executive_bar_cashier': 'administration',
-        'kyogong_sports_bar_cashier': 'administration',
-        'kyogong_reception_cashier': 'administration',
-        'procurement': 'administration',
-        'central_storekeeper': 'administration',
-        'branch_storekeeper': 'administration',
-        'storekeeper': 'administration',
-        'employee': 'administration',
-      };
-
-      const userRole = (userProfile.role || 'employee') as string;
-      const mappedDepartment = roleToDept[userRole] || 'general';
-
-      const idNumber = await generateStaffId(userProfile.branch_id, userRole);
-
-      const newProfileInfo = {
-        id: userProfile.id,
-        user_id: userProfile.id,
-        first_name: userProfile.first_name,
-        last_name: userProfile.last_name,
-        phone: userProfile.phone_number,
-        email: userProfile.email,
-        role: userRole,
-        status: userProfile.status || 'active',
-        branch_id: userProfile.branch_id,
-        department: mappedDepartment,
-        basic_salary: 0,
-        shift: 'morning',
-        start_date: new Date().toISOString().split('T')[0],
-        id_number: idNumber
-      };
-
-      // SEARCH for existing profile before creating a new one to prevent duplication
-      let { data: existingProfile } = await supabase
-        .from('staff_profiles')
-        .select('id')
-        .or(`id_number.eq.${idNumber},email.eq.${userProfile.email},and(first_name.ilike.${userProfile.first_name},last_name.ilike.${userProfile.last_name})`)
-        .maybeSingle();
-
-      if (existingProfile) {
-        // LINK existing profile instead of creating new one
-        const { data: linkedStaff, error: linkError } = await supabase
-          .from('staff_profiles')
-          .update({ user_id: userProfile.id })
-          .eq('id', existingProfile.id)
-          .select()
-          .single();
-        
-        if (linkError) throw linkError;
-        staff = linkedStaff;
-        logger.info('Linked existing staff_profile to user:', userProfile.id);
-      } else {
-        // Create new one if truly missing
-        const { data: newStaff, error: createError } = await supabase
-          .from('staff_profiles')
-          .upsert(newProfileInfo, { onConflict: 'id', ignoreDuplicates: false })
-          .select()
-          .single();
-
-        if (createError || !newStaff) {
-          logger.error(`Failed to auto-create staff_profile for user ${userProfile.id}:`, createError);
-          res.status(500).json({
-            success: false,
-            message: 'Failed to initialize staff profile for user'
-          });
-          return;
-        }
-        staff = newStaff;
-        logger.info('Auto-created missing staff_profiles row for user:', userProfile.id);
-      }
     }
+
+    const staffProfileId = staff.id;
 
     // Get current email from users table for comparison
     let currentEmail = null;
@@ -1077,7 +829,7 @@ export const updateStaffMember = async (
     const { data: updatedStaff, error: updateError } = await supabase
       .from('staff_profiles')
       .update(staffUpdateData)
-      .eq('id', req.params.id)
+      .eq('id', staffProfileId)
       .select()
       .single();
 
@@ -1090,7 +842,7 @@ export const updateStaffMember = async (
     const historyEntries = [];
     if (basic_salary !== undefined && staff.basic_salary !== parseFloat(basic_salary)) {
       historyEntries.push({
-        staff_id: req.params.id,
+        staff_id: staffProfileId,
         change_type: 'salary_adjustment',
         old_value: staff.basic_salary?.toString() || '0',
         new_value: basic_salary.toString(),
@@ -1100,7 +852,7 @@ export const updateStaffMember = async (
     }
     if (effectiveRole !== undefined && staff.role !== effectiveRole) {
       historyEntries.push({
-        staff_id: req.params.id,
+        staff_id: staffProfileId,
         change_type: 'role_change',
         old_value: staff.role,
         new_value: effectiveRole,
@@ -1109,7 +861,7 @@ export const updateStaffMember = async (
     }
     if (normalizedDepartment !== undefined && staff.department !== normalizedDepartment) {
       historyEntries.push({
-        staff_id: req.params.id,
+        staff_id: staffProfileId,
         change_type: 'department_transfer',
         old_value: staff.department,
         new_value: normalizedDepartment,
@@ -1118,7 +870,7 @@ export const updateStaffMember = async (
     }
     if (status !== undefined && staff.status !== status) {
       historyEntries.push({
-        staff_id: req.params.id,
+        staff_id: staffProfileId,
         change_type: 'status_change',
         old_value: staff.status,
         new_value: status,
@@ -2014,9 +1766,14 @@ export const getLeaveRequests = async (
         last_name: profile.last_name || user?.last_name || '',
         user
       } : null;
+      const staffName = staffData
+        ? `${staffData.first_name || ''} ${staffData.last_name || ''}`.trim()
+        : '';
       
       return {
         ...leave,
+        staff_name: staffName || null,
+        employee_id: staffData?.id_number || null,
         staff: staffData,
         approver,
       };

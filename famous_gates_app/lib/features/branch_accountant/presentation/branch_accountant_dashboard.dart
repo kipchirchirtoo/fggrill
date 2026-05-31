@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/readable_record.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../data/repository.dart';
 import '../domain/providers.dart';
@@ -578,7 +580,9 @@ class _CashierClearanceSectionState
         .getCashierClearances(date: _date, status: _status);
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -624,6 +628,11 @@ class _CashierClearanceSectionState
                     _money(_num(summary['total_expected'])),
                     Icons.payments,
                     Colors.teal),
+                _MetricCard(
+                    'Actual Cash',
+                    _money(_num(summary['total_actual'])),
+                    Icons.point_of_sale,
+                    Colors.indigo),
                 _MetricCard('Variance', _money(_num(summary['total_variance'])),
                     Icons.compare_arrows, Colors.purple),
               ]),
@@ -648,7 +657,7 @@ class _CashierClearanceSectionState
                                 item['expected_amount'])),
                             _money(_num(
                                 item['actual_cash'] ?? item['actual_amount'])),
-                            _money(_num(item['variance'])),
+                            '${_money(_num(item['variance']))}${item['variance_percentage'] != null ? ' (${_num(item['variance_percentage']).toStringAsFixed(1)}%)' : ''}',
                             _StatusPill(_text(item, ['status'])),
                             Wrap(
                               spacing: 8,
@@ -906,7 +915,9 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
     return {'sales': sales, 'financials': financials};
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -1022,6 +1033,12 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                         financialSummary['net_profit'])),
                     Icons.wallet,
                     Colors.indigo),
+                _MetricCard(
+                    'Net Position',
+                    _money(_num(financials['receivables']) -
+                        _num(financials['payables'])),
+                    Icons.account_balance_wallet,
+                    Colors.brown),
               ]),
               _TwoColumn(
                 left: _SalesTrendChart(data: dailyBreakdown),
@@ -1037,6 +1054,67 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                     title: 'Expense Categories',
                     values: _map(financialSummary['expensesByCategory'] ??
                         financialSummary['expenses_by_category'])),
+              ),
+              _TwoColumn(
+                left: _SectionCard(
+                  title: 'Recent Finance Transactions',
+                  child: _SimpleTable(
+                    columns: const ['Description', 'Date', 'Type', 'Amount'],
+                    rows: _list(financials['recentTransactions'])
+                        .map((e) => [
+                              _text(e, ['description', 'transaction_number'])
+                                      .isEmpty
+                                  ? 'Finance transaction'
+                                  : _text(
+                                      e, ['description', 'transaction_number']),
+                              _shortDate(_text(e, ['created_at'])),
+                              _title(_text(e, ['transaction_type']).isEmpty
+                                  ? 'entry'
+                                  : _text(e, ['transaction_type'])),
+                              _money(_num(e['amount'])),
+                            ])
+                        .toList(),
+                  ),
+                ),
+                right: _SectionCard(
+                  title: 'Recent Payments & Logbooks',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Payments',
+                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      _SimpleTable(
+                        columns: const ['Reference', 'Date', 'Amount'],
+                        rows: _list(financials['recentPayments'])
+                            .take(5)
+                            .map((e) => [
+                                  _text(e,
+                                      ['reference', 'payment_reference', 'id']),
+                                  _shortDate(_text(e, ['created_at'])),
+                                  _money(_num(e['amount'])),
+                                ])
+                            .toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Cashier Logbooks',
+                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      _SimpleTable(
+                        columns: const ['Type', 'Date', 'Status'],
+                        rows: _list(financials['logbooks'])
+                            .map((e) => [
+                                  _title(_text(e, ['type']).isEmpty
+                                      ? 'logbook'
+                                      : _text(e, ['type'])),
+                                  _text(e, ['log_date']),
+                                  _StatusPill(_text(e, ['status'])),
+                                ])
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               _AnalyticsTransactionTable(transactions: transactions),
             ],
@@ -1646,7 +1724,9 @@ class _FinancialWorkspaceSectionState
         .getDailyRecords(startDate: _date(start), endDate: _date(end));
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -1868,7 +1948,9 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
   Future<Map<String, dynamic>> _load() => ref
       .read(branchAccountantRepositoryProvider)
       .getProfitLoss(fromDate: _from, toDate: _to);
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -1978,7 +2060,9 @@ class _RevenueOversightSectionState
   Future<Map<String, dynamic>> _load() => ref
       .read(branchAccountantRepositoryProvider)
       .getRevenueOversight(period: _period);
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -2089,7 +2173,9 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   Future<Map<String, dynamic>> _load() => ref
       .read(branchAccountantRepositoryProvider)
       .getSoldItems(startDate: _from, endDate: _to);
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -2242,7 +2328,9 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
   Future<Map<String, dynamic>> _load() => ref
       .read(branchAccountantRepositoryProvider)
       .getStaffAudit(startDate: _from, endDate: _to);
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -2514,7 +2602,9 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
       .read(branchAccountantRepositoryProvider)
       .getShiftLogs(status: _status);
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -2713,7 +2803,9 @@ class _PosVoidApprovalsSectionState
   Future<List<Map<String, dynamic>>> _load() =>
       ref.read(branchAccountantRepositoryProvider).getPendingPosVoidRequests();
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -2858,7 +2950,9 @@ class _BankingSectionState extends ConsumerState<_BankingSection> {
     };
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -3014,7 +3108,9 @@ class _PaymentsInvoicesSectionState
     return {'invoices': results[0], 'transactions': results[1]};
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -3088,16 +3184,22 @@ class _CreditBillsSection extends ConsumerStatefulWidget {
 
 class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   String _status = 'all';
+  bool _customerMode = false;
   late Future<List<Map<String, dynamic>>> _future = _load();
 
-  Future<List<Map<String, dynamic>>> _load() => ref
-      .read(branchAccountantRepositoryProvider)
-      .getCreditBills(status: _status);
+  Future<List<Map<String, dynamic>>> _load() => _customerMode
+      ? ref.read(branchAccountantRepositoryProvider).getCustomerUnpaidBills()
+      : ref
+          .read(branchAccountantRepositoryProvider)
+          .getCreditBills(status: _status);
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
+    if (_customerMode) return _buildCustomer();
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
@@ -3108,6 +3210,17 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           subtitle:
               'Review staff credit bills from cashier clearance and payroll deductions.',
           actions: [
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Staff')),
+                ButtonSegment(value: true, label: Text('Customer')),
+              ],
+              selected: {_customerMode},
+              onSelectionChanged: (v) => setState(() {
+                _customerMode = v.first;
+                _future = _load();
+              }),
+            ),
             _Dropdown(
               value: _status,
               values: const ['all', 'pending', 'paid_cash', 'approved'],
@@ -3190,6 +3303,395 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         .recordCreditBillPayment('${bill['id']}', data);
     _toast('Paid bill recorded');
     _refresh();
+  }
+
+  // ── Customer credit bills view ──────────────────────────────────────────────
+  Widget _buildCustomer() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) {
+          num outstanding(Map<String, dynamic> b) =>
+              _num(b['balance_amount'] ?? b['outstanding_amount']) != 0
+                  ? _num(b['balance_amount'] ?? b['outstanding_amount'])
+                  : _num(b['total_amount'] ?? b['amount']) -
+                      _num(b['paid_amount']);
+          return _Page(
+            title: 'Credit Bills',
+            subtitle:
+                'Customer credit bills (unpaid bills) — record, settle, and print.',
+            actions: [
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Staff')),
+                  ButtonSegment(value: true, label: Text('Customer')),
+                ],
+                selected: {_customerMode},
+                onSelectionChanged: (v) => setState(() {
+                  _customerMode = v.first;
+                  _future = _load();
+                }),
+              ),
+              OutlinedButton.icon(
+                onPressed: _downloadOutstanding,
+                icon: const Icon(Icons.download, size: 16),
+                label: const Text('Outstanding PDF'),
+              ),
+              _RefreshButton(onPressed: _refresh),
+              FilledButton.icon(
+                onPressed: _createCustomerBill,
+                icon: const Icon(Icons.add),
+                label: const Text('New Customer Bill'),
+              ),
+            ],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Customer Bills', '${items.length}',
+                    Icons.receipt_long, Colors.blue),
+                _MetricCard('Total', _money(_sum(items, 'total_amount')),
+                    Icons.payments, Colors.green),
+                _MetricCard(
+                    'Outstanding',
+                    _money(items.fold<num>(0, (s, b) => s + outstanding(b))),
+                    Icons.warning,
+                    Colors.orange),
+              ]),
+              _SectionCard(
+                title: 'Customer Credit Bills',
+                child: _SimpleTable(
+                  columns: const [
+                    'Customer',
+                    'Reference',
+                    'Total',
+                    'Outstanding',
+                    'Status',
+                    'Date',
+                    'Actions'
+                  ],
+                  rows: items
+                      .map((e) => [
+                            _text(e, ['customer_name']),
+                            _text(e, ['bill_number', 'reference', 'id']),
+                            _money(_num(e['total_amount'] ?? e['amount'])),
+                            _money(outstanding(e)),
+                            _StatusPill(_text(e, ['status'])),
+                            _text(e, ['created_at', 'bill_date', 'due_date']),
+                            Wrap(spacing: 6, children: [
+                              TextButton(
+                                  onPressed: () => _showRecord(context, e),
+                                  child: const Text('View')),
+                              if (outstanding(e) > 0)
+                                FilledButton.tonal(
+                                    onPressed: () => _payCustomerBill(e),
+                                    child: const Text('Record Payment')),
+                              IconButton(
+                                tooltip: 'Invoice PDF',
+                                icon: const Icon(Icons.download, size: 18),
+                                onPressed: () => _downloadInvoice(e),
+                              ),
+                            ]),
+                          ])
+                      .toList(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _createCustomerBill() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _CustomerCreditBillDialog(),
+    );
+    if (result == true && mounted) {
+      _notify(context, 'Customer credit bill recorded');
+      _refresh();
+    }
+  }
+
+  Future<void> _payCustomerBill(Map<String, dynamic> bill) async {
+    final data = await _formDialog(context, 'Record Customer Payment', const [
+      'amount',
+      'payment_method',
+      'reference',
+      'notes',
+    ]);
+    if (data == null) return;
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .recordUnpaidBillPayment('${bill['id']}', data);
+      if (mounted) _notify(context, 'Payment recorded');
+      _refresh();
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to record payment: $e');
+    }
+  }
+
+  Future<void> _downloadInvoice(Map<String, dynamic> bill) async {
+    try {
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadUnpaidBillInvoice('${bill['id']}');
+      if (mounted) _notify(context, 'Invoice saved to ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to download invoice: $e');
+    }
+  }
+
+  Future<void> _downloadOutstanding() async {
+    try {
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadOutstandingCustomerCredits();
+      if (mounted) _notify(context, 'Report saved to ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to download report: $e');
+    }
+  }
+}
+
+// ── Customer Credit Bill create dialog ────────────────────────────────────────
+class _CustomerCreditBillDialog extends ConsumerStatefulWidget {
+  const _CustomerCreditBillDialog();
+
+  @override
+  ConsumerState<_CustomerCreditBillDialog> createState() =>
+      _CustomerCreditBillDialogState();
+}
+
+class _CustomerCreditBillDialogState
+    extends ConsumerState<_CustomerCreditBillDialog> {
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  String _customerType = 'corporate';
+  final _dueDateCtrl = TextEditingController(text: _today());
+  final _termsCtrl = TextEditingController();
+  final _remarksCtrl = TextEditingController();
+  final List<Map<String, dynamic>> _lines = [
+    {'description': '', 'quantity': 1.0, 'unitPrice': 0.0},
+  ];
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _dueDateCtrl.dispose();
+    _termsCtrl.dispose();
+    _remarksCtrl.dispose();
+    super.dispose();
+  }
+
+  num get _total => _lines.fold<num>(
+      0, (s, l) => s + _num(l['quantity']) * _num(l['unitPrice']));
+
+  Future<void> _save() async {
+    if (_nameCtrl.text.trim().isEmpty) {
+      _notify(context, 'Customer name is required');
+      return;
+    }
+    final validLines = _lines
+        .where((l) =>
+            _text(l, ['description']).isNotEmpty && _num(l['quantity']) > 0)
+        .toList();
+    if (validLines.isEmpty) {
+      _notify(context, 'Add at least one valid item');
+      return;
+    }
+    if (_total <= 0) {
+      _notify(context, 'Total must be greater than zero');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .createCustomerUnpaidBill({
+        'bill_type': 'customer_credit',
+        'reference_type': 'branch_customer_credit',
+        'customer_type': _customerType,
+        'customer_name': _nameCtrl.text.trim(),
+        if (_phoneCtrl.text.trim().isNotEmpty)
+          'customer_phone': _phoneCtrl.text.trim(),
+        'total_amount': num.parse(_total.toStringAsFixed(2)),
+        if (_termsCtrl.text.trim().isNotEmpty)
+          'payment_terms': _termsCtrl.text.trim(),
+        'due_date': _dueDateCtrl.text.trim(),
+        if (_remarksCtrl.text.trim().isNotEmpty)
+          'remarks': _remarksCtrl.text.trim(),
+        'items': validLines
+            .map((l) => {
+                  'description': l['description'],
+                  'quantity': _num(l['quantity']),
+                  'unitPrice': _num(l['unitPrice']),
+                })
+            .toList(),
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _notify(context,
+            'Failed: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New Customer Credit Bill'),
+      content: SizedBox(
+        width: 680,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Customer Name *'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _phoneCtrl,
+                    decoration: const InputDecoration(labelText: 'Phone'),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _customerType,
+                    decoration:
+                        const InputDecoration(labelText: 'Customer Type'),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'corporate', child: Text('Corporate')),
+                      DropdownMenuItem(
+                          value: 'individual', child: Text('Individual')),
+                      DropdownMenuItem(
+                          value: 'walk_in', child: Text('Walk-in')),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _customerType = v ?? 'corporate'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _dueDateCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Due Date (YYYY-MM-DD)'),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _termsCtrl,
+                decoration: const InputDecoration(labelText: 'Payment Terms'),
+              ),
+              const SizedBox(height: 14),
+              Row(children: [
+                const Expanded(
+                    child: Text('Items',
+                        style: TextStyle(fontWeight: FontWeight.w800))),
+                OutlinedButton.icon(
+                  onPressed: () => setState(() => _lines.add(
+                      {'description': '', 'quantity': 1.0, 'unitPrice': 0.0})),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Item'),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              ..._lines.asMap().entries.map((entry) {
+                final i = entry.key;
+                final line = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(children: [
+                    Expanded(
+                      flex: 4,
+                      child: TextField(
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
+                        controller: TextEditingController(
+                            text: '${line['description']}'),
+                        onChanged: (v) => line['description'] = v,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Qty'),
+                        controller: TextEditingController(
+                            text: '${_num(line['quantity'])}'),
+                        onChanged: (v) {
+                          line['quantity'] = num.tryParse(v) ?? 0;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Price'),
+                        controller: TextEditingController(
+                            text: '${_num(line['unitPrice'])}'),
+                        onChanged: (v) {
+                          line['unitPrice'] = num.tryParse(v) ?? 0;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: _lines.length > 1
+                          ? () => setState(() => _lines.removeAt(i))
+                          : null,
+                    ),
+                  ]),
+                );
+              }),
+              const Divider(),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text('Total: ${_money(_total)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Record Bill'),
+        ),
+      ],
+    );
   }
 }
 
@@ -3302,7 +3804,9 @@ class _ShiftPnlSectionState extends ConsumerState<_ShiftPnlSection> {
     return {'items': results[0], 'summary': results[1]};
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -3454,21 +3958,85 @@ class _BookingsInvoicesSectionState
   }
 }
 
-class _StockTakeSection extends ConsumerWidget {
+class _StockTakeSection extends ConsumerStatefulWidget {
   const _StockTakeSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_StockTakeSection> createState() => _StockTakeSectionState();
+}
+
+class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
+  late Future<List<Map<String, dynamic>>> _future =
+      ref.read(branchAccountantRepositoryProvider).getStockTakes();
+  bool _creating = false;
+
+  void _refresh() => setState(() =>
+      _future = ref.read(branchAccountantRepositoryProvider).getStockTakes());
+
+  Future<void> _createStockTake() async {
+    if (_creating) return;
+    setState(() => _creating = true);
+    try {
+      await ref.read(branchAccountantRepositoryProvider).createStockTake(
+            countType: 'monthly',
+            notes: 'Generated from Branch Accounting',
+          );
+      if (mounted) _notify(context, 'New stock take started');
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        _notify(context,
+            'Failed to start stock take: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
+  }
+
+  Future<void> _downloadWorksheet() async {
+    try {
+      if (mounted) _notify(context, 'Preparing worksheet…');
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadStockTakeWorksheet();
+      if (mounted) _notify(context, 'Worksheet saved to ${file.path}');
+    } catch (e) {
+      if (mounted) {
+        _notify(context,
+            'Failed to download worksheet: ${e is DioException ? (e.message ?? 'network error') : e}');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: ref.read(branchAccountantRepositoryProvider).getStockTakes(),
+      future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
-        onRefresh: () {},
+        onRefresh: _refresh,
         builder: (items) => _Page(
           title: 'Stock Takes',
           subtitle:
               'Daily branch stock takes submitted by storekeepers for accountant review and auditor flow.',
-          actions: const [],
+          actions: [
+            OutlinedButton.icon(
+              onPressed: _downloadWorksheet,
+              icon: const Icon(Icons.download, size: 16),
+              label: const Text('Download Worksheet'),
+            ),
+            _RefreshButton(onPressed: _refresh),
+            FilledButton.icon(
+              onPressed: _creating ? null : _createStockTake,
+              icon: _creating
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.add),
+              label: const Text('Start New Stock Take'),
+            ),
+          ],
           children: [
             _ResponsiveGrid(children: [
               _MetricCard(
@@ -3522,21 +4090,36 @@ class _StockTakeSection extends ConsumerWidget {
   }
 }
 
-class _PurchasesSection extends ConsumerWidget {
+class _PurchasesSection extends ConsumerStatefulWidget {
   const _PurchasesSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PurchasesSection> createState() => _PurchasesSectionState();
+}
+
+class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
+  int _tab = 0; // 0 = orders, 1 = invoices
+  late Future<Map<String, dynamic>> _future = _load();
+
+  Future<Map<String, dynamic>> _load() async {
     final repo = ref.read(branchAccountantRepositoryProvider);
+    final r = await Future.wait([
+      repo.getPurchaseOrders(),
+      repo.getSupplierInvoices(),
+      repo.getSupplierPayments(),
+    ]);
+    return {'pos': r[0], 'invoices': r[1], 'payments': r[2]};
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
-      future: Future.wait([
-        repo.getPurchaseOrders(),
-        repo.getSupplierInvoices(),
-        repo.getSupplierPayments(),
-      ]).then((r) => {'pos': r[0], 'invoices': r[1], 'payments': r[2]}),
+      future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
-        onRefresh: () {},
+        onRefresh: _refresh,
         builder: (data) {
           final pos = _list(data['pos']);
           final invoices = _list(data['invoices']);
@@ -3545,7 +4128,15 @@ class _PurchasesSection extends ConsumerWidget {
             title: 'Purchases',
             subtitle:
                 'Purchase orders, supplier invoices, and supplier payments for branch accounting.',
-            actions: const [],
+            actions: [
+              _RefreshButton(onPressed: _refresh),
+              FilledButton.icon(
+                onPressed: _tab == 0 ? _createPurchaseOrder : _createInvoice,
+                icon: const Icon(Icons.add),
+                label:
+                    Text(_tab == 0 ? 'New Purchase Order' : 'Record Invoice'),
+              ),
+            ],
             children: [
               _ResponsiveGrid(children: [
                 _MetricCard('Purchase Orders', '${pos.length}',
@@ -3555,26 +4146,706 @@ class _PurchasesSection extends ConsumerWidget {
                 _MetricCard('Supplier Payments', '${payments.length}',
                     Icons.payments, Colors.green),
               ]),
-              _SectionCard(
-                title: 'Purchase Orders',
-                child: _SimpleTable(
-                  columns: const ['PO', 'Supplier', 'Total', 'Status', 'Date'],
-                  rows: pos
-                      .map((e) => [
-                            _text(e,
-                                ['po_number', 'purchase_order_number', 'id']),
-                            _text(e, ['supplier_name']),
-                            _money(_num(e['total_amount'])),
-                            _StatusPill(_text(e, ['status'])),
-                            _text(e, ['created_at', 'order_date']),
-                          ])
-                      .toList(),
-                ),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 0, label: Text('Orders')),
+                  ButtonSegment(value: 1, label: Text('Invoices')),
+                ],
+                selected: {_tab},
+                onSelectionChanged: (v) => setState(() => _tab = v.first),
               ),
+              if (_tab == 0)
+                _SectionCard(
+                  title: 'Purchase Orders',
+                  child: _SimpleTable(
+                    columns: const [
+                      'PO',
+                      'Supplier',
+                      'Total',
+                      'Status',
+                      'Date',
+                      'Actions'
+                    ],
+                    rows: pos
+                        .map((e) => [
+                              _text(e,
+                                  ['po_number', 'purchase_order_number', 'id']),
+                              _text(e, ['supplier_name']).isEmpty
+                                  ? _text(_map(e['supplier']), ['name'])
+                                  : _text(e, ['supplier_name']),
+                              _money(_num(e['total_amount'])),
+                              _StatusPill(_text(e, ['status'])),
+                              _text(e, ['created_at', 'order_date']),
+                              Wrap(spacing: 6, children: [
+                                TextButton(
+                                    onPressed: () => _showRecord(context, e),
+                                    child: const Text('View')),
+                                IconButton(
+                                  tooltip: 'Download PDF',
+                                  icon: const Icon(Icons.download, size: 18),
+                                  onPressed: () => _downloadPoPdf(e),
+                                ),
+                              ]),
+                            ])
+                        .toList(),
+                  ),
+                ),
+              if (_tab == 1)
+                _SectionCard(
+                  title: 'Supplier Invoices',
+                  child: _SimpleTable(
+                    columns: const [
+                      'Invoice',
+                      'Supplier',
+                      'Total',
+                      'Status',
+                      'Date',
+                      'Actions'
+                    ],
+                    rows: invoices
+                        .map((e) => [
+                              _text(e, ['invoice_number', 'id']),
+                              _text(e, ['supplier_name']),
+                              _money(_num(e['total_amount'])),
+                              _StatusPill(_text(e, ['status'])),
+                              _text(e, ['invoice_date', 'created_at']),
+                              Wrap(spacing: 6, children: [
+                                TextButton(
+                                    onPressed: () => _viewInvoice(e),
+                                    child: const Text('View')),
+                                IconButton(
+                                  tooltip: 'Download PDF',
+                                  icon: const Icon(Icons.download, size: 18),
+                                  onPressed: () => _downloadInvoicePdf(e),
+                                ),
+                              ]),
+                            ])
+                        .toList(),
+                  ),
+                ),
             ],
           );
         },
       ),
+    );
+  }
+
+  Future<void> _createPurchaseOrder() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final suppliers = await repo.getSuppliers();
+    final items = await repo.getStoreItems();
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _PurchaseOrderDialog(suppliers: suppliers, items: items),
+    );
+    if (result == true && mounted) {
+      _notify(context, 'Purchase order created');
+      _refresh();
+    }
+  }
+
+  Future<void> _createInvoice() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final suppliers = await repo.getSuppliers();
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _SupplierInvoiceDialog(suppliers: suppliers),
+    );
+    if (result == true && mounted) {
+      _notify(context, 'Invoice recorded');
+      _refresh();
+    }
+  }
+
+  Future<void> _viewInvoice(Map<String, dynamic> inv) async {
+    try {
+      final full = await ref
+          .read(branchAccountantRepositoryProvider)
+          .getInvoiceDetail('${inv['id']}');
+      if (mounted) _showRecord(context, full.isEmpty ? inv : full);
+    } catch (_) {
+      if (mounted) _showRecord(context, inv);
+    }
+  }
+
+  Future<void> _downloadPoPdf(Map<String, dynamic> po) async {
+    try {
+      final lineItems = _list(po['items']);
+      final file = await _exportPdf(
+        filename: 'PO_${_text(po, ['po_number', 'id'])}.pdf',
+        title: 'PURCHASE ORDER',
+        subtitle: _text(po, ['po_number', 'id']),
+        metrics: {
+          'Supplier': _text(po, ['supplier_name']).isEmpty
+              ? _text(_map(po['supplier']), ['name'])
+              : _text(po, ['supplier_name']),
+          'Status': _text(po, ['status']),
+          'Date': _text(po, ['created_at', 'order_date']),
+          'Total': _money(_num(po['total_amount'])),
+        },
+        tableHeaders: const ['Item', 'Qty', 'Unit Price', 'Total'],
+        tableRows: lineItems
+            .map((it) => [
+                  _text(it, ['item_name']).isEmpty
+                      ? _text(_map(it['item']), ['name'])
+                      : _text(it, ['item_name']),
+                  '${_num(it['quantity'])}',
+                  _money(_num(it['unit_price'])),
+                  _money(_num(it['total_price'] ?? it['total'])),
+                ])
+            .toList(),
+      );
+      if (mounted) _notify(context, 'PO PDF saved to ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to generate PDF: $e');
+    }
+  }
+
+  Future<void> _downloadInvoicePdf(Map<String, dynamic> inv) async {
+    try {
+      Map<String, dynamic> full = inv;
+      try {
+        final detail = await ref
+            .read(branchAccountantRepositoryProvider)
+            .getInvoiceDetail('${inv['id']}');
+        if (detail.isNotEmpty) full = detail;
+      } catch (_) {}
+      final lineItems = _list(full['items']);
+      final file = await _exportPdf(
+        filename: 'Invoice_${_text(full, ['invoice_number', 'id'])}.pdf',
+        title: 'SUPPLIER INVOICE',
+        subtitle: _text(full, ['invoice_number', 'id']),
+        metrics: {
+          'Supplier': _text(full, ['supplier_name']),
+          'Invoice Date': _text(full, ['invoice_date']),
+          'Due Date': _text(full, ['due_date']),
+          'Status': _text(full, ['status']),
+          'Sub Total': _money(_num(full['sub_total'])),
+          'VAT': _money(_num(full['vat_amount'])),
+          'Total': _money(_num(full['total_amount'])),
+        },
+        tableHeaders: const [
+          'Description',
+          'Qty',
+          'Unit Price',
+          'VAT',
+          'Total'
+        ],
+        tableRows: lineItems
+            .map((it) => [
+                  _text(it, ['description', 'item_name']),
+                  '${_num(it['quantity'])}',
+                  _money(_num(it['unit_price'])),
+                  _money(_num(it['vat_amount'])),
+                  _money(_num(it['total_price'])),
+                ])
+            .toList(),
+      );
+      if (mounted) _notify(context, 'Invoice PDF saved to ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to generate PDF: $e');
+    }
+  }
+}
+
+// ── Purchase Order create dialog ──────────────────────────────────────────────
+class _PurchaseOrderDialog extends ConsumerStatefulWidget {
+  const _PurchaseOrderDialog({required this.suppliers, required this.items});
+  final List<Map<String, dynamic>> suppliers;
+  final List<Map<String, dynamic>> items;
+
+  @override
+  ConsumerState<_PurchaseOrderDialog> createState() =>
+      _PurchaseOrderDialogState();
+}
+
+class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
+  String? _supplierId;
+  final _deliveryCtrl = TextEditingController(text: _today());
+  final _notesCtrl = TextEditingController();
+  final List<Map<String, dynamic>> _lines = [
+    {'item_id': null, 'quantity': 1.0, 'unit_price': 0.0, 'vat_rate': 16.0},
+  ];
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _deliveryCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  String _itemId(Map<String, dynamic> it) =>
+      _text(it, ['id', 'sku', 'item_code']);
+  String _itemName(Map<String, dynamic> it) =>
+      _text(it, ['name', 'description', 'item_name']);
+
+  num get _total => _lines.fold<num>(0, (sum, l) {
+        final q = _num(l['quantity']);
+        final p = _num(l['unit_price']);
+        final vat = _num(l['vat_rate']);
+        return sum + (q * p) * (1 + vat / 100);
+      });
+
+  Future<void> _save() async {
+    if (_supplierId == null) {
+      _notify(context, 'Please select a supplier');
+      return;
+    }
+    final validLines = _lines
+        .where((l) =>
+            l['item_id'] != null &&
+            _num(l['quantity']) > 0 &&
+            _num(l['unit_price']) > 0)
+        .toList();
+    if (validLines.isEmpty) {
+      _notify(context, 'Add at least one valid item');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(branchAccountantRepositoryProvider).createPurchaseOrder({
+        'supplier_id': _supplierId,
+        'expected_delivery_date': _deliveryCtrl.text.trim(),
+        'special_instructions': _notesCtrl.text.trim(),
+        'items': validLines
+            .map((l) => {
+                  'item_id': l['item_id'],
+                  'quantity': _num(l['quantity']),
+                  'unit_price': _num(l['unit_price']),
+                  'vat_rate': _num(l['vat_rate']),
+                })
+            .toList(),
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _notify(context,
+            'Failed: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.response?.data['error'] ?? e.message) : e.message) : e}');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New Purchase Order'),
+      content: SizedBox(
+        width: 720,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _supplierId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Supplier *'),
+                items: widget.suppliers
+                    .map((s) => DropdownMenuItem(
+                          value: _text(s, ['id']),
+                          child: Text(_text(s, ['name']),
+                              overflow: TextOverflow.ellipsis),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _supplierId = v),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _deliveryCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Expected Delivery (YYYY-MM-DD)'),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _notesCtrl,
+                decoration: const InputDecoration(labelText: 'Notes'),
+                minLines: 1,
+                maxLines: 3,
+              ),
+              const SizedBox(height: 14),
+              Row(children: [
+                const Expanded(
+                    child: Text('Items',
+                        style: TextStyle(fontWeight: FontWeight.w800))),
+                OutlinedButton.icon(
+                  onPressed: () => setState(() => _lines.add({
+                        'item_id': null,
+                        'quantity': 1.0,
+                        'unit_price': 0.0,
+                        'vat_rate': 16.0
+                      })),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Item'),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              ..._lines.asMap().entries.map((entry) {
+                final i = entry.key;
+                final line = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(children: [
+                    Expanded(
+                      flex: 4,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: line['item_id'] as String?,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Item'),
+                        items: widget.items
+                            .map((it) => DropdownMenuItem(
+                                  value: _itemId(it),
+                                  child: Text(_itemName(it),
+                                      overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          setState(() {
+                            line['item_id'] = v;
+                            final found = widget.items.firstWhere(
+                                (it) => _itemId(it) == v,
+                                orElse: () => {});
+                            final cost = _num(found['cost_price'] ??
+                                found['retail_price'] ??
+                                found['unit_price']);
+                            if (cost > 0 && _num(line['unit_price']) == 0) {
+                              line['unit_price'] = cost;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Qty'),
+                        controller: TextEditingController(
+                            text: '${_num(line['quantity'])}'),
+                        onChanged: (v) =>
+                            line['quantity'] = num.tryParse(v) ?? 0,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Price'),
+                        controller: TextEditingController(
+                            text: '${_num(line['unit_price'])}'),
+                        onChanged: (v) {
+                          line['unit_price'] = num.tryParse(v) ?? 0;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: _lines.length > 1
+                          ? () => setState(() => _lines.removeAt(i))
+                          : null,
+                    ),
+                  ]),
+                );
+              }),
+              const Divider(),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text('Total (incl VAT): ${_money(_total)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Supplier Invoice create dialog ────────────────────────────────────────────
+class _SupplierInvoiceDialog extends ConsumerStatefulWidget {
+  const _SupplierInvoiceDialog({required this.suppliers});
+  final List<Map<String, dynamic>> suppliers;
+
+  @override
+  ConsumerState<_SupplierInvoiceDialog> createState() =>
+      _SupplierInvoiceDialogState();
+}
+
+class _SupplierInvoiceDialogState
+    extends ConsumerState<_SupplierInvoiceDialog> {
+  String? _supplierId;
+  final _otherSupplierCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
+  final _invoiceNumberCtrl = TextEditingController();
+  final _invoiceDateCtrl = TextEditingController(text: _today());
+  final _dueDateCtrl = TextEditingController(
+      text: _date(DateTime.now().add(const Duration(days: 30))));
+  final _notesCtrl = TextEditingController();
+  final List<Map<String, dynamic>> _lines = [
+    {'description': '', 'quantity': 1.0, 'unit_price': 0.0, 'vat_rate': 16.0},
+  ];
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _otherSupplierCtrl.dispose();
+    _pinCtrl.dispose();
+    _invoiceNumberCtrl.dispose();
+    _invoiceDateCtrl.dispose();
+    _dueDateCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  num get _subTotal => _lines.fold<num>(
+      0, (sum, l) => sum + _num(l['quantity']) * _num(l['unit_price']));
+  num get _vat => _lines.fold<num>(
+      0,
+      (sum, l) =>
+          sum +
+          _num(l['quantity']) *
+              _num(l['unit_price']) *
+              _num(l['vat_rate']) /
+              100);
+
+  Future<void> _save() async {
+    if (_supplierId == null && _otherSupplierCtrl.text.trim().isEmpty) {
+      _notify(context, 'Select a supplier or enter a supplier name');
+      return;
+    }
+    if (_invoiceNumberCtrl.text.trim().isEmpty) {
+      _notify(context, 'Invoice number is required');
+      return;
+    }
+    final validLines = _lines
+        .where((l) =>
+            _text(l, ['description']).isNotEmpty && _num(l['unit_price']) > 0)
+        .toList();
+    if (validLines.isEmpty) {
+      _notify(context, 'Add at least one valid item');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(branchAccountantRepositoryProvider).createSupplierInvoice({
+        if (_supplierId != null) 'supplier_id': _supplierId,
+        'other_supplier_name': _otherSupplierCtrl.text.trim(),
+        'manual_supplier_pin': _pinCtrl.text.trim(),
+        'invoice_number': _invoiceNumberCtrl.text.trim(),
+        'invoice_date': _invoiceDateCtrl.text.trim(),
+        'due_date': _dueDateCtrl.text.trim(),
+        'notes': _notesCtrl.text.trim(),
+        'items': validLines.map((l) {
+          final base = _num(l['quantity']) * _num(l['unit_price']);
+          final vat = base * _num(l['vat_rate']) / 100;
+          return {
+            'description': l['description'],
+            'quantity': _num(l['quantity']),
+            'unit_price': _num(l['unit_price']),
+            'vat_rate': _num(l['vat_rate']),
+            'vat_amount': vat,
+            'total_price': base + vat,
+          };
+        }).toList(),
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _notify(context,
+            'Failed: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Record Supplier Invoice'),
+      content: SizedBox(
+        width: 720,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _supplierId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                    labelText: 'Supplier (or enter name below)'),
+                items: widget.suppliers
+                    .map((s) => DropdownMenuItem(
+                          value: _text(s, ['id']),
+                          child: Text(_text(s, ['name']),
+                              overflow: TextOverflow.ellipsis),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _supplierId = v),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _otherSupplierCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Other Supplier Name'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _pinCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Supplier PIN'),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _invoiceNumberCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Invoice Number *'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _invoiceDateCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Invoice Date'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _dueDateCtrl,
+                    decoration: const InputDecoration(labelText: 'Due Date'),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              Row(children: [
+                const Expanded(
+                    child: Text('Items',
+                        style: TextStyle(fontWeight: FontWeight.w800))),
+                OutlinedButton.icon(
+                  onPressed: () => setState(() => _lines.add({
+                        'description': '',
+                        'quantity': 1.0,
+                        'unit_price': 0.0,
+                        'vat_rate': 16.0
+                      })),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Item'),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              ..._lines.asMap().entries.map((entry) {
+                final i = entry.key;
+                final line = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(children: [
+                    Expanded(
+                      flex: 4,
+                      child: TextField(
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
+                        controller: TextEditingController(
+                            text: '${line['description']}'),
+                        onChanged: (v) => line['description'] = v,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Qty'),
+                        controller: TextEditingController(
+                            text: '${_num(line['quantity'])}'),
+                        onChanged: (v) {
+                          line['quantity'] = num.tryParse(v) ?? 0;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Price'),
+                        controller: TextEditingController(
+                            text: '${_num(line['unit_price'])}'),
+                        onChanged: (v) {
+                          line['unit_price'] = num.tryParse(v) ?? 0;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: _lines.length > 1
+                          ? () => setState(() => _lines.removeAt(i))
+                          : null,
+                    ),
+                  ]),
+                );
+              }),
+              const Divider(),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Sub Total: ${_money(_subTotal)}'),
+                      Text('VAT: ${_money(_vat)}'),
+                      Text('Total: ${_money(_subTotal + _vat)}',
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ]),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Record Invoice'),
+        ),
+      ],
     );
   }
 }
@@ -3781,7 +5052,9 @@ class _BudgetsSectionState extends ConsumerState<_BudgetsSection> {
     };
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -3946,6 +5219,7 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
       'cash',
       'mpesa',
       'swipe',
+      'credit_bills',
       'banked',
       'opening_balance',
       'central_store_receipts',
@@ -3999,6 +5273,16 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
     final data = widget.existing;
     return '${_map(data['revenue_data'])[field] ?? _map(data['payment_data'])[field] ?? _map(data['banking_data'])[field] ?? _map(data['cogs_data'])[field] ?? _map(data['expense_data'])[field] ?? data[field] ?? ''}';
   }
+
+  // Field label overrides for the workspace (otherwise falls back to _title)
+  static const _fieldLabels = {
+    'other': 'Paid Bills',
+    'credit_bills': 'Credit Bills',
+    'swipe': 'Swipe (Card)',
+    'mpesa': 'Mpesa',
+  };
+
+  String _fieldLabel(String field) => _fieldLabels[field] ?? _title(field);
 
   @override
   void dispose() {
@@ -4071,10 +5355,10 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
             const Divider(),
             _KeyValueList({
               'Total Revenue': _money(_total(_revenueFields)),
-              'Total Payments':
-                  _money(_total(const ['cash', 'mpesa', 'swipe'])),
+              'Total Payments': _money(
+                  _total(const ['cash', 'mpesa', 'swipe', 'credit_bills'])),
               'Payment Variance': _money(
-                  _total(const ['cash', 'mpesa', 'swipe']) -
+                  _total(const ['cash', 'mpesa', 'swipe', 'credit_bills']) -
                       _total(_revenueFields)),
               'Expected Cash':
                   _money(_numText('cash') - _numText('petty_cash_total')),
@@ -4114,10 +5398,12 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _fieldGrid(const ['cash', 'mpesa', 'swipe'], readOnly),
+            _fieldGrid(
+                const ['cash', 'mpesa', 'swipe', 'credit_bills'], readOnly),
             const SizedBox(height: 8),
             Builder(builder: (_) {
-              final totalPay = _total(const ['cash', 'mpesa', 'swipe']);
+              final totalPay =
+                  _total(const ['cash', 'mpesa', 'swipe', 'credit_bills']);
               final totalRev = _total(_revenueFields);
               final variance = totalPay - totalRev;
               final isOk = variance.abs() <= 1;
@@ -4282,7 +5568,7 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
                   controller: _controllers[field],
                   keyboardType: TextInputType.number,
                   enabled: !readOnly,
-                  decoration: InputDecoration(labelText: _title(field)),
+                  decoration: InputDecoration(labelText: _fieldLabel(field)),
                 ),
               ))
           .toList(),
@@ -4326,7 +5612,8 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
 
   Future<void> _save(String status) async {
     final totalRevenue = _total(_revenueFields);
-    final totalPayments = _total(const ['cash', 'mpesa', 'swipe']);
+    final totalPayments =
+        _total(const ['cash', 'mpesa', 'swipe', 'credit_bills']);
     if (status == 'SUBMITTED' && (totalPayments - totalRevenue).abs() > 1) {
       _toast('Cannot submit with payment variance');
       return;
@@ -4374,6 +5661,7 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
         'cash': _numText('cash'),
         'mpesa': _numText('mpesa'),
         'swipe': _numText('swipe'),
+        'credit_bills': _numText('credit_bills'),
       },
       'total_payments': totalPayments,
       'banking_data': {
@@ -5620,14 +6908,19 @@ class _ResponsiveGrid extends StatelessWidget {
             : width > 650
                 ? 2
                 : 1;
-    return GridView.count(
-      crossAxisCount: count,
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: width < 650 ? 4.5 : 2.6,
-      children: children,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: count,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        // Fixed pixel height avoids the bottom overflow that a ratio causes
+        // when cells get narrow (icon 42 + vertical padding 28 = 70, plus slack).
+        mainAxisExtent: 74,
+      ),
+      itemCount: children.length,
+      itemBuilder: (context, index) => children[index],
     );
   }
 }
@@ -5643,12 +6936,13 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
             Container(
@@ -5665,15 +6959,19 @@ class _MetricCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(label,
-                      style: const TextStyle(
-                          color: AppColors.kTextSecondary, fontSize: 12)),
-                  const SizedBox(height: 4),
-                  Text(value,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w800)),
+                          color: AppColors.kTextSecondary, fontSize: 12)),
+                  const SizedBox(height: 2),
+                  Text(value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w800)),
                 ],
               ),
             ),
@@ -5767,7 +7065,7 @@ class _KeyValueList extends StatelessWidget {
                     Text(
                       entry.value is num
                           ? _money(_num(entry.value))
-                          : '${entry.value}',
+                          : readableRecordValue(values, entry.key, entry.value),
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ],
@@ -6075,7 +7373,8 @@ void _showRecord(BuildContext context, Map<String, dynamic> record) {
       title: const Text('Record Details'),
       content: SizedBox(
         width: 680,
-        child: SingleChildScrollView(child: _KeyValueList(_flatten(record))),
+        child:
+            SingleChildScrollView(child: ReadableRecordDetails(record: record)),
       ),
       actions: [
         TextButton(
@@ -6085,27 +7384,6 @@ void _showRecord(BuildContext context, Map<String, dynamic> record) {
       ],
     ),
   );
-}
-
-Map<String, String> _flatten(Map<String, dynamic> record) {
-  final out = <String, String>{};
-  for (final entry in record.entries) {
-    final value = entry.value;
-    if (value == null || '$value' == 'null') continue;
-    if (value is Map) {
-      for (final child in value.entries) {
-        final childValue = child.value;
-        if (childValue != null && '$childValue' != 'null') {
-          out['${_title(entry.key)} ${_title('${child.key}')}'] = '$childValue';
-        }
-      }
-    } else if (value is List) {
-      out[_title(entry.key)] = '${value.length} records';
-    } else {
-      out[_title(entry.key)] = '$value';
-    }
-  }
-  return out;
 }
 
 IconData _icon(BranchAccountantSection section) =>

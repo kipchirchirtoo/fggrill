@@ -11,20 +11,70 @@ class OutletPosRepository {
 
   final Dio _dio;
 
-  Future<List<PosOutlet>> getOutlets({String? outletType}) async {
+  Future<List<PosOutlet>> getOutlets(
+      {String? outletType, int? branchId}) async {
     final response = await _dio.get('/pos/outlets', queryParameters: {
       if (outletType != null) 'outlet_type': outletType,
+      if (branchId != null) 'branch_id': branchId,
     });
     return _list(response.data)
         .map((item) => PosOutlet.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
-  Future<List<OutletPosItem>> getItems(String outletId) async {
-    final response = await _dio.get('/pos/outlets/$outletId/items');
+  Future<List<OutletPosItem>> getItems(
+    String outletId, {
+    bool includeRelated = false,
+    PosOutlet? fallbackOutlet,
+  }) async {
+    final response =
+        await _dio.get('/pos/outlets/$outletId/items', queryParameters: {
+      if (includeRelated) 'include_related': true,
+    });
     return _list(response.data)
-        .map((item) => OutletPosItem.fromJson(Map<String, dynamic>.from(item)))
+        .map((item) => OutletPosItem.fromJson(
+              Map<String, dynamic>.from(item),
+              fallbackOutlet: fallbackOutlet,
+            ))
         .toList();
+  }
+
+  Future<List<OutletPosItem>> getUnifiedFoodAndBarItems(
+    PosOutlet primaryOutlet,
+  ) async {
+    final relatedItems = await getItems(
+      primaryOutlet.id,
+      includeRelated: true,
+      fallbackOutlet: primaryOutlet,
+    );
+    final relatedGroups = relatedItems.map((item) => item.itemGroup).toSet();
+    if (relatedGroups.contains('restaurant') && relatedGroups.contains('bar')) {
+      return _sortItems(relatedItems);
+    }
+
+    final outletById = <String, PosOutlet>{primaryOutlet.id: primaryOutlet};
+    for (final outlet in await getOutlets(branchId: primaryOutlet.branchId)) {
+      if (outlet.isFoodOrBar) outletById[outlet.id] = outlet;
+    }
+
+    final items = <OutletPosItem>[];
+    for (final outlet in outletById.values) {
+      if (!outlet.isFoodOrBar) continue;
+      final outletItems = await getItems(outlet.id, fallbackOutlet: outlet);
+      items.addAll(outletItems);
+    }
+
+    return _sortItems(items);
+  }
+
+  List<OutletPosItem> _sortItems(List<OutletPosItem> items) {
+    return [...items]..sort((a, b) {
+        final group = a.itemGroupLabel.compareTo(b.itemGroupLabel);
+        if (group != 0) return group;
+        final category = a.category.compareTo(b.category);
+        if (category != 0) return category;
+        return a.name.compareTo(b.name);
+      });
   }
 
   Future<List<OutletStaffMember>> getStaff({String? search}) async {
@@ -183,11 +233,11 @@ class OutletPosRepository {
 
   Future<OutletShift> closeShift(
     String shiftId, {
-    required double closingCashCounted,
+    double? closingCashCounted,
     String? varianceReason,
   }) async {
     final response = await _dio.post('/pos/shifts/$shiftId/close', data: {
-      'closing_cash_counted': closingCashCounted,
+      if (closingCashCounted != null) 'closing_cash_counted': closingCashCounted,
       if (varianceReason != null && varianceReason.trim().isNotEmpty)
         'cash_variance_reason': varianceReason.trim(),
     });
@@ -256,12 +306,29 @@ class PosOutlet {
     required this.name,
     required this.outletType,
     required this.pinPrefix,
+    this.branchId,
   });
 
   final String id;
   final String name;
   final String outletType;
   final String pinPrefix;
+  final int? branchId;
+
+  bool get isFoodOrBar => itemGroup == 'restaurant' || itemGroup == 'bar';
+
+  String get itemGroup {
+    final type = outletType.toLowerCase();
+    if (type == 'restaurant') return 'restaurant';
+    if (type.contains('bar')) return 'bar';
+    return 'other';
+  }
+
+  String get itemGroupLabel {
+    if (itemGroup == 'restaurant') return 'Restaurant';
+    if (itemGroup == 'bar') return 'Bar';
+    return 'Other';
+  }
 
   factory PosOutlet.fromJson(Map<String, dynamic> json) {
     return PosOutlet(
@@ -269,6 +336,7 @@ class PosOutlet {
       name: '${json['name'] ?? ''}',
       outletType: '${json['outlet_type'] ?? ''}',
       pinPrefix: '${json['pin_prefix'] ?? ''}',
+      branchId: _intOrNull(json['branch_id']),
     );
   }
 }
@@ -282,6 +350,10 @@ class OutletPosItem {
     required this.sellingPrice,
     required this.currentStock,
     required this.unit,
+    required this.itemGroup,
+    required this.itemGroupLabel,
+    required this.outletName,
+    required this.outletType,
   });
 
   final String id;
@@ -291,16 +363,49 @@ class OutletPosItem {
   final double sellingPrice;
   final double currentStock;
   final String unit;
+  final String itemGroup;
+  final String itemGroupLabel;
+  final String outletName;
+  final String outletType;
 
-  factory OutletPosItem.fromJson(Map<String, dynamic> json) {
+  factory OutletPosItem.fromJson(
+    Map<String, dynamic> json, {
+    PosOutlet? fallbackOutlet,
+  }) {
+    final outlet = json['outlet'];
+    final outletMap =
+        outlet is Map ? Map<String, dynamic>.from(outlet) : const {};
+    final outletType =
+        '${json['outlet_type'] ?? outletMap['outlet_type'] ?? fallbackOutlet?.outletType ?? ''}';
+    final rawGroup = '${json['item_group'] ?? ''}';
+    final itemGroup = rawGroup.trim().isNotEmpty
+        ? rawGroup
+        : fallbackOutlet?.itemGroup ??
+            (outletType == 'restaurant'
+                ? 'restaurant'
+                : outletType.contains('bar')
+                    ? 'bar'
+                    : 'other');
+    final groupLabel = '${json['item_group_label'] ?? ''}'.trim();
     return OutletPosItem(
       id: '${json['id']}',
       name: '${json['name'] ?? ''}',
-      category: '${json['category'] ?? 'Uncategorised'}',
+      category: _normalisedCategory(_categoryValue(json), itemGroup),
       costPrice: _num(json['cost_price']),
       sellingPrice: _num(json['selling_price']),
       currentStock: _num(json['current_stock']),
       unit: '${json['unit'] ?? 'each'}',
+      itemGroup: itemGroup,
+      itemGroupLabel: groupLabel.isNotEmpty
+          ? groupLabel
+          : itemGroup == 'restaurant'
+              ? 'Restaurant'
+              : itemGroup == 'bar'
+                  ? 'Bar'
+                  : 'Other',
+      outletName:
+          '${json['outlet_name'] ?? outletMap['name'] ?? fallbackOutlet?.name ?? ''}',
+      outletType: outletType,
     );
   }
 }
@@ -354,6 +459,11 @@ class OutletCartItem {
     return {
       'outlet_item_id': item.id,
       'name': item.name,
+      'category': item.category,
+      'item_group': item.itemGroup,
+      'item_group_label': item.itemGroupLabel,
+      'outlet_name': item.outletName,
+      'outlet_type': item.outletType,
       'quantity': quantity,
       'unit_price': item.sellingPrice,
       'line_total': lineTotal,
@@ -504,4 +614,70 @@ class OutletStockCount {
 double _num(Object? value) {
   final parsed = value is num ? value.toDouble() : double.tryParse('$value');
   return parsed ?? 0;
+}
+
+int? _intOrNull(Object? value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value');
+}
+
+Object? _categoryValue(Map<String, dynamic> json) {
+  for (final key in [
+    'category_name',
+    'categoryName',
+    'category_label',
+    'categoryLabel',
+    'menu_category_name',
+    'drink_category_name',
+    'category',
+  ]) {
+    final text = _categoryText(json[key]);
+    if (text.isNotEmpty) return text;
+  }
+
+  for (final key in [
+    'menu_category',
+    'drink_category',
+    'restaurant_category',
+    'bar_category',
+  ]) {
+    final text = _categoryText(json[key]);
+    if (text.isNotEmpty) return text;
+  }
+
+  return null;
+}
+
+String _categoryText(Object? value) {
+  if (value == null) return '';
+  if (value is Map) {
+    for (final key in ['name', 'category_name', 'label', 'title']) {
+      final text = '${value[key] ?? ''}'.trim();
+      if (text.isNotEmpty && text != 'null') return text;
+    }
+    return '';
+  }
+  final text = '$value'.trim();
+  if (text.isEmpty || text == 'null' || text == 'undefined') return '';
+  return text;
+}
+
+String _normalisedCategory(Object? value, String itemGroup) {
+  final category = _categoryText(value);
+  if (category.isEmpty) return 'Other';
+  final lower = category.toLowerCase();
+  final isGenericRestaurant =
+      itemGroup == 'restaurant' && lower == 'restaurant';
+  final isGenericBar = itemGroup == 'bar' &&
+      {
+        'bar',
+        'main bar',
+        'executive bar',
+        'kyogong executive bar',
+        'kyogong sports bar',
+      }.contains(lower);
+  if (isGenericRestaurant || isGenericBar) return 'Other';
+  return category;
 }

@@ -6,6 +6,8 @@ import '../../domain/admin_providers.dart';
 import 'notification_drawer.dart';
 import '../../../../features/auth/domain/auth_notifier.dart';
 
+const _allBranchesMenuValue = '__all_branches__';
+
 class AdminTopBar extends ConsumerStatefulWidget {
   final int unreadCount;
   final VoidCallback? onMenuTap;
@@ -110,32 +112,53 @@ class _BranchChip extends ConsumerWidget {
       data: (branches) {
         final selected =
             branches.where((b) => b.id == selectedBranchId).firstOrNull;
-        return ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 160),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.kPrimary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
+        return PopupMenuButton<String>(
+          tooltip: 'Select audit branch',
+          initialValue: selectedBranchId ?? _allBranchesMenuValue,
+          onSelected: (value) => ref
+              .read(adminSelectedBranchProvider.notifier)
+              .state = value == _allBranchesMenuValue ? null : value,
+          itemBuilder: (context) => [
+            const PopupMenuItem<String>(
+              value: _allBranchesMenuValue,
+              child: Text('All Branches'),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(PhosphorIcons.buildings(),
-                    size: 14, color: AppColors.kPrimary),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    selected?.name ?? 'All Branches',
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.kPrimary),
+            for (final branch in branches)
+              PopupMenuItem<String>(
+                value: branch.id,
+                child: Text(branch.name),
+              ),
+          ],
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.kPrimary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(PhosphorIcons.buildings(),
+                      size: 14, color: AppColors.kPrimary),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      selected?.name ?? 'All Branches',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.kPrimary),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Icon(PhosphorIcons.caretDown(),
+                      size: 12, color: AppColors.kPrimary),
+                ],
+              ),
             ),
           ),
         );

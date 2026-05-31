@@ -8,6 +8,7 @@ class KitchenOrder {
   final String? shortCode;
   final String? source;
   final String? paymentStatus;
+  final String? voidRequestStatus;
   final String status;
   final double total;
   final List<KitchenOrderItem> items;
@@ -24,6 +25,7 @@ class KitchenOrder {
     this.shortCode,
     this.source,
     this.paymentStatus,
+    this.voidRequestStatus,
     this.status = 'pending',
     this.total = 0,
     this.items = const [],
@@ -38,21 +40,22 @@ class KitchenOrder {
       orderNumber:
           '${json['order_number'] ?? json['orderNumber'] ?? json['id']}',
       orderType: '${json['order_type'] ?? 'dine_in'}',
-      tableNumber:
-          int.tryParse('${json['table_number'] ?? json['table'] ?? ''}') ??
-              (json['table_number'] as num?)?.toInt(),
-      waiterName: json['waiter_name'] as String?,
-      customerName: json['customer_name'] as String?,
+      tableNumber: _intValue(json['table_number'] ?? json['table']),
+      waiterName: _optionalString(json['waiter_name']),
+      customerName: _optionalString(json['customer_name']),
       shortCode: json['short_code'] == null ? null : '${json['short_code']}',
       source: json['source'] == null ? null : '${json['source']}',
       paymentStatus:
           json['payment_status'] == null ? null : '${json['payment_status']}',
+      voidRequestStatus: json['void_request_status'] == null
+          ? null
+          : '${json['void_request_status']}',
       status: '${json['status'] ?? 'pending'}',
-      total: (json['total'] as num?)?.toDouble() ?? 0,
+      total: _doubleValue(json['total'] ?? json['total_amount']),
       items: rawItems
-          .whereType<Map<String, dynamic>>()
-          .cast<Map<String, dynamic>>()
-          .map((item) => KitchenOrderItem.fromJson(item))
+          .whereType<Map>()
+          .map((item) =>
+              KitchenOrderItem.fromJson(Map<String, dynamic>.from(item)))
           .toList(),
       createdAt:
           DateTime.tryParse('${json['created_at'] ?? json['createdAt']}') ??
@@ -64,6 +67,10 @@ class KitchenOrder {
   bool get isCaptainOrder =>
       source == 'pos_shift_order' || id.startsWith('pos:');
 
+  bool get hasPendingVoidRequest =>
+      voidRequestStatus?.toLowerCase() == 'pending' ||
+      status.toLowerCase() == 'void_requested';
+
   String get locationLabel {
     if (tableNumber != null) return 'Table $tableNumber';
     if (orderType == 'room_service') return 'Room Service';
@@ -73,6 +80,24 @@ class KitchenOrder {
 
   Duration get elapsed => DateTime.now().difference(createdAt);
   bool get isUrgent => elapsed.inMinutes > 15;
+
+  static String? _optionalString(dynamic value) {
+    if (value == null) return null;
+    final text = '$value'.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  static int? _intValue(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value');
+  }
+
+  static double _doubleValue(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
+  }
 }
 
 class KitchenOrderItem {
@@ -95,10 +120,9 @@ class KitchenOrderItem {
       id: '${json['id'] ?? json['item_id']}',
       name:
           '${json['name'] ?? json['item_name'] ?? json['menu_item_name'] ?? ''}',
-      quantity: (json['quantity'] as num?)?.toInt() ??
-          (json['qty'] as num?)?.toInt() ??
-          1,
-      notes: (json['notes'] ?? json['special_instructions']) as String?,
+      quantity: KitchenOrder._intValue(json['quantity'] ?? json['qty']) ?? 1,
+      notes: KitchenOrder._optionalString(
+          json['notes'] ?? json['special_instructions']),
       isReady: json['is_ready'] == true ||
           json['isReady'] == true ||
           '${json['status'] ?? ''}'.toLowerCase() == 'ready',

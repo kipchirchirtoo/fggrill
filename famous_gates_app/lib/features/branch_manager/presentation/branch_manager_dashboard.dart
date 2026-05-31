@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
+import '../../kitchen/presentation/kds_screen.dart';
 import 'mobile/mobile_manager_reviews_screen.dart';
 
 enum BranchManagerSection {
@@ -37,6 +38,7 @@ enum BranchManagerSection {
   stockAnalytics,
   stockOut,
   restaurant,
+  orderIntelligence,
   menu,
   barMenu,
   housekeeping,
@@ -259,6 +261,8 @@ class _BranchManagerDashboardState
           break;
         case BranchManagerSection.restaurant:
           _rows = await _repo.restaurantOrders();
+          break;
+        case BranchManagerSection.orderIntelligence:
           break;
         case BranchManagerSection.menu:
           _rows = await _repo.restaurantMenuItems(category: _status);
@@ -494,6 +498,12 @@ class _BranchManagerDashboardState
           icon: PhosphorIcons.forkKnife(),
           group: 'Restaurant',
         ),
+        const MasterNavItem(
+          section: BranchManagerSection.orderIntelligence,
+          label: 'Order Intelligence',
+          icon: Icons.insights_outlined,
+          group: 'Restaurant',
+        ),
         MasterNavItem(
           section: BranchManagerSection.menu,
           label: 'Restaurant Menu',
@@ -571,6 +581,8 @@ class _BranchManagerDashboardState
         return _reports();
       case BranchManagerSection.reviews:
         return const MobileManagerReviewsScreen();
+      case BranchManagerSection.orderIntelligence:
+        return const KitchenOrderIntelligencePanel();
       case BranchManagerSection.stockAnalytics:
         return _stockAnalytics();
       case BranchManagerSection.staffDocuments:
@@ -1908,6 +1920,7 @@ class _BranchManagerDashboardState
         return PhosphorIcons.package();
       case BranchManagerSection.menu:
       case BranchManagerSection.restaurant:
+      case BranchManagerSection.orderIntelligence:
         return PhosphorIcons.forkKnife();
       case BranchManagerSection.barMenu:
         return PhosphorIcons.wine();
@@ -2033,6 +2046,8 @@ String _label(BranchManagerSection section) {
       return 'Stock Out';
     case BranchManagerSection.restaurant:
       return 'Restaurant';
+    case BranchManagerSection.orderIntelligence:
+      return 'Order Intelligence';
     case BranchManagerSection.menu:
       return 'Restaurant Menu';
     case BranchManagerSection.barMenu:
@@ -2078,6 +2093,8 @@ String _subtitle(BranchManagerSection section) {
       return 'Stock-out movement ledger for branch inventory deductions.';
     case BranchManagerSection.restaurant:
       return 'Restaurant operation overview with recent orders and quick links to menu and waiter sales.';
+    case BranchManagerSection.orderIntelligence:
+      return 'Branch-specific kitchen demand, rush windows, and preparation pressure from restaurant POS orders.';
     case BranchManagerSection.menu:
       return 'Restaurant menu item/category management, availability toggles, and CRUD.';
     case BranchManagerSection.barMenu:

@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/api_error_message.dart';
+import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../services/print_service.dart';
 import '../../pos/domain/models.dart';
@@ -1566,22 +1567,12 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
     try {
       final repo = ref.read(cashierRepositoryProvider);
       final shiftId = _text(row, ['id']);
-      final shift = await repo.getShift(shiftId);
-      final items = await repo.getPOSItems();
-      final staff = await repo.getBranchStaff().catchError(
-            (_) => <Map<String, dynamic>>[],
-          );
       if (!mounted) return;
-      final payload = await _shiftCloseLogbookDialog(
-        context,
-        shift: _payload(shift).isEmpty ? row : _payload(shift),
-        stockItems: items,
-        staffMembers: staff,
-      );
+      final payload = await _automatedShiftCloseDialog(context);
       if (payload == null) return;
       await repo.closeShift(shiftId, payload);
       ref.invalidate(cashierShiftsProvider);
-      _snack('Shift closed');
+      _snack('Shift closed. Lina generated the logbook for accountant review.');
     } catch (error) {
       _snack('Close shift failed: ${apiErrorMessage(error)}');
     }
@@ -1607,6 +1598,72 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
     if (!mounted) return;
     AppNotifier.show(context, message);
   }
+}
+
+Future<Map<String, dynamic>?> _automatedShiftCloseDialog(BuildContext context) {
+  final cashController = TextEditingController();
+  final notesController = TextEditingController();
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Close shift with Lina'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Lina will generate the cashier logbook, migrate waiter unpaid bills to staff credit bills, post POS stock adjustments, and send the logbook to the branch accountant.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: cashController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Counted cash (optional)',
+                helperText: 'Leave blank to use expected cash.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Close note (optional)',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.auto_awesome),
+          onPressed: () {
+            final cashText = cashController.text.trim();
+            final notes = notesController.text.trim();
+            Navigator.pop(context, {
+              'automation_mode': 'lina',
+              if (cashText.isNotEmpty)
+                'actual_cash': num.tryParse(cashText) ?? 0,
+              if (cashText.isNotEmpty)
+                'closing_float': num.tryParse(cashText) ?? 0,
+              if (notes.isNotEmpty) 'remarks': notes,
+            });
+          },
+          label: const Text('Close Shift'),
+        ),
+      ],
+    ),
+  ).whenComplete(() {
+    cashController.dispose();
+    notesController.dispose();
+  });
 }
 
 class _ShiftCreditEntry {
@@ -1683,6 +1740,8 @@ class _ShiftStockEntry {
       };
 }
 
+// Kept temporarily for rollback while Lina close automation is being rolled out.
+// ignore: unused_element
 Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   BuildContext context, {
   required Map<String, dynamic> shift,
@@ -3118,8 +3177,9 @@ class _JsonSummary extends StatelessWidget {
     return _KeyValueGrid(
       values: {
         for (final entry in entries)
-          entry.key:
-              entry.value is num ? _money(entry.value) : entry.value.toString(),
+          entry.key: entry.value is num
+              ? _money(entry.value)
+              : readableRecordValue(data, entry.key, entry.value),
       },
     );
   }

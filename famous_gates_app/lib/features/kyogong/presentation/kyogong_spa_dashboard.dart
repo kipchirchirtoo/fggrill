@@ -1215,7 +1215,9 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
-                onPressed: () => setState(() => _future = _load()),
+                onPressed: () => setState(() {
+                  _future = _load();
+                }),
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Refresh'),
               ),
@@ -1299,7 +1301,9 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
     try {
       await ref.read(kyogongRepositoryProvider).approveShift(_text(row, ['id']),
           {'notes': 'Approved from Flutter Kyogong module'});
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
     } catch (error) {
       _snack('Approve failed: $error');
     }
@@ -1312,7 +1316,9 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
       await ref
           .read(kyogongRepositoryProvider)
           .flagShift(_text(row, ['id']), {'reason': reason});
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
     } catch (error) {
       _snack('Flag failed: $error');
     }
@@ -1433,7 +1439,9 @@ class _ServicesSectionState extends ConsumerState<_ServicesSection> {
     if (body == null) return;
     try {
       await ref.read(kyogongRepositoryProvider).createDynamicService(body);
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
     } catch (error) {
       _snack('Create failed: $error');
     }
@@ -1446,7 +1454,9 @@ class _ServicesSectionState extends ConsumerState<_ServicesSection> {
       await ref
           .read(kyogongRepositoryProvider)
           .updateDynamicService(_text(row, ['id']), body);
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
     } catch (error) {
       _snack('Update failed: $error');
     }
@@ -1490,7 +1500,9 @@ class _PettyCashSectionState extends ConsumerState<_PettyCashSection> {
                   await ref
                       .read(kyogongRepositoryProvider)
                       .recordPettyCash(body);
-                  setState(() => _future = _load());
+                  setState(() {
+                    _future = _load();
+                  });
                 },
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Entry'),

@@ -713,6 +713,50 @@ class _StoreResourceTab extends ConsumerWidget {
       .join(' ');
 }
 
+String _storeDisplayName(dynamic value) {
+  if (value is Map) {
+    final joinedName = [value['first_name'], value['last_name']]
+        .where((part) => part != null && '$part'.trim().isNotEmpty)
+        .map((part) => '$part'.trim())
+        .join(' ');
+    final name = value['display_name'] ??
+        value['name'] ??
+        value['branch_name'] ??
+        value['full_name'] ??
+        value['staff_name'] ??
+        value['employee_name'] ??
+        (joinedName.isEmpty ? null : joinedName) ??
+        value['registration_number'] ??
+        value['model'] ??
+        value['code'];
+    if (name != null && '$name'.trim().isNotEmpty) return '$name';
+    final id = value['id'];
+    return id == null ? '—' : _storeShortReference('$id');
+  }
+  if (value == null || '$value'.trim().isEmpty) return '—';
+  return _storeShortReference('$value');
+}
+
+String _storeShortReference(String value) {
+  final trimmed = value.trim();
+  final isUuid = RegExp(
+          r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+      .hasMatch(trimmed);
+  if (!isUuid || trimmed.length <= 12) return trimmed;
+  return '${trimmed.substring(0, 8)}...${trimmed.substring(trimmed.length - 4)}';
+}
+
+String _storeBranchName(Map<String, dynamic> row) {
+  final branch = row['branch_name'] ??
+      row['to_branch_name'] ??
+      row['from_branch_name'] ??
+      row['requesting_branch'] ??
+      row['branch'] ??
+      row['to_branch'] ??
+      row['from_branch'];
+  return _storeDisplayName(branch);
+}
+
 // Uses raw map data via storeResourceProvider so we get all fields
 // (request_number, branch_name, items[], status, priority).
 // The old StockRequest model only had itemName/quantity (single item) — insufficient.
@@ -813,7 +857,7 @@ class _StockRequestsTabState extends ConsumerState<_StockRequestsTab> {
                                   color: statusColor, size: 18),
                             ),
                             title: Text(
-                              '${r['request_number'] ?? r['id']}  —  ${r['branch_name'] ?? r['requesting_branch'] ?? '—'}',
+                              '${r['request_number'] ?? _storeDisplayName(r['id'])}  —  ${_storeBranchName(r)}',
                               style:
                                   const TextStyle(fontWeight: FontWeight.w600),
                             ),
@@ -880,7 +924,8 @@ class _StockRequestsTabState extends ConsumerState<_StockRequestsTab> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Request ${request['request_number'] ?? request['id']}'),
+        title: Text(
+            'Request ${request['request_number'] ?? _storeDisplayName(request['id'])}'),
         content: SizedBox(
           width: 600,
           child: SingleChildScrollView(
@@ -893,8 +938,7 @@ class _StockRequestsTabState extends ConsumerState<_StockRequestsTab> {
                       label: Text(status.toUpperCase(),
                           style: const TextStyle(fontSize: 10))),
                   Chip(
-                      label: Text(
-                          'Branch: ${request['branch_name'] ?? request['requesting_branch'] ?? '—'}',
+                      label: Text('Branch: ${_storeBranchName(request)}',
                           style: const TextStyle(fontSize: 10))),
                   if (request['priority'] != null)
                     Chip(
@@ -1648,7 +1692,7 @@ class _PackingTabState extends ConsumerState<_PackingTab> {
                       leading: Icon(PhosphorIcons.package(),
                           color: AppColors.kPrimary),
                       title: Text(
-                        '${r['request_number'] ?? r['id']}  —  ${r['branch_name'] ?? r['requesting_branch'] ?? '—'}',
+                        '${r['request_number'] ?? _storeDisplayName(r['id'])}  —  ${_storeBranchName(r)}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
@@ -1725,8 +1769,7 @@ class _PackingTabState extends ConsumerState<_PackingTab> {
                         items: vehicles
                             .map((v) => DropdownMenuItem(
                                   value: '${v['id']}',
-                                  child: Text(
-                                      '${v['registration_number'] ?? v['model'] ?? v['id']}'),
+                                  child: Text(_storeDisplayName(v)),
                                 ))
                             .toList(),
                         onChanged: (val) =>
@@ -1740,7 +1783,7 @@ class _PackingTabState extends ConsumerState<_PackingTab> {
                         items: drivers
                             .map((d) => DropdownMenuItem(
                                   value: '${d['id']}',
-                                  child: Text('${d['name'] ?? d['id']}'),
+                                  child: Text(_storeDisplayName(d)),
                                 ))
                             .toList(),
                         onChanged: (val) =>
@@ -1912,7 +1955,7 @@ class _CentralStockTakesTabState extends ConsumerState<_CentralStockTakesTab> {
                       leading:
                           Icon(PhosphorIcons.clipboardText(), color: color),
                       title: Text(
-                        '${t['take_number'] ?? t['id']}  —  ${t['store_type'] ?? ''}',
+                        '${t['take_number'] ?? _storeDisplayName(t['id'])}  —  ${t['store_type'] ?? ''}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(

@@ -16,9 +16,11 @@ class KitchenRepository {
   final Dio _dio;
   final Ref _ref;
 
-  Future<String> get _branchId async {
+  Future<int?> get _branchId async {
     final storage = _ref.read(secureStorageProvider);
-    return await storage.read(key: AuthRepository.branchIdKey) ?? '';
+    final raw = await storage.read(key: AuthRepository.branchIdKey);
+    final parsed = int.tryParse((raw ?? '').trim());
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 
   List<KitchenOrder> _parseOrders(dynamic data) {
@@ -26,10 +28,25 @@ class KitchenRepository {
         ? data
         : (data is Map ? (data['data'] ?? data['orders'] ?? []) : []);
     return (list as List)
-        .whereType<Map<String, dynamic>>()
-        .cast<Map<String, dynamic>>()
-        .map((json) => KitchenOrder.fromJson(json))
+        .whereType<Map>()
+        .map((json) => KitchenOrder.fromJson(Map<String, dynamic>.from(json)))
         .toList();
+  }
+
+  String _errorMessage(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        final message = data['message'] ?? data['error'];
+        if (message != null && '$message'.trim().isNotEmpty) {
+          return '$message';
+        }
+      }
+      if (error.response?.statusCode != null) {
+        return 'Kitchen API returned ${error.response!.statusCode}.';
+      }
+    }
+    return '$error';
   }
 
   Future<List<KitchenOrder>> getOrders() async {
@@ -37,13 +54,13 @@ class KitchenRepository {
       final branchId = await _branchId;
       final response =
           await _dio.get('/restaurant/kitchen/orders', queryParameters: {
-        if (branchId.isNotEmpty) 'branch_id': branchId,
+        if (branchId != null) 'branch_id': branchId,
       });
       return _parseOrders(response.data);
     } catch (e, stackTrace) {
       debugPrint('KitchenRepository.getOrders error: $e');
       debugPrint('StackTrace: $stackTrace');
-      return [];
+      throw Exception('Unable to load kitchen orders: ${_errorMessage(e)}');
     }
   }
 
@@ -52,14 +69,14 @@ class KitchenRepository {
       final branchId = await _branchId;
       final response = await _dio
           .get('/restaurant/kitchen/orders/history', queryParameters: {
-        if (branchId.isNotEmpty) 'branch_id': branchId,
+        if (branchId != null) 'branch_id': branchId,
         'limit': limit,
       });
       return _parseOrders(response.data);
     } catch (e, stackTrace) {
       debugPrint('KitchenRepository.getHistory error: $e');
       debugPrint('StackTrace: $stackTrace');
-      return [];
+      throw Exception('Unable to load kitchen history: ${_errorMessage(e)}');
     }
   }
 
@@ -95,7 +112,7 @@ class KitchenRepository {
       if (priority != null && priority != 'ALL') 'priority': priority,
       if (category != null && category != 'ALL') 'category': category,
       if (role != null && role.isNotEmpty) 'role': role,
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (branchId != null) 'branch_id': branchId,
     });
     final payload = response.data;
     final list = payload is List

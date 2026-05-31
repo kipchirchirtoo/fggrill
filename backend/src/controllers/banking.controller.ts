@@ -490,7 +490,23 @@ export const getBankReconciliations = async (
 
         const { data: reconciliations, error } = await query;
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === 'PGRST205') {
+                logger.warn('Banking reconciliations table is not configured; returning an empty list', {
+                    bank_account_id,
+                    status,
+                    start_date,
+                    end_date
+                });
+                res.status(200).json({
+                    success: true,
+                    data: [],
+                    message: 'Bank reconciliations are not configured yet.'
+                });
+                return;
+            }
+            throw error;
+        }
 
         // Transform data for frontend compatibility
         const transformedReconciliations = (reconciliations || []).map((rec: any) => {

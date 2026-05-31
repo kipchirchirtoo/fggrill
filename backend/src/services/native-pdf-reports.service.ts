@@ -113,10 +113,15 @@ function drawSummaryBox(doc: PDFKit.PDFDocument, y: number, items: { label: stri
 }
 
 function drawFooter(doc: PDFKit.PDFDocument) {
-  const y = doc.page.height - 40;
+  const y = doc.page.height - 52;
   doc.strokeColor(BORDER).lineWidth(0.5).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke();
   doc.fillColor(SECONDARY).fontSize(7.5).font('Helvetica')
-    .text(`Generated: ${new Date().toLocaleString('en-KE')} | ${COMPANY_NAME} — Confidential`, 40, y + 6, { align: 'center' });
+    .text(`Generated: ${new Date().toLocaleString('en-KE')} | ${COMPANY_NAME} - Confidential`, 40, y + 7, {
+      width: doc.page.width - 80,
+      align: 'center',
+      lineBreak: false,
+      ellipsis: true
+    });
 }
 
 // ── SUPPLIER STATEMENT ────────────────────────────────────────────────────────
@@ -1502,16 +1507,39 @@ export async function generateBrandedPayrollSummaryV2(
   const approverLine = runData.approver_name ? `Approved by: ${runData.approver_name}` : '';
   const subtitle = `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()} · Total Employees: ${records.length}${approverLine ? ' · ' + approverLine : ''}`;
 
-  // A3 LANDSCAPE: 1190 × 842 pt
-  const doc = new PDFDocument({ margin: 36, size: 'A3', layout: 'landscape', autoFirstPage: true, bufferPages: true });
+  // A3 landscape gives the payroll table enough horizontal room without
+  // shrinking the report into unreadable text.
+  const doc = new PDFDocument({
+    margin: 34,
+    size: 'A3',
+    layout: 'landscape',
+    autoFirstPage: true,
+    bufferPages: true
+  });
   
   const filename = `Payroll_Summary_${branchName.replace(/\s+/g, '_')}_${monthName}_${runData.year}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   doc.pipe(res);
 
-  const MARGIN = 36;
-  const PAGE_W = 1190;
+  const MARGIN = 34;
+  const PAGE_W = doc.page.width;
+  const PAGE_H = doc.page.height;
+  const TABLE_W = PAGE_W - (MARGIN * 2);
+  const FOOTER_TOP = PAGE_H - 46;
+  const ROW_H = 18;
+  const HEADER_H = 22;
+  const ROW_FONT = 7.2;
+  const HEADER_FONT = 7.4;
+  const PADDING_X = 4;
+
+  const money = (value: number) =>
+    `KES ${Math.round(value || 0).toLocaleString('en-KE')}`;
+  const moneyOrDash = (value: number) => value > 0 ? money(value) : '—';
+  const oneLine = (value: unknown, fallback = '—') => {
+    const raw = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return raw && raw !== 'null' && raw !== 'undefined' ? raw : fallback;
+  };
   
   // Custom header for A3
   const drawHeader = (d: PDFKit.PDFDocument, t: string, st?: string) => {
@@ -1523,49 +1551,63 @@ export async function generateBrandedPayrollSummaryV2(
     d.fontSize(9).font('Helvetica').fillColor(SECONDARY).text(COMPANY_ADDRESS, MARGIN + 70, 50);
     
     // Right side info
-    d.fontSize(9).font('Helvetica-Bold').fillColor(PRIMARY).text(t, PAGE_W - MARGIN - 400, 32, { width: 400, align: 'right' });
-    if (st) d.fontSize(8).font('Helvetica').fillColor(SECONDARY).text(st, PAGE_W - MARGIN - 400, 48, { width: 400, align: 'right' });
+    d.fontSize(9).font('Helvetica-Bold').fillColor(PRIMARY).text(t, PAGE_W - MARGIN - 420, 32, { width: 420, align: 'right', lineBreak: false, ellipsis: true });
+    if (st) d.fontSize(8).font('Helvetica').fillColor(SECONDARY).text(st, PAGE_W - MARGIN - 420, 48, { width: 420, align: 'right', lineBreak: false, ellipsis: true });
 
     // Approved by line (prominent, below subtitle)
     if (runData.approver_name) {
       d.fontSize(8).font('Helvetica-Bold').fillColor('#15803d')
         .text(`Approved by: ${runData.approver_name}${runData.approved_at ? '  ·  ' + new Date(runData.approved_at).toLocaleDateString('en-KE') : ''}`,
-          PAGE_W - MARGIN - 400, 62, { width: 400, align: 'right' });
+          PAGE_W - MARGIN - 420, 62, { width: 420, align: 'right', lineBreak: false, ellipsis: true });
     }
 
     d.strokeColor(BORDER).lineWidth(1).moveTo(MARGIN, 94).lineTo(PAGE_W - MARGIN, 94).stroke();
-    d.rect(MARGIN, 95, PAGE_W - (MARGIN * 2), 3).fill(GOLD);
+    d.rect(MARGIN, 95, TABLE_W, 3).fill(GOLD);
     return 115;
   };
 
   let y = drawHeader(doc, title, `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()} · Total Employees: ${records.length}`);
 
-  // Column definitions for A3 Landscape
-  const C = [
-    { label: '#',          x: 36,   width: 25 },
-    { label: 'Emp ID',     x: 61,   width: 55 },
-    { label: 'Staff Name', x: 116,  width: 130 },
-    { label: 'Role',       x: 246,  width: 80 },
-    { label: 'Basic',      x: 326,  width: 80,  align: 'right' },
-    { label: 'Additions',  x: 406,  width: 75,  align: 'right' },
-    { label: 'Gross',      x: 481,  width: 85,  align: 'right' },
-    { label: 'NSSF',       x: 566,  width: 65,  align: 'right' },
-    { label: 'SHIF',       x: 631,  width: 65,  align: 'right' },
-    { label: 'Loans',      x: 696,  width: 65,  align: 'right' },
-    { label: 'Advances',   x: 761,  width: 65,  align: 'right' },
-    { label: 'Unpaid Bills', x: 826, width: 75,  align: 'right' },
-    { label: 'Other Ded.', x: 901,  width: 70,  align: 'right' },
-    { label: 'Total Ded.', x: 971,  width: 85,  align: 'right' },
-    { label: 'Net Pay',    x: 1056, width: 90,  align: 'right' },
+  const columnSpecs = [
+    { label: '#', width: 22 },
+    { label: 'Emp ID', width: 54 },
+    { label: 'Staff Name', width: 136 },
+    { label: 'Role', width: 118 },
+    { label: 'Basic', width: 74, align: 'right' },
+    { label: 'Additions', width: 70, align: 'right' },
+    { label: 'Gross', width: 74, align: 'right' },
+    { label: 'NSSF', width: 62, align: 'right' },
+    { label: 'SHIF', width: 62, align: 'right' },
+    { label: 'Loans', width: 62, align: 'right' },
+    { label: 'Advances', width: 68, align: 'right' },
+    { label: 'Unpaid Bills', width: 78, align: 'right' },
+    { label: 'Other Ded.', width: 72, align: 'right' },
+    { label: 'Total Ded.', width: 78, align: 'right' },
+    { label: 'Net Pay', width: 82, align: 'right' },
   ];
 
+  const specWidth = columnSpecs.reduce((sum, col) => sum + col.width, 0);
+  const scale = TABLE_W / specWidth;
+  let cursorX = MARGIN;
+  const C = columnSpecs.map(col => {
+    const width = col.width * scale;
+    const next = { ...col, x: cursorX, width };
+    cursorX += width;
+    return next;
+  });
+
   const drawTHeader = (d: PDFKit.PDFDocument, curY: number) => {
-    d.rect(MARGIN, curY, PAGE_W - (MARGIN * 2), 22).fill(HEADER_BG);
-    d.fillColor('white').fontSize(8.5).font('Helvetica-Bold');
+    d.rect(MARGIN, curY, TABLE_W, HEADER_H).fill(HEADER_BG);
+    d.fillColor('white').fontSize(HEADER_FONT).font('Helvetica-Bold');
     C.forEach(col => {
-      d.text(col.label, col.x, curY + 6, { width: col.width, align: (col.align as any) || 'left' });
+      d.text(col.label, col.x + PADDING_X, curY + 7, {
+        width: col.width - (PADDING_X * 2),
+        align: (col.align as any) || 'left',
+        lineBreak: false,
+        ellipsis: true
+      });
     });
-    return curY + 22;
+    return curY + HEADER_H;
   };
 
   y = drawTHeader(doc, y);
@@ -1585,16 +1627,16 @@ export async function generateBrandedPayrollSummaryV2(
   });
 
   sortedRecords.forEach((r, i) => {
-    if (y > 790) { // Page break — A3 landscape is 842pt, leave room for footer
+    if (y + ROW_H > FOOTER_TOP - 4) {
       doc.addPage();
       y = drawHeader(doc, title + ' (cont.)', `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()}`);
       y = drawTHeader(doc, y);
     }
 
     const shade = i % 2 === 0;
-    if (shade) doc.rect(MARGIN, y, PAGE_W - (MARGIN * 2), 20).fill(ROW_BG);
+    if (shade) doc.rect(MARGIN, y, TABLE_W, ROW_H).fill(ROW_BG);
     
-    doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
+    doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica');
 
     // Extract categories from deductions JSONB array
     const ded: any[] = Array.isArray(r.deductions) ? r.deductions : [];
@@ -1631,64 +1673,83 @@ export async function generateBrandedPayrollSummaryV2(
 
     const values = [
       { v: String(i + 1),                              x: C[0].x, w: C[0].width },
-      { v: r.employee_code || '—',                     x: C[1].x, w: C[1].width },
-      { v: r.employee_name || '—',                     x: C[2].x, w: C[2].width },
-      { v: r.role || 'Staff',                          x: C[3].x, w: C[3].width },
-      { v: fmt(basic),                                 x: C[4].x, w: C[4].width, a: 'right' },
-      { v: additions > 0 ? fmt(additions) : '—',       x: C[5].x, w: C[5].width, a: 'right' },
-      { v: fmt(gross),                                 x: C[6].x, w: C[6].width, a: 'right' },
-      { v: nssf > 0 ? fmt(nssf) : '—',                x: C[7].x, w: C[7].width, a: 'right' },
-      { v: shif > 0 ? fmt(shif) : '—',                x: C[8].x, w: C[8].width, a: 'right' },
-      { v: loans > 0 ? fmt(loans) : '—',              x: C[9].x, w: C[9].width, a: 'right' },
-      { v: advances > 0 ? fmt(advances) : '—',        x: C[10].x, w: C[10].width, a: 'right' },
-      { v: unpaid > 0 ? fmt(unpaid) : '—',            x: C[11].x, w: C[11].width, a: 'right' },
-      { v: other > 0 ? fmt(other) : '—',              x: C[12].x, w: C[12].width, a: 'right' },
-      { v: fmt(totalDed),                              x: C[13].x, w: C[13].width, a: 'right' },
-      { v: fmt(netPay),                                x: C[14].x, w: C[14].width, a: 'right' },
+      { v: oneLine(r.employee_code || r.employee_id),  x: C[1].x, w: C[1].width },
+      { v: oneLine(r.employee_name),                   x: C[2].x, w: C[2].width },
+      { v: oneLine(r.role, 'Staff'),                   x: C[3].x, w: C[3].width },
+      { v: money(basic),                               x: C[4].x, w: C[4].width, a: 'right' },
+      { v: moneyOrDash(additions),                     x: C[5].x, w: C[5].width, a: 'right' },
+      { v: money(gross),                               x: C[6].x, w: C[6].width, a: 'right' },
+      { v: moneyOrDash(nssf),                          x: C[7].x, w: C[7].width, a: 'right' },
+      { v: moneyOrDash(shif),                          x: C[8].x, w: C[8].width, a: 'right' },
+      { v: moneyOrDash(loans),                         x: C[9].x, w: C[9].width, a: 'right' },
+      { v: moneyOrDash(advances),                      x: C[10].x, w: C[10].width, a: 'right' },
+      { v: moneyOrDash(unpaid),                        x: C[11].x, w: C[11].width, a: 'right' },
+      { v: moneyOrDash(Math.max(other, 0)),             x: C[12].x, w: C[12].width, a: 'right' },
+      { v: money(totalDed),                            x: C[13].x, w: C[13].width, a: 'right' },
+      { v: money(netPay),                              x: C[14].x, w: C[14].width, a: 'right' },
     ];
 
     values.forEach(val => {
-      doc.text(val.v, val.x, y + 5, { width: val.w, align: (val.a as any) || 'left', ellipsis: true });
+      doc.text(val.v, val.x + PADDING_X, y + 5, {
+        width: val.w - (PADDING_X * 2),
+        align: (val.a as any) || 'left',
+        lineBreak: false,
+        ellipsis: true
+      });
     });
 
-    doc.strokeColor(BORDER).lineWidth(0.2).moveTo(MARGIN, y + 20).lineTo(PAGE_W - MARGIN, y + 20).stroke();
-    y += 20;
+    doc.strokeColor(BORDER).lineWidth(0.2).moveTo(MARGIN, y + ROW_H).lineTo(PAGE_W - MARGIN, y + ROW_H).stroke();
+    y += ROW_H;
   });
 
   // Totals Row — computed from actual records, not stale run data
-  doc.rect(MARGIN, y, PAGE_W - (MARGIN * 2), 24).fill('#eef2f7');
-  doc.fillColor(PRIMARY).fontSize(9).font('Helvetica-Bold');
-  doc.text('TOTALS', C[0].x, y + 7);
+  if (y + 78 > FOOTER_TOP) {
+    doc.addPage();
+    y = drawHeader(doc, title + ' (totals)', `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()}`);
+    y = drawTHeader(doc, y);
+  }
+
+  doc.rect(MARGIN, y, TABLE_W, 22).fill('#eef2f7');
+  doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica-Bold');
+  doc.text('TOTALS', C[0].x + PADDING_X, y + 7, {
+    width: (C[0].width + C[1].width + C[2].width + C[3].width) - (PADDING_X * 2),
+    lineBreak: false
+  });
   
   const sumCols = [
-    { v: fmt(sumBasic),     x: C[4].x,  w: C[4].width },
-    { v: fmt(sumAdditions), x: C[5].x,  w: C[5].width },
-    { v: fmt(sumGross),     x: C[6].x,  w: C[6].width },
-    { v: fmt(sumNssf),      x: C[7].x,  w: C[7].width },
-    { v: fmt(sumShif),      x: C[8].x,  w: C[8].width },
-    { v: fmt(sumLoans),     x: C[9].x,  w: C[9].width },
-    { v: fmt(sumAdvances),  x: C[10].x, w: C[10].width },
-    { v: fmt(sumUnpaid),    x: C[11].x, w: C[11].width },
-    { v: fmt(sumOther),     x: C[12].x, w: C[12].width },
-    { v: fmt(sumTotalDed),  x: C[13].x, w: C[13].width },
-    { v: fmt(sumNet),       x: C[14].x, w: C[14].width },
+    { v: money(sumBasic),     x: C[4].x,  w: C[4].width },
+    { v: money(sumAdditions), x: C[5].x,  w: C[5].width },
+    { v: money(sumGross),     x: C[6].x,  w: C[6].width },
+    { v: money(sumNssf),      x: C[7].x,  w: C[7].width },
+    { v: money(sumShif),      x: C[8].x,  w: C[8].width },
+    { v: money(sumLoans),     x: C[9].x,  w: C[9].width },
+    { v: money(sumAdvances),  x: C[10].x, w: C[10].width },
+    { v: money(sumUnpaid),    x: C[11].x, w: C[11].width },
+    { v: money(sumOther),     x: C[12].x, w: C[12].width },
+    { v: money(sumTotalDed),  x: C[13].x, w: C[13].width },
+    { v: money(sumNet),       x: C[14].x, w: C[14].width },
   ];
 
   sumCols.forEach(sc => {
-    doc.text(sc.v, sc.x, y + 7, { width: sc.w, align: 'right' });
+    doc.text(sc.v, sc.x + PADDING_X, y + 7, {
+      width: sc.w - (PADDING_X * 2),
+      align: 'right',
+      lineBreak: false,
+      ellipsis: true
+    });
   });
 
   // Summary box
-  y += 40;
-  if (y > 760) {
+  y += 34;
+  if (y + 110 > FOOTER_TOP) {
     doc.addPage();
-    y = 50;
+    y = drawHeader(doc, title + ' (summary)', `${branchName} · Status: ${(runData.status || 'draft').toUpperCase()}`);
   }
 
   drawSummaryBox(doc, y, [
-    { label: 'Gross Salary Total',  value: fmt(sumGross) },
-    { label: 'Total Deductions',    value: fmt(sumTotalDed) },
-    { label: 'Net Pay Total (KES)', value: fmt(sumNet) },
+    { label: 'Gross Salary Total',  value: money(sumGross) },
+    { label: 'Total Deductions',    value: money(sumTotalDed) },
+    { label: 'Net Pay Total',       value: money(sumNet) },
   ]);
 
   // Approval signature block

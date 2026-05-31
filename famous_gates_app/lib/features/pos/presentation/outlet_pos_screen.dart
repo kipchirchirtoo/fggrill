@@ -16,20 +16,37 @@ class OutletPOSScreen extends ConsumerStatefulWidget {
     required this.outletType,
     required this.title,
     required this.initials,
+    this.unifiedStations = false,
   });
 
   final String outletType;
   final String title;
   final String initials;
+  final bool unifiedStations;
 
   @override
   ConsumerState<OutletPOSScreen> createState() => _OutletPOSScreenState();
 }
 
 class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
+  static const _unifiedStationTypes = [
+    'restaurant',
+    'main_bar',
+    'executive_bar',
+    'non_consumables',
+  ];
+
+  static const _stationLabels = {
+    'restaurant': 'Restaurant',
+    'main_bar': 'Main Bar',
+    'executive_bar': 'Executive Bar',
+    'non_consumables': 'Non-consumables',
+  };
+
   OutletPosSection _section = OutletPosSection.station;
   PosOutlet? _outlet;
   OutletShift? _shift;
+  List<PosOutlet> _stationOutlets = [];
   List<OutletPosItem> _items = [];
   List<OutletCartItem> _cart = [];
   List<OutletShiftOrder> _orders = [];
@@ -39,6 +56,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   final _roomController = TextEditingController();
   final _customerController = TextEditingController();
   String _selectedCategory = 'all';
+  String _selectedItemGroup = 'all';
   String _orderType = 'dine_in';
   bool _gridView = true;
   bool _loading = true;
@@ -67,29 +85,120 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     });
     try {
       final repo = ref.read(outletPosRepositoryProvider);
-      final outlets = await repo.getOutlets(outletType: widget.outletType);
-      final outlet = outlets.isNotEmpty ? outlets.first : null;
+      final outlets = widget.unifiedStations
+          ? await repo.getOutlets()
+          : await repo.getOutlets(outletType: widget.outletType);
+      final stationOutlets = _normaliseStationOutlets(outlets);
+      final outlet = _resolveInitialOutlet(stationOutlets);
       if (outlet == null) {
         throw Exception(
-            'No ${widget.title} outlet is configured for this branch.');
+          widget.unifiedStations
+              ? 'No POS station is configured for this branch.'
+              : 'No ${widget.title} outlet is configured for this branch.',
+        );
       }
-      var shift = await repo.getActiveShift(outlet.id);
-      if (shift == null) {
-        try {
-          shift = await repo.openShift(outlet.id, 0);
-        } catch (_) {
-          shift = await repo.getActiveShift(outlet.id);
-          if (shift == null) rethrow;
+      final snapshot = await _fetchOutletState(repo, outlet);
+      if (!mounted) return;
+      setState(() {
+        _stationOutlets = stationOutlets;
+        _outlet = outlet;
+        _shift = snapshot.shift;
+        _items = snapshot.items;
+        _orders = snapshot.orders;
+        if (!_items.any((item) => item.category == _selectedCategory)) {
+          _selectedCategory = 'all';
         }
+        if (_selectedItemGroup != 'all' &&
+            !_items.any((item) => item.itemGroup == _selectedItemGroup)) {
+          _selectedItemGroup = 'all';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<PosOutlet> _normaliseStationOutlets(List<PosOutlet> outlets) {
+    final filtered = widget.unifiedStations
+        ? outlets
+            .where((outlet) =>
+                _unifiedStationTypes.contains(outlet.outletType.toLowerCase()))
+            .toList()
+        : outlets.toList();
+    filtered.sort((a, b) {
+      final aIndex = _stationSortIndex(a.outletType);
+      final bIndex = _stationSortIndex(b.outletType);
+      if (aIndex != bIndex) return aIndex.compareTo(bIndex);
+      return _stationLabel(a).compareTo(_stationLabel(b));
+    });
+    return filtered;
+  }
+
+  int _stationSortIndex(String outletType) {
+    final index = _unifiedStationTypes.indexOf(outletType.toLowerCase());
+    return index == -1 ? 999 : index;
+  }
+
+  PosOutlet? _resolveInitialOutlet(List<PosOutlet> outlets) {
+    if (outlets.isEmpty) return null;
+    final currentOutlet = _outlet;
+    if (currentOutlet != null) {
+      for (final outlet in outlets) {
+        if (outlet.id == currentOutlet.id) return outlet;
       }
-      final items = await repo.getItems(outlet.id);
-      final orders = await repo.getOrders(shift.id);
+    }
+    for (final outlet in outlets) {
+      if (outlet.outletType.toLowerCase() == widget.outletType.toLowerCase()) {
+        return outlet;
+      }
+    }
+    return outlets.first;
+  }
+
+  Future<_OutletStationSnapshot> _fetchOutletState(
+    OutletPosRepository repo,
+    PosOutlet outlet,
+  ) async {
+    var shift = await repo.getActiveShift(outlet.id);
+    if (shift == null) {
+      try {
+        shift = await repo.openShift(outlet.id, 0);
+      } catch (_) {
+        shift = await repo.getActiveShift(outlet.id);
+        if (shift == null) rethrow;
+      }
+    }
+    final items = await repo.getItems(outlet.id, fallbackOutlet: outlet);
+    final orders = await repo.getOrders(shift.id);
+    return _OutletStationSnapshot(shift: shift, items: items, orders: orders);
+  }
+
+  Future<void> _selectOutlet(PosOutlet outlet) async {
+    if (_busy || _outlet?.id == outlet.id) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(outletPosRepositoryProvider);
+      final snapshot = await _fetchOutletState(repo, outlet);
       if (!mounted) return;
       setState(() {
         _outlet = outlet;
-        _shift = shift;
-        _items = items;
-        _orders = orders;
+        _shift = snapshot.shift;
+        _items = snapshot.items;
+        _orders = snapshot.orders;
+        _cart = [];
+        _recalledOrder = null;
+        _selectedCategory = 'all';
+        _selectedItemGroup = 'all';
+        _orderType = 'dine_in';
+        _tableController.clear();
+        _roomController.clear();
+        _customerController.clear();
       });
     } catch (error) {
       if (!mounted) return;
@@ -149,18 +258,35 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   }
 
   Widget _station() {
-    final categories = {
-      for (final item in _items) item.category,
-    }.where((category) => category.trim().isNotEmpty).toList()
-      ..sort();
+    final activeOutlet = _outlet;
+    final groups = {
+      for (final item in _items)
+        if (item.itemGroup == 'restaurant' || item.itemGroup == 'bar')
+          item.itemGroup: item.itemGroupLabel,
+    };
+    final categorySource = _items.where((item) {
+      return _selectedItemGroup == 'all' ||
+          item.itemGroup == _selectedItemGroup;
+    });
+    final categories = <String>[];
+    for (final item in categorySource) {
+      final category = item.category.trim();
+      if (category.isNotEmpty && !categories.contains(category)) {
+        categories.add(category);
+      }
+    }
     final query = _searchController.text.trim().toLowerCase();
     final visibleItems = _items.where((item) {
+      final matchesGroup =
+          _selectedItemGroup == 'all' || item.itemGroup == _selectedItemGroup;
       final matchesCategory =
           _selectedCategory == 'all' || item.category == _selectedCategory;
       final matchesSearch = query.isEmpty ||
           item.name.toLowerCase().contains(query) ||
-          item.category.toLowerCase().contains(query);
-      return matchesCategory && matchesSearch;
+          item.category.toLowerCase().contains(query) ||
+          item.itemGroupLabel.toLowerCase().contains(query) ||
+          item.outletName.toLowerCase().contains(query);
+      return matchesGroup && matchesCategory && matchesSearch;
     }).toList();
     final subtotal = _cart.fold<double>(0, (sum, item) => sum + item.lineTotal);
 
@@ -178,7 +304,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                       children: [
                         Text(widget.title,
                             style: Theme.of(context).textTheme.headlineSmall),
-                        Text(_outlet?.name ?? 'Outlet POS',
+                        Text(
+                            widget.unifiedStations
+                                ? [
+                                    if (activeOutlet != null)
+                                      _stationLabel(activeOutlet),
+                                    activeOutlet?.name ?? 'POS station',
+                                  ].join(' - ')
+                                : _outlet?.name ?? 'Outlet POS',
                             style: Theme.of(context).textTheme.bodyMedium),
                       ],
                     ),
@@ -207,6 +340,24 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              if (widget.unifiedStations && _stationOutlets.isNotEmpty) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final outlet in _stationOutlets)
+                      ChoiceChip(
+                        selected: _outlet?.id == outlet.id,
+                        label: Text(_stationLabel(outlet)),
+                        avatar: Icon(_stationIcon(outlet.outletType), size: 18),
+                        onSelected: _busy || _outlet?.id == outlet.id
+                            ? null
+                            : (_) => _selectOutlet(outlet),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
               TextField(
                 controller: _searchController,
                 onChanged: (_) => setState(() {}),
@@ -227,26 +378,39 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                 ),
               ],
               const SizedBox(height: 16),
-              if (categories.isNotEmpty)
+              if (groups.length > 1) ...[
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
                     ChoiceChip(
-                      selected: _selectedCategory == 'all',
-                      label: const Text('All'),
-                      onSelected: (_) =>
-                          setState(() => _selectedCategory = 'all'),
+                      selected: _selectedItemGroup == 'all',
+                      label: const Text('All sources'),
+                      onSelected: (_) => setState(() {
+                        _selectedItemGroup = 'all';
+                        _selectedCategory = 'all';
+                      }),
                     ),
-                    ...categories.map(
-                      (category) => ChoiceChip(
-                        selected: _selectedCategory == category,
-                        label: Text(category),
-                        onSelected: (_) =>
-                            setState(() => _selectedCategory = category),
+                    ...groups.entries.map(
+                      (entry) => ChoiceChip(
+                        selected: _selectedItemGroup == entry.key,
+                        label: Text(entry.value),
+                        onSelected: (_) => setState(() {
+                          _selectedItemGroup = entry.key;
+                          _selectedCategory = 'all';
+                        }),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (categories.isNotEmpty)
+                _CategoryTabStrip(
+                  categories: categories,
+                  selectedCategory: _selectedCategory,
+                  onSelected: (category) =>
+                      setState(() => _selectedCategory = category),
                 ),
               const SizedBox(height: 16),
               if (visibleItems.isEmpty)
@@ -272,7 +436,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                       for (final item in visibleItems)
                         ListTile(
                           title: Text(item.name),
-                          subtitle: Text(item.category),
+                          subtitle: Text(
+                            item.outletName.trim().isEmpty
+                                ? '${item.itemGroupLabel} - ${item.category}'
+                                : '${item.itemGroupLabel} - ${item.category} - ${item.outletName}',
+                          ),
                           trailing: Text(formatKes(item.sellingPrice),
                               style:
                                   const TextStyle(fontWeight: FontWeight.w800)),
@@ -534,10 +702,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         receiptItems,
         _outlet?.name ?? widget.title,
         receiptType: 'ORDER PROFORMA BILL',
-        tableNumber:
-            _orderType == 'dine_in' ? _tableController.text.trim() : null,
-        roomNumber:
-            _orderType == 'room_service' ? _roomController.text.trim() : null,
+        tableNumber: _isRestaurant && _orderType == 'dine_in'
+            ? _tableController.text.trim()
+            : null,
+        roomNumber: _isRestaurant && _orderType == 'room_service'
+            ? _roomController.text.trim()
+            : null,
         customerName: _orderCustomerLabel(),
         staffLabel: 'Waiter',
         publicCode: order.shortCode,
@@ -555,7 +725,23 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     }
   }
 
-  bool get _isRestaurant => widget.outletType == 'restaurant';
+  bool get _isRestaurant =>
+      (_outlet?.outletType ?? widget.outletType).toLowerCase() == 'restaurant';
+
+  String _stationLabel(PosOutlet outlet) {
+    final type = outlet.outletType.toLowerCase();
+    return _stationLabels[type] ??
+        (outlet.name.trim().isEmpty ? 'POS station' : outlet.name.trim());
+  }
+
+  IconData _stationIcon(String outletType) {
+    final type = outletType.toLowerCase();
+    if (type == 'restaurant') return Icons.restaurant_menu;
+    if (type == 'main_bar') return Icons.local_bar;
+    if (type == 'executive_bar') return Icons.wine_bar;
+    if (type == 'non_consumables') return Icons.inventory_2;
+    return Icons.point_of_sale;
+  }
 
   String _orderCustomerLabel() {
     final customerName = _customerController.text.trim();
@@ -725,6 +911,18 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   }
 }
 
+class _OutletStationSnapshot {
+  const _OutletStationSnapshot({
+    required this.shift,
+    required this.items,
+    required this.orders,
+  });
+
+  final OutletShift shift;
+  final List<OutletPosItem> items;
+  final List<OutletShiftOrder> orders;
+}
+
 class _OrderContextPanel extends StatelessWidget {
   const _OrderContextPanel({
     required this.orderType,
@@ -812,6 +1010,116 @@ class _Surface extends StatelessWidget {
   }
 }
 
+class _CategoryTabStrip extends StatefulWidget {
+  const _CategoryTabStrip({
+    required this.categories,
+    required this.selectedCategory,
+    required this.onSelected,
+  });
+
+  final List<String> categories;
+  final String selectedCategory;
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<_CategoryTabStrip> createState() => _CategoryTabStripState();
+}
+
+class _CategoryTabStripState extends State<_CategoryTabStrip> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = ['all', ...widget.categories];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x11000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Scrollbar(
+        controller: _scrollController,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              for (var index = 0; index < tabs.length; index++) ...[
+                _CategoryTabButton(
+                  label: tabs[index] == 'all'
+                      ? 'All Items'
+                      : tabs[index].toUpperCase(),
+                  selected: widget.selectedCategory == tabs[index],
+                  onTap: () => widget.onSelected(tabs[index]),
+                ),
+                if (index != tabs.length - 1) const SizedBox(width: 10),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryTabButton extends StatelessWidget {
+  const _CategoryTabButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final background =
+        selected ? const Color(0xFF2563EB) : const Color(0xFFF9FAFB);
+    final foreground = selected ? Colors.white : const Color(0xFF1F2937);
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 92, minHeight: 48),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ItemTile extends StatelessWidget {
   const _ItemTile({required this.item, required this.onTap});
   final OutletPosItem item;
@@ -839,6 +1147,17 @@ class _ItemTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall),
+                if (item.itemGroupLabel.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    item.outletName.trim().isEmpty
+                        ? item.itemGroupLabel
+                        : '${item.itemGroupLabel} - ${item.outletName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Row(
                   children: [

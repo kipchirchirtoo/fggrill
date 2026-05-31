@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../data/branch_storekeeper_repository.dart';
 
@@ -2693,14 +2694,7 @@ class _BranchStorekeeperDashboardState
         content: SizedBox(
           width: 680,
           child: SingleChildScrollView(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: data.entries
-                  .where((entry) => entry.value != null)
-                  .map((entry) => _InfoPill(entry.key, _display(entry.value)))
-                  .toList(),
-            ),
+            child: ReadableRecordDetails(record: data),
           ),
         ),
         actions: [
@@ -2778,17 +2772,6 @@ class _BranchStorekeeperDashboardState
     final parsed = DateTime.tryParse('$value');
     if (parsed == null) return '$value';
     return '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
-  }
-
-  String _display(dynamic value) {
-    if (value is List) return '${value.length} items';
-    if (value is Map) {
-      return value.entries
-          .take(4)
-          .map((e) => '${e.key}: ${e.value}')
-          .join(', ');
-    }
-    return '$value';
   }
 
   String _stockRequestNextStep(dynamic rawStatus) {

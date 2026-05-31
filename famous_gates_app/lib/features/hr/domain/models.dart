@@ -14,6 +14,7 @@ class StaffMember {
   final String? employeeId;
   final bool nssfEnabled;
   final bool shifEnabled;
+  final bool uniformEnabled;
   final bool housingFundEnabled;
   final String? branchName;
   final String? photoUrl;
@@ -37,6 +38,7 @@ class StaffMember {
     this.employeeId,
     this.nssfEnabled = true,
     this.shifEnabled = true,
+    this.uniformEnabled = false,
     this.housingFundEnabled = true,
     this.branchName,
     this.photoUrl,
@@ -93,6 +95,8 @@ class StaffMember {
           data['nssf_enabled'] != false && data['nssf_enabled'] != 'false',
       shifEnabled:
           data['shif_enabled'] != false && data['shif_enabled'] != 'false',
+      uniformEnabled:
+          data['uniform_enabled'] == true || data['uniform_enabled'] == 'true',
       housingFundEnabled: data['housing_fund_enabled'] != false &&
           data['housing_fund_enabled'] != 'false',
       branchName:
@@ -141,31 +145,59 @@ class AttendanceRecord {
 class LeaveRequest {
   final String id;
   final String? staffName;
+  final String? employeeId;
   final String? leaveType;
   final DateTime? startDate;
   final DateTime? endDate;
   final String status;
   final String? reason;
+  final bool reportedToDuty;
 
   const LeaveRequest({
     required this.id,
     this.staffName,
+    this.employeeId,
     this.leaveType,
     this.startDate,
     this.endDate,
     this.status = 'pending',
     this.reason,
+    this.reportedToDuty = false,
   });
 
   factory LeaveRequest.fromJson(Map<String, dynamic> json) {
+    final staff = json['staff'];
+    final staffData =
+        staff is Map ? Map<String, dynamic>.from(staff) : <String, dynamic>{};
+    final user = staffData['user'];
+    final userData =
+        user is Map ? Map<String, dynamic>.from(user) : <String, dynamic>{};
+    final staffName = json['staff_name'] ??
+        json['name'] ??
+        staffData['full_name'] ??
+        staffData['name'] ??
+        [
+          staffData['first_name'] ?? userData['first_name'],
+          staffData['last_name'] ?? userData['last_name'],
+        ]
+            .where((part) => part != null && '$part'.trim().isNotEmpty)
+            .map((part) => '$part'.trim())
+            .join(' ');
     return LeaveRequest(
       id: '${json['id']}',
-      staffName: json['staff_name'] as String? ?? json['name'] as String?,
+      staffName: '$staffName'.trim().isEmpty ? null : '$staffName',
+      employeeId: json['employee_id'] as String? ??
+          json['id_number'] as String? ??
+          staffData['id_number'] as String? ??
+          staffData['employee_id'] as String? ??
+          staffData['national_id'] as String?,
       leaveType: json['leave_type'] as String? ?? json['type'] as String?,
       startDate: DateTime.tryParse('${json['start_date'] ?? ''}'),
       endDate: DateTime.tryParse('${json['end_date'] ?? ''}'),
       status: '${json['status'] ?? 'pending'}',
       reason: json['reason'] as String?,
+      reportedToDuty: json['reported_to_duty'] == true ||
+          json['reported_to_duty'] == 'true',
     );
   }
 }

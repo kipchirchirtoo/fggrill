@@ -10,31 +10,41 @@ import '../../data/admin_repository.dart';
 
 Widget _header(String title, IconData icon, {String? subtitle}) {
   return Container(
-    padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-    decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.kDivider))),
+    padding: const EdgeInsets.fromLTRB(28, 28, 28, 10),
+    color: Colors.white,
     child: Row(children: [
       Container(
-        width: 40,
-        height: 40,
+        width: 52,
+        height: 52,
         decoration: BoxDecoration(
-            color: AppColors.kPrimary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10)),
-        child: Icon(icon, color: AppColors.kPrimary, size: 20),
+          color: const Color(0xFF1D1917),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 14,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Icon(icon, color: Colors.white, size: 24),
       ),
-      const SizedBox(width: 14),
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title,
-            style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.kTextPrimary)),
-        if (subtitle != null)
-          Text(subtitle,
+      const SizedBox(width: 18),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
               style: const TextStyle(
-                  fontSize: 12, color: AppColors.kTextSecondary)),
-      ]),
+                  fontSize: 27,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.kTextPrimary)),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(subtitle,
+                style: const TextStyle(
+                    fontSize: 14, color: AppColors.kTextSecondary)),
+          ],
+        ]),
+      ),
     ]),
   );
 }
@@ -78,6 +88,104 @@ class _StatCard extends StatelessWidget {
                   fontSize: 11, color: AppColors.kTextSecondary)),
         ]),
       ),
+    );
+  }
+}
+
+class _AuditBranchSelector extends ConsumerWidget {
+  const _AuditBranchSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(adminSelectedBranchProvider);
+    final branchesAsync = ref.watch(adminBranchesProvider);
+    return branchesAsync.when(
+      data: (branches) {
+        var selectedName = 'All Branches';
+        for (final branch in branches) {
+          if (branch.id == selectedId) {
+            selectedName = branch.name;
+            break;
+          }
+        }
+        return PopupMenuButton<String?>(
+          tooltip: 'Filter by branch',
+          initialValue: selectedId,
+          onSelected: (value) =>
+              ref.read(adminSelectedBranchProvider.notifier).state = value,
+          itemBuilder: (context) => [
+            const PopupMenuItem<String?>(
+              value: null,
+              child: Text('All Branches'),
+            ),
+            for (final branch in branches)
+              PopupMenuItem<String?>(
+                value: branch.id,
+                child: Text(branch.name),
+              ),
+          ],
+          child: Container(
+            height: 52,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.kDivider),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Text(
+                'Branch:',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 10),
+              Icon(PhosphorIcons.buildings(),
+                  color: AppColors.kPrimary, size: 16),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 180),
+                child: Text(
+                  selectedName,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: AppColors.kPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(PhosphorIcons.caretDown(), size: 14),
+            ]),
+          ),
+        );
+      },
+      loading: () => Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppColors.kSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.kDivider),
+        ),
+        child: const Text(
+          'Loading branches...',
+          style: TextStyle(color: AppColors.kTextSecondary),
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _AuditBranchFilterBar extends StatelessWidget {
+  const _AuditBranchFilterBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [_AuditBranchSelector()],
     );
   }
 }
@@ -135,60 +243,129 @@ class AuditSearchSection extends StatefulWidget {
 
 class _AuditSearchSectionState extends State<AuditSearchSection> {
   final _ctrl = TextEditingController();
+  bool _hasSearched = false;
 
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      _header('Search', PhosphorIcons.magnifyingGlass(),
-          subtitle: 'Search across all audit records, transactions and events'),
+      _header('Universal Search', PhosphorIcons.shield(),
+          subtitle: 'Cross-entity system intelligence and audit retrieval'),
       Expanded(
           child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(28),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(
-            controller: _ctrl,
-            decoration: InputDecoration(
-              hintText: 'Search by user, action, entity or date…',
-              prefixIcon: Icon(PhosphorIcons.magnifyingGlass(), size: 18),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side:
+                  BorderSide(color: AppColors.kDivider.withValues(alpha: 0.55)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(children: [
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      onSubmitted: (_) => setState(() => _hasSearched = true),
+                      decoration: InputDecoration(
+                        hintText:
+                            'Search by reference, staff name, M-Pesa code, order ID...',
+                        prefixIcon:
+                            Icon(PhosphorIcons.magnifyingGlass(), size: 20),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 15),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const _AuditBranchSelector(),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: () => setState(() => _hasSearched = true),
+                    icon: Icon(PhosphorIcons.magnifyingGlass(), size: 18),
+                    label: const Text('Run Search'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.kWarning,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(150, 52),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.kSurface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: AppColors.kDivider.withValues(alpha: 0.45)),
+                  ),
+                  child: const Text(
+                    'SEARCH DOMAINS:  OPERATIONS, FINANCE, HUMAN RESOURCES, GUEST RELATIONS, INVENTORY',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.kTextSecondary,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                )
+              ]),
             ),
           ),
-          const SizedBox(height: 20),
-          const Text('Quick Filters',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(height: 10),
-          const Wrap(spacing: 8, children: [
-            _FilterChip('All Records'),
-            _FilterChip('Today'),
-            _FilterChip('This Week'),
-            _FilterChip('Financial'),
-            _FilterChip('Staff'),
-            _FilterChip('Inventory'),
-          ]),
-          const SizedBox(height: 20),
+          const SizedBox(height: 36),
           Expanded(
-              child: _tableCard('Results',
-                  ['Time', 'User', 'Action', 'Entity', 'Branch'], [])),
+            child: _hasSearched
+                ? _tableCard('Match Summary (0)',
+                    ['Type', 'Title', 'Reference', 'Context', 'Action'], [])
+                : Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 96,
+                          height: 96,
+                          decoration: BoxDecoration(
+                            color: AppColors.kSurface,
+                            borderRadius: BorderRadius.circular(34),
+                            border: Border.all(color: AppColors.kDivider),
+                          ),
+                          child: Icon(PhosphorIcons.magnifyingGlass(),
+                              size: 42,
+                              color: AppColors.kTextSecondary
+                                  .withValues(alpha: 0.28)),
+                        ),
+                        const SizedBox(height: 22),
+                        const Text('Centralized Intelligence',
+                            style: TextStyle(
+                                fontSize: 22, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 8),
+                        const SizedBox(
+                          width: 460,
+                          child: Text(
+                            'Perform a global cross-reference search across all operational nodes and financial records.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                color: AppColors.kTextSecondary,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
         ]),
       )),
     ]);
   }
-}
-
-class _FilterChip extends StatelessWidget {
-  final String label;
-  const _FilterChip(this.label);
-  @override
-  Widget build(BuildContext context) => ActionChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        onPressed: () => AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('Filter: $label'))),
-        backgroundColor: AppColors.kSurface,
-        side: const BorderSide(color: AppColors.kDivider),
-      );
 }
 
 // ─── Financial Verification ────────────────────────────────────────────────
@@ -228,6 +405,8 @@ class FinancialVerificationSection extends ConsumerWidget {
           return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(children: [
+                const _AuditBranchFilterBar(),
+                const SizedBox(height: 20),
                 Row(children: [
                   Expanded(
                       child: _StatCard(
@@ -300,6 +479,8 @@ class ShiftVerificationSection extends ConsumerWidget {
           return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(children: [
+                const _AuditBranchFilterBar(),
+                const SizedBox(height: 20),
                 Row(children: [
                   Expanded(
                       child: _StatCard(
@@ -348,6 +529,8 @@ class RevenueOversightSection extends StatelessWidget {
           child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(children: [
+                const _AuditBranchFilterBar(),
+                const SizedBox(height: 20),
                 Row(children: [
                   Expanded(
                       child: _StatCard(
@@ -415,6 +598,8 @@ class SoldItemsAnalysisSection extends ConsumerWidget {
           return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(children: [
+                const _AuditBranchFilterBar(),
+                const SizedBox(height: 20),
                 Row(children: [
                   Expanded(
                       child: _StatCard(
@@ -528,82 +713,104 @@ class StockRequestApprovalsSection extends ConsumerWidget {
             child: Text('Error: $e',
                 style: const TextStyle(color: AppColors.kError))),
         data: (requests) {
-          if (requests.isEmpty) return _emptyMsg('No pending stock requests');
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: requests.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (ctx, i) {
-              final r = requests[i];
-              final id = (r['id'] ?? '').toString();
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppColors.kWarning.withValues(alpha: 0.1),
-                  child: Icon(PhosphorIcons.package(),
-                      color: AppColors.kWarning, size: 18),
-                ),
-                title: Text((r['item_name'] ?? r['name'] ?? 'Request #$id'),
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                  'Branch: ${r['branch_name'] ?? r['requesting_branch'] ?? '—'}  •  '
-                  'Qty: ${r['quantity'] ?? '—'}  •  '
-                  'By: ${r['requested_by'] ?? r['staff_name'] ?? '—'}',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(PhosphorIcons.checkCircle(),
-                          color: AppColors.kSuccess, size: 20),
-                      tooltip: 'Approve',
-                      onPressed: () async {
-                        try {
-                          await ref
-                              .read(adminRepositoryProvider)
-                              .approveStockRequest(id);
-                          ref.invalidate(adminStockRequestApprovalsProvider);
-                          if (ctx.mounted) {
-                            AppNotifier.showSnackBar(
-                                ctx,
-                                const SnackBar(
-                                    content: Text('Request approved')));
-                          }
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            AppNotifier.showSnackBar(
-                                ctx, SnackBar(content: Text('Error: $e')));
-                          }
-                        }
-                      },
-                    ),
-                    IconButton(
-                      icon: Icon(PhosphorIcons.xCircle(),
-                          color: AppColors.kError, size: 20),
-                      tooltip: 'Reject',
-                      onPressed: () async {
-                        try {
-                          await ref
-                              .read(adminRepositoryProvider)
-                              .rejectStockRequest(id);
-                          ref.invalidate(adminStockRequestApprovalsProvider);
-                          if (ctx.mounted) {
-                            AppNotifier.showSnackBar(
-                                ctx,
-                                const SnackBar(
-                                    content: Text('Request rejected')));
-                          }
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            AppNotifier.showSnackBar(
-                                ctx, SnackBar(content: Text('Error: $e')));
-                          }
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              );
-            },
+          return Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 24, 24, 8),
+                child: _AuditBranchFilterBar(),
+              ),
+              Expanded(
+                child: requests.isEmpty
+                    ? _emptyMsg('No pending stock requests')
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: requests.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final r = requests[i];
+                          final id = (r['id'] ?? '').toString();
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  AppColors.kWarning.withValues(alpha: 0.1),
+                              child: Icon(PhosphorIcons.package(),
+                                  color: AppColors.kWarning, size: 18),
+                            ),
+                            title: Text(
+                                (r['item_name'] ?? r['name'] ?? 'Request #$id'),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            subtitle: Text(
+                              'Branch: ${r['branch_name'] ?? r['requesting_branch'] ?? '—'}  •  '
+                              'Qty: ${r['quantity'] ?? '—'}  •  '
+                              'By: ${r['requested_by'] ?? r['staff_name'] ?? '—'}',
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(PhosphorIcons.checkCircle(),
+                                      color: AppColors.kSuccess, size: 20),
+                                  tooltip: 'Approve',
+                                  onPressed: () async {
+                                    try {
+                                      await ref
+                                          .read(adminRepositoryProvider)
+                                          .approveStockRequest(id);
+                                      ref.invalidate(
+                                          adminStockRequestApprovalsProvider);
+                                      if (ctx.mounted) {
+                                        AppNotifier.showSnackBar(
+                                            ctx,
+                                            const SnackBar(
+                                                content:
+                                                    Text('Request approved')));
+                                      }
+                                    } catch (e) {
+                                      if (ctx.mounted) {
+                                        AppNotifier.showSnackBar(
+                                            ctx,
+                                            SnackBar(
+                                                content: Text('Error: $e')));
+                                      }
+                                    }
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(PhosphorIcons.xCircle(),
+                                      color: AppColors.kError, size: 20),
+                                  tooltip: 'Reject',
+                                  onPressed: () async {
+                                    try {
+                                      await ref
+                                          .read(adminRepositoryProvider)
+                                          .rejectStockRequest(id);
+                                      ref.invalidate(
+                                          adminStockRequestApprovalsProvider);
+                                      if (ctx.mounted) {
+                                        AppNotifier.showSnackBar(
+                                            ctx,
+                                            const SnackBar(
+                                                content:
+                                                    Text('Request rejected')));
+                                      }
+                                    } catch (e) {
+                                      if (ctx.mounted) {
+                                        AppNotifier.showSnackBar(
+                                            ctx,
+                                            SnackBar(
+                                                content: Text('Error: $e')));
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           );
         },
       )),
@@ -654,6 +861,8 @@ class BarStockAuditsSection extends ConsumerWidget {
           return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(children: [
+                const _AuditBranchFilterBar(),
+                const SizedBox(height: 20),
                 Row(children: [
                   Expanded(
                       child: _StatCard(
@@ -722,6 +931,8 @@ class PurchaseAuditsSection extends ConsumerWidget {
           return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(children: [
+                const _AuditBranchFilterBar(),
+                const SizedBox(height: 20),
                 Row(children: [
                   Expanded(
                       child: _StatCard(

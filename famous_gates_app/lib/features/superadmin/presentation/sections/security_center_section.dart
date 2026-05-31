@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/api_error_message.dart';
+import '../../../../core/utils/readable_record.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
 import '../../domain/superadmin_providers.dart';
@@ -1048,7 +1049,8 @@ class _SecurityCenterSectionState extends ConsumerState<SecurityCenterSection> {
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(entry.key.replaceAll('_', ' ')),
-              subtitle: Text(entry.value.toString()),
+              subtitle:
+                  Text(readableRecordValue(config, entry.key, entry.value)),
             ),
           );
         }).toList(),

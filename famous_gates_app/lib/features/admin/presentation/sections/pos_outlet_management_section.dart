@@ -74,7 +74,9 @@ class _PosOutletManagementSectionState
   }
 
   Future<void> _refresh() async {
-    setState(() => _loadFuture = _load());
+    setState(() {
+      _loadFuture = _load();
+    });
     await _loadFuture;
     if (mounted) setState(() {});
   }

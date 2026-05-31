@@ -165,7 +165,7 @@ class AdminRepository {
     await _dio.put('/users/$id', data: {'password': newPassword});
   }
 
-  /// Normalises the backend snake_case staff/user response to the fields that
+  /// Normalises the backend snake_case staff profile response to the fields that
   /// [AdminUser.fromJson] expects. The backend returns `first_name`+`last_name`
   /// instead of `name`, `basic_salary` instead of `salary`, `status` instead of
   /// `isActive`, `branch_id` instead of `branchId`, etc.
@@ -202,7 +202,7 @@ class AdminRepository {
 
   Future<List<AdminUser>> getStaff(
       {String? branchId, String? department}) async {
-    final params = <String, dynamic>{};
+    final params = <String, dynamic>{'source': 'staff_profiles'};
     if (branchId != null) params['branch_id'] = branchId;
     if (department != null) params['department'] = department;
     final response = await _dio.get('/staff', queryParameters: params);
@@ -1063,10 +1063,11 @@ class AdminRepository {
   }
 
   Future<List<Map<String, dynamic>>> getStockRequestApprovals(
-      {String? status}) async {
+      {String? status, String? branchId}) async {
     try {
       final response =
           await _dio.get('/auditor/approvals/pending', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
         if (status != null) 'status': status,
       });
       return _parseMapList(response.data);

@@ -150,6 +150,8 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         data.activeOrders.where((order) => order.status == 'preparing').length;
     final ready =
         data.activeOrders.where((order) => order.status == 'ready').length;
+    final voidPending =
+        data.activeOrders.where((order) => order.hasPendingVoidRequest).length;
     final avgWait = data.activeOrders.isEmpty
         ? 0
         : (data.activeOrders
@@ -179,6 +181,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
               _StatTile('Pending', '$pending'),
               _StatTile('Preparing', '$preparing'),
               _StatTile('Ready', '$ready'),
+              _StatTile('Void Pending', '$voidPending'),
               _StatTile('Avg Wait', '${avgWait}m'),
             ],
           ),
@@ -259,8 +262,6 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   }
 
   Widget _analytics(_KitchenModuleSnapshot data) {
-    final source = [...data.activeOrders, ...data.history];
-    final analytics = _KitchenAnalytics.from(source);
     return _Page(
       title: 'Order Intelligence',
       subtitle:
@@ -272,61 +273,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           label: const Text('Refresh'),
         ),
       ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _StatTile('Orders Analysed', '${source.length}'),
-              _StatTile('Items Analysed', '${analytics.totalItems}'),
-              _StatTile('Top Item', analytics.topItemName),
-              _StatTile('Rush Window', analytics.rushWindow),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _SectionCard(
-            title: 'Most Ordered Items',
-            child: analytics.topItems.isEmpty
-                ? const EmptyState(message: 'No item trends yet.')
-                : Column(
-                    children: analytics.topItems
-                        .map((item) => _MetricRow(
-                              label: item.name,
-                              value: '${item.quantity} ordered',
-                              ratio: item.quantity / analytics.maxItemQuantity,
-                            ))
-                        .toList(),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Preparation Pressure',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(analytics.insight,
-                    style: const TextStyle(color: AppColors.kTextSecondary)),
-                const SizedBox(height: 12),
-                _MetricRow(
-                  label: 'Urgent active tickets',
-                  value: '${analytics.urgentOrders}',
-                  ratio: source.isEmpty
-                      ? 0
-                      : analytics.urgentOrders / source.length,
-                ),
-                _MetricRow(
-                  label: 'Ready waiting for waiter',
-                  value: '${analytics.readyOrders}',
-                  ratio: data.activeOrders.isEmpty
-                      ? 0
-                      : analytics.readyOrders / data.activeOrders.length,
-                ),
-              ],
-            ),
-          ),
-        ],
+      child: _KitchenOrderIntelligenceContent(
+        activeOrders: data.activeOrders,
+        history: data.history,
       ),
     );
   }
@@ -436,6 +385,90 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   }
 }
 
+class KitchenOrderIntelligencePanel extends ConsumerStatefulWidget {
+  const KitchenOrderIntelligencePanel({super.key});
+
+  @override
+  ConsumerState<KitchenOrderIntelligencePanel> createState() =>
+      _KitchenOrderIntelligencePanelState();
+}
+
+class _KitchenOrderIntelligencePanelState
+    extends ConsumerState<KitchenOrderIntelligencePanel> {
+  late Future<_KitchenOrderIntelligenceSnapshot> _future;
+
+  KitchenRepository get _repo => ref.read(kitchenRepositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<_KitchenOrderIntelligenceSnapshot> _load() async {
+    final results = await Future.wait<dynamic>([
+      _repo.getOrders(),
+      _repo.getHistory(limit: 150),
+    ]);
+    return _KitchenOrderIntelligenceSnapshot(
+      activeOrders: results[0] as List<KitchenOrder>,
+      history: results[1] as List<KitchenOrder>,
+    );
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_KitchenOrderIntelligenceSnapshot>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: LoadingSkeleton(type: SkeletonType.list),
+          );
+        }
+        if (snapshot.hasError) {
+          return ErrorState(message: '${snapshot.error}', onRetry: _refresh);
+        }
+        final data = snapshot.data ?? const _KitchenOrderIntelligenceSnapshot();
+        return _Page(
+          title: 'Order Intelligence',
+          subtitle:
+              'Branch-specific kitchen demand, rush windows, and preparation pressure from restaurant POS orders.',
+          actions: [
+            OutlinedButton.icon(
+              onPressed: _refresh,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Refresh'),
+            ),
+          ],
+          child: _KitchenOrderIntelligenceContent(
+            activeOrders: data.activeOrders,
+            history: data.history,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _KitchenOrderIntelligenceSnapshot {
+  const _KitchenOrderIntelligenceSnapshot({
+    this.activeOrders = const [],
+    this.history = const [],
+  });
+
+  final List<KitchenOrder> activeOrders;
+  final List<KitchenOrder> history;
+}
+
 class _KitchenModuleSnapshot {
   const _KitchenModuleSnapshot({
     required this.activeOrders,
@@ -452,6 +485,77 @@ class _KitchenModuleSnapshot {
   final List<KitchenOrder> activeOrders;
   final List<KitchenOrder> history;
   final List<Map<String, dynamic>> notifications;
+}
+
+class _KitchenOrderIntelligenceContent extends StatelessWidget {
+  const _KitchenOrderIntelligenceContent({
+    required this.activeOrders,
+    required this.history,
+  });
+
+  final List<KitchenOrder> activeOrders;
+  final List<KitchenOrder> history;
+
+  @override
+  Widget build(BuildContext context) {
+    final source = [...activeOrders, ...history];
+    final analytics = _KitchenAnalytics.from(source);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _StatTile('Orders Analysed', '${source.length}'),
+            _StatTile('Items Analysed', '${analytics.totalItems}'),
+            _StatTile('Top Item', analytics.topItemName),
+            _StatTile('Rush Window', analytics.rushWindow),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _SectionCard(
+          title: 'Most Ordered Items',
+          child: analytics.topItems.isEmpty
+              ? const EmptyState(message: 'No item trends yet.')
+              : Column(
+                  children: analytics.topItems
+                      .map((item) => _MetricRow(
+                            label: item.name,
+                            value: '${item.quantity} ordered',
+                            ratio: item.quantity / analytics.maxItemQuantity,
+                          ))
+                      .toList(),
+                ),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: 'Preparation Pressure',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(analytics.insight,
+                  style: const TextStyle(color: AppColors.kTextSecondary)),
+              const SizedBox(height: 12),
+              _MetricRow(
+                label: 'Urgent active tickets',
+                value: '${analytics.urgentOrders}',
+                ratio:
+                    source.isEmpty ? 0 : analytics.urgentOrders / source.length,
+              ),
+              _MetricRow(
+                label: 'Ready waiting for waiter',
+                value: '${analytics.readyOrders}',
+                ratio: activeOrders.isEmpty
+                    ? 0
+                    : analytics.readyOrders / activeOrders.length,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _Page extends StatelessWidget {
@@ -590,6 +694,11 @@ class _OrderTicket extends StatelessWidget {
                     label: order.paymentStatus!,
                     icon: Icons.payments_outlined,
                   ),
+                if (order.hasPendingVoidRequest)
+                  const _MetaPill(
+                    label: 'Void approval',
+                    icon: Icons.block_outlined,
+                  ),
                 _StatusPill(status: status),
               ],
             ),
@@ -642,8 +751,9 @@ class _OrderTicket extends StatelessWidget {
                       IconButton(
                         tooltip:
                             item.isReady ? 'Item ready' : 'Mark item ready',
-                        onPressed:
-                            item.isReady ? null : () => onItemReady(item),
+                        onPressed: item.isReady || order.hasPendingVoidRequest
+                            ? null
+                            : () => onItemReady(item),
                         icon: Icon(
                           item.isReady
                               ? Icons.check_circle
@@ -669,6 +779,25 @@ class _OrderTicket extends StatelessWidget {
   }
 
   Widget _ticketAction(String status) {
+    if (order.hasPendingVoidRequest) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.kError.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.kError.withValues(alpha: 0.18)),
+        ),
+        child: const Text(
+          'Void approval pending. Stop preparation.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.kError,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+    }
     if (status == 'pending' || status == 'confirmed') {
       return FilledButton.icon(
         onPressed: onStart,

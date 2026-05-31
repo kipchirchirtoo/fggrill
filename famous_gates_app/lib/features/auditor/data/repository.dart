@@ -3,8 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../../../core/network/dio_client.dart';
-import '../../../core/storage/secure_storage_provider.dart';
-import '../../auth/data/auth_repository.dart';
+import '../../admin/domain/admin_providers.dart';
 import '../domain/models.dart';
 
 final auditorRepositoryProvider = Provider<AuditorRepository>((ref) {
@@ -18,12 +17,14 @@ class AuditorRepository {
   final Ref _ref;
 
   Future<String> get _branchId async {
-    final storage = _ref.read(secureStorageProvider);
-    final value = await storage.read(key: AuthRepository.branchIdKey) ?? '';
-    final normalized = value.trim();
-    final lower = normalized.toLowerCase();
-    return lower == 'null' || lower == 'nan' ? '' : normalized;
+    final selectedBranchId = _ref.read(adminSelectedBranchProvider);
+    if (selectedBranchId != null && selectedBranchId.trim().isNotEmpty) {
+      return selectedBranchId.trim();
+    }
+    return '';
   }
+
+  Future<String> getCurrentBranchId() => _branchId;
 
   Map<String, dynamic> _unwrap(dynamic data) {
     if (data is Map && data['success'] == true && data['data'] != null) {
@@ -137,19 +138,20 @@ class AuditorRepository {
     Map<String, dynamic> queryParameters = const {},
   }) async {
     final branchId = await _branchId;
-    if (branchId.isEmpty && _requiresBranch(endpoint)) {
-      return {
-        'success': true,
-        'data': <Map<String, dynamic>>[],
-        'message': 'Select a branch to load this audit view.'
-      };
+    if (endpoint == '/auditor/invoice-verification') {
+      return _getInvoiceVerification(
+        branchId: branchId,
+        queryParameters: queryParameters,
+      );
     }
     try {
-      final response = await _dio.get(endpoint, queryParameters: {
-        if (branchId.isNotEmpty) 'branch_id': branchId,
-        ..._defaultQuery(endpoint),
-        ...queryParameters,
-      });
+      final response = await _dio.get(endpoint,
+          queryParameters: {
+            if (branchId.isNotEmpty) 'branch_id': branchId,
+            ..._defaultQuery(endpoint),
+            ...queryParameters,
+          },
+          options: _branchOptions(branchId));
       return response.data;
     } on DioException catch (error) {
       final status = error.response?.statusCode;
@@ -167,6 +169,106 @@ class AuditorRepository {
       }
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> _getInvoiceVerification({
+    required String branchId,
+    Map<String, dynamic> queryParameters = const {},
+  }) async {
+    final params = <String, dynamic>{
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      ...queryParameters,
+    };
+    final responses = await Future.wait([
+      _dio.get('/accounting/invoices',
+          queryParameters: params, options: _branchOptions(branchId)),
+      _dio.get('/accounting/bills',
+          queryParameters: params, options: _branchOptions(branchId)),
+    ]);
+    final invoiceRows = _listFromResponse(responses[0].data).map((row) {
+      final customer = row['customer'];
+      final customerName = customer is Map
+          ? (customer['customer_name'] ??
+              customer['name'] ??
+              customer['company_name'])
+          : null;
+      return {
+        ...row,
+        '_source': 'invoices',
+        'type': 'invoice',
+        'supplier_name': row['customer_name'] ?? customerName ?? 'Customer',
+        'counterparty_name': row['customer_name'] ?? customerName ?? 'Customer',
+        'invoice_number': row['invoice_number'] ?? row['number'] ?? row['id'],
+        'total_amount': row['total_amount'] ?? row['amount'] ?? row['total'],
+      };
+    });
+    final billRows = _listFromResponse(responses[1].data).map((row) {
+      final vendor = row['vendor'];
+      final vendorName = vendor is Map
+          ? (vendor['vendor_name'] ?? vendor['supplier_name'] ?? vendor['name'])
+          : null;
+      return {
+        ...row,
+        '_source': 'bills',
+        'type': 'bill',
+        'supplier_name': row['vendor_name'] ?? vendorName ?? 'Supplier',
+        'counterparty_name': row['vendor_name'] ?? vendorName ?? 'Supplier',
+        'invoice_number':
+            row['bill_number'] ?? row['invoice_number'] ?? row['number'],
+        'total_amount': row['total_amount'] ?? row['amount'] ?? row['total'],
+      };
+    });
+    final rows = [...invoiceRows, ...billRows].toList();
+    final pending = rows.where((row) {
+      final status =
+          '${row['status'] ?? row['audit_status'] ?? ''}'.toLowerCase().trim();
+      return status.isEmpty ||
+          status == 'draft' ||
+          status == 'pending' ||
+          status == 'submitted' ||
+          status == 'pending_audit';
+    }).length;
+    final totalValue = rows.fold<num>(0, (sum, row) {
+      final value = row['total_amount'] ?? row['amount'] ?? row['total'] ?? 0;
+      return sum + (value is num ? value : num.tryParse('$value') ?? 0);
+    });
+    return {
+      'success': true,
+      'count': rows.length,
+      'data': {
+        'summary': {
+          'records': rows.length,
+          'pending_review': pending,
+          'total_value': totalValue,
+          'variance': 0,
+        },
+        'records': rows,
+      },
+    };
+  }
+
+  List<Map<String, dynamic>> _listFromResponse(dynamic responseData) {
+    dynamic value = responseData;
+    if (value is Map && value['success'] == true && value.containsKey('data')) {
+      value = value['data'];
+    }
+    if (value is Map) {
+      for (final key in ['records', 'items', 'rows', 'data', 'invoices']) {
+        final list = value[key];
+        if (list is List) {
+          return list.whereType<Map>().map(Map<String, dynamic>.from).toList();
+        }
+      }
+    }
+    if (value is List) {
+      return value.whereType<Map>().map(Map<String, dynamic>.from).toList();
+    }
+    return <Map<String, dynamic>>[];
+  }
+
+  Options? _branchOptions(String branchId) {
+    if (branchId.isEmpty) return null;
+    return Options(headers: {'x-branch-id': branchId});
   }
 
   Future<dynamic> submitAction(
@@ -213,11 +315,6 @@ class AuditorRepository {
     return file;
   }
 
-  bool _requiresBranch(String endpoint) {
-    return endpoint == '/auditor/consumption/variances' ||
-        endpoint == '/finance/shift-pnl/summary';
-  }
-
   Map<String, dynamic> _defaultQuery(String endpoint) {
     if (endpoint != '/auditor/consumption/variances') return const {};
     final now = DateTime.now();
@@ -235,8 +332,10 @@ class AuditorRepository {
     String? startDate,
     String? endDate,
   }) async {
+    final branchId = await _branchId;
     final response =
         await _dio.get('/auditor/verify/branch-orders', queryParameters: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
       if (startDate != null) 'start_date': startDate,
       if (endDate != null) 'end_date': endDate,
     });

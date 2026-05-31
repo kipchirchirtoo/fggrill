@@ -38,6 +38,168 @@ String _date(dynamic value) {
 
 String _money(num value) => 'KES ${value.toStringAsFixed(0)}';
 
+final _uuidPattern = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+  caseSensitive: false,
+);
+
+String _detailLabel(String key) {
+  const overrides = {
+    'id': 'Record',
+    'request_id': 'Request',
+    'requesting_branch_id': 'Requesting Branch',
+    'branch_id': 'Branch',
+    'reviewed_by': 'Reviewed By',
+    'reviewed_by_id': 'Reviewed By',
+    'auditor_id': 'Auditor',
+    'created_by': 'Created By',
+    'requested_by': 'Requested By',
+    'requested_by_id': 'Requested By',
+    'requested_by_user': 'Requested By',
+    'reviewed_by_user': 'Reviewed By',
+    'requesting_branch': 'Requesting Branch',
+  };
+  return overrides[key] ??
+      key
+          .replaceAll('_', ' ')
+          .split(' ')
+          .where((part) => part.isNotEmpty)
+          .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+          .join(' ');
+}
+
+String _formatStatusValue(dynamic value) {
+  final raw = '$value'.trim();
+  if (raw.isEmpty) return '—';
+  return raw
+      .replaceAll('_', ' ')
+      .toLowerCase()
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
+}
+
+String _formatDateTimeValue(dynamic value) {
+  final parsed = DateTime.tryParse('$value');
+  if (parsed == null) return '$value';
+  final local = parsed.toLocal();
+  final date =
+      '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
+  final time =
+      '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  return '$date $time';
+}
+
+String? _mapDisplayName(Map<dynamic, dynamic> value) {
+  final firstName = '${value['first_name'] ?? ''}'.trim();
+  final lastName = '${value['last_name'] ?? ''}'.trim();
+  final fullName = '${value['full_name'] ?? value['name'] ?? ''}'.trim();
+  final joinedName = '$firstName $lastName'.trim();
+  final email = '${value['email'] ?? ''}'.trim();
+  final code = '${value['code'] ?? value['branch_code'] ?? ''}'.trim();
+  final number =
+      '${value['request_number'] ?? value['po_number'] ?? value['sku'] ?? ''}'
+          .trim();
+
+  if (joinedName.isNotEmpty) {
+    return email.isNotEmpty ? '$joinedName ($email)' : joinedName;
+  }
+  if (fullName.isNotEmpty) {
+    return code.isNotEmpty ? '$fullName ($code)' : fullName;
+  }
+  if (number.isNotEmpty) return number;
+  if (email.isNotEmpty) return email;
+  return null;
+}
+
+String _listDisplayValue(List<dynamic> values) {
+  if (values.isEmpty) return 'None';
+
+  return values.take(12).map((value) {
+    if (value is Map) {
+      final name = _mapDisplayName(value) ??
+          '${value['item_name'] ?? value['name'] ?? value['description'] ?? value['item_sku'] ?? value['sku'] ?? 'Item'}';
+      final quantity = value['quantity_approved'] ??
+          value['approved_quantity'] ??
+          value['quantity_requested'] ??
+          value['quantity'] ??
+          value['qty'];
+      final unit = value['unit'] ?? value['unit_of_measure'] ?? '';
+      final quantityText = quantity == null || '$quantity'.trim().isEmpty
+          ? ''
+          : ' — Qty $quantity${'$unit'.trim().isNotEmpty ? ' $unit' : ''}';
+      return '$name$quantityText';
+    }
+    return '$value';
+  }).join('\n');
+}
+
+String? _relatedDisplayValue(Map<String, dynamic> row, String key) {
+  final relatedKeys = <String>[
+    if (key == 'reviewed_by' || key == 'reviewed_by_id') 'reviewed_by_user',
+    if (key == 'auditor_id') 'auditor',
+    if (key == 'auditor_id') 'reviewed_by_user',
+    if (key == 'created_by') 'created_by_user',
+    if (key == 'requested_by' || key == 'requested_by_id') 'requested_by_user',
+    if (key == 'requesting_branch_id' || key == 'branch_id')
+      'requesting_branch',
+    if (key == 'branch_id') 'branch',
+  ];
+
+  for (final relatedKey in relatedKeys) {
+    final related = row[relatedKey];
+    if (related is Map) {
+      final name = _mapDisplayName(related);
+      if (name != null && name.isNotEmpty) return name;
+    }
+  }
+  return null;
+}
+
+String _detailValue(Map<String, dynamic> row, String key, dynamic value) {
+  final related = _relatedDisplayValue(row, key);
+  if (related != null) return related;
+
+  if (value is Map) {
+    return _mapDisplayName(value) ?? 'Linked record';
+  }
+  if (value is List) {
+    return _listDisplayValue(value);
+  }
+  if (key.endsWith('_at') ||
+      key.endsWith('_date') ||
+      key == 'created_at' ||
+      key == 'updated_at') {
+    return _formatDateTimeValue(value);
+  }
+  if (key == 'status' ||
+      key.endsWith('_status') ||
+      key == 'count_type' ||
+      key == 'store_type') {
+    return _formatStatusValue(value);
+  }
+
+  final text = '$value'.trim();
+  if (_uuidPattern.hasMatch(text)) return 'Linked record';
+  return text;
+}
+
+bool _shouldShowDetailEntry(
+    Map<String, dynamic> row, MapEntry<String, dynamic> entry) {
+  final value = entry.value;
+  if (value == null || '$value'.trim().isEmpty || '$value' == 'null') {
+    return false;
+  }
+  if (entry.key.endsWith('_id') ||
+      entry.key == 'reviewed_by' ||
+      entry.key == 'created_by') {
+    return _relatedDisplayValue(row, entry.key) != null ||
+        !_uuidPattern.hasMatch('$value');
+  }
+  return true;
+}
+
 Widget _header(String title, IconData icon, {String? subtitle}) {
   return Container(
     padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
@@ -371,8 +533,7 @@ Future<void> _showMapDetails(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: row.entries
-                .where((entry) =>
-                    entry.value != null && '${entry.value}'.isNotEmpty)
+                .where((entry) => _shouldShowDetailEntry(row, entry))
                 .take(40)
                 .map((entry) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 5),
@@ -382,14 +543,18 @@ Future<void> _showMapDetails(
                           SizedBox(
                             width: 160,
                             child: Text(
-                              entry.key.replaceAll('_', ' ').toUpperCase(),
+                              _detailLabel(entry.key).toUpperCase(),
                               style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.kTextSecondary),
                             ),
                           ),
-                          Expanded(child: Text('${entry.value}')),
+                          Expanded(
+                            child: Text(
+                              _detailValue(row, entry.key, entry.value),
+                            ),
+                          ),
                         ],
                       ),
                     ))

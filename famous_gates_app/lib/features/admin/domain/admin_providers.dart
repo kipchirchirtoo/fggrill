@@ -475,37 +475,54 @@ final adminWastageProvider =
 // Cashier clearances for financial verification
 final adminCashierClearancesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(adminRepositoryProvider).getCashierClearances();
+  final branchId = ref.watch(adminSelectedBranchProvider);
+  return ref.read(adminRepositoryProvider).getCashierClearances(
+        branchId: branchId,
+      );
 });
 
 // Shift summaries for shift verification
 final adminShiftSummariesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(adminRepositoryProvider).getShiftSummaries();
+  final branchId = ref.watch(adminSelectedBranchProvider);
+  return ref.read(adminRepositoryProvider).getShiftSummaries(
+        branchId: branchId,
+      );
 });
 
 // Sold items analysis
 final adminSoldItemsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(adminRepositoryProvider).getSoldItemsAnalysis();
+  final branchId = ref.watch(adminSelectedBranchProvider);
+  return ref.read(adminRepositoryProvider).getSoldItemsAnalysis(
+        branchId: branchId,
+      );
 });
 
 // Stock request approvals (pending)
 final adminStockRequestApprovalsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref
-      .read(adminRepositoryProvider)
-      .getStockRequestApprovals(status: 'pending');
+  final branchId = ref.watch(adminSelectedBranchProvider);
+  return ref.read(adminRepositoryProvider).getStockRequestApprovals(
+        status: 'pending',
+        branchId: branchId,
+      );
 });
 
 // Bar stock audits
 final adminBarStockAuditsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(adminRepositoryProvider).getBarStockAudits();
+  final branchId = ref.watch(adminSelectedBranchProvider);
+  return ref.read(adminRepositoryProvider).getBarStockAudits(
+        branchId: branchId,
+      );
 });
 
 // Purchase audit orders
 final adminPurchaseAuditOrdersProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(adminRepositoryProvider).getPurchaseAuditOrders();
+  final branchId = ref.watch(adminSelectedBranchProvider);
+  return ref.read(adminRepositoryProvider).getPurchaseAuditOrders(
+        branchId: branchId,
+      );
 });
