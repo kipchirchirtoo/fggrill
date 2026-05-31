@@ -81,6 +81,17 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                   value: 'receptionist', child: Text('Receptionist')),
               DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
               DropdownMenuItem(
+                  value: 'restaurant_cashier',
+                  child: Text('Restaurant Cashier')),
+              DropdownMenuItem(
+                  value: 'main_bar_cashier', child: Text('Main Bar Cashier')),
+              DropdownMenuItem(
+                  value: 'executive_bar_cashier',
+                  child: Text('Executive Bar Cashier')),
+              DropdownMenuItem(
+                  value: 'non_consumables_cashier',
+                  child: Text('Non-consumables Cashier')),
+              DropdownMenuItem(
                   value: 'housekeeping', child: Text('Housekeeping')),
               DropdownMenuItem(
                   value: 'maintenance', child: Text('Maintenance')),
@@ -177,6 +188,10 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       'storekeeper',
       'receptionist',
       'cashier',
+      'restaurant_cashier',
+      'main_bar_cashier',
+      'executive_bar_cashier',
+      'non_consumables_cashier',
       'restaurant',
       'pos_kitchen',
       'waiter',
@@ -227,6 +242,10 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       'chef',
       'head_chef',
       'cashier',
+      'restaurant_cashier',
+      'main_bar_cashier',
+      'executive_bar_cashier',
+      'non_consumables_cashier',
       'procurement',
       'purchasing_manager',
       'kyogong_spa_cashier',

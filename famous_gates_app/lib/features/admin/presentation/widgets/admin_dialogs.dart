@@ -332,7 +332,19 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
       'Front Office',
       ['receptionist', 'front_desk_supervisor', 'concierge', 'bellboy']
     ),
-    ('Finance', ['finance_manager', 'accountant', 'cashier', 'auditor']),
+    (
+      'Finance',
+      [
+        'finance_manager',
+        'accountant',
+        'cashier',
+        'restaurant_cashier',
+        'main_bar_cashier',
+        'executive_bar_cashier',
+        'non_consumables_cashier',
+        'auditor'
+      ]
+    ),
     (
       'Housekeeping',
       [
