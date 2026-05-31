@@ -158,6 +158,7 @@ class _UsersSectionState extends ConsumerState<UsersSection> {
               width: 180,
               child: DropdownButtonFormField<String>(
                 initialValue: _selectedRole,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Role',
                   contentPadding:
@@ -166,8 +167,11 @@ class _UsersSectionState extends ConsumerState<UsersSection> {
                 items: _roles
                     .map((r) => DropdownMenuItem(
                           value: r == 'All' ? null : r,
-                          child: Text(r[0].toUpperCase() +
-                              r.substring(1).replaceAll('_', ' ')),
+                          child: Text(
+                            r[0].toUpperCase() +
+                                r.substring(1).replaceAll('_', ' '),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ))
                     .toList(),
                 onChanged: (v) => setState(() => _selectedRole = v),

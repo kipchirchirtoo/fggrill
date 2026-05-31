@@ -515,11 +515,16 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             initialValue: _selectedRole.isEmpty ? null : _selectedRole,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Role'),
             items: [
               for (final group in _roleGroups)
                 ...group.$2.map((r) => DropdownMenuItem(
-                    value: r, child: Text('${group.$1} — $r'))),
+                    value: r,
+                    child: Text(
+                      '${group.$1} — $r',
+                      overflow: TextOverflow.ellipsis,
+                    ))),
             ],
             onChanged: (v) => setState(() => _selectedRole = v ?? ''),
             validator: (v) => v == null || v.isEmpty ? 'Required' : null,

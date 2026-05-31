@@ -64,37 +64,58 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
           width: 220,
           child: DropdownButtonFormField<String>(
             initialValue: _roleFilter,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Role'),
             items: const [
-              DropdownMenuItem(value: 'all', child: Text('All roles')),
               DropdownMenuItem(
-                  value: 'super_admin', child: Text('Super Admin')),
+                  value: 'all',
+                  child: Text('All roles', overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
-                  value: 'general_manager', child: Text('General Manager')),
+                  value: 'super_admin',
+                  child: Text('Super Admin', overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
-                  value: 'branch_manager', child: Text('Branch Manager')),
+                  value: 'general_manager',
+                  child:
+                      Text('General Manager', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                  value: 'branch_manager',
+                  child:
+                      Text('Branch Manager', overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
                   value: 'central_storekeeper',
-                  child: Text('Central Storekeeper')),
-              DropdownMenuItem(value: 'auditor', child: Text('Auditor')),
+                  child: Text('Central Storekeeper',
+                      overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
-                  value: 'receptionist', child: Text('Receptionist')),
-              DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+                  value: 'auditor',
+                  child: Text('Auditor', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                  value: 'receptionist',
+                  child: Text('Receptionist', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                  value: 'cashier',
+                  child: Text('Cashier', overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
                   value: 'restaurant_cashier',
-                  child: Text('Restaurant Cashier')),
+                  child: Text('Restaurant Cashier',
+                      overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
-                  value: 'main_bar_cashier', child: Text('Main Bar Cashier')),
+                  value: 'main_bar_cashier',
+                  child: Text('Main Bar Cashier',
+                      overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
                   value: 'executive_bar_cashier',
-                  child: Text('Executive Bar Cashier')),
+                  child: Text('Executive Bar Cashier',
+                      overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
                   value: 'non_consumables_cashier',
-                  child: Text('Non-consumables Cashier')),
+                  child: Text('Non-consumables Cashier',
+                      overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
-                  value: 'housekeeping', child: Text('Housekeeping')),
+                  value: 'housekeeping',
+                  child: Text('Housekeeping', overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
-                  value: 'maintenance', child: Text('Maintenance')),
+                  value: 'maintenance',
+                  child: Text('Maintenance', overflow: TextOverflow.ellipsis)),
             ],
             onChanged: (value) => setState(() => _roleFilter = value ?? 'all'),
           ),
@@ -302,11 +323,15 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: selectedRole,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Role'),
                     items: roles
                         .map((r) => DropdownMenuItem(
                             value: r,
-                            child: Text(r.replaceAll('_', ' ').toUpperCase())))
+                            child: Text(
+                              r.replaceAll('_', ' ').toUpperCase(),
+                              overflow: TextOverflow.ellipsis,
+                            )))
                         .toList(),
                     onChanged: (v) => setS(() {
                       selectedRole = v ?? selectedRole;
