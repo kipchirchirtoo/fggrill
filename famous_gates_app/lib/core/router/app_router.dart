@@ -19,7 +19,6 @@ import '../../features/hr/domain/providers.dart';
 import '../../features/kitchen/presentation/kds_screen.dart';
 import '../../features/maintenance/presentation/maintenance_dashboard.dart';
 import '../../features/pos/presentation/outlet_pos_screen.dart';
-import '../../features/pos/presentation/pos_screen.dart';
 import '../../features/reception/presentation/reception_dashboard.dart';
 import '../../features/reports/presentation/reports_dashboard.dart';
 import '../../features/restaurant/presentation/table_map_view.dart';
@@ -104,37 +103,49 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/license', builder: (context, state) => const LicenseScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-      GoRoute(path: '/pos', builder: (context, state) => const POSScreen()),
+      GoRoute(
+        path: '/pos',
+        builder: (context, state) => const OutletPOSScreen(
+          outletType: 'restaurant',
+          title: 'Unified POS',
+          initials: 'UP',
+          unifiedStations: true,
+        ),
+      ),
       GoRoute(
         path: '/pos/restaurant',
         builder: (context, state) => const OutletPOSScreen(
           outletType: 'restaurant',
-          title: 'Restaurant POS',
-          initials: 'RP',
+          title: 'Unified POS',
+          initials: 'UP',
+          unifiedStations: true,
         ),
       ),
       GoRoute(
         path: '/pos/main-bar',
         builder: (context, state) => const OutletPOSScreen(
           outletType: 'main_bar',
-          title: 'Main Bar POS',
-          initials: 'MB',
+          title: 'Unified POS',
+          initials: 'UP',
+          unifiedStations: true,
         ),
       ),
       GoRoute(
         path: '/pos/executive-bar',
         builder: (context, state) => const OutletPOSScreen(
           outletType: 'executive_bar',
-          title: 'Executive Bar POS',
-          initials: 'EB',
+          title: 'Unified POS',
+          initials: 'UP',
+          unifiedStations: true,
         ),
       ),
       GoRoute(
         path: '/pos/non-consumables',
         builder: (context, state) => const OutletPOSScreen(
           outletType: 'non_consumables',
-          title: 'Non-consumables POS',
-          initials: 'NP',
+          title: 'Unified POS',
+          initials: 'UP',
+          unifiedStations: true,
         ),
       ),
       GoRoute(
@@ -877,7 +888,14 @@ const _publicRoutes = {
 };
 const _authEntryRoutes = {'/terminal', '/login'};
 
-const _cashierRoles = {'cashier', 'kyogong_reception_cashier'};
+const _cashierRoles = {
+  'cashier',
+  'restaurant_cashier',
+  'main_bar_cashier',
+  'executive_bar_cashier',
+  'non_consumables_cashier',
+  'kyogong_reception_cashier',
+};
 const _barRoles = {
   'bartender',
   'bar_manager',
@@ -1147,23 +1165,32 @@ const _routeRoles = <String, Set<String>>{
 
 const _auditorSectionRouteSpecs = <MapEntry<String, AdminSection>>[
   MapEntry('/auditor/search', AdminSection.auditSearch),
+  MapEntry('/auditor/financial-sync', AdminSection.financialVerification),
   MapEntry(
       '/auditor/financial-verification', AdminSection.financialVerification),
   MapEntry('/auditor/financial-verification/logs',
       AdminSection.financialVerification),
   MapEntry('/auditor/shift-verification', AdminSection.shiftVerification),
   MapEntry('/auditor/revenue-oversight', AdminSection.revenueOversight),
+  MapEntry('/auditor/revenue-audit', AdminSection.auditorSales),
   MapEntry('/auditor/sales', AdminSection.auditorSales),
+  MapEntry('/auditor/banking-review', AdminSection.auditorBanking),
   MapEntry('/auditor/banking', AdminSection.auditorBanking),
+  MapEntry('/auditor/invoice-verification', AdminSection.auditorInvoices),
   MapEntry('/auditor/invoices', AdminSection.auditorInvoices),
   MapEntry('/auditor/discrepancies', AdminSection.auditorDiscrepancies),
+  MapEntry('/auditor/order-tracking', AdminSection.auditorOrders),
   MapEntry('/auditor/orders', AdminSection.auditorOrders),
+  MapEntry('/auditor/item-analytics', AdminSection.soldItemsAnalysis),
+  MapEntry('/auditor/sold-items-analysis', AdminSection.soldItemsAnalysis),
   MapEntry('/auditor/sold-items', AdminSection.soldItemsAnalysis),
+  MapEntry('/auditor/inventory-flow', AdminSection.auditorStock),
   MapEntry('/auditor/stock', AdminSection.auditorStock),
   MapEntry('/auditor/bar-stock', AdminSection.barStockAudits),
   MapEntry('/auditor/purchases', AdminSection.purchaseAudits),
   MapEntry('/auditor/deliveries', AdminSection.auditorDeliveries),
   MapEntry('/auditor/ledger', AdminSection.auditorLedger),
+  MapEntry('/auditor/kitchen-flow', AdminSection.auditorKitchenRequisitions),
   MapEntry(
       '/auditor/kitchen-requisitions', AdminSection.auditorKitchenRequisitions),
   MapEntry('/auditor/kitchen-usage', AdminSection.auditorKitchenUsage),
@@ -1171,6 +1198,7 @@ const _auditorSectionRouteSpecs = <MapEntry<String, AdminSection>>[
   MapEntry('/auditor/staff-audit', AdminSection.staffFinancials),
   MapEntry('/auditor/payroll-approvals', AdminSection.auditorPayrollApprovals),
   MapEntry('/auditor/approvals', AdminSection.stockRequestApprovals),
+  MapEntry('/auditor/leakage-control', AdminSection.auditReports),
   MapEntry('/auditor/audit-reports', AdminSection.auditReports),
   MapEntry('/auditor/branch-audit', AdminSection.auditLogs),
   MapEntry('/auditor/branch-audit/invoices', AdminSection.auditorInvoices),
@@ -1246,6 +1274,10 @@ const _branchManagerSectionRouteSpecs =
   MapEntry('/branch-manager/restaurant', BranchManagerSection.restaurant),
   MapEntry(
       '/branch-manager/restaurant-overview', BranchManagerSection.restaurant),
+  MapEntry('/branch-manager/order-intelligence',
+      BranchManagerSection.orderIntelligence),
+  MapEntry('/branch-manager/restaurant/order-intelligence',
+      BranchManagerSection.orderIntelligence),
   MapEntry('/branch-manager/menu', BranchManagerSection.menu),
   MapEntry('/branch-manager/bar-menu', BranchManagerSection.barMenu),
   MapEntry('/branch-manager/housekeeping', BranchManagerSection.housekeeping),
@@ -1346,8 +1378,7 @@ const _centralStoreSectionRouteSpecs = <MapEntry<String, AdminSection>>[
 ];
 
 const _superAdminSectionRouteSpecs = <MapEntry<String, SuperAdminSection>>[
-  MapEntry('/superadmin/lina',
-      SuperAdminSection.lina),
+  MapEntry('/superadmin/lina', SuperAdminSection.lina),
   MapEntry('/superadmin/admin-dashboard', SuperAdminSection.adminDashboard),
   MapEntry('/superadmin/audit-logs', SuperAdminSection.securityCenter),
   MapEntry('/super/admin/security', SuperAdminSection.securityCenter),

@@ -4,6 +4,13 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
 import { ensureShiftAutomationOpened, runShiftCloseAutomation } from '../services/cashier-automation.service';
+import {
+  assignedOutletIds,
+  canAccessPosOutlet,
+  loadAssignedPosOutlets,
+  shouldRestrictCashierStationAccess,
+  stationTypesForCashierRole
+} from '../utils/posStationAccess';
 
 type OutletType =
   | 'restaurant'
@@ -207,7 +214,20 @@ const ensureOutletManagementAccess = (req: Request, branchId?: unknown): void =>
 const ensureShiftAccess = async (req: Request, shiftId: string) => {
   const shift = await loadShift(shiftId);
   ensureBranchAccess(req, shift.branch_id);
+  const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+  if (outlet) {
+    await ensureCashierOutletAccess(req, outlet);
+  }
   return shift;
+};
+
+const ensureCashierOutletAccess = async (req: Request, outlet: Record<string, any>): Promise<void> => {
+  ensureBranchAccess(req, outlet.branch_id);
+  const role = roleFor(req);
+  const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
+  if (!canAccessPosOutlet(role, outlet, assignedOutlets)) {
+    throw new AppError('Forbidden: this cashier is not assigned to this POS station', 403);
+  }
 };
 
 const loadShiftOrder = async (shiftId: string, orderId: string) => {
@@ -983,7 +1003,20 @@ export const getOutlets = async (req: Request, res: Response, next: NextFunction
 
     const { data, error } = await query;
     if (error) throw error;
-    res.json({ success: true, data: data || [] });
+
+    const role = roleFor(req);
+    const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
+    const ids = assignedOutletIds(assignedOutlets);
+    let rows = ((data || []) as Array<Record<string, any>>);
+    if (shouldRestrictCashierStationAccess(role, ids)) {
+      const roleOutletTypes = stationTypesForCashierRole(role);
+      rows = rows.filter((outlet) =>
+        ids.includes(String(outlet.id)) ||
+        roleOutletTypes.includes(String(outlet.outlet_type || '').toLowerCase())
+      );
+    }
+
+    res.json({ success: true, data: rows });
   } catch (error) {
     next(error);
   }
@@ -1001,7 +1034,7 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
       .eq('id', outletId)
       .single();
     if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
-    ensureBranchAccess(req, outlet.branch_id);
+    await ensureCashierOutletAccess(req, outlet);
 
     if (includeRelated && isFoodOrBarOutlet(outlet.outlet_type)) {
       const { data: outlets, error: outletsError } = await supabase
@@ -1098,7 +1131,7 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
       .eq('id', outletId)
       .single();
     if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
-    ensureBranchAccess(req, outlet.branch_id);
+    await ensureCashierOutletAccess(req, outlet);
 
     const { data, error } = await supabase
       .from('pos_outlet_shifts')
@@ -1130,7 +1163,7 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
       .eq('id', outletId)
       .single();
     if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
-    ensureBranchAccess(req, outlet.branch_id);
+    await ensureCashierOutletAccess(req, outlet);
 
     const { data: existing, error: existingError } = await supabase
       .from('pos_outlet_shifts')

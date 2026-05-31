@@ -54,6 +54,10 @@ router.use(authenticate);
 router.use((req: any, res, next) => {
     const allowedRoles = [
         'cashier',
+        'restaurant_cashier',
+        'main_bar_cashier',
+        'executive_bar_cashier',
+        'non_consumables_cashier',
         'super_admin',
         'accountant',
         'branch_accountant',

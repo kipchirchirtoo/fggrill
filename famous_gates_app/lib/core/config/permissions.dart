@@ -363,6 +363,10 @@ class RolePermissions {
 
       // Cashier / Kyogong cashiers
       case UserRole.cashier:
+      case UserRole.restaurantCashier:
+      case UserRole.mainBarCashier:
+      case UserRole.executiveBarCashier:
+      case UserRole.nonConsumablesCashier:
       case UserRole.kyogongSpaCashier:
       case UserRole.kyogongExecutiveBarCashier:
       case UserRole.kyogongSportsBarCashier:

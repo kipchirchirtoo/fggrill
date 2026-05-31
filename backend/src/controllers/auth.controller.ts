@@ -1003,6 +1003,10 @@ export const posLogin = async (
     };
     const outletTypeByRole: Record<string, string> = {
       cashier: 'cashier',
+      restaurant_cashier: 'restaurant',
+      main_bar_cashier: 'main_bar',
+      executive_bar_cashier: 'executive_bar',
+      non_consumables_cashier: 'non_consumables',
       kyogong_reception_cashier: 'kyogong_reception',
       kyogong_spa_cashier: 'kyogong_spa',
       kyogong_executive_bar_cashier: 'kyogong_executive_bar',
@@ -1013,7 +1017,7 @@ export const posLogin = async (
       'line_cook', 'prep_cook', 'waiter', 'waitress', 'head_waiter',
       'food_runner', 'busser', 'host_hostess', 'pos_kitchen',
       'kitchen', 'kitchen_helper', 'dishwasher', 'manager',
-      'branch_manager', 'super_admin', 'cashier',
+      'branch_manager', 'super_admin', 'cashier', 'restaurant_cashier',
       'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
       'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'
     ];
@@ -1021,6 +1025,7 @@ export const posLogin = async (
     const barRoles = [
       'barmaid', 'barman', 'bartender', 'barista', 'bar_manager',
       'manager', 'branch_manager', 'super_admin', 'cashier',
+      'main_bar_cashier', 'executive_bar_cashier',
       'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
       'kyogong_sports_bar_cashier', 'kyogong_reception_cashier',
       'general_manager', 'director', 'auditor'
@@ -1028,6 +1033,8 @@ export const posLogin = async (
 
     const cashierRoles = [
       'cashier', 'accountant', 'manager', 'branch_manager', 'super_admin',
+      'restaurant_cashier', 'main_bar_cashier', 'executive_bar_cashier',
+      'non_consumables_cashier',
       'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
       'kyogong_sports_bar_cashier', 'kyogong_reception_cashier',
       'general_manager', 'director', 'auditor', 'finance_manager',
@@ -1094,6 +1101,16 @@ export const posLogin = async (
     }
 
     if (outlet && prefix !== 'C') {
+      const stationCashierRoles = new Set([
+        'restaurant_cashier',
+        'main_bar_cashier',
+        'executive_bar_cashier',
+        'non_consumables_cashier',
+        'kyogong_spa_cashier',
+        'kyogong_executive_bar_cashier',
+        'kyogong_sports_bar_cashier',
+        'kyogong_reception_cashier'
+      ]);
       const managerOverrideRoles = new Set([
         'super_admin',
         'general_manager',
@@ -1119,6 +1136,14 @@ export const posLogin = async (
           outletId: outlet.id,
           error: assignmentError.message
         });
+      }
+
+      if (!assignment && stationCashierRoles.has(normalizedRole)) {
+        res.status(403).json({
+          success: false,
+          message: `This cashier is not assigned to ${outlet.name || 'this POS station'}. Ask a manager to assign them to the station first.`
+        });
+        return;
       }
 
       if (!assignment && !managerOverrideRoles.has(normalizedRole)) {

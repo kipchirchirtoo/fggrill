@@ -43,6 +43,10 @@ enum UserRole {
   storekeeper('storekeeper'),
   purchasingManager('purchasing_manager'),
   cashier('cashier'),
+  restaurantCashier('restaurant_cashier'),
+  mainBarCashier('main_bar_cashier'),
+  executiveBarCashier('executive_bar_cashier'),
+  nonConsumablesCashier('non_consumables_cashier'),
   hrManager('hr_manager'),
   employee('employee'),
   driver('driver'),
@@ -160,6 +164,14 @@ enum UserRole {
         return 'Purchasing Manager';
       case UserRole.cashier:
         return 'Cashier';
+      case UserRole.restaurantCashier:
+        return 'Restaurant Cashier';
+      case UserRole.mainBarCashier:
+        return 'Main Bar Cashier';
+      case UserRole.executiveBarCashier:
+        return 'Executive Bar Cashier';
+      case UserRole.nonConsumablesCashier:
+        return 'Non-consumables Cashier';
       case UserRole.hrManager:
         return 'HR Manager';
       case UserRole.employee:
@@ -217,6 +229,10 @@ enum UserRole {
 
   static Set<String> get cashierRoles => {
         cashier.value,
+        restaurantCashier.value,
+        mainBarCashier.value,
+        executiveBarCashier.value,
+        nonConsumablesCashier.value,
         kyogongReceptionCashier.value,
       };
 

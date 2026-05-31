@@ -9,6 +9,15 @@ import { mpesaService } from '../services/mpesa.service';
 import notificationService from '../services/notification.service';
 import { deductIngredientsForItem } from './kitchen/recipes.controller';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import {
+    assignedOutletIds,
+    canAccessPosOutlet,
+    isBarStationType,
+    loadAssignedPosOutlets,
+    shouldRestrictCashierStationAccess,
+    stationDisplayName,
+    stationTypesForCashierRole
+} from '../utils/posStationAccess';
 import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
@@ -5476,53 +5485,73 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const to = req.query.to_date
             ? new Date(String(req.query.to_date))
             : new Date(`${date}T23:59:59.999Z`);
+        const requestedOutletId = String(req.query.outlet_id || '').trim();
+        const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
+        const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+        const assignedIds = assignedOutletIds(assignedOutlets);
+        const roleOutletTypes = stationTypesForCashierRole(userRole);
+        const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+        const allowedOutletTypes = new Set([
+            ...roleOutletTypes,
+            ...assignedOutlets.map((outlet) => String(outlet.outlet_type || '').toLowerCase()).filter(Boolean)
+        ]);
+        const canSeeLegacyRestaurant = !stationRestricted || allowedOutletTypes.has('restaurant');
+        const canSeeLegacyBar = !stationRestricted || Array.from(allowedOutletTypes).some(isBarStationType);
 
         // Fetch pending restaurant orders
-        let restaurantQuery = supabase
-            .from('restaurant_orders')
-            .select(`
-                id, order_number, short_code, status, payment_status,
-                table_number, room_number, guest_name,
-                total_amount, amount_paid, balance_amount, created_at, branch_id, created_by,
-                waiter:users!created_by(id, first_name, last_name),
-                items:restaurant_order_items(
-                    id, quantity, unit_price, total_price,
-                    menu_item:restaurant_menu_items(name)
-                )
-            `)
-            .neq('payment_status', 'paid')
-            .neq('status', 'cancelled')
-            .gte('created_at', from.toISOString())
-            .lte('created_at', to.toISOString())
-            .order('created_at', { ascending: false });
+        let restaurantOrders: any[] = [];
+        if (canSeeLegacyRestaurant && (!requestedOutletType || requestedOutletType === 'restaurant')) {
+            let restaurantQuery = supabase
+                .from('restaurant_orders')
+                .select(`
+                    id, order_number, short_code, status, payment_status,
+                    table_number, room_number, guest_name,
+                    total_amount, amount_paid, balance_amount, created_at, branch_id, created_by,
+                    waiter:users!created_by(id, first_name, last_name),
+                    items:restaurant_order_items(
+                        id, quantity, unit_price, total_price,
+                        menu_item:restaurant_menu_items(name)
+                    )
+                `)
+                .neq('payment_status', 'paid')
+                .neq('status', 'cancelled')
+                .gte('created_at', from.toISOString())
+                .lte('created_at', to.toISOString())
+                .order('created_at', { ascending: false });
 
-        if (effectiveBranchId) restaurantQuery = restaurantQuery.eq('branch_id', effectiveBranchId);
-        if (status !== 'all') restaurantQuery = restaurantQuery.eq('payment_status', status);
+            if (effectiveBranchId) restaurantQuery = restaurantQuery.eq('branch_id', effectiveBranchId);
+            if (status !== 'all') restaurantQuery = restaurantQuery.eq('payment_status', status);
 
-        const { data: restaurantOrders, error: rErr } = await restaurantQuery;
-        if (rErr && rErr.code !== '42703') throw rErr;
+            const { data, error: rErr } = await restaurantQuery;
+            if (rErr && rErr.code !== '42703') throw rErr;
+            restaurantOrders = data || [];
+        }
 
         // Fetch pending bar orders
-        let barQuery = supabase
-            .from('bar_orders')
-            .select(`
-                id, order_number, short_code, status, payment_status,
-                seat_number, room_number, guest_name,
-                total, amount_paid, balance_amount, created_at, branch_id, created_by,
-                waiter:users!created_by(id, first_name, last_name),
-                items:bar_order_items(id, drink_name, quantity, unit_price, total_price)
-            `)
-            .neq('payment_status', 'paid')
-            .neq('status', 'cancelled')
-            .gte('created_at', from.toISOString())
-            .lte('created_at', to.toISOString())
-            .order('created_at', { ascending: false });
+        let barOrders: any[] = [];
+        if (canSeeLegacyBar && (!requestedOutletType || isBarStationType(requestedOutletType))) {
+            let barQuery = supabase
+                .from('bar_orders')
+                .select(`
+                    id, order_number, short_code, status, payment_status,
+                    seat_number, room_number, guest_name,
+                    total, amount_paid, balance_amount, created_at, branch_id, created_by,
+                    waiter:users!created_by(id, first_name, last_name),
+                    items:bar_order_items(id, drink_name, quantity, unit_price, total_price)
+                `)
+                .neq('payment_status', 'paid')
+                .neq('status', 'cancelled')
+                .gte('created_at', from.toISOString())
+                .lte('created_at', to.toISOString())
+                .order('created_at', { ascending: false });
 
-        if (effectiveBranchId) barQuery = barQuery.eq('branch_id', effectiveBranchId);
-        if (status !== 'all') barQuery = barQuery.eq('payment_status', status);
+            if (effectiveBranchId) barQuery = barQuery.eq('branch_id', effectiveBranchId);
+            if (status !== 'all') barQuery = barQuery.eq('payment_status', status);
 
-        const { data: barOrders, error: bErr } = await barQuery;
-        if (bErr && bErr.code !== '42703') throw bErr;
+            const { data, error: bErr } = await barQuery;
+            if (bErr && bErr.code !== '42703') throw bErr;
+            barOrders = data || [];
+        }
 
         let posOrders: any[] = [];
         let posShiftIds: string[] = [];
@@ -5530,12 +5559,19 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         try {
             let posShiftQuery = supabase
                 .from('pos_outlet_shifts')
-                .select('id, branch_id, outlet:pos_outlets(name, outlet_type)');
+                .select('id, branch_id, outlet_id, cashier_id, outlet:pos_outlets(id, name, outlet_type, branch_id)');
             if (effectiveBranchId) posShiftQuery = posShiftQuery.eq('branch_id', effectiveBranchId);
             const { data: posShifts, error: posShiftErr } = await posShiftQuery;
             if (posShiftErr) throw posShiftErr;
 
-            shiftLookup = Object.fromEntries((posShifts || []).map((shift: any) => [shift.id, shift]));
+            const visibleShifts = ((posShifts || []) as any[]).filter((shift: any) => {
+                const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+                if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
+                if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
+                return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+            });
+
+            shiftLookup = Object.fromEntries(visibleShifts.map((shift: any) => [shift.id, shift]));
             posShiftIds = Object.keys(shiftLookup);
             if (posShiftIds.length) {
                 const allowedStatuses = status === 'all' ? ['unpaid', 'partial'] : [status];
@@ -5625,15 +5661,17 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const items = Array.isArray(o.items) ? o.items : [];
                 const shift = shiftLookup[o.shift_id];
                 const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
+                const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
                 return {
                     id: o.id,
                     source: 'pos',
                     source_type: 'CAPTAIN_ORDER',
                     bill_type: 'pos_shift_order',
+                    bill_label: 'Captain Order',
                     order_number: o.order_number,
                     bill_number: o.order_number,
                     short_code: o.short_code,
-                    location: o.customer_name || outlet?.name || 'POS station',
+                    location: o.customer_name || stationName,
                     guest_name: o.customer_name || 'Walk-in',
                     customer_name: o.customer_name || 'Walk-in',
                     total_amount: Number(o.total_amount || 0),
@@ -5644,6 +5682,10 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     created_at: o.created_at,
                     bill_date: o.created_at,
                     branch_id: shift?.branch_id || effectiveBranchId,
+                    outlet_id: o.outlet_id || shift?.outlet_id,
+                    outlet_type: outlet?.outlet_type || null,
+                    outlet_name: outlet?.name || null,
+                    station_name: stationName,
                     waiter: null,
                     waiter_id: o.waiter_id || o.created_by,
                     waiter_name: o.waiter_name || '',
@@ -5691,6 +5733,8 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
             skip_credit_bill_creation = false
         } = req.body;
 
+        const userRole = (req.user as any)?.role?.toLowerCase() || '';
+        const isGlobal = isGlobalRole(userRole);
         const normalizedSource = String(source || '').toLowerCase();
         const isRestaurantOrder = normalizedSource === 'restaurant';
         const isPosCaptainOrder = ['pos', 'pos_shift_order', 'captain', 'captain_order'].includes(normalizedSource);
@@ -5732,6 +5776,23 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                 .eq('id', (order as any).shift_id)
                 .maybeSingle();
             orderBranchId = shift?.branch_id;
+        }
+
+        if (isPosCaptainOrder) {
+            const { data: outlet, error: outletError } = await supabase
+                .from('pos_outlets')
+                .select('id, name, outlet_type, branch_id')
+                .eq('id', (order as any).outlet_id)
+                .maybeSingle();
+            if (outletError) throw outletError;
+            if (!outlet) throw new AppError('POS station not found for this captain order', 404);
+            if (!isGlobal && Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
+                throw new AppError('Forbidden: captain order belongs to another branch', 403);
+            }
+            const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+            if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                throw new AppError('Forbidden: this cashier cannot clear orders for this POS station', 403);
+            }
         }
 
         let linkedStaffCreditBillId = staff_credit_bill_id || null;

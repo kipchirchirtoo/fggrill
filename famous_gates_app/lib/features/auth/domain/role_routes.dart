@@ -35,6 +35,10 @@ String getRoleRoute(String role) {
     case 'concierge':
       return '/reception';
     case 'cashier':
+    case 'restaurant_cashier':
+    case 'main_bar_cashier':
+    case 'executive_bar_cashier':
+    case 'non_consumables_cashier':
       return '/cashier';
     case 'kyogong_reception_cashier':
       return '/pos/kyogong-reception';

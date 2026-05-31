@@ -12,6 +12,10 @@ export enum UserRole {
   CENTRAL_STOREKEEPER = 'central_storekeeper',
   BRANCH_STOREKEEPER = 'branch_storekeeper',
   CASHIER = 'cashier',
+  RESTAURANT_CASHIER = 'restaurant_cashier',
+  MAIN_BAR_CASHIER = 'main_bar_cashier',
+  EXECUTIVE_BAR_CASHIER = 'executive_bar_cashier',
+  NON_CONSUMABLES_CASHIER = 'non_consumables_cashier',
   EMPLOYEE = 'employee',
   GUEST = 'guest'
 }

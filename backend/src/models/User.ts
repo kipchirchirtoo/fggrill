@@ -66,6 +66,10 @@ export enum UserRole {
   HR_MANAGER = 'hr_manager',
   PAYROLL_CLERK = 'payroll_clerk',
   CASHIER = 'cashier',
+  RESTAURANT_CASHIER = 'restaurant_cashier',
+  MAIN_BAR_CASHIER = 'main_bar_cashier',
+  EXECUTIVE_BAR_CASHIER = 'executive_bar_cashier',
+  NON_CONSUMABLES_CASHIER = 'non_consumables_cashier',
 
   // FamousGateHotels Cashiers
   KYOGONG_SPA_CASHIER = 'kyogong_spa_cashier',

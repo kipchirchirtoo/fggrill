@@ -26,7 +26,13 @@ export default function DashboardPage() {
                 router.push('/dashboard/reception');
             } else if (role === UserRole.POS_KITCHEN || role === UserRole.RESTAURANT) {
                 router.push('/dashboard/pos-kitchen');
-            } else if (role === UserRole.CASHIER) {
+            } else if (
+                role === UserRole.CASHIER ||
+                role === UserRole.RESTAURANT_CASHIER ||
+                role === UserRole.MAIN_BAR_CASHIER ||
+                role === UserRole.EXECUTIVE_BAR_CASHIER ||
+                role === UserRole.NON_CONSUMABLES_CASHIER
+            ) {
                 router.push('/dashboard/cashier');
             } else if (role === UserRole.HR_MANAGER) {
                 router.push('/dashboard/hr');

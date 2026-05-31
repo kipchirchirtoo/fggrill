@@ -34,6 +34,10 @@ const router = Router();
 
 const allowedRoles = new Set([
   'cashier',
+  'restaurant_cashier',
+  'main_bar_cashier',
+  'executive_bar_cashier',
+  'non_consumables_cashier',
   'super_admin',
   'general_manager',
   'director',
