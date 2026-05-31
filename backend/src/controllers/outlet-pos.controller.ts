@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
+import { ensureShiftAutomationOpened, runShiftCloseAutomation } from '../services/cashier-automation.service';
 
 type OutletType =
   | 'restaurant'
@@ -15,6 +16,94 @@ type OutletType =
   | 'kyogong_executive_bar'
   | 'kyogong_sports_bar';
 type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'credit_bill';
+
+const FOOD_AND_BAR_OUTLET_TYPES = new Set<OutletType>([
+  'restaurant',
+  'main_bar',
+  'executive_bar',
+  'kyogong_executive_bar',
+  'kyogong_sports_bar'
+]);
+
+const isFoodOrBarOutlet = (outletType: unknown): boolean =>
+  FOOD_AND_BAR_OUTLET_TYPES.has(String(outletType || '') as OutletType);
+
+const outletItemGroup = (outletType: unknown): 'restaurant' | 'bar' | 'other' => {
+  const type = String(outletType || '');
+  if (type === 'restaurant') return 'restaurant';
+  if (isFoodOrBarOutlet(type)) return 'bar';
+  return 'other';
+};
+
+const categoryText = (value: unknown): string => {
+  if (!value) return '';
+  if (typeof value === 'object') {
+    const record = value as Record<string, any>;
+    return String(record.name ?? record.category_name ?? record.label ?? '').trim();
+  }
+  const text = String(value).trim();
+  return text === 'null' || text === 'undefined' ? '' : text;
+};
+
+const isGenericOutletCategory = (category: string, group: 'restaurant' | 'bar' | 'other'): boolean => {
+  const lower = category.trim().toLowerCase();
+  if (!lower) return true;
+  if (group === 'restaurant') return lower === 'restaurant' || lower === 'other';
+  if (group === 'bar') {
+    return [
+      'bar',
+      'main bar',
+      'executive bar',
+      'kyogong executive bar',
+      'kyogong sports bar',
+      'other'
+    ].includes(lower);
+  }
+  return lower === 'uncategorised' || lower === 'uncategorized' || lower === 'other';
+};
+
+const sourceIdForOutletItem = (item: Record<string, any>, prefix: string): string | null => {
+  const explicitId = categoryText(item.source_item_id);
+  if (explicitId) return explicitId;
+  if (!prefix) return null;
+  const sku = categoryText(item.sku);
+  return sku.startsWith(prefix) ? sku.slice(prefix.length) : null;
+};
+
+const applySourceCategory = (
+  item: Record<string, any>,
+  categoryName?: string,
+  categoryId?: string | null,
+  sortOrder?: number | null
+): Record<string, any> => {
+  const group = outletItemGroup(item.outlet_type);
+  const currentCategory = categoryText(item.category);
+  const nextCategory =
+    categoryName && isGenericOutletCategory(currentCategory, group)
+      ? categoryName
+      : currentCategory || categoryName || 'Other';
+  return {
+    ...item,
+    category: nextCategory,
+    category_name: nextCategory,
+    category_id: categoryId ?? item.category_id ?? null,
+    category_sort_order: sortOrder ?? item.category_sort_order ?? null
+  };
+};
+
+const sortOutletItems = (
+  a: Record<string, any>,
+  b: Record<string, any>
+): number => {
+  const group = String(a.item_group_label || '').localeCompare(String(b.item_group_label || ''));
+  if (group !== 0) return group;
+  const aSort = Number.isFinite(Number(a.category_sort_order)) ? Number(a.category_sort_order) : 9999;
+  const bSort = Number.isFinite(Number(b.category_sort_order)) ? Number(b.category_sort_order) : 9999;
+  if (aSort !== bSort) return aSort - bSort;
+  const category = String(a.category || '').localeCompare(String(b.category || ''));
+  if (category !== 0) return category;
+  return String(a.name || '').localeCompare(String(b.name || ''));
+};
 
 const GLOBAL_ROLES = new Set([
   'super_admin',
@@ -151,6 +240,11 @@ const normalizeOrderItems = (items: Array<Record<string, any>>): Array<Record<st
     return {
       outlet_item_id: outletItemId,
       name: String(item.name ?? item.item_name ?? ''),
+      category: item.category ?? null,
+      item_group: item.item_group ?? null,
+      item_group_label: item.item_group_label ?? null,
+      outlet_name: item.outlet_name ?? null,
+      outlet_type: item.outlet_type ?? null,
       quantity,
       unit_price: unitPrice,
       line_total: quantity * unitPrice
@@ -345,32 +439,31 @@ const updateStockForItems = async (
       .maybeSingle();
 
     if (countError) throw countError;
-    if (!countRow) continue;
+    if (countRow) {
+      const soldQuantity = Math.max(0, numberValue(countRow.sold_quantity) + direction * quantity);
+      const systemClosingStock =
+        numberValue(countRow.opening_stock) + numberValue(countRow.additions) - soldQuantity;
 
-    const soldQuantity = Math.max(0, numberValue(countRow.sold_quantity) + direction * quantity);
-    const systemClosingStock =
-      numberValue(countRow.opening_stock) + numberValue(countRow.additions) - soldQuantity;
+      const { error: updateCountError } = await supabase
+        .from('pos_shift_stock_counts')
+        .update({
+          sold_quantity: soldQuantity,
+          system_closing_stock: systemClosingStock,
+          variance:
+            countRow.physical_count === null || countRow.physical_count === undefined
+              ? 0
+              : numberValue(countRow.physical_count) - systemClosingStock,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', countRow.id);
 
-    const { error: updateCountError } = await supabase
-      .from('pos_shift_stock_counts')
-      .update({
-        sold_quantity: soldQuantity,
-        system_closing_stock: systemClosingStock,
-        variance:
-          countRow.physical_count === null || countRow.physical_count === undefined
-            ? 0
-            : numberValue(countRow.physical_count) - systemClosingStock,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', countRow.id);
-
-    if (updateCountError) throw updateCountError;
+      if (updateCountError) throw updateCountError;
+    }
 
     const { data: outletItem, error: itemError } = await supabase
       .from('pos_outlet_items')
-      .select('current_stock')
+      .select('current_stock, outlet_id')
       .eq('id', outletItemId)
-      .eq('outlet_id', outletId)
       .maybeSingle();
 
     if (itemError) throw itemError;
@@ -382,8 +475,92 @@ const updateStockForItems = async (
         current_stock: numberValue(outletItem.current_stock) - direction * quantity,
         updated_at: new Date().toISOString()
       })
-      .eq('id', outletItemId);
+      .eq('id', outletItemId)
+      .eq('outlet_id', outletItem.outlet_id || outletId);
   }
+};
+
+const hydrateOutletItemCategories = async (
+  outlet: Record<string, any>,
+  items: Array<Record<string, any>>
+): Promise<Array<Record<string, any>>> => {
+  if (!items.length || !isFoodOrBarOutlet(outlet.outlet_type)) return items;
+
+  const group = outletItemGroup(outlet.outlet_type);
+  const withOutlet: Array<Record<string, any>> = items.map((item) => ({
+    ...item,
+    outlet_type: item.outlet_type || outlet.outlet_type
+  }));
+
+  const restaurantIds = new Set<string>();
+  const barDrinkIds = new Set<string>();
+  for (const item of withOutlet) {
+    if (item.source_table === 'restaurant_menu_items' || group === 'restaurant') {
+      const id = sourceIdForOutletItem(item, 'R-');
+      if (id) restaurantIds.add(id);
+    }
+    if (item.source_table === 'bar_drinks') {
+      const id = sourceIdForOutletItem(item, '');
+      if (id) barDrinkIds.add(id);
+    }
+  }
+
+  const restaurantCategoryById = new Map<string, { id: string | null; name: string; sortOrder: number | null }>();
+  if (restaurantIds.size) {
+    const { data, error } = await supabase
+      .from('restaurant_menu_items')
+      .select('id, category_id, category:restaurant_menu_categories(id, name, sort_order)')
+      .in('id', Array.from(restaurantIds));
+    if (error) {
+      logger.warn(`Could not hydrate restaurant POS categories: ${error.message}`);
+    } else {
+      for (const row of (data || []) as Array<Record<string, any>>) {
+        const category = row.category as Record<string, any> | null;
+        const name = categoryText(category);
+        if (name) {
+          restaurantCategoryById.set(String(row.id), {
+            id: row.category_id ? String(row.category_id) : null,
+            name,
+            sortOrder: Number.isFinite(Number(category?.sort_order)) ? Number(category?.sort_order) : null
+          });
+        }
+      }
+    }
+  }
+
+  const barCategoryById = new Map<string, { id: string | null; name: string; sortOrder: number | null }>();
+  if (barDrinkIds.size) {
+    const { data, error } = await supabase
+      .from('bar_drinks')
+      .select('id, category_id, category:bar_drink_categories(id, name, sort_order)')
+      .in('id', Array.from(barDrinkIds));
+    if (error) {
+      logger.warn(`Could not hydrate bar POS categories: ${error.message}`);
+    } else {
+      for (const row of (data || []) as Array<Record<string, any>>) {
+        const category = row.category as Record<string, any> | null;
+        const name = categoryText(category);
+        if (name) {
+          barCategoryById.set(String(row.id), {
+            id: row.category_id ? String(row.category_id) : null,
+            name,
+            sortOrder: Number.isFinite(Number(category?.sort_order)) ? Number(category?.sort_order) : null
+          });
+        }
+      }
+    }
+  }
+
+  return withOutlet.map((item) => {
+    const restaurantId = sourceIdForOutletItem(item, 'R-');
+    const barDrinkId = sourceIdForOutletItem(item, '');
+    const sourceCategory =
+      (restaurantId && restaurantCategoryById.get(restaurantId)) ||
+      (barDrinkId && barCategoryById.get(barDrinkId));
+    return sourceCategory
+      ? applySourceCategory(item, sourceCategory.name, sourceCategory.id, sourceCategory.sortOrder)
+      : applySourceCategory(item);
+  }).sort(sortOutletItems);
 };
 
 const seedOutletItemsFromExistingMenus = async (
@@ -396,7 +573,7 @@ const seedOutletItemsFromExistingMenus = async (
   if (outletType === 'restaurant') {
     let query = supabase
       .from('restaurant_menu_items')
-      .select('id, name, price, category, is_available, branch_id')
+      .select('id, name, price, category_id, category:restaurant_menu_categories(id, name), is_available, branch_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
@@ -408,7 +585,7 @@ const seedOutletItemsFromExistingMenus = async (
       source_item_id: item.id,
       sku: `R-${item.id}`,
       name: item.name,
-      category: item.category || 'Restaurant',
+      category: categoryText(item.category) || 'Restaurant',
       unit: 'each',
       cost_price: 0,
       selling_price: item.price || 0,
@@ -423,23 +600,37 @@ const seedOutletItemsFromExistingMenus = async (
       outletType === 'kyogong_executive_bar' || outletType === 'kyogong_sports_bar') {
     let query = supabase
       .from('bar_drinks')
-      .select('id, name, price, cost_price, unit, is_available, branch_id')
+      .select('id, name, price, cost_price, unit, is_available, branch_id, category_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
     const { data, error } = await query;
     if (error) throw error;
+    const rows = (data || []) as Array<Record<string, any>>;
+    const categoryIds = [...new Set(rows.map((item) => item.category_id).filter(Boolean))];
+    const categoryById = new Map<string, string>();
+    if (categoryIds.length) {
+      const { data: categories, error: categoryError } = await supabase
+        .from('bar_drink_categories')
+        .select('id, name')
+        .in('id', categoryIds);
+      if (categoryError) throw categoryError;
+      for (const category of (categories || []) as Array<Record<string, any>>) {
+        categoryById.set(String(category.id), String(category.name || 'Bar'));
+      }
+    }
     const prefix =
       outletType === 'main_bar' ? 'M' :
       outletType === 'executive_bar' ? 'E' :
       outletType === 'kyogong_executive_bar' ? 'KX' : 'KS';
-    sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => ({
+    sourceRows = rows.map((item) => ({
       outlet_id: outlet.id,
       source_table: 'bar_drinks',
       source_item_id: item.id,
       sku: `${prefix}-${item.id}`,
       name: item.name,
-      category: outletType.includes('executive') ? 'Executive Bar' : 'Main Bar',
+      category: categoryById.get(String(item.category_id)) ||
+        (outletType.includes('executive') ? 'Executive Bar' : 'Main Bar'),
       unit: item.unit || 'each',
       cost_price: item.cost_price || 0,
       selling_price: item.price || 0,
@@ -554,6 +745,46 @@ const seedOutletItemsFromExistingMenus = async (
     .order('name', { ascending: true });
   if (error) throw error;
   return (data || []) as Array<Record<string, any>>;
+};
+
+const enrichOutletItems = (
+  outlet: Record<string, any>,
+  items: Array<Record<string, any>>
+): Array<Record<string, any>> => {
+  const group = outletItemGroup(outlet.outlet_type);
+  return items.map((item) => ({
+    ...item,
+    outlet_id: item.outlet_id || outlet.id,
+    outlet_name: outlet.name,
+    outlet_type: outlet.outlet_type,
+    item_group: group,
+    item_group_label:
+      group === 'restaurant' ? 'Restaurant' :
+      group === 'bar' ? 'Bar' :
+      'Other',
+    category: item.category || (group === 'restaurant' ? 'Restaurant' : group === 'bar' ? 'Bar' : 'Uncategorised')
+  }));
+};
+
+const loadActiveOutletItems = async (
+  outlet: Record<string, any>,
+  refreshFromSource = false
+): Promise<Array<Record<string, any>>> => {
+  if (refreshFromSource && isFoodOrBarOutlet(outlet.outlet_type)) {
+    const synced = await seedOutletItemsFromExistingMenus(outlet);
+    if (synced.length) return synced;
+  }
+
+  const { data, error } = await supabase
+    .from('pos_outlet_items')
+    .select('*')
+    .eq('outlet_id', outlet.id)
+    .eq('is_active', true)
+    .order('category', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) throw error;
+  const items = (data || []) as Array<Record<string, any>>;
+  return items.length ? items : await seedOutletItemsFromExistingMenus(outlet);
 };
 
 export const createOutlet = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -762,6 +993,8 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
   try {
     assertUser(req);
     const { outletId } = req.params;
+    const includeRelated = ['true', '1', 'branch_food_bar', 'food_bar']
+      .includes(String(req.query.include_related ?? req.query.unified ?? '').toLowerCase());
     const { data: outlet, error: outletError } = await supabase
       .from('pos_outlets')
       .select('*')
@@ -770,18 +1003,37 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
     if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
     ensureBranchAccess(req, outlet.branch_id);
 
-    const { data, error } = await supabase
-      .from('pos_outlet_items')
-      .select('*')
-      .eq('outlet_id', outletId)
-      .eq('is_active', true)
-      .order('category', { ascending: true })
-      .order('name', { ascending: true });
-    if (error) throw error;
-    const items = (data || []) as Array<Record<string, any>>;
+    if (includeRelated && isFoodOrBarOutlet(outlet.outlet_type)) {
+      const { data: outlets, error: outletsError } = await supabase
+        .from('pos_outlets')
+        .select('*')
+        .eq('branch_id', outlet.branch_id)
+        .eq('is_active', true)
+        .in('outlet_type', Array.from(FOOD_AND_BAR_OUTLET_TYPES))
+        .order('outlet_type', { ascending: true })
+        .order('name', { ascending: true });
+      if (outletsError) throw outletsError;
+
+      const merged: Array<Record<string, any>> = [];
+      for (const branchOutlet of (outlets || []) as Array<Record<string, any>>) {
+        const items = await loadActiveOutletItems(branchOutlet, true);
+        const categorisedItems = await hydrateOutletItemCategories(branchOutlet, items);
+        merged.push(...enrichOutletItems(branchOutlet, categorisedItems));
+      }
+
+      merged.sort(sortOutletItems);
+
+      res.json({ success: true, data: merged });
+      return;
+    }
+
+    const items = await hydrateOutletItemCategories(
+      outlet,
+      await loadActiveOutletItems(outlet)
+    );
     res.json({
       success: true,
-      data: items.length ? items : await seedOutletItemsFromExistingMenus(outlet)
+      data: enrichOutletItems(outlet, items)
     });
   } catch (error) {
     next(error);
@@ -931,6 +1183,9 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
       if (stockError) throw stockError;
     }
 
+    ensureShiftAutomationOpened(shift.id, req.user.id)
+      .catch((error) => logger.warn('Unable to record shift open automation marker', error));
+
     res.status(201).json({ success: true, data: shift });
   } catch (error) {
     next(error);
@@ -1043,6 +1298,10 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         balance_amount: Math.max(0, totalAmount - amountPaid),
         payment_status: amountPaid > 0 ? 'partial' : 'unpaid',
         status: 'open',
+        kitchen_status: 'pending',
+        kitchen_started_at: null,
+        kitchen_ready_at: null,
+        void_request_status: null,
         items: normalizedItems,
         updated_at: new Date().toISOString()
       })
@@ -1098,6 +1357,7 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
           waiter_name: order.waiter_name ||
           `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
           status: 'open',
+          kitchen_status: 'pending',
           payment_status: 'unpaid',
           total_amount: totalAmount,
           amount_paid: 0,
@@ -1120,6 +1380,7 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
       .update({
         is_split: true,
         status: 'cancelled',
+        kitchen_status: 'cancelled',
         payment_status: 'voided',
         balance_amount: 0,
         updated_at: new Date().toISOString()
@@ -1167,6 +1428,7 @@ export const mergeShiftOrders = async (req: Request, res: Response, next: NextFu
         waiter_id: req.user.id,
         waiter_name: `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
         status: 'open',
+        kitchen_status: 'pending',
         payment_status: 'unpaid',
         total_amount: totalAmount,
         amount_paid: 0,
@@ -1184,6 +1446,7 @@ export const mergeShiftOrders = async (req: Request, res: Response, next: NextFu
         is_merged: true,
         merged_into: target.id,
         status: 'cancelled',
+        kitchen_status: 'cancelled',
         payment_status: 'voided',
         balance_amount: 0,
         updated_at: new Date().toISOString()
@@ -1234,7 +1497,11 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
 
     await supabase
       .from('pos_shift_orders')
-      .update({ void_request_status: 'pending', updated_at: new Date().toISOString() })
+      .update({
+        void_request_status: 'pending',
+        kitchen_status: 'void_requested',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', orderId);
 
     await notificationService.notifyRole(
@@ -1366,6 +1633,7 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
         .update({
           status: 'voided',
           payment_status: 'voided',
+          kitchen_status: 'cancelled',
           balance_amount: 0,
           void_request_status: 'approved',
           voided_at: new Date().toISOString(),
@@ -1378,7 +1646,11 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
     } else {
       await supabase
         .from('pos_shift_orders')
-        .update({ void_request_status: 'rejected', updated_at: new Date().toISOString() })
+        .update({
+          void_request_status: 'rejected',
+          kitchen_status: 'pending',
+          updated_at: new Date().toISOString()
+        })
         .eq('id', requestRow.order_id);
     }
 
@@ -1559,15 +1831,17 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
     const shift = await ensureShiftAccess(req, shiftId);
     if (shift.status !== 'open') throw new AppError('Only an open shift can be closed', 400);
 
-    const { data: unclearedOrders, error: ordersError } = await supabase
-      .from('pos_shift_orders')
-      .select('id, order_number, total_amount')
-      .eq('shift_id', shiftId)
-      .in('payment_status', ['unpaid', 'partial']);
-    if (ordersError) throw ordersError;
-    if ((unclearedOrders || []).length) {
-      throw new AppError('Clear all bills or record them as credit bills before closing the shift', 409);
-    }
+    const requestedClosingCash = req.body.closing_cash_counted ?? req.body.closingCashCounted;
+    const closingCashInput = requestedClosingCash === null || requestedClosingCash === undefined || requestedClosingCash === ''
+      ? null
+      : numberValue(requestedClosingCash);
+    const cashVarianceReason = String(req.body.cash_variance_reason || req.body.variance_reason || '').trim();
+
+    const automation = await runShiftCloseAutomation(shiftId, {
+      actorId: req.user.id,
+      closingCashCounted: closingCashInput,
+      cashVarianceReason
+    });
 
     const { data: stockCounts, error: stockError } = await supabase
       .from('pos_shift_stock_counts')
@@ -1576,47 +1850,29 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
     if (stockError) throw stockError;
 
     const trackedStockCounts = (stockCounts || []).filter((row: Record<string, any>) => row.track_stock !== false);
-    const missingCounts = trackedStockCounts.filter((row: Record<string, any>) =>
-      row.physical_count === null || row.physical_count === undefined
-    );
-    if (missingCounts.length) {
-      throw new AppError('Enter physical stock count for every sellable item before closing', 409);
-    }
-
-    const unexplainedVariance = trackedStockCounts.filter((row: Record<string, any>) =>
-      numberValue(row.variance) !== 0 && !String(row.variance_reason || '').trim()
-    );
-    if (unexplainedVariance.length) {
-      throw new AppError('Explain every stock variance before closing the shift', 409);
-    }
 
     for (const row of trackedStockCounts as Array<Record<string, any>>) {
       await supabase
         .from('pos_outlet_items')
         .update({
-          current_stock: numberValue(row.physical_count),
+          current_stock: numberValue(row.physical_count ?? row.system_closing_stock),
           updated_at: new Date().toISOString()
         })
         .eq('id', row.outlet_item_id)
         .eq('outlet_id', shift.outlet_id);
     }
 
-    const closingCashCounted = numberValue(req.body.closing_cash_counted ?? req.body.closingCashCounted);
-    if (!Number.isFinite(closingCashCounted) || closingCashCounted < 0) {
-      throw new AppError('Closing cash count is required before closing the shift', 400);
-    }
-
     const summary = await calculateShiftSummary(shiftId);
     const expectedCash = numberValue(summary.expected_cash);
+    const closingCashCounted = closingCashInput === null ? expectedCash : closingCashInput;
     const cashVariance = closingCashCounted - expectedCash;
-    const varianceThreshold = Math.max(expectedCash * 0.05, 1000);
-    const cashVarianceReason = String(req.body.cash_variance_reason || req.body.variance_reason || '').trim();
-    if (Math.abs(cashVariance) > varianceThreshold && !cashVarianceReason) {
-      throw new AppError('Explain the cash variance before closing the shift', 409);
+    if (!Number.isFinite(closingCashCounted) || closingCashCounted < 0) {
+      throw new AppError('Closing cash count must be a valid non-negative number', 400);
     }
 
     const finalSummary = {
       ...summary,
+      automation,
       closing_cash_counted: closingCashCounted,
       cash_variance: cashVariance
     };

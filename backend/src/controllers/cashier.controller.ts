@@ -123,14 +123,14 @@ async function resolveCashierCreditStaffProfile(
 
     let query = supabase
         .from('staff_profiles')
-        .select('id, first_name, last_name, employee_id, staff_code, id_number, department, position, branch_id, user_id')
+        .select('id, first_name, last_name, id_number, department, branch_id, user_id')
         .limit(1);
 
     if (UUID_PATTERN.test(staffKey)) {
         query = query.or(`id.eq.${staffKey},user_id.eq.${staffKey}`);
     } else {
         const safeStaffKey = staffKey.replace(/[(),]/g, '');
-        query = query.or(`employee_id.eq.${safeStaffKey},staff_code.eq.${safeStaffKey},id_number.eq.${safeStaffKey}`);
+        query = query.eq('id_number', safeStaffKey);
     }
 
     const { data: staffRows, error: staffError } = await query;
@@ -169,9 +169,9 @@ async function resolveCashierCreditStaffProfile(
 
     return {
         id: staff.id,
-        name: staffName || staff.employee_id || staff.staff_code || 'Staff',
-        employeeId: staff.employee_id || staff.staff_code || staff.id_number || null,
-        department: staff.department || staff.position || null,
+        name: staffName || staff.id_number || 'Staff',
+        employeeId: staff.id_number || null,
+        department: staff.department || null,
         branchId: staffBranchId
     };
 }
@@ -4161,6 +4161,7 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
     try {
         const { id } = req.params;
         const { closing_float, actual_cash, remarks } = req.body;
+        const automationWarnings: string[] = [];
 
         // Fetch shift
         const { data: shift, error: fetchError } = await supabase
@@ -4193,16 +4194,24 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
         const total_revenue = transactions?.reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
 
         const expected_cash = shift.opening_float + total_cash;
-        const cash_variance = actual_cash - expected_cash;
+        const actualCashWasProvided = actual_cash !== undefined && actual_cash !== null && actual_cash !== '';
+        const actualCashCounted = actualCashWasProvided ? Number(actual_cash) : expected_cash;
+        if (!Number.isFinite(actualCashCounted) || actualCashCounted < 0) {
+            throw new AppError('Actual cash must be a valid non-negative number', 400);
+        }
+        const closingFloatValue = closing_float !== undefined && closing_float !== null && closing_float !== ''
+            ? Number(closing_float)
+            : expected_cash;
+        const cash_variance = actualCashCounted - expected_cash;
 
         // Update shift
         const { data, error } = await supabase
             .from('cashier_shifts')
             .update({
                 end_time: new Date().toISOString(),
-                closing_float,
+                closing_float: closingFloatValue,
                 expected_cash,
-                actual_cash,
+                actual_cash: actualCashCounted,
                 cash_variance,
                 total_transactions: transactions?.length || 0,
                 total_cash_in: total_cash,
@@ -4237,13 +4246,108 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
             .neq('variance', 0);
 
         if (unresolvedVariances && unresolvedVariances.length > 0) {
-            throw new AppError(`Cannot close shift: ${unresolvedVariances.length} kitchen items have variances without reasons.`, 400);
+            automationWarnings.push(`${unresolvedVariances.length} kitchen variance item(s) still need operational review.`);
+        }
+
+        try {
+            const logDate = shift.shift_date || new Date().toISOString().slice(0, 10);
+            const { data: existingLogbook } = await supabase
+                .from('cashier_logbooks')
+                .select('id')
+                .eq('cashier_shift_id', id)
+                .maybeSingle();
+
+            const logbookPayload = {
+                branch_id: shift.branch_id,
+                cashier_id: shift.cashier_id,
+                type: 'cashier',
+                log_date: logDate,
+                opening_float: shift.opening_float || 0,
+                closing_float: closingFloatValue,
+                sales_breakdown: {
+                    total_cash,
+                    total_mpesa,
+                    total_card,
+                    total_revenue,
+                    transactions: transactions?.length || 0,
+                    source: 'cashier_shift_close'
+                },
+                total_mpesa,
+                total_swipe: total_card,
+                notes: remarks || 'Generated automatically by Lina at cashier shift close.',
+                status: 'pending_accountant_review',
+                source: 'lina_shift_automation',
+                cashier_shift_id: id,
+                submitted_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+
+            const logbookResult = existingLogbook?.id
+                ? await supabase
+                    .from('cashier_logbooks')
+                    .update(logbookPayload)
+                    .eq('id', existingLogbook.id)
+                    .select('*')
+                    .single()
+                : await supabase
+                    .from('cashier_logbooks')
+                    .insert(logbookPayload)
+                    .select('*')
+                    .single();
+
+            if (logbookResult.error) throw logbookResult.error;
+            const logbook = logbookResult.data;
+
+            await supabase
+                .from('cashier_logbook_lines')
+                .delete()
+                .eq('logbook_id', logbook.id)
+                .eq('source_table', 'cashier_transactions');
+
+            const lines = (transactions || []).map((transaction: any) => ({
+                logbook_id: logbook.id,
+                section: 'paid_bill',
+                customer_name: transaction.customer_name || transaction.description || transaction.reference || 'Cashier transaction',
+                amount: Number(transaction.amount || 0),
+                reference: transaction.reference || transaction.id,
+                source_table: 'cashier_transactions',
+                source_id: transaction.id,
+                payment_method: transaction.payment_method || null
+            }));
+
+            if (lines.length) {
+                const { error: linesError } = await supabase
+                    .from('cashier_logbook_lines')
+                    .insert(lines);
+                if (linesError) throw linesError;
+            }
+
+            notificationService.notifyRole(
+                'branch_accountant',
+                'Cashier shift logbook ready for review',
+                `Lina generated a cashier shift logbook for ${logDate}.`,
+                {
+                    type: 'info',
+                    category: 'cashier_logbook',
+                    priority: 'high',
+                    branchId: shift.branch_id,
+                    metadata: { logbook_id: logbook.id, cashier_shift_id: id }
+                }
+            ).catch(e => logger.error('Failed to notify branch accountant of generated cashier logbook', e));
+        } catch (logbookError) {
+            logger.error('Failed to generate cashier shift logbook automatically:', logbookError);
+            automationWarnings.push('Shift closed, but automatic logbook generation failed. Please review cashier logbooks.');
         }
 
         res.json({
             success: true,
-            message: 'Shift closed successfully',
-            data
+            message: automationWarnings.length
+                ? 'Shift closed with automation warnings'
+                : 'Shift closed and logbook generated successfully',
+            data: {
+                ...data,
+                automation_warnings: automationWarnings
+            }
         });
     } catch (error) {
         next(error);
@@ -4619,7 +4723,13 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
 export const getLogbooksForAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const branch_id = req.headers['x-branch-id'];
-        const { status = 'pending_audit', from_date, to_date } = req.query;
+        const requestedStatus = req.query.status as string | undefined;
+        const reviewerRole = String(req.user?.role || '').toLowerCase();
+        const defaultStatus = ['branch_accountant', 'accountant'].includes(reviewerRole)
+            ? 'pending_accountant_review'
+            : 'pending_audit';
+        const status = requestedStatus || defaultStatus;
+        const { from_date, to_date } = req.query;
 
         let query = supabase
             .from('cashier_logbooks')
@@ -4674,9 +4784,10 @@ export const auditLogbook = async (req: Request, res: Response, next: NextFuncti
         const { id } = req.params;
         const { action, notes } = req.body;
         const auditor_id = req.user?.id;
+        const reviewerRole = String(req.user?.role || '').toLowerCase();
 
         if (!id || !auditor_id) {
-            throw new AppError('Logbook ID and Auditor ID are required', 400);
+            throw new AppError('Logbook ID and reviewer ID are required', 400);
         }
 
         if (!['approve', 'reject'].includes(action)) {
@@ -4694,8 +4805,54 @@ export const auditLogbook = async (req: Request, res: Response, next: NextFuncti
             throw new AppError('Logbook not found', 404);
         }
 
+        const isAccountantReview = ['branch_accountant', 'accountant'].includes(reviewerRole);
+        if (isAccountantReview) {
+            if (logbook.status !== 'pending_accountant_review') {
+                throw new AppError('Only logbooks pending branch accountant review can be reviewed here', 400);
+            }
+
+            const { data: updated, error: updateError } = await supabase
+                .from('cashier_logbooks')
+                .update({
+                    status: action === 'approve' ? 'pending_audit' : 'rejected',
+                    accountant_reviewed_by: auditor_id,
+                    accountant_reviewed_at: new Date(),
+                    accountant_notes: notes || null,
+                    updated_at: new Date()
+                })
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (updateError) throw updateError;
+
+            if (action === 'approve') {
+                notificationService.notifyRole(
+                    'auditor',
+                    'Cashier logbook ready for audit',
+                    `Branch accountant reviewed a cashier logbook for ${updated.type}.`,
+                    {
+                        type: 'info',
+                        category: 'cashier_logbook',
+                        priority: 'high',
+                        branchId: updated.branch_id,
+                        metadata: { logbook_id: id, status: updated.status }
+                    }
+                ).catch(e => logger.error('Failed to notify auditor of accountant-reviewed logbook', e));
+            }
+
+            res.json({
+                success: true,
+                message: action === 'approve'
+                    ? 'Logbook sent to auditor for final review'
+                    : 'Logbook rejected by branch accountant',
+                data: updated
+            });
+            return;
+        }
+
         if (logbook.status !== 'pending_audit') {
-            throw new AppError('Only pending logbooks can be audited', 400);
+            throw new AppError('Only logbooks pending final audit can be audited', 400);
         }
 
         // Update logbook with audit decision
