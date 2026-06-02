@@ -37,6 +37,8 @@ import {
     getShiftLog,
     startShift as startNewShift,
     closeShift as closeShiftLog,
+    approveShiftOpening,
+    rejectShiftOpening,
     reconcileShift,
     verifyShift,
     addShiftTransaction
@@ -187,6 +189,12 @@ router.route('/shifts/:id')
 
 router.route('/shifts/:id/close')
     .put(closeShiftLog);
+
+router.route('/shifts/:id/approve-open')
+    .put(authorize([UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN] as any), approveShiftOpening);
+
+router.route('/shifts/:id/reject-open')
+    .put(authorize([UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER, UserRole.SUPER_ADMIN] as any), rejectShiftOpening);
 
 router.route('/shifts/:id/reconcile')
     .put(authorize([UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN] as any), reconcileShift);
