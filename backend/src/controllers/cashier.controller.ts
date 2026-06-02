@@ -46,6 +46,17 @@ function normalizeRestaurantBillPaymentMethod(method?: string): string {
     return 'CASH';
 }
 
+function posOrderLocation(order: any, fallbackStation: string): string {
+    const orderType = String(order?.order_type || '').toLowerCase();
+    const tableNumber = String(order?.table_number || '').trim();
+    const roomNumber = String(order?.room_number || '').trim();
+    if (orderType === 'dine_in' && tableNumber) return `Table ${tableNumber}`;
+    if (orderType === 'room_service' && roomNumber) return `Room ${roomNumber}`;
+    if (orderType === 'takeaway') return 'Takeaway';
+    if (String(order?.customer_name || '').trim()) return String(order.customer_name).trim();
+    return fallbackStation;
+}
+
 const PUBLIC_SHORT_CODE_PATTERN = /^(?:[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}|[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6})$/;
 
 type CashierShortCodeResolution = {
@@ -1510,6 +1521,61 @@ async function linkPaymentToActiveShift(
         }
     } catch {
         // Non-critical — don't fail the payment if shift linking fails
+    }
+}
+
+async function activeCashierShiftLogId(
+    cashierId?: string | null,
+    branchId?: unknown
+): Promise<string | null> {
+    if (!cashierId) return null;
+    try {
+        let query = supabase
+            .from('cashier_shift_logs')
+            .select('id')
+            .eq('cashier_id', cashierId)
+            .eq('status', 'open')
+            .order('shift_start', { ascending: false })
+            .limit(1);
+
+        const parsedBranchId = parseBranchId(branchId);
+        if (parsedBranchId) {
+            query = query.eq('branch_id', parsedBranchId);
+        }
+
+        const { data, error } = await query.maybeSingle();
+        if (error) {
+            logger.warn('Unable to resolve active cashier shift log', { error: error.message, cashierId, branchId });
+            return null;
+        }
+        return data?.id || null;
+    } catch (error) {
+        logger.warn('Unable to resolve active cashier shift log', error);
+        return null;
+    }
+}
+
+async function recordActiveShiftSale(params: {
+    cashierId?: string | null;
+    branchId?: unknown;
+    transactionId: string;
+    transactionRef: string;
+    paymentMethod: string;
+    amount: number;
+}): Promise<void> {
+    const shiftId = await activeCashierShiftLogId(params.cashierId, params.branchId);
+    if (!shiftId) return;
+    const method = String(params.paymentMethod || 'cash').toUpperCase();
+    const { error } = await supabase.from('cashier_shift_transactions').insert({
+        shift_id: shiftId,
+        transaction_id: params.transactionId,
+        transaction_ref: params.transactionRef,
+        payment_method: method,
+        amount: params.amount,
+        transaction_time: new Date().toISOString()
+    });
+    if (error) {
+        logger.warn('Unable to add payment to active cashier shift sales', { error: error.message, shiftId });
     }
 }
 
@@ -3100,7 +3166,7 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
 
         const transaction_number = transactionData || `CT${Date.now()}`;
 
-        await supabase
+        const { data: cashierTransaction, error: cashierTransactionError } = await supabase
             .from('cashier_transactions')
             .insert({
                 transaction_number,
@@ -3115,7 +3181,22 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
                 amount: paymentAmount,
                 payment_reference,
                 customer_name: bill.customer_name
-            });
+            })
+            .select('id, transaction_number')
+            .single();
+
+        if (cashierTransactionError) {
+            throw new AppError(`Cashier transaction recording failed: ${cashierTransactionError.message}`, 500);
+        }
+
+        await recordActiveShiftSale({
+            cashierId: req.user?.id,
+            branchId: bill.branch_id,
+            transactionId: cashierTransaction?.id || String(bill.id),
+            transactionRef: cashierTransaction?.transaction_number || transaction_number,
+            paymentMethod: payment_method,
+            amount: paymentAmount
+        });
 
         res.json({
             success: true,
@@ -4038,7 +4119,7 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
 
         const transaction_number = transactionData || `CT${Date.now()}`;
 
-        await supabase
+        const { data: cashierTransaction, error: cashierTransactionError } = await supabase
             .from('cashier_transactions')
             .insert({
                 transaction_number,
@@ -4052,7 +4133,22 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
                 amount: paymentAmount,
                 payment_reference,
                 customer_name: credit.staff_name
-            });
+            })
+            .select('id, transaction_number')
+            .single();
+
+        if (cashierTransactionError) {
+            throw new AppError(`Cashier transaction recording failed: ${cashierTransactionError.message}`, 500);
+        }
+
+        await recordActiveShiftSale({
+            cashierId: req.user?.id,
+            branchId: credit.branch_id,
+            transactionId: cashierTransaction?.id || String(credit.id),
+            transactionRef: cashierTransaction?.transaction_number || transaction_number,
+            paymentMethod: payment_method,
+            amount: paymentAmount
+        });
 
         res.json({
             success: true,
@@ -4731,7 +4827,7 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
  */
 export const getLogbooksForAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const branch_id = req.headers['x-branch-id'];
+        const branch_id = req.query.branch_id || req.headers['x-branch-id'];
         const requestedStatus = req.query.status as string | undefined;
         const reviewerRole = String(req.user?.role || '').toLowerCase();
         const defaultStatus = ['branch_accountant', 'accountant'].includes(reviewerRole)
@@ -4753,8 +4849,12 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
         query = applyBranchFilter(query, req);
         const isGlobal = isGlobalRole(req.user?.role);
 
-        if (isGlobal && branch_id) {
-            query = query.eq('branch_id', branch_id);
+        if (branch_id) {
+            const requestedBranchId = Number(Array.isArray(branch_id) ? branch_id[0] : branch_id);
+            const userBranchId = Number(req.user?.branch_id ?? req.user?.branchId);
+            if (Number.isFinite(requestedBranchId) && (isGlobal || requestedBranchId === userBranchId)) {
+                query = query.eq('branch_id', requestedBranchId);
+            }
         }
 
         if (from_date) {
@@ -5662,6 +5762,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const shift = shiftLookup[o.shift_id];
                 const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
                 const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
+                const location = posOrderLocation(o, stationName);
                 return {
                     id: o.id,
                     source: 'pos',
@@ -5671,7 +5772,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     order_number: o.order_number,
                     bill_number: o.order_number,
                     short_code: o.short_code,
-                    location: o.customer_name || stationName,
+                    location,
                     guest_name: o.customer_name || 'Walk-in',
                     customer_name: o.customer_name || 'Walk-in',
                     total_amount: Number(o.total_amount || 0),
@@ -5874,8 +5975,9 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
         // Record cashier transaction for audit trail
         try {
             const { data: txNumber } = await supabase.rpc('generate_cashier_transaction_number');
-            await supabase.from('cashier_transactions').insert({
-                transaction_number: txNumber || `CT${Date.now()}`,
+            const transactionNumber = txNumber || `CT${Date.now()}`;
+            const { data: cashierTransaction, error: cashierTransactionError } = await supabase.from('cashier_transactions').insert({
+                transaction_number: transactionNumber,
                 branch_id: orderBranchId,
                 cashier_id: req.user?.id,
                 transaction_type: 'payment',
@@ -5887,6 +5989,15 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                 payment_reference,
                 credit_bill_id: credit_bill_id || null,
                 customer_name: (order as any)[customerField] || (order as any).order_number
+            }).select('id, transaction_number').single();
+            if (cashierTransactionError) throw cashierTransactionError;
+            await recordActiveShiftSale({
+                cashierId: req.user?.id,
+                branchId: orderBranchId,
+                transactionId: cashierTransaction?.id || String((order as any).id),
+                transactionRef: cashierTransaction?.transaction_number || transactionNumber,
+                paymentMethod: payment_method,
+                amount: amountPaid
             });
         } catch (txErr) {
             logger.warn('Could not record cashier transaction for order payment:', txErr);

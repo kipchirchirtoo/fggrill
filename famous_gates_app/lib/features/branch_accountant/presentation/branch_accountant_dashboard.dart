@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
+import 'package:famous_gates_app/core/widgets/branch_sales_payments_view.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/theme/app_theme.dart';
@@ -21,12 +22,14 @@ enum BranchAccountantSection {
   overview,
   cashierClearance,
   analytics,
+  salesPayments,
   financialWorkspace,
   discrepancies,
   profitLoss,
   revenueOversight,
   soldItems,
   staffAudit,
+  shiftOpenings,
   shiftReview,
   cashierLogbooks,
   voidApprovals,
@@ -100,11 +103,15 @@ class _BranchAccountantDashboardState
   Widget _buildSection() {
     switch (_section) {
       case BranchAccountantSection.overview:
-        return const _OverviewSection();
+        return _OverviewSection(
+          onNavigate: (section) => setState(() => _section = section),
+        );
       case BranchAccountantSection.cashierClearance:
         return const _CashierClearanceSection();
       case BranchAccountantSection.analytics:
         return const _AnalyticsSection();
+      case BranchAccountantSection.salesPayments:
+        return const BranchSalesPaymentsView();
       case BranchAccountantSection.financialWorkspace:
         return const _FinancialWorkspaceSection();
       case BranchAccountantSection.discrepancies:
@@ -117,6 +124,8 @@ class _BranchAccountantDashboardState
         return const _SoldItemsSection();
       case BranchAccountantSection.staffAudit:
         return const _StaffAuditSection();
+      case BranchAccountantSection.shiftOpenings:
+        return const _ShiftOpeningApprovalsSection();
       case BranchAccountantSection.shiftReview:
         return const _ShiftReviewSection();
       case BranchAccountantSection.cashierLogbooks:
@@ -177,6 +186,8 @@ const _navItems = [
       Icons.fact_check),
   _NavItem(
       BranchAccountantSection.analytics, 'Branch Analytics', Icons.analytics),
+  _NavItem(BranchAccountantSection.salesPayments, 'Sales & Payments',
+      Icons.point_of_sale),
   _NavItem(BranchAccountantSection.financialWorkspace, 'Financial Workspace',
       Icons.calendar_month),
   _NavItem(
@@ -187,7 +198,10 @@ const _navItems = [
       Icons.trending_up),
   _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
-  _NavItem(BranchAccountantSection.shiftReview, 'Shift Review', Icons.schedule),
+  _NavItem(
+      BranchAccountantSection.shiftOpenings, 'Shift Openings', Icons.lock_open),
+  _NavItem(BranchAccountantSection.shiftReview, 'Shift Reconciliation',
+      Icons.schedule),
   _NavItem(
       BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
   _NavItem(
@@ -459,9 +473,9 @@ class _BranchAccountantBottomNav extends StatelessWidget {
     const items = [
       BranchAccountantSection.overview,
       BranchAccountantSection.cashierClearance,
+      BranchAccountantSection.shiftOpenings,
       BranchAccountantSection.financialWorkspace,
       BranchAccountantSection.discrepancies,
-      BranchAccountantSection.budgets,
     ];
     return BottomNavigationBar(
       currentIndex: items.indexOf(current).clamp(0, items.length - 1),
@@ -480,7 +494,9 @@ class _BranchAccountantBottomNav extends StatelessWidget {
 }
 
 class _OverviewSection extends ConsumerWidget {
-  const _OverviewSection();
+  const _OverviewSection({required this.onNavigate});
+
+  final ValueChanged<BranchAccountantSection> onNavigate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -495,10 +511,35 @@ class _OverviewSection extends ConsumerWidget {
       builder: (payload) {
         final clearance = _map(payload['clearances']);
         final summary = _map(clearance['summary']);
+        // Branch-sales analytics nests its totals under `summary`.
         final sales = _map(payload['sales']);
+        final salesSummary = _map(sales['summary']);
+        // Branch-financials nests aggregates under `summary` (revenue/expenses/netProfit).
         final financials = _map(payload['financials']);
+        final finSummary = _map(financials['summary']);
         final discrepancies = _list(payload['discrepancies']);
         final budget = _map(payload['budget_summary']);
+
+        num totalRevenue =
+            _num(salesSummary['total_sales'] ?? sales['total_sales']);
+        num netProfit = _num(finSummary['netProfit'] ??
+            finSummary['net_profit'] ??
+            financials['net_profit'] ??
+            financials['netProfit']);
+        num finRevenue = _num(finSummary['revenue'] ??
+            financials['total_revenue'] ??
+            financials['revenue']);
+        num finExpenses = _num(finSummary['expenses'] ??
+            financials['total_expenses'] ??
+            financials['expenses']);
+        num receivables = _num(financials['receivables']);
+        num payables = _num(financials['payables']);
+        num budgetUtil = _num(budget['utilization_percentage'] ??
+            budget['utilization'] ??
+            budget['utilisation_percentage']);
+        num pendingClear = _num(summary['pending'] ?? summary['pending_count']);
+        num variance = _num(summary['total_variance']);
+
         return _Page(
           title: 'Branch Accountant Overview',
           subtitle:
@@ -517,38 +558,35 @@ class _OverviewSection extends ConsumerWidget {
               orElse: () => const SizedBox.shrink(),
             ),
             _ResponsiveGrid(children: [
-              _MetricCard('Total Revenue', _money(_num(sales['total_sales'])),
+              _MetricCard('Total Revenue', _money(totalRevenue),
                   Icons.trending_up, Colors.green),
               _MetricCard(
                   'Cashier Variance',
-                  _money(_num(summary['total_variance'])),
+                  _money(variance),
                   Icons.fact_check,
-                  _num(summary['total_variance']).abs() > 0
-                      ? Colors.red
-                      : Colors.green),
-              _MetricCard('Pending Clearances', '${summary['pending'] ?? 0}',
+                  variance.abs() > 0 ? Colors.red : Colors.green),
+              _MetricCard('Pending Clearances', '${pendingClear.toInt()}',
                   Icons.hourglass_bottom, Colors.orange),
               _MetricCard('Open Discrepancies', '${discrepancies.length}',
                   Icons.warning, Colors.red),
-              _MetricCard(
-                  'Net Profit',
-                  _money(_num(
-                      financials['net_profit'] ?? financials['netProfit'])),
-                  Icons.account_balance_wallet,
-                  Colors.blue),
+              _MetricCard('Net Profit', _money(netProfit),
+                  Icons.account_balance_wallet, Colors.blue),
               _MetricCard(
                   'Budget Utilization',
-                  '${_num(budget['utilization_percentage']).toStringAsFixed(1)}%',
+                  '${budgetUtil.toStringAsFixed(1)}%',
                   Icons.account_balance,
                   Colors.purple),
             ]),
+            const SizedBox(height: 8),
+            _QuickActions(onNavigate: onNavigate),
+            const SizedBox(height: 8),
             _SectionCard(
               title: 'Recent Financial Position',
               child: _KeyValueList({
-                'Revenue': _money(_num(financials['total_revenue'])),
-                'Expenses': _money(_num(financials['total_expenses'])),
-                'Receivables': _money(_num(financials['receivables'])),
-                'Payables': _money(_num(financials['payables'])),
+                'Revenue': _money(finRevenue),
+                'Expenses': _money(finExpenses),
+                'Receivables': _money(receivables),
+                'Payables': _money(payables),
                 'Budget Balance': _money(
                     _num(budget['remaining_budget'] ?? budget['balance'])),
               }),
@@ -556,6 +594,59 @@ class _OverviewSection extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+// ── Quick action links on the overview ────────────────────────────────────────
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.onNavigate});
+  final ValueChanged<BranchAccountantSection> onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <(String, IconData, BranchAccountantSection)>[
+      (
+        'Cashier Clearance',
+        Icons.fact_check,
+        BranchAccountantSection.cashierClearance
+      ),
+      (
+        'Shift Openings',
+        Icons.lock_open,
+        BranchAccountantSection.shiftOpenings
+      ),
+      (
+        'Financial Workspace',
+        Icons.calendar_month,
+        BranchAccountantSection.financialWorkspace
+      ),
+      ('Discrepancies', Icons.warning, BranchAccountantSection.discrepancies),
+      ('Banking', Icons.account_balance, BranchAccountantSection.banking),
+      ('Credit Bills', Icons.credit_card, BranchAccountantSection.creditBills),
+      ('Purchases', Icons.shopping_cart, BranchAccountantSection.purchases),
+      ('Stock Takes', Icons.inventory, BranchAccountantSection.stockTake),
+      ('Profit & Loss', Icons.bar_chart, BranchAccountantSection.profitLoss),
+    ];
+    return _SectionCard(
+      title: 'Quick Actions',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: actions
+            .map((a) => OutlinedButton.icon(
+                  onPressed: () => onNavigate(a.$3),
+                  icon: Icon(a.$2, size: 18),
+                  label: Text(a.$1),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.kPrimary,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                  ),
+                ))
+            .toList(),
+      ),
     );
   }
 }
@@ -1854,8 +1945,13 @@ class _DiscrepanciesSectionState extends ConsumerState<_DiscrepanciesSection> {
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getDiscrepancies();
 
-  void _refresh() => setState(() => _future =
-      ref.read(branchAccountantRepositoryProvider).getDiscrepancies());
+  void _refresh() {
+    final nextFuture =
+        ref.read(branchAccountantRepositoryProvider).getDiscrepancies();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1906,10 +2002,23 @@ class _DiscrepanciesSectionState extends ConsumerState<_DiscrepanciesSection> {
                         _text(item, ['director_final_decision']),
                   },
                   actions: [
+                    OutlinedButton.icon(
+                      onPressed: () => _showRecord(context, item),
+                      icon: const Icon(Icons.visibility, size: 16),
+                      label: const Text('View Details'),
+                    ),
                     if (_text(item, ['status']) == 'PENDING')
-                      FilledButton(
+                      FilledButton.icon(
                         onPressed: () => _respond(item),
-                        child: const Text('Respond'),
+                        icon: const Icon(Icons.reply, size: 16),
+                        label: const Text('Respond'),
+                      ),
+                    if (_text(item, ['status']) == 'UNDER_REVIEW' &&
+                        _text(item, ['accountant_response']).isNotEmpty)
+                      OutlinedButton.icon(
+                        onPressed: () => _respond(item),
+                        icon: const Icon(Icons.edit_note, size: 16),
+                        label: const Text('Update Response'),
                       ),
                   ],
                 )),
@@ -1924,11 +2033,18 @@ class _DiscrepanciesSectionState extends ConsumerState<_DiscrepanciesSection> {
         hint: 'Explain investigation, correction, or planned action',
         minLines: 5);
     if (response == null || response.trim().isEmpty) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .respondDiscrepancy('${item['id']}', response.trim());
-    _toast('Response submitted');
-    _refresh();
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .respondDiscrepancy('${item['id']}', response.trim());
+      if (mounted) _notify(context, 'Response submitted successfully');
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        _notify(context,
+            'Failed to submit response: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
+    }
   }
 }
 
@@ -2586,6 +2702,315 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
   }
 }
 
+class _ShiftOpeningApprovalsSection extends ConsumerStatefulWidget {
+  const _ShiftOpeningApprovalsSection();
+
+  @override
+  ConsumerState<_ShiftOpeningApprovalsSection> createState() =>
+      _ShiftOpeningApprovalsSectionState();
+}
+
+class _ShiftOpeningApprovalsSectionState
+    extends ConsumerState<_ShiftOpeningApprovalsSection> {
+  late Future<List<Map<String, dynamic>>> _future = _load();
+  final Set<String> _busyIds = {};
+
+  Future<List<Map<String, dynamic>>> _load() {
+    return ref
+        .read(branchAccountantRepositoryProvider)
+        .getShiftLogs(status: 'pending_open');
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  Future<void> _approve(Map<String, dynamic> shift) async {
+    final id = '${shift['id'] ?? ''}';
+    if (id.isEmpty || _busyIds.contains(id)) return;
+    setState(() => _busyIds.add(id));
+    try {
+      await ref.read(branchAccountantRepositoryProvider).approveShiftOpening(
+            id,
+            notes: 'Approved from Shift Openings queue',
+          );
+      if (!mounted) return;
+      _notify(
+        context,
+        'Shift opened for ${_firstTextFrom(shift, [
+              'cashier_name',
+              'cashier',
+              'user_name'
+            ], fallback: 'cashier')}',
+      );
+      _refresh();
+    } catch (error) {
+      if (mounted) _notify(context, 'Could not approve shift: $error');
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(id));
+    }
+  }
+
+  Future<void> _reject(Map<String, dynamic> shift) async {
+    final id = '${shift['id'] ?? ''}';
+    if (id.isEmpty || _busyIds.contains(id)) return;
+    final notes = await _askForRejectionNote();
+    if (notes == null) return;
+
+    setState(() => _busyIds.add(id));
+    try {
+      await ref.read(branchAccountantRepositoryProvider).rejectShiftOpening(
+            id,
+            notes:
+                notes.trim().isEmpty ? 'Rejected by branch accountant' : notes,
+          );
+      if (!mounted) return;
+      _notify(context, 'Shift opening request rejected');
+      _refresh();
+    } catch (error) {
+      if (mounted) _notify(context, 'Could not reject shift: $error');
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(id));
+    }
+  }
+
+  Future<String?> _askForRejectionNote() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Shift Opening'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: 'Reason or notes for the cashier',
+            alignLabelWithHint: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) {
+          return _Page(
+            title: 'Shift Opening Approvals',
+            subtitle:
+                'Approve cashier shift-opening requests before POS access begins.',
+            actions: [
+              _RefreshButton(onPressed: _refresh),
+            ],
+            children: [
+              _ResponsiveGrid(
+                children: [
+                  _MetricCard('Pending Requests', '${items.length}',
+                      Icons.lock_open, Colors.orange),
+                  _MetricCard(
+                    'Cashiers Waiting',
+                    '${items.map((item) => '${item['cashier_id'] ?? item['cashier_name']}').toSet().length}',
+                    Icons.point_of_sale,
+                    AppColors.kPrimary,
+                  ),
+                  _MetricCard(
+                    'Opening Float',
+                    _money(items.fold<num>(
+                        0, (sum, item) => sum + _num(item['opening_float']))),
+                    Icons.payments,
+                    Colors.green,
+                  ),
+                ],
+              ),
+              _SectionCard(
+                title: 'Pending Shift Opening Queue',
+                child: items.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 46),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.check_circle_outline,
+                                  color: Colors.green, size: 46),
+                              SizedBox(height: 10),
+                              Text(
+                                'No shift opening requests',
+                                style:
+                                    TextStyle(color: AppColors.kTextSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: items
+                            .map(
+                              (shift) => _ShiftOpeningRequestRow(
+                                shift: shift,
+                                busy: _busyIds.contains('${shift['id']}'),
+                                onApprove: () => _approve(shift),
+                                onReject: () => _reject(shift),
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ShiftOpeningRequestRow extends StatelessWidget {
+  const _ShiftOpeningRequestRow({
+    required this.shift,
+    required this.busy,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final Map<String, dynamic> shift;
+  final bool busy;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final cashier = _firstTextFrom(
+      shift,
+      ['cashier_name', 'cashier', 'user_name'],
+      fallback: 'Cashier',
+    );
+    final shiftNumber = _firstTextFrom(
+      shift,
+      ['shift_number', 'id'],
+      fallback: 'Shift request',
+    );
+    final requestedAt =
+        _firstTextFrom(shift, ['requested_at', 'created_at', 'shift_start']);
+    final openingFloat = _firstNumFrom(shift, ['opening_float']);
+    final notes = _firstTextFrom(shift, ['notes', 'opening_review_notes']);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.kDivider)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final details = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    shiftNumber,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const _MiniBadge('PENDING OPEN'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                cashier,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 18,
+                runSpacing: 6,
+                children: [
+                  Text('Requested ${_shortDate(requestedAt)}',
+                      style: const TextStyle(color: AppColors.kTextSecondary)),
+                  Text('Opening float ${_money(openingFloat)}',
+                      style: const TextStyle(color: AppColors.kTextSecondary)),
+                  if (notes.isNotEmpty)
+                    Text('Notes: $notes',
+                        style:
+                            const TextStyle(color: AppColors.kTextSecondary)),
+                ],
+              ),
+            ],
+          );
+
+          final actions = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton.icon(
+                onPressed: busy ? null : onReject,
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('Reject'),
+              ),
+              const SizedBox(width: 10),
+              FilledButton.icon(
+                onPressed: busy ? null : onApprove,
+                icon: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_circle_outline),
+                label: const Text('Approve & Open'),
+              ),
+            ],
+          );
+
+          if (constraints.maxWidth < 760) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                details,
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: actions,
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: details),
+              const SizedBox(width: 16),
+              actions,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _ShiftReviewSection extends ConsumerStatefulWidget {
   const _ShiftReviewSection();
 
@@ -2595,12 +3020,31 @@ class _ShiftReviewSection extends ConsumerStatefulWidget {
 }
 
 class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
-  String _status = 'closed';
+  final TextEditingController _notesController = TextEditingController();
+  String? _selectedShiftId;
+  Map<String, dynamic>? _selectedShift;
+  Map<String, dynamic>? _selectedDetail;
+  bool _loadingDetail = false;
+
   late Future<List<Map<String, dynamic>>> _future = _load();
 
-  Future<List<Map<String, dynamic>>> _load() => ref
-      .read(branchAccountantRepositoryProvider)
-      .getShiftLogs(status: _status);
+  Future<List<Map<String, dynamic>>> _load() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final results = await Future.wait([
+      repo.getShiftLogs(status: 'pending_open'),
+      repo.getShiftLogs(status: 'closed'),
+    ]);
+    return [
+      ...results[0],
+      ...results[1],
+    ];
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
 
   void _refresh() => setState(() {
         _future = _load();
@@ -2613,88 +3057,885 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Shift Review',
-          subtitle:
-              'Reconcile closed cashier shifts before auditor verification.',
-          actions: [
-            _Dropdown(
-              value: _status,
-              values: const ['closed', 'reconciled', 'verified', 'all'],
-              onChanged: (v) => setState(() {
-                _status = v;
-                _future = _load();
-              }),
-            ),
-            _RefreshButton(onPressed: _refresh),
-          ],
-          children: [
-            _ResponsiveGrid(children: [
-              _MetricCard(
-                  'Shifts', '${items.length}', Icons.schedule, Colors.blue),
-              _MetricCard('Sales', _money(_sum(items, 'total_sales')),
-                  Icons.payments, Colors.green),
-              _MetricCard('Variance', _money(_sum(items, 'variance')),
-                  Icons.compare_arrows, Colors.orange),
-              _MetricCard(
-                  'Credit Bills',
-                  _money(_sum(items, 'credit_bills_taken')),
-                  Icons.credit_card,
-                  Colors.purple),
-            ]),
-            _SectionCard(
-              title: 'Shift Queue',
-              child: _SimpleTable(
-                columns: const [
-                  'Shift',
-                  'Cashier',
-                  'Started',
-                  'Sales',
-                  'Cash',
-                  'Variance',
-                  'Status',
-                  'Actions'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e, ['shift_number', 'id']),
-                          _text(e, ['cashier_name']),
-                          _shortDate(_text(e, ['shift_start', 'created_at'])),
-                          _money(_num(e['total_sales'])),
-                          _money(_num(e['closing_float'])),
-                          _money(_num(e['variance'])),
-                          _StatusPill(_text(e, ['status'])),
-                          Wrap(spacing: 8, children: [
-                            TextButton(
-                              onPressed: () => _showRecord(context, e),
-                              child: const Text('View'),
-                            ),
-                            if (_text(e, ['status']).toLowerCase() == 'closed')
-                              FilledButton.tonal(
-                                onPressed: () => _reconcile(e),
-                                child: const Text('Reconcile'),
-                              ),
-                          ]),
-                        ])
-                    .toList(),
+        builder: (items) {
+          if (items.isNotEmpty && _selectedShiftId == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _selectedShiftId == null) {
+                _selectShift(items.first, clearNotes: false);
+              }
+            });
+          }
+
+          final selected = _currentSelected(items);
+
+          return _Page(
+            title: 'Shift Reconciliation',
+            subtitle:
+                'Approve cashier shift openings and reconcile closed shifts',
+            actions: [
+              _RefreshButton(onPressed: _refresh),
+            ],
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final shiftList = _ShiftReconciliationList(
+                    shifts: items,
+                    selectedId: _selectedShiftId,
+                    onSelect: _selectShift,
+                  );
+                  final detailPanel = _ShiftReconciliationPanel(
+                    shift: selected,
+                    loading: _loadingDetail,
+                    notesController: _notesController,
+                    onApproveOpening: selected == null
+                        ? null
+                        : () => _approveOpening(selected),
+                    onRejectOpening: selected == null
+                        ? null
+                        : () => _rejectOpening(selected),
+                    onReconcile: selected == null
+                        ? null
+                        : () => _reconcileSelected(selected),
+                  );
+
+                  if (constraints.maxWidth < 980) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        shiftList,
+                        const SizedBox(height: 18),
+                        detailPanel,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: shiftList),
+                      const SizedBox(width: 24),
+                      Expanded(child: detailPanel),
+                    ],
+                  );
+                },
               ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Map<String, dynamic>? _currentSelected(List<Map<String, dynamic>> items) {
+    if (_selectedDetail != null) return _selectedDetail;
+    if (_selectedShift != null) return _selectedShift;
+    if (items.isEmpty) return null;
+    if (_selectedShiftId == null) return items.first;
+    return items.firstWhere(
+      (shift) => '${shift['id']}' == _selectedShiftId,
+      orElse: () => items.first,
+    );
+  }
+
+  void _selectShift(
+    Map<String, dynamic> shift, {
+    bool clearNotes = true,
+  }) {
+    final id = '${shift['id'] ?? ''}'.trim();
+    setState(() {
+      _selectedShiftId = id.isEmpty ? null : id;
+      _selectedShift = shift;
+      _selectedDetail = null;
+      _loadingDetail = id.isNotEmpty;
+      if (clearNotes) _notesController.clear();
+    });
+
+    if (id.isEmpty) return;
+
+    ref.read(branchAccountantRepositoryProvider).getShiftLog(id).then((detail) {
+      if (!mounted) return;
+      if (_selectedShiftId != id) return;
+      setState(() {
+        _selectedDetail = {...shift, ...detail};
+        _loadingDetail = false;
+      });
+    }).catchError((_) {
+      if (!mounted) return;
+      if (_selectedShiftId != id) return;
+      setState(() => _loadingDetail = false);
+      _notify(context,
+          'Could not load full shift details. Showing available shift summary.');
+    });
+  }
+
+  Future<void> _reconcileSelected(Map<String, dynamic> shift) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .reconcileShift('${shift['id']}', _notesController.text.trim());
+    _toast('Shift reconciled');
+    _notesController.clear();
+    _selectedShiftId = null;
+    _selectedShift = null;
+    _selectedDetail = null;
+    _refresh();
+  }
+
+  Future<void> _approveOpening(Map<String, dynamic> shift) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .approveShiftOpening('${shift['id']}', notes: _notesController.text);
+    _toast('Cashier shift opened');
+    _notesController.clear();
+    _selectedShiftId = null;
+    _selectedShift = null;
+    _selectedDetail = null;
+    _refresh();
+  }
+
+  Future<void> _rejectOpening(Map<String, dynamic> shift) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .rejectShiftOpening('${shift['id']}', notes: _notesController.text);
+    _toast('Shift opening request rejected');
+    _notesController.clear();
+    _selectedShiftId = null;
+    _selectedShift = null;
+    _selectedDetail = null;
+    _refresh();
+  }
+}
+
+class _ShiftReconciliationList extends StatelessWidget {
+  const _ShiftReconciliationList({
+    required this.shifts,
+    required this.selectedId,
+    required this.onSelect,
+  });
+
+  final List<Map<String, dynamic>> shifts;
+  final String? selectedId;
+  final ValueChanged<Map<String, dynamic>> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Shift Opening & Reconciliation Queue',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 14),
+        if (shifts.isEmpty)
+          const _SectionCard(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 34),
+              child: Column(
+                children: [
+                  Icon(Icons.check_circle_outline,
+                      color: Colors.green, size: 48),
+                  SizedBox(height: 10),
+                  Text(
+                    'All shifts processed',
+                    style: TextStyle(color: AppColors.kTextSecondary),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ...shifts.map(
+            (shift) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ShiftReconciliationCard(
+                shift: shift,
+                selected: '${shift['id']}' == selectedId,
+                onTap: () => onSelect(shift),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ShiftReconciliationCard extends StatelessWidget {
+  const _ShiftReconciliationCard({
+    required this.shift,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> shift;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final variance = _firstNumFrom(shift, ['variance', 'variance_amount']);
+    final status = _firstTextFrom(shift, ['status']).toLowerCase();
+    final isOpeningRequest = status == 'pending_open';
+    final varianceColor = variance == 0
+        ? Colors.green.shade700
+        : variance.abs() < 100
+            ? Colors.orange.shade700
+            : Colors.red.shade700;
+    final module = _firstTextFrom(shift, ['module'], fallback: 'standard');
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? Colors.orange : AppColors.kDivider,
+            width: selected ? 2 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        _firstTextFrom(shift, ['shift_number', 'id'],
+                            fallback: 'Shift'),
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w900),
+                      ),
+                      _MiniBadge(
+                        isOpeningRequest
+                            ? 'PENDING OPEN'
+                            : module.toLowerCase() == 'kyogong'
+                                ? 'KYOGONG'
+                                : 'FAMOUS GATE',
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  _shortDate(_firstTextFrom(
+                      shift, ['shift_start', 'created_at', 'opened_at'])),
+                  style: const TextStyle(color: AppColors.kTextSecondary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final narrow = constraints.maxWidth < 420;
+                final children = [
+                  _ShiftCardField(
+                    label: 'Cashier',
+                    value: _firstTextFrom(
+                      shift,
+                      ['cashier_name', 'cashier', 'user_name'],
+                      fallback: 'N/A',
+                    ),
+                  ),
+                  _ShiftCardField(
+                    label: isOpeningRequest ? 'Opening Float' : 'Sales',
+                    value: _money(isOpeningRequest
+                        ? _firstNumFrom(shift, ['opening_float'])
+                        : _firstNumFrom(
+                            shift, ['total_sales', 'total_revenue', 'sales'])),
+                    valueColor: isOpeningRequest
+                        ? Colors.orange.shade700
+                        : Colors.green.shade700,
+                  ),
+                  _ShiftCardField(
+                    label: isOpeningRequest ? 'Requested' : 'Variance',
+                    value: isOpeningRequest
+                        ? _shortDate(_firstTextFrom(
+                            shift, ['requested_at', 'created_at']))
+                        : variance > 0
+                            ? '+${_money(variance)}'
+                            : _money(variance),
+                    valueColor: isOpeningRequest
+                        ? AppColors.kTextPrimary
+                        : varianceColor,
+                  ),
+                ];
+
+                if (narrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: children
+                        .map((child) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: child,
+                            ))
+                        .toList(),
+                  );
+                }
+
+                return Row(
+                  children: children
+                      .map((child) => Expanded(child: child))
+                      .toList(growable: false),
+                );
+              },
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Future<void> _reconcile(Map<String, dynamic> shift) async {
-    final notes = await _textDialog(context, 'Reconcile Shift',
-        hint: 'Reconciliation notes', minLines: 4);
-    if (notes == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .reconcileShift('${shift['id']}', notes);
-    _toast('Shift reconciled');
-    _refresh();
+class _ShiftCardField extends StatelessWidget {
+  const _ShiftCardField({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.kTextSecondary,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: valueColor ?? AppColors.kTextPrimary,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
   }
+}
+
+class _MiniBadge extends StatelessWidget {
+  const _MiniBadge(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.kSurface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          color: AppColors.kTextSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _ShiftReconciliationPanel extends StatelessWidget {
+  const _ShiftReconciliationPanel({
+    required this.shift,
+    required this.loading,
+    required this.notesController,
+    required this.onApproveOpening,
+    required this.onRejectOpening,
+    required this.onReconcile,
+  });
+
+  final Map<String, dynamic>? shift;
+  final bool loading;
+  final TextEditingController notesController;
+  final VoidCallback? onApproveOpening;
+  final VoidCallback? onRejectOpening;
+  final VoidCallback? onReconcile;
+
+  @override
+  Widget build(BuildContext context) {
+    if (shift == null) {
+      return Container(
+        constraints: const BoxConstraints(minHeight: 420),
+        alignment: Alignment.center,
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: AppColors.kTextSecondary, size: 46),
+            SizedBox(height: 10),
+            Text(
+              'Select a shift to review',
+              style: TextStyle(color: AppColors.kTextSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final status = _firstTextFrom(shift!, ['status']).toLowerCase();
+    final openingRequest = status == 'pending_open';
+    final shiftTitle =
+        _firstTextFrom(shift!, ['shift_number', 'id'], fallback: 'Shift');
+
+    if (openingRequest) {
+      return _SectionCard(
+        title: 'Shift Opening Request — $shiftTitle',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (loading) ...[
+              const LinearProgressIndicator(minHeight: 2),
+              const SizedBox(height: 12),
+            ],
+            _ShiftReportSection(
+              number: '1.',
+              title: 'Opening Approval',
+              rows: [
+                _ShiftReportRow(
+                  'Cashier',
+                  _firstTextFrom(
+                    shift!,
+                    ['cashier_name', 'cashier', 'user_name'],
+                    fallback: 'N/A',
+                  ),
+                  emphasized: true,
+                ),
+                _ShiftReportRow(
+                  'Opening Float',
+                  _money(_firstNumFrom(shift!, ['opening_float'])),
+                  emphasized: true,
+                ),
+                _ShiftReportRow(
+                  'Requested At',
+                  _shortDate(_firstTextFrom(
+                    shift!,
+                    ['requested_at', 'created_at'],
+                  )),
+                ),
+                const _ShiftReportRow(
+                  'Status',
+                  'Pending branch accountant approval',
+                  emphasized: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Review Notes',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: notesController,
+              minLines: 4,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                hintText: 'Add notes for the cashier...',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 14),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final buttons = [
+                  OutlinedButton.icon(
+                    onPressed: onRejectOpening,
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: const Text('Reject Request'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: onApproveOpening,
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Approve & Open Shift'),
+                  ),
+                ];
+
+                if (constraints.maxWidth < 520) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(height: 50, child: buttons[0]),
+                      const SizedBox(height: 10),
+                      SizedBox(height: 50, child: buttons[1]),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: SizedBox(height: 50, child: buttons[0])),
+                    const SizedBox(width: 12),
+                    Expanded(child: SizedBox(height: 50, child: buttons[1])),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _SectionCard(
+      title: 'Shift Details — $shiftTitle',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (loading) ...[
+            const LinearProgressIndicator(minHeight: 2),
+            const SizedBox(height: 12),
+          ],
+          _ShiftReportSection(
+            number: '1.',
+            title: 'Cash Reconciliation',
+            rows: [
+              _ShiftReportRow('Opening Float', _money(_openingFloat(shift!))),
+              _ShiftReportRow('+ Cash Sales', _money(_cashSales(shift!))),
+              _ShiftReportRow('+ Credit Payments Received',
+                  _money(_creditPaymentsReceived(shift!))),
+              _ShiftReportRow(
+                '= Expected Closing Amount',
+                _money(_expectedClosingAmount(shift!)),
+                emphasized: true,
+              ),
+              _ShiftReportRow(
+                'Actual Cash Counted',
+                _money(_actualCashCounted(shift!)),
+                emphasized: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _ShiftReportSection(
+            number: '2.',
+            title: 'Sales by Payment Method',
+            rows: [
+              _ShiftReportRow('Cash Sales', _money(_cashSales(shift!))),
+              _ShiftReportRow('M-Pesa Sales', _money(_mpesaSales(shift!))),
+              _ShiftReportRow('Card Sales', _money(_cardSales(shift!))),
+              _ShiftReportRow('Other Sales', _money(_otherSales(shift!))),
+              _ShiftReportRow(
+                'Total Sales',
+                _money(_totalSales(shift!)),
+                emphasized: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _ShiftReportSection(
+            number: '3.',
+            title: 'Sales by Revenue Stream',
+            rows: [
+              _ShiftReportRow(
+                  'Room Booking Revenue', _money(_roomRevenue(shift!))),
+              _ShiftReportRow(
+                  'Restaurant Revenue', _money(_restaurantRevenue(shift!))),
+              _ShiftReportRow('Bar Revenue', _money(_barRevenue(shift!))),
+              _ShiftReportRow('Other Revenue', _money(_otherRevenue(shift!))),
+              _ShiftReportRow(
+                'Stream Subtotal',
+                _money(_streamSubtotal(shift!)),
+                emphasized: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _ShiftReportSection(
+            number: '4.',
+            title: 'Credit & Bills Summary',
+            rows: [
+              _ShiftReportRow(
+                  'Credit Bills Created', _money(_creditBillsCreated(shift!))),
+              _ShiftReportRow(
+                  'Credit Bills Paid', _money(_creditBillsPaid(shift!))),
+              _ShiftReportRow(
+                'Outstanding Credit',
+                _outstandingCredit(shift!) == 0
+                    ? 'None'
+                    : _money(_outstandingCredit(shift!)),
+                emphasized: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _VarianceAnalysisBox(shift: shift!),
+          const SizedBox(height: 18),
+          const Text(
+            'Reconciliation Notes',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: notesController,
+            minLines: 4,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              hintText: 'Add notes or comments...',
+              alignLabelWithHint: true,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 56,
+            child: FilledButton.icon(
+              onPressed: status == 'closed' ? onReconcile : null,
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Reconcile Shift'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShiftReportSection extends StatelessWidget {
+  const _ShiftReportSection({
+    required this.number,
+    required this.title,
+    required this.rows,
+  });
+
+  final String number;
+  final String title;
+  final List<_ShiftReportRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: const BoxDecoration(
+              color: AppColors.kSurface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+            ),
+            child: Text(
+              '$number  ${title.toUpperCase()}',
+              style: const TextStyle(
+                color: AppColors.kTextSecondary,
+                fontSize: 12,
+                letterSpacing: 1.4,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          ...rows,
+        ],
+      ),
+    );
+  }
+}
+
+class _ShiftReportRow extends StatelessWidget {
+  const _ShiftReportRow(
+    this.label,
+    this.value, {
+    this.emphasized = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontWeight: emphasized ? FontWeight.w900 : FontWeight.w700,
+      color: emphasized ? AppColors.kTextPrimary : AppColors.kTextSecondary,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.kDivider)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: style)),
+          Text(value, textAlign: TextAlign.right, style: style),
+        ],
+      ),
+    );
+  }
+}
+
+class _VarianceAnalysisBox extends StatelessWidget {
+  const _VarianceAnalysisBox({required this.shift});
+
+  final Map<String, dynamic> shift;
+
+  @override
+  Widget build(BuildContext context) {
+    final expected = _expectedClosingAmount(shift);
+    final actual = _actualCashCounted(shift);
+    final variance = _varianceAmount(shift);
+    final balanced = variance.abs() < 0.01;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: balanced ? Colors.green.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: balanced ? Colors.green.shade200 : Colors.orange.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '5.  VARIANCE ANALYSIS',
+            style: TextStyle(
+              color: AppColors.kTextSecondary,
+              fontSize: 12,
+              letterSpacing: 1.4,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Opening Float (${_money(_openingFloat(shift))}) + Cash Sales (${_money(_cashSales(shift))}) + Credit Paid (${_money(_creditPaymentsReceived(shift))}) = Expected (${_money(expected)})\n'
+            'Actual (${_money(actual)}) - Expected (${_money(expected)}) = Variance',
+            style: const TextStyle(color: AppColors.kTextSecondary),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  balanced
+                      ? Icons.check_circle_outline
+                      : Icons.warning_amber_rounded,
+                  color: balanced ? Colors.green.shade700 : Colors.orange,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    balanced ? 'BALANCED' : 'VARIANCE FOUND',
+                    style: TextStyle(
+                      color: balanced ? Colors.green.shade700 : Colors.orange,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${variance >= 0 ? '+' : '-'}${_money(variance.abs())}',
+                  style: TextStyle(
+                    color: balanced ? Colors.green.shade700 : Colors.orange,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+num _openingFloat(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['opening_float', 'float_opening']);
+num _cashSales(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['total_cash_sales', 'cash_sales', 'cash_collected']);
+num _mpesaSales(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['total_mpesa_sales', 'mpesa_sales']);
+num _cardSales(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['total_card_sales', 'card_sales']);
+num _otherSales(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['total_other_sales', 'other_sales']);
+num _totalSales(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['total_sales', 'total_revenue', 'sales']);
+num _creditPaymentsReceived(Map<String, dynamic> shift) => _firstNumFrom(shift,
+    ['credit_payments_received', 'credit_bills_paid', 'paid_bills_value']);
+num _expectedClosingAmount(Map<String, dynamic> shift) {
+  final stored = _firstNumFrom(
+      shift, ['expected_closing_float', 'expected_closing_amount']);
+  if (stored != 0) return stored;
+  return _openingFloat(shift) +
+      _cashSales(shift) +
+      _creditPaymentsReceived(shift);
+}
+
+num _actualCashCounted(Map<String, dynamic> shift) {
+  final actual = _firstNumFrom(
+      shift, ['actual_cash_counted', 'closing_float', 'cash_at_hand']);
+  if (actual != 0) return actual;
+  return _firstNumFrom(shift, ['cash_deposited']);
+}
+
+num _varianceAmount(Map<String, dynamic> shift) {
+  final stored = _firstNumFrom(shift, ['variance', 'variance_amount']);
+  if (stored != 0) return stored;
+  return _actualCashCounted(shift) - _expectedClosingAmount(shift);
+}
+
+num _roomRevenue(Map<String, dynamic> shift) => _firstNumFrom(
+    shift, ['room_booking_revenue', 'rooms_revenue', 'accommodation_revenue']);
+num _restaurantRevenue(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['restaurant_revenue']);
+num _barRevenue(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['bar_revenue']);
+num _otherRevenue(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['other_revenue']);
+num _streamSubtotal(Map<String, dynamic> shift) =>
+    _roomRevenue(shift) +
+    _restaurantRevenue(shift) +
+    _barRevenue(shift) +
+    _otherRevenue(shift);
+num _creditBillsCreated(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['credit_bills_taken', 'credit_bills_value']);
+num _creditBillsPaid(Map<String, dynamic> shift) =>
+    _firstNumFrom(shift, ['credit_bills_paid', 'paid_bills_value']);
+num _outstandingCredit(Map<String, dynamic> shift) {
+  final stored =
+      _firstNumFrom(shift, ['outstanding_credit', 'outstanding_credit_value']);
+  if (stored != 0) return stored;
+  final unpaid = _firstNumFrom(shift, ['unpaid_bills_value']);
+  return unpaid > 0
+      ? unpaid
+      : (_creditBillsCreated(shift) - _creditBillsPaid(shift));
 }
 
 class _CashierLogbooksSection extends ConsumerStatefulWidget {
@@ -2710,8 +3951,14 @@ class _CashierLogbooksSectionState
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks();
 
-  void _refresh() => setState(() => _future =
-      ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks());
+  void _refresh() {
+    final nextFuture = ref
+        .read(branchAccountantRepositoryProvider)
+        .getPendingCashierLogbooks();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3707,8 +4954,13 @@ class _FoodVarianceSectionState extends ConsumerState<_FoodVarianceSection> {
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getPendingFoodVariances();
 
-  void _refresh() => setState(() => _future =
-      ref.read(branchAccountantRepositoryProvider).getPendingFoodVariances());
+  void _refresh() {
+    final nextFuture =
+        ref.read(branchAccountantRepositoryProvider).getPendingFoodVariances();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3911,8 +5163,13 @@ class _BookingsInvoicesSectionState
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getFinanceInvoices();
 
-  void _refresh() => setState(() => _future =
-      ref.read(branchAccountantRepositoryProvider).getFinanceInvoices());
+  void _refresh() {
+    final nextFuture =
+        ref.read(branchAccountantRepositoryProvider).getFinanceInvoices();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3970,8 +5227,13 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
       ref.read(branchAccountantRepositoryProvider).getStockTakes();
   bool _creating = false;
 
-  void _refresh() => setState(() =>
-      _future = ref.read(branchAccountantRepositoryProvider).getStockTakes());
+  void _refresh() {
+    final nextFuture =
+        ref.read(branchAccountantRepositoryProvider).getStockTakes();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   Future<void> _createStockTake() async {
     if (_creating) return;
@@ -4111,7 +5373,12 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     return {'pos': r[0], 'invoices': r[1], 'payments': r[2]};
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() {
+    final nextFuture = _load();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4861,8 +6128,13 @@ class _BuffetSectionState extends ConsumerState<_BuffetSection> {
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getBuffets();
 
-  void _refresh() => setState(() =>
-      _future = ref.read(branchAccountantRepositoryProvider).getBuffets());
+  void _refresh() {
+    final nextFuture =
+        ref.read(branchAccountantRepositoryProvider).getBuffets();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4951,8 +6223,13 @@ class _CateringSectionState extends ConsumerState<_CateringSection> {
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getCateringEvents();
 
-  void _refresh() => setState(() => _future =
-      ref.read(branchAccountantRepositoryProvider).getCateringEvents());
+  void _refresh() {
+    final nextFuture =
+        ref.read(branchAccountantRepositoryProvider).getCateringEvents();
+    setState(() {
+      _future = nextFuture;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6983,12 +8260,13 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
-  final String title;
+  const _SectionCard({this.title, required this.child});
+  final String? title;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final hasTitle = title != null && title!.isNotEmpty;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -7000,10 +8278,12 @@ class _SectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
+            if (hasTitle) ...[
+              Text(title!,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+            ],
             child,
           ],
         ),
@@ -7386,6 +8666,37 @@ void _showRecord(BuildContext context, Map<String, dynamic> record) {
   );
 }
 
+dynamic _firstRaw(Map<String, dynamic> row, List<String> keys) {
+  for (final key in keys) {
+    final value = row[key];
+    if (value != null && '$value'.trim().isNotEmpty && '$value' != 'null') {
+      return value;
+    }
+  }
+  return null;
+}
+
+String _firstTextFrom(
+  Map<String, dynamic> row,
+  List<String> keys, {
+  String fallback = '',
+}) {
+  final value = _firstRaw(row, keys);
+  if (value == null) return fallback;
+  if (value is Map) return readableMapName(value) ?? fallback;
+  if (value is List) return value.isEmpty ? fallback : readableListValue(value);
+  return '$value'.trim().isEmpty ? fallback : '$value';
+}
+
+num _firstNumFrom(Map<String, dynamic> row, List<String> keys) {
+  for (final key in keys) {
+    final value = row[key];
+    final parsed = _num(value);
+    if (parsed != 0 || value == 0 || value == '0') return parsed;
+  }
+  return 0;
+}
+
 IconData _icon(BranchAccountantSection section) =>
     _navItems.firstWhere((item) => item.section == section).icon;
 
@@ -7400,6 +8711,8 @@ String _shortLabel(BranchAccountantSection section) {
       return 'Workspace';
     case BranchAccountantSection.discrepancies:
       return 'Flags';
+    case BranchAccountantSection.shiftOpenings:
+      return 'Openings';
     case BranchAccountantSection.shiftReview:
       return 'Shifts';
     case BranchAccountantSection.cashierLogbooks:

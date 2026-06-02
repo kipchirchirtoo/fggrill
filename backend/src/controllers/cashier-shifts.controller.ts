@@ -47,6 +47,144 @@ function normalizeShiftOpeningStatus(shift: any): any {
     };
 }
 
+function toNumber(value: unknown, fallback = 0): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toArray(value: unknown): any[] {
+    return Array.isArray(value) ? value : [];
+}
+
+async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Promise<any> {
+    const logDate = String(shift.shift_start || new Date().toISOString()).slice(0, 10);
+    const creditBills = toArray(shift.credit_bills_details);
+    const paidBills = toArray(shift.paid_bills_details);
+    const totalCash = toNumber(shift.total_cash_sales);
+    const totalMpesa = toNumber(shift.total_mpesa_sales);
+    const totalCard = toNumber(shift.total_card_sales);
+    const totalSales = toNumber(shift.total_sales);
+
+    const { data: existingLogbook, error: existingError } = await supabase
+        .from('cashier_logbooks')
+        .select('id')
+        .eq('cashier_shift_id', shift.id)
+        .maybeSingle();
+
+    if (existingError) throw existingError;
+
+    const payload = {
+        branch_id: shift.branch_id,
+        cashier_id: shift.cashier_id,
+        type: 'cashier',
+        log_date: logDate,
+        opening_float: toNumber(shift.opening_float),
+        closing_float: toNumber(shift.closing_float ?? shift.cash_at_hand),
+        sales_breakdown: {
+            source: 'cashier_shift_logs',
+            shift_id: shift.id,
+            shift_number: shift.shift_number,
+            cashier_name: shift.cashier_name,
+            total_cash: totalCash,
+            total_mpesa: totalMpesa,
+            total_card: totalCard,
+            total_sales: totalSales,
+            expected_closing_float: toNumber(shift.expected_closing_float),
+            variance: toNumber(shift.variance),
+            transaction_count: toNumber(shift.transaction_count),
+            restaurant_revenue: toNumber(shift.restaurant_revenue),
+            bar_revenue: toNumber(shift.bar_revenue),
+            room_booking_revenue: toNumber(shift.room_booking_revenue),
+            conference_revenue: toNumber(shift.conference_revenue),
+            swimming_pool_revenue: toNumber(shift.swimming_pool_revenue),
+            other_revenue: toNumber(shift.other_revenue),
+            unpaid_bills_value: toNumber(shift.unpaid_bills_value),
+            unpaid_bills_count: toNumber(shift.unpaid_bills_count),
+            paid_bills_value: toNumber(shift.paid_bills_value),
+            paid_bills_count: toNumber(shift.paid_bills_count)
+        },
+        total_mpesa: totalMpesa,
+        total_swipe: totalCard,
+        notes: shift.notes || 'Generated automatically when the cashier shift was closed.',
+        status: 'pending_accountant_review',
+        source: 'cashier_shift_close',
+        cashier_shift_id: shift.id,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    };
+
+    const logbookResult = existingLogbook?.id
+        ? await supabase
+            .from('cashier_logbooks')
+            .update(payload)
+            .eq('id', existingLogbook.id)
+            .select('*')
+            .single()
+        : await supabase
+            .from('cashier_logbooks')
+            .insert(payload)
+            .select('*')
+            .single();
+
+    if (logbookResult.error) throw logbookResult.error;
+    const logbook = logbookResult.data;
+
+    await supabase
+        .from('cashier_logbook_lines')
+        .delete()
+        .eq('logbook_id', logbook.id);
+
+    const lines = [
+        ...creditBills.map((bill: any, index: number) => ({
+            logbook_id: logbook.id,
+            section: 'credit_bill',
+            customer_name: bill.name || bill.staff_name || bill.customer_name || 'Credit bill',
+            amount: toNumber(bill.amount),
+            reference: bill.reference || bill.id || `${shift.shift_number}-credit-${index + 1}`,
+            source_table: null,
+            source_id: null,
+            payment_method: 'credit_bill'
+        })),
+        ...paidBills.map((bill: any, index: number) => ({
+            logbook_id: logbook.id,
+            section: 'paid_bill',
+            customer_name: bill.name || bill.staff_name || bill.customer_name || 'Paid bill',
+            amount: toNumber(bill.amount),
+            reference: bill.reference || bill.id || `${shift.shift_number}-paid-${index + 1}`,
+            source_table: null,
+            source_id: null,
+            payment_method: bill.payment_method || 'cash'
+        }))
+    ].filter((line) => line.amount > 0);
+
+    if (lines.length) {
+        const { error: linesError } = await supabase
+            .from('cashier_logbook_lines')
+            .insert(lines);
+        if (linesError) throw linesError;
+    }
+
+    notificationService.notifyRole(
+        'branch_accountant',
+        'Cashier shift logbook ready for review',
+        `Shift ${shift.shift_number || shift.id} has been closed and is waiting for accountant review.`,
+        {
+            type: 'info',
+            category: 'cashier_logbook',
+            priority: 'high',
+            branchId: shift.branch_id,
+            metadata: {
+                logbook_id: logbook.id,
+                cashier_shift_id: shift.id,
+                shift_number: shift.shift_number,
+                reviewed_by: reviewerId
+            }
+        }
+    ).catch((notifyError) => logger.warn('Cashier logbook notification failed:', notifyError));
+
+    return logbook;
+}
+
 // @desc    Get shift logs
 // @route   GET /api/cashier/shifts
 // @access  Private
@@ -847,6 +985,7 @@ export const closeShift = async (
             rooms_na
         } = req.body;
         const userId = req.user?.id;
+        const automationWarnings: string[] = [];
 
         // Get shift
         const { data: shift, error: shiftError } = await supabase
@@ -1081,11 +1220,27 @@ export const closeShift = async (
         } catch (syncError) {
             // Log but don't fail the request since shift is already closed
             logger.error(`Error in shift sync logic for ${id}`, syncError);
+            automationWarnings.push('Credit-bill sync failed. Review staff credit bills manually.');
+        }
+
+        let generatedLogbook: any = null;
+        try {
+            generatedLogbook = await generateCashierShiftLogbook(updatedShift, userId);
+        } catch (logbookError) {
+            logger.error(`Failed to generate cashier shift logbook for ${id}`, logbookError);
+            automationWarnings.push('Shift closed, but cashier logbook generation failed. Branch accountant queue may not show this shift.');
         }
 
         res.status(200).json({
             success: true,
-            data: updatedShift
+            message: automationWarnings.length
+                ? 'Shift closed with automation warnings'
+                : 'Shift closed and sent to branch accountant for logbook review',
+            data: {
+                ...updatedShift,
+                generated_logbook_id: generatedLogbook?.id || null,
+                automation_warnings: automationWarnings
+            }
         });
     } catch (error) {
         next(error);
