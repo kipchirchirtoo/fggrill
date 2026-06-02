@@ -142,6 +142,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   }
 
   Widget _orders(_KitchenModuleSnapshot data) {
+    // Newest orders first so chefs always see fresh tickets at the top.
+    final orders = [...data.activeOrders]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final pending = data.activeOrders
         .where(
             (order) => order.status == 'pending' || order.status == 'confirmed')
@@ -152,6 +155,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         data.activeOrders.where((order) => order.status == 'ready').length;
     final voidPending =
         data.activeOrders.where((order) => order.hasPendingVoidRequest).length;
+    final voided = data.activeOrders.where((order) => order.isVoided).length;
     final avgWait = data.activeOrders.isEmpty
         ? 0
         : (data.activeOrders
@@ -182,58 +186,50 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
               _StatTile('Preparing', '$preparing'),
               _StatTile('Ready', '$ready'),
               _StatTile('Void Pending', '$voidPending'),
+              _StatTile('Voided', '$voided'),
               _StatTile('Avg Wait', '${avgWait}m'),
             ],
           ),
           const SizedBox(height: 24),
-          if (data.activeOrders.isEmpty)
+          if (orders.isEmpty)
             const EmptyState(message: 'No active restaurant orders.')
           else
             LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                final columns = width > 1320
-                    ? 4
-                    : width > 960
-                        ? 3
-                        : width > 640
-                            ? 2
-                            : 1;
+                // Big-screen friendly: keep each ticket a comfortable, readable
+                // width (~360px) so a wall-mounted display fits several columns
+                // without shrinking text.
+                final columns = (width / 360).floor().clamp(1, 6);
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columns,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                    childAspectRatio: 0.82,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    mainAxisExtent: 460,
                   ),
-                  itemCount: data.activeOrders.length,
-                  itemBuilder: (context, index) => _OrderTicket(
-                    order: data.activeOrders[index],
-                    onItemReady: (item) => _run(
-                      () => _repo.markItemReady(
-                        data.activeOrders[index].id,
-                        item.id,
+                  itemCount: orders.length,
+                  itemBuilder: (context, index) {
+                    final order = orders[index];
+                    // Index within the newest-first list — the first few are
+                    // highlighted as freshly arrived.
+                    return _OrderTicket(
+                      order: order,
+                      queuePosition: index + 1,
+                      onItemReady: (item) => _run(
+                        () => _repo.markItemReady(order.id, item.id),
+                        successMessage: '${item.name} marked ready',
                       ),
-                      successMessage: '${item.name} marked ready',
-                    ),
-                    onStart: () => _updateOrder(
-                      data.activeOrders[index].id,
-                      'preparing',
-                      'Order started',
-                    ),
-                    onReady: () => _updateOrder(
-                      data.activeOrders[index].id,
-                      'ready',
-                      'Waiter notification sent',
-                    ),
-                    onServed: () => _updateOrder(
-                      data.activeOrders[index].id,
-                      'served',
-                      'Order moved to history',
-                    ),
-                  ),
+                      onStart: () =>
+                          _updateOrder(order.id, 'preparing', 'Order started'),
+                      onReady: () => _updateOrder(
+                          order.id, 'ready', 'Waiter notification sent'),
+                      onServed: () => _updateOrder(
+                          order.id, 'served', 'Order moved to history'),
+                    );
+                  },
                 );
               },
             ),
@@ -616,90 +612,276 @@ class _OrderTicket extends StatelessWidget {
     required this.onStart,
     required this.onReady,
     required this.onServed,
+    this.queuePosition,
   });
 
   final KitchenOrder order;
+  final int? queuePosition;
   final ValueChanged<KitchenOrderItem> onItemReady;
   final VoidCallback onStart;
   final VoidCallback onReady;
   final VoidCallback onServed;
 
+  bool get _isNew => order.elapsed.inMinutes < 3;
+
+  IconData get _typeIcon => order.orderType == 'room_service'
+      ? Icons.hotel_outlined
+      : order.orderType == 'takeaway'
+          ? Icons.shopping_bag_outlined
+          : Icons.table_restaurant_outlined;
+
   @override
   Widget build(BuildContext context) {
     final status = order.status.toLowerCase();
     final urgent = order.isUrgent;
-    final color = status == 'ready'
-        ? AppColors.kSuccess
-        : status == 'preparing'
-            ? Colors.blue
-            : urgent
-                ? AppColors.kError
-                : AppColors.kWarning;
+    final isStopTicket = order.hasPendingVoidRequest || order.isVoided;
+    final stopLabel = order.isVoided ? 'VOID' : 'VOID REQUESTED';
+    final stopMessage = order.isVoided
+        ? 'VOIDED - do not prepare. Acknowledge after kitchen has seen it.'
+        : 'VOID REQUESTED - stop preparation until approval is complete.';
+    final color = order.isVoided
+        ? AppColors.kError
+        : status == 'ready'
+            ? AppColors.kSuccess
+            : status == 'preparing'
+                ? Colors.blue
+                : urgent
+                    ? AppColors.kError
+                    : AppColors.kWarning;
+    final itemCount =
+        order.items.fold<int>(0, (sum, item) => sum + item.quantity);
     return Card(
       clipBehavior: Clip.antiAlias,
+      elevation: _isNew ? 6 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: isStopTicket
+            ? const BorderSide(color: AppColors.kError, width: 3)
+            : _isNew
+                ? const BorderSide(color: AppColors.kAccent, width: 2.5)
+                : const BorderSide(color: AppColors.kDivider),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header: big order number + timer (readable across the room) ──
           Container(
             color: color,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    '#${order.orderNumber}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        if (queuePosition != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text('#$queuePosition',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 13)),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (_isNew)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text('NEW',
+                                style: TextStyle(
+                                    color: color,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 12,
+                                    letterSpacing: 1)),
+                          ),
+                        if (isStopTicket) ...[
+                          if (_isNew) const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              stopLabel,
+                              style: const TextStyle(
+                                color: AppColors.kError,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ]),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Order ${order.orderNumber}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 24,
+                          height: 1.1,
+                          decoration:
+                              isStopTicket ? TextDecoration.lineThrough : null,
+                          decorationColor: Colors.white,
+                          decorationThickness: 3,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  '${order.elapsed.inMinutes}m',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.timer_outlined,
+                          color: Colors.white, size: 18),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${order.elapsed.inMinutes}m',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 2),
+                    Text('$itemCount item${itemCount == 1 ? '' : 's'}',
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12)),
+                  ],
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Icon(Icons.table_restaurant_outlined,
-                    size: 18, color: Colors.grey.shade600),
-                SizedBox(
-                  width: 120,
-                  child: Text(
-                    order.locationLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+          if (isStopTicket)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.kError.withValues(alpha: 0.08),
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppColors.kError.withValues(alpha: 0.22),
                   ),
                 ),
-                if (order.shortCode != null && order.shortCode!.isNotEmpty)
-                  _MetaPill(label: order.shortCode!, icon: Icons.tag),
-                if (order.isCaptainOrder)
-                  const _MetaPill(label: 'Captain', icon: Icons.point_of_sale),
-                if (order.paymentStatus != null &&
-                    order.paymentStatus!.isNotEmpty)
-                  _MetaPill(
-                    label: order.paymentStatus!,
-                    icon: Icons.payments_outlined,
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.block, color: AppColors.kError, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      stopMessage,
+                      style: const TextStyle(
+                        color: AppColors.kError,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
-                if (order.hasPendingVoidRequest)
-                  const _MetaPill(
-                    label: 'Void approval',
-                    icon: Icons.block_outlined,
-                  ),
-                _StatusPill(status: status),
+                ],
+              ),
+            ),
+          // ── Location / type / shortcode / waiter (large, scannable) ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(_typeIcon, size: 22, color: AppColors.kPrimary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        order.locationLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 19,
+                          decoration:
+                              isStopTicket ? TextDecoration.lineThrough : null,
+                          decorationColor: AppColors.kError,
+                          decorationThickness: 2.5,
+                        ),
+                      ),
+                    ),
+                    if (order.shortCode != null && order.shortCode!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.kPrimary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          order.shortCode!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _MetaPill(label: order.orderTypeLabel, icon: _typeIcon),
+                    if ((order.waiterName ?? '').isNotEmpty)
+                      _MetaPill(
+                        label: 'Waiter: ${order.waiterName!}',
+                        icon: Icons.person_outline,
+                      ),
+                    if ((order.customerName ?? '').isNotEmpty)
+                      _MetaPill(
+                        label: order.customerName!,
+                        icon: Icons.badge_outlined,
+                      ),
+                    if (order.isCaptainOrder)
+                      const _MetaPill(
+                          label: 'Captain', icon: Icons.point_of_sale),
+                    if (order.paymentStatus != null &&
+                        order.paymentStatus!.isNotEmpty)
+                      _MetaPill(
+                        label: order.paymentStatus!,
+                        icon: Icons.payments_outlined,
+                      ),
+                    if (order.hasPendingVoidRequest)
+                      const _MetaPill(
+                        label: 'Void approval',
+                        icon: Icons.block_outlined,
+                      ),
+                    if (order.isVoided)
+                      const _MetaPill(label: 'Voided', icon: Icons.block),
+                    _StatusPill(status: status),
+                  ],
+                ),
               ],
             ),
           ),
@@ -714,35 +896,59 @@ class _OrderTicket extends StatelessWidget {
                 return Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.kSurface,
+                    color: isStopTicket
+                        ? AppColors.kError.withValues(alpha: 0.04)
+                        : AppColors.kSurface,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.kDivider),
+                    border: Border.all(
+                      color: isStopTicket
+                          ? AppColors.kError.withValues(alpha: 0.24)
+                          : AppColors.kDivider,
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${item.quantity}x',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 40),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
                           color: AppColors.kPrimary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${item.quantity}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            fontSize: 18,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(item.name,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700)),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                  decoration: isStopTicket
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  decorationColor: AppColors.kError,
+                                  decorationThickness: 2.5,
+                                )),
                             if (item.notes != null && item.notes!.isNotEmpty)
                               Text(
                                 'Note: ${item.notes}',
                                 style: const TextStyle(
                                   color: AppColors.kWarning,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                           ],
@@ -751,7 +957,9 @@ class _OrderTicket extends StatelessWidget {
                       IconButton(
                         tooltip:
                             item.isReady ? 'Item ready' : 'Mark item ready',
-                        onPressed: item.isReady || order.hasPendingVoidRequest
+                        onPressed: item.isReady ||
+                                order.hasPendingVoidRequest ||
+                                order.isVoided
                             ? null
                             : () => onItemReady(item),
                         icon: Icon(
@@ -798,6 +1006,13 @@ class _OrderTicket extends StatelessWidget {
         ),
       );
     }
+    if (order.isVoided) {
+      return OutlinedButton.icon(
+        onPressed: onServed,
+        icon: const Icon(Icons.visibility_off_outlined, size: 18),
+        label: const Text('Acknowledge Void'),
+      );
+    }
     if (status == 'pending' || status == 'confirmed') {
       return FilledButton.icon(
         onPressed: onStart,
@@ -840,12 +1055,24 @@ class _OrderList extends StatelessWidget {
         separatorBuilder: (_, __) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final order = orders[index];
+          final isStopTicket = order.hasPendingVoidRequest || order.isVoided;
           return ListTile(
-            leading: const Icon(Icons.receipt_long_outlined),
-            title: Text('#${order.orderNumber} • ${order.locationLabel}'),
+            leading: Icon(
+              isStopTicket ? Icons.block : Icons.receipt_long_outlined,
+              color: isStopTicket ? AppColors.kError : null,
+            ),
+            title: Text(
+              '#${order.orderNumber} • ${order.locationLabel} • ${order.orderTypeLabel}',
+              style: TextStyle(
+                decoration: isStopTicket ? TextDecoration.lineThrough : null,
+                decorationColor: AppColors.kError,
+                decorationThickness: 2.5,
+              ),
+            ),
             subtitle: Text(
+              '${(order.waiterName ?? '').isEmpty ? 'Waiter not assigned' : 'Waiter: ${order.waiterName}'}\n'
               '${order.items.map((item) => '${item.quantity}x ${item.name}').join(', ')}\n${order.createdAt}',
-              maxLines: 2,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
             trailing: _StatusPill(status: order.status),
@@ -898,14 +1125,19 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
-    final color = normalized == 'ready' ||
-            normalized == 'served' ||
-            normalized == 'delivered' ||
-            normalized == 'completed'
-        ? AppColors.kSuccess
-        : normalized == 'preparing'
-            ? Colors.blue
-            : AppColors.kWarning;
+    final isVoidStatus = normalized == 'void_requested' ||
+        normalized == 'cancelled' ||
+        normalized == 'voided';
+    final color = isVoidStatus
+        ? AppColors.kError
+        : normalized == 'ready' ||
+                normalized == 'served' ||
+                normalized == 'delivered' ||
+                normalized == 'completed'
+            ? AppColors.kSuccess
+            : normalized == 'preparing'
+                ? Colors.blue
+                : AppColors.kWarning;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(

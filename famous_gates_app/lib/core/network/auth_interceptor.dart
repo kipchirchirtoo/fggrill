@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../storage/secure_storage_provider.dart';
+import '../utils/working_directory_guard.dart';
 import '../../features/auth/data/auth_repository.dart';
 
 class AuthInterceptor extends Interceptor {
@@ -11,6 +12,7 @@ class AuthInterceptor extends Interceptor {
   @override
   void onRequest(
       RequestOptions options, RequestInterceptorHandler handler) async {
+    ensureStableWorkingDirectory();
     final storage = _ref.read(secureStorageProvider);
     final jwt = await storage.read(key: AuthRepository.jwtKey);
     final branchId = await storage.read(key: AuthRepository.branchIdKey);
@@ -31,6 +33,7 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    ensureStableWorkingDirectory();
     if (err.response?.statusCode == 401) {
       final storage = _ref.read(secureStorageProvider);
       await storage.delete(key: AuthRepository.jwtKey);

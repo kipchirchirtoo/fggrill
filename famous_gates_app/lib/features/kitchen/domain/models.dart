@@ -3,6 +3,7 @@ class KitchenOrder {
   final String orderNumber;
   final String orderType;
   final int? tableNumber;
+  final String? roomNumber;
   final String? waiterName;
   final String? customerName;
   final String? shortCode;
@@ -20,6 +21,7 @@ class KitchenOrder {
     this.orderNumber = '',
     this.orderType = 'dine_in',
     this.tableNumber,
+    this.roomNumber,
     this.waiterName,
     this.customerName,
     this.shortCode,
@@ -41,6 +43,7 @@ class KitchenOrder {
           '${json['order_number'] ?? json['orderNumber'] ?? json['id']}',
       orderType: '${json['order_type'] ?? 'dine_in'}',
       tableNumber: _intValue(json['table_number'] ?? json['table']),
+      roomNumber: _optionalString(json['room_number']),
       waiterName: _optionalString(json['waiter_name']),
       customerName: _optionalString(json['customer_name']),
       shortCode: json['short_code'] == null ? null : '${json['short_code']}',
@@ -71,11 +74,34 @@ class KitchenOrder {
       voidRequestStatus?.toLowerCase() == 'pending' ||
       status.toLowerCase() == 'void_requested';
 
+  bool get isVoided {
+    final normalizedStatus = status.toLowerCase();
+    final normalizedPayment = paymentStatus?.toLowerCase();
+    final normalizedVoidRequest = voidRequestStatus?.toLowerCase();
+    return normalizedStatus == 'cancelled' ||
+        normalizedStatus == 'voided' ||
+        normalizedPayment == 'voided' ||
+        normalizedVoidRequest == 'approved';
+  }
+
   String get locationLabel {
     if (tableNumber != null) return 'Table $tableNumber';
-    if (orderType == 'room_service') return 'Room Service';
+    if (orderType == 'room_service') {
+      return roomNumber == null ? 'Room service' : 'Room $roomNumber';
+    }
     if (orderType == 'takeaway') return 'Takeaway';
     return orderType.replaceAll('_', ' ');
+  }
+
+  String get orderTypeLabel {
+    if (orderType == 'dine_in') return 'Dine in';
+    if (orderType == 'room_service') return 'Room service';
+    if (orderType == 'takeaway') return 'Takeaway';
+    return orderType
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1))
+        .join(' ');
   }
 
   Duration get elapsed => DateTime.now().difference(createdAt);

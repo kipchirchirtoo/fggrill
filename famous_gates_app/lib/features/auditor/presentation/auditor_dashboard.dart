@@ -8,6 +8,7 @@ import '../domain/models.dart';
 import '../data/repository.dart';
 import 'branch_orders_tab.dart';
 import '../../lina/presentation/lina_screen.dart';
+import '../../../core/widgets/branch_sales_payments_view.dart';
 
 class AuditorDashboard extends ConsumerStatefulWidget {
   const AuditorDashboard({super.key});
@@ -29,6 +30,10 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
             label: 'Audit Control',
             icon: PhosphorIcons.shieldCheck(),
             content: const _AuditorOverviewTab()),
+        DashboardTab(
+            label: 'Sales & Payments',
+            icon: PhosphorIcons.creditCard(),
+            content: const BranchSalesPaymentsView()),
         DashboardTab(
             label: 'Order Tracking',
             icon: PhosphorIcons.shoppingCart(),

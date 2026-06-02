@@ -87,6 +87,155 @@ class AdminRepository {
     return Map<String, dynamic>.from(payload ?? {});
   }
 
+  int _asInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.round();
+    return int.tryParse('$value') ?? double.tryParse('$value')?.round() ?? 0;
+  }
+
+  double _asDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
+  }
+
+  int _countFromEnvelope(dynamic data) {
+    if (data is Map) {
+      final explicitCount = data['count'] ??
+          data['total'] ??
+          data['total_count'] ??
+          data['pagination']?['total'] ??
+          data['meta']?['total'];
+      if (explicitCount != null) return _asInt(explicitCount);
+      final rows = data['data'];
+      if (rows is List) return rows.length;
+    }
+    if (data is List) return data.length;
+    return 0;
+  }
+
+  List<Map<String, dynamic>> _mapList(dynamic value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Map<String, dynamic> _buildAdminDashboardPayload({
+    required Map<String, dynamic> report,
+    required Map<String, dynamic> context,
+    required Map<String, dynamic> systemStats,
+    required int staffCount,
+  }) {
+    final branches = Map<String, dynamic>.from(context['branches'] ?? {});
+    final users = Map<String, dynamic>.from(context['users'] ?? {});
+    final revenue = Map<String, dynamic>.from(context['revenue'] ?? {});
+    final bookings = Map<String, dynamic>.from(context['bookings'] ?? {});
+    final anomalies = Map<String, dynamic>.from(context['anomalies'] ?? {});
+    final security = Map<String, dynamic>.from(context['security'] ?? {});
+    final hr = Map<String, dynamic>.from(context['hr'] ?? {});
+    final audit = Map<String, dynamic>.from(context['audit'] ?? {});
+    final reportBookings = Map<String, dynamic>.from(report['bookings'] ?? {});
+    final reportOccupancy =
+        Map<String, dynamic>.from(report['occupancy'] ?? {});
+
+    final totalBranches = _asInt(
+      branches['total'] ??
+          systemStats['total_branches'] ??
+          systemStats['branches_count'],
+    );
+    final totalUsers = _asInt(
+      users['total'] ??
+          systemStats['total_users'] ??
+          systemStats['users_count'],
+    );
+    final totalStaff = staffCount > 0 ? staffCount : totalUsers;
+    final activeBookings =
+        _asInt(bookings['active'] ?? reportBookings['upcoming']);
+    final todayRevenue =
+        _asDouble(revenue['total_24h'] ?? reportBookings['today_revenue']);
+    final monthlyRevenue = _asDouble(
+      revenue['total_30d'] ??
+          revenue['month_to_date'] ??
+          reportBookings['revenue'] ??
+          revenue['total_7d'],
+    );
+    final pendingActions = _asInt(anomalies['critical_count']) +
+        _asInt(anomalies['high_count']) +
+        _asInt(hr['pending_leaves']) +
+        _asInt(security['failed_logins_24h']) +
+        _asInt(revenue['open_shifts_now']);
+    final occupancyPercent = _asDouble(reportOccupancy['current']);
+    final totalRooms = occupancyPercent > 0 ? 100 : 0;
+    final occupiedRooms = activeBookings > 0
+        ? activeBookings
+        : occupancyPercent > 0
+            ? occupancyPercent.round()
+            : 0;
+
+    return {
+      'logins_today': _asInt(bookings['active'] ?? reportBookings['total']),
+      'failed_logins': pendingActions,
+      'active_sessions': totalUsers,
+      'total_branches': totalBranches,
+      'total_users': totalUsers,
+      'total_staff': totalStaff,
+      'total_rooms': totalRooms,
+      'occupied_rooms': occupiedRooms,
+      'today_revenue': todayRevenue,
+      'monthly_revenue': monthlyRevenue,
+      'revenueTrend': _buildRevenueTrend(revenue),
+      'occupancyTrend': _buildOccupancyTrend(reportOccupancy),
+      'recentActivity': _mapList(audit['recent_actions'])
+          .map((action) => {
+                'id': _asString(action['id'] ?? action['created_at']),
+                'action': _asString(action['action']).isNotEmpty
+                    ? _asString(action['action'])
+                    : 'System activity',
+                'description': _asString(action['description'] ??
+                    action['entity_type'] ??
+                    action['metadata']),
+                'userName':
+                    _asString(action['user_name'] ?? action['user_email']),
+                'type': 'info',
+                'createdAt': _asString(action['created_at']),
+              })
+          .toList(),
+    };
+  }
+
+  List<Map<String, dynamic>> _buildRevenueTrend(Map<String, dynamic> revenue) {
+    final byBranch = revenue['by_branch_7d'];
+    if (byBranch is Map && byBranch.isNotEmpty) {
+      return byBranch.entries
+          .map((entry) => {
+                'label': _asString(entry.key),
+                'revenue': _asDouble(entry.value),
+              })
+          .toList();
+    }
+    final sevenDayTotal = _asDouble(revenue['total_7d']);
+    final todayTotal = _asDouble(revenue['total_24h']);
+    if (sevenDayTotal <= 0 && todayTotal <= 0) return const [];
+    final previousTotal =
+        (sevenDayTotal - todayTotal).clamp(0, double.infinity);
+    return [
+      {'label': '7d', 'revenue': previousTotal},
+      {'label': 'Today', 'revenue': todayTotal},
+    ];
+  }
+
+  List<Map<String, dynamic>> _buildOccupancyTrend(
+      Map<String, dynamic> occupancy) {
+    final current = _asDouble(occupancy['current']);
+    if (current <= 0) return const [];
+    return [
+      {'label': 'Current', 'occupancy': current},
+    ];
+  }
+
   Map<String, dynamic> _normalizeBranch(Map<String, dynamic> json) {
     return {
       'id': _asString(json['id']),
@@ -108,9 +257,50 @@ class AdminRepository {
   }
 
   Future<AdminDashboard> getDashboard() async {
-    // Using reports/dashboard as the main admin dashboard endpoint
-    final response = await _dio.get('/reports/dashboard');
-    return AdminDashboard.fromJson(_unwrap(response.data));
+    Map<String, dynamic> report = {};
+    Map<String, dynamic> context = {};
+    Map<String, dynamic> systemStats = {};
+    var staffCount = 0;
+
+    try {
+      final response = await _dio.get('/reports/dashboard');
+      report = _unwrap(response.data);
+    } catch (_) {
+      report = {};
+    }
+
+    try {
+      final response = await _dio.get('/lina/context');
+      context = _unwrap(response.data);
+    } catch (_) {
+      context = {};
+    }
+
+    try {
+      final response = await _dio.get('/system/stats');
+      systemStats = _unwrap(response.data);
+    } catch (_) {
+      systemStats = {};
+    }
+
+    try {
+      final response = await _dio.get(
+        '/staff',
+        queryParameters: const {'source': 'staff_profiles', 'limit': 5000},
+      );
+      staffCount = _countFromEnvelope(response.data);
+    } catch (_) {
+      staffCount = 0;
+    }
+
+    return AdminDashboard.fromJson(
+      _buildAdminDashboardPayload(
+        report: report,
+        context: context,
+        systemStats: systemStats,
+        staffCount: staffCount,
+      ),
+    );
   }
 
   Future<List<AdminBranch>> getBranches() async {

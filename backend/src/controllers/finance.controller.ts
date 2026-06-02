@@ -126,13 +126,12 @@ export const getInvoices = async (
     const limit = parseInt(req.query.limit as string) || 10;
     const startIndex = (page - 1) * limit;
 
+    // NOTE: embedded joins (users!guest_id / finance_invoice_items) fail with
+    // PGRST200 when the FK relationship is not in the schema cache. Fetch the
+    // base rows first, then enrich guests + items with separate batch queries.
     let query = supabase
       .from('finance_invoices')
-      .select(`
-        *,
-        guest:users!guest_id(*),
-        items:finance_invoice_items(*)
-      `, { count: 'exact' })
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
 
@@ -163,13 +162,47 @@ export const getInvoices = async (
       throw error;
     }
 
+    const rows = (invoices || []) as Array<Record<string, any>>;
+
+    // Enrich guests (best-effort — never fatal)
+    const guestIds = [...new Set(rows.map((r) => r.guest_id).filter(Boolean))];
+    const guestMap: Record<string, any> = {};
+    if (guestIds.length > 0) {
+      const { data: guests } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone')
+        .in('id', guestIds);
+      (guests || []).forEach((g: any) => {
+        guestMap[g.id] = g;
+      });
+    }
+
+    // Enrich line items (best-effort — never fatal)
+    const invoiceIds = rows.map((r) => r.id).filter(Boolean);
+    const itemsByInvoice: Record<string, any[]> = {};
+    if (invoiceIds.length > 0) {
+      const { data: lineItems } = await supabase
+        .from('finance_invoice_items')
+        .select('*')
+        .in('invoice_id', invoiceIds);
+      (lineItems || []).forEach((li: any) => {
+        (itemsByInvoice[li.invoice_id] ||= []).push(li);
+      });
+    }
+
+    const enriched = rows.map((r) => ({
+      ...r,
+      guest: r.guest_id ? guestMap[r.guest_id] || null : null,
+      items: itemsByInvoice[r.id] || [],
+    }));
+
     res.status(200).json({
       success: true,
-      count: invoices.length,
+      count: enriched.length,
       total: count || 0,
       page,
       pages: Math.ceil((count || 0) / limit),
-      data: invoices
+      data: enriched
     });
   } catch (error) {
     next(error);

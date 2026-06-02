@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
+import '../../../core/widgets/branch_sales_payments_view.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart' hide DataColumn, DataRow;
 import '../data/repository.dart';
@@ -14,6 +15,7 @@ import '../../lina/presentation/lina_screen.dart';
 
 enum DirectorSection {
   overview,
+  salesPayments,
   payments,
   banking,
   discrepancies,
@@ -157,6 +159,12 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
           group: 'Executive',
         ),
         MasterNavItem(
+          section: DirectorSection.salesPayments,
+          label: 'Sales & Payments',
+          icon: Icons.point_of_sale_outlined,
+          group: 'Executive',
+        ),
+        MasterNavItem(
           section: DirectorSection.payments,
           label: 'Payment Intelligence',
           icon: Icons.payments_outlined,
@@ -259,6 +267,8 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
           onRefresh: _refresh,
           onNavigate: _selectSection,
         );
+      case DirectorSection.salesPayments:
+        return const BranchSalesPaymentsView();
       case DirectorSection.payments:
         return _PaymentSection(
           data: data,

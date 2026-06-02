@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
+import 'package:famous_gates_app/core/widgets/safe_asset_image.dart';
 import '../domain/auth_notifier.dart';
 import '../domain/role_routes.dart';
 
@@ -51,7 +52,7 @@ class TerminalScreen extends ConsumerWidget {
           fit: StackFit.expand,
           children: [
             // 1 — Background photo
-            Image.asset(
+            const SafeAssetImage(
               'assets/frontend_public/IMG_8704.JPG',
               fit: BoxFit.cover,
             ),
@@ -78,14 +79,15 @@ class TerminalScreen extends ConsumerWidget {
             // 4 — UI content
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
                 child: Column(
                   children: [
                     const _TopBar(),
                     Expanded(
                       child: LayoutBuilder(
-                        builder: (context, constraints) => SingleChildScrollView(
+                        builder: (context, constraints) =>
+                            SingleChildScrollView(
                           physics: const NeverScrollableScrollPhysics(),
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
@@ -124,8 +126,7 @@ class TerminalScreen extends ConsumerWidget {
     );
   }
 
-  static void _appendPin(
-      WidgetRef ref, String value, BuildContext context) {
+  static void _appendPin(WidgetRef ref, String value, BuildContext context) {
     final pin = ref.read(_terminalPinProvider);
     if (ref.read(_terminalLoadingProvider)) return;
 
@@ -141,8 +142,7 @@ class TerminalScreen extends ConsumerWidget {
       if (pin.isEmpty) {
         AppNotifier.showSnackBar(
           context,
-          const SnackBar(
-              content: Text('Select the POS station first.')),
+          const SnackBar(content: Text('Select the POS station first.')),
         );
         return;
       }
@@ -163,8 +163,7 @@ class TerminalScreen extends ConsumerWidget {
         pin.substring(0, pin.length - 1);
   }
 
-  static Future<void> _login(
-      BuildContext context, WidgetRef ref) async {
+  static Future<void> _login(BuildContext context, WidgetRef ref) async {
     if (!context.mounted) return;
     final pin = ref.read(_terminalPinProvider);
     if (pin.length < _minPinLength) {
@@ -176,8 +175,7 @@ class TerminalScreen extends ConsumerWidget {
     }
     ref.read(_terminalLoadingProvider.notifier).state = true;
     try {
-      final user =
-          await ref.read(authNotifierProvider.notifier).posLogin(pin);
+      final user = await ref.read(authNotifierProvider.notifier).posLogin(pin);
       final route = _routeForPosUser(user.outletType, user.role, pin);
       debugPrint(
           'Terminal login role=${user.role} outlet=${user.outletType} route=$route');
@@ -188,8 +186,7 @@ class TerminalScreen extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         ref.read(_terminalPinProvider.notifier).state = '';
-        AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('$error')));
+        AppNotifier.showSnackBar(context, SnackBar(content: Text('$error')));
       }
     } finally {
       if (context.mounted) {
@@ -198,8 +195,7 @@ class TerminalScreen extends ConsumerWidget {
     }
   }
 
-  static String _routeForPosUser(
-      String? outletType, String role, String pin) {
+  static String _routeForPosUser(String? outletType, String role, String pin) {
     switch (pin.substring(0, 1).toUpperCase()) {
       case 'R':
         return '/pos/restaurant';
@@ -264,7 +260,7 @@ class _TopBar extends StatelessWidget {
               ),
             ],
           ),
-          child: Image.asset(
+          child: const SafeAssetImage(
             'assets/frontend_public/fglogo.png',
             fit: BoxFit.contain,
           ),
@@ -288,11 +284,9 @@ class _TopBar extends StatelessWidget {
             backgroundColor: Colors.white.withValues(alpha: 0.07),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.12)),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
             ),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
@@ -352,8 +346,7 @@ class _BrandClock extends StatelessWidget {
         const SizedBox(height: 12),
         // Instruction hint
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(20),
@@ -375,13 +368,28 @@ class _BrandClock extends StatelessWidget {
   }
 
   static String _weekday(int v) => const [
-        'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-        'Friday', 'Saturday', 'Sunday'
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+        'Sunday'
       ][v - 1];
 
   static String _month(int v) => const [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
       ][v - 1];
 }
 
@@ -402,8 +410,7 @@ class _PinDots extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(PhosphorIcons.shieldCheck(),
-                size: 14, color: Colors.white38),
+            Icon(PhosphorIcons.shieldCheck(), size: 14, color: Colors.white38),
             const SizedBox(width: 7),
             const Text(
               'ENTER PIN',
@@ -471,8 +478,7 @@ class _PinDots extends StatelessWidget {
                   ),
                   SizedBox(width: 9),
                   Text('Authenticating…',
-                      style:
-                          TextStyle(color: Colors.white54, fontSize: 12)),
+                      style: TextStyle(color: Colors.white54, fontSize: 12)),
                 ],
               ),
             ),
@@ -563,18 +569,15 @@ class _PinPad extends StatelessWidget {
                         Container(
                           width: 1,
                           height: 290,
-                          margin: const EdgeInsets.symmetric(
-                              horizontal: 16),
+                          margin: const EdgeInsets.symmetric(horizontal: 16),
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.transparent,
-                                Colors.white
-                                    .withValues(alpha: 0.15),
-                                Colors.white
-                                    .withValues(alpha: 0.15),
+                                Colors.white.withValues(alpha: 0.15),
+                                Colors.white.withValues(alpha: 0.15),
                                 Colors.transparent,
                               ],
                               stops: const [0, 0.1, 0.9, 1],
@@ -747,9 +750,7 @@ class _StationTile extends StatelessWidget {
                           ? Colors.white
                           : Colors.white.withValues(alpha: 0.78),
                       fontSize: 13,
-                      fontWeight: isActive
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -817,18 +818,13 @@ class _NumberColumn extends StatelessWidget {
           children: [
             for (final n in [1, 2, 3, 4, 5, 6, 7, 8, 9])
               _NumKey(
-                  label: '$n',
-                  onTap: () => onKey('$n'),
-                  disabled: disabled),
+                  label: '$n', onTap: () => onKey('$n'), disabled: disabled),
             _NumKey(
                 label: 'Staff',
                 isSpecial: true,
                 onTap: onStaff,
                 disabled: disabled),
-            _NumKey(
-                label: '0',
-                onTap: () => onKey('0'),
-                disabled: disabled),
+            _NumKey(label: '0', onTap: () => onKey('0'), disabled: disabled),
             _NumKey(
                 icon: Icons.backspace_rounded,
                 isDelete: true,
@@ -879,10 +875,16 @@ class _NumKeyState extends State<_NumKey> {
 
   @override
   Widget build(BuildContext context) {
-    final bgAlpha =
-        widget.isDelete ? 0.05 : widget.isSpecial ? 0.07 : 0.12;
-    final borderAlpha =
-        widget.isDelete ? 0.06 : widget.isSpecial ? 0.08 : 0.14;
+    final bgAlpha = widget.isDelete
+        ? 0.05
+        : widget.isSpecial
+            ? 0.07
+            : 0.12;
+    final borderAlpha = widget.isDelete
+        ? 0.06
+        : widget.isSpecial
+            ? 0.08
+            : 0.14;
 
     return AnimatedScale(
       scale: _pressed ? 0.88 : 1.0,
@@ -901,9 +903,8 @@ class _NumKeyState extends State<_NumKey> {
             ),
           ),
           child: InkWell(
-            onTapDown: widget.disabled
-                ? null
-                : (_) => setState(() => _pressed = true),
+            onTapDown:
+                widget.disabled ? null : (_) => setState(() => _pressed = true),
             onTapUp: widget.disabled
                 ? null
                 : (_) => setState(() => _pressed = false),
@@ -915,8 +916,7 @@ class _NumKeyState extends State<_NumKey> {
             child: Center(
               child: widget.icon != null
                   ? Icon(widget.icon,
-                      color: Colors.white.withValues(alpha: 0.42),
-                      size: 22)
+                      color: Colors.white.withValues(alpha: 0.42), size: 22)
                   : Text(
                       widget.label!,
                       style: TextStyle(

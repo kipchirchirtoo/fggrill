@@ -118,6 +118,10 @@ class SuperAdminNavItem {
                 section: SuperAdminSection.cashierStationConfig,
                 label: 'Cashier Station Config',
                 icon: PhosphorIcons.creditCard()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.nonConsumablesCatalog,
+                label: 'Non-Consumables POS',
+                icon: PhosphorIcons.package()),
           ],
         ),
         SuperAdminNavGroup(

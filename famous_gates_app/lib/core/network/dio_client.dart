@@ -2,8 +2,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
+import '../utils/working_directory_guard.dart';
 import 'auth_interceptor.dart';
 import 'retry_interceptor.dart';
+import 'cert_handling_stub.dart' if (dart.library.io) 'cert_handling_io.dart';
+
+class _WorkingDirectoryInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    ensureStableWorkingDirectory();
+    handler.next(options);
+  }
+}
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
@@ -15,7 +25,10 @@ final dioProvider = Provider<Dio>((ref) {
     ),
   );
 
+  applyCertHandling(dio);
+
   dio.interceptors.addAll([
+    _WorkingDirectoryInterceptor(),
     AuthInterceptor(ref),
     RetryInterceptor(dio),
     if (kDebugMode)
@@ -40,7 +53,10 @@ final pythonDioProvider = Provider<Dio>((ref) {
     ),
   );
 
+  applyCertHandling(dio);
+
   dio.interceptors.addAll([
+    _WorkingDirectoryInterceptor(),
     AuthInterceptor(ref),
     RetryInterceptor(dio),
     if (kDebugMode)

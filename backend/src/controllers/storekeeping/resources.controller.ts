@@ -912,39 +912,75 @@ const seedStockCountItemsFromBranchStock = async (
     .from('stock_count_items')
     .insert(rows);
 
-  if (insertError) throw insertError;
+  if (insertError) {
+    // The richer columns (store_type, opening_stock, additions, issued_quantity,
+    // system_closing_stock, cost_price, variance_reason) are added by migrations
+    // that may not be applied on every environment. Retry with the minimal,
+    // always-present column set so branch stock taking still works.
+    if (insertError.code === '42703' || /column/i.test(insertError.message || '')) {
+      logger.warn(
+        'stock_count_items full insert failed, retrying with minimal columns:',
+        insertError.message
+      );
+      const minimalRows = rows.map((r: any) => ({
+        stock_count_id: r.stock_count_id,
+        item_sku: r.item_sku,
+        item_id: r.item_id,
+        system_quantity: r.system_quantity,
+        physical_quantity: r.physical_quantity,
+        unit_cost: r.unit_cost,
+      }));
+      const { error: minimalError } = await supabase
+        .from('stock_count_items')
+        .insert(minimalRows);
+      if (minimalError) throw minimalError;
+    } else {
+      throw insertError;
+    }
+  }
 };
 
 const recalculateStockCountTotals = async (stockCountId: string): Promise<void> => {
-  const { data: items, error } = await supabase
-    .from('stock_count_items')
-    .select('physical_quantity, system_quantity, system_closing_stock, cost_price, unit_cost, issued_quantity')
-    .eq('stock_count_id', stockCountId);
+  // Non-fatal: totals are a convenience aggregate. A failure here (e.g. missing
+  // columns on a not-yet-migrated environment) must never break count save/load.
+  try {
+    const { data: items, error } = await supabase
+      .from('stock_count_items')
+      .select('physical_quantity, system_quantity, system_closing_stock, cost_price, unit_cost, issued_quantity')
+      .eq('stock_count_id', stockCountId);
 
-  if (error) throw error;
+    if (error) {
+      logger.warn('recalculateStockCountTotals select failed (skipped):', error.message);
+      return;
+    }
 
-  const totals = (items || []).reduce(
-    (acc: any, item: any) => {
-      const cost = toNumber(item.cost_price ?? item.unit_cost);
-      const systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
-      const physical = item.physical_quantity === null || item.physical_quantity === undefined
-        ? systemClosing
-        : toNumber(item.physical_quantity);
-      const variance = physical - systemClosing;
-      acc.total_stock_value += physical * cost;
-      acc.total_cogs_value += toNumber(item.issued_quantity) * cost;
-      acc.total_variance_value += variance * cost;
-      return acc;
-    },
-    { total_stock_value: 0, total_cogs_value: 0, total_variance_value: 0 }
-  );
+    const totals = (items || []).reduce(
+      (acc: any, item: any) => {
+        const cost = toNumber(item.cost_price ?? item.unit_cost);
+        const systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
+        const physical = item.physical_quantity === null || item.physical_quantity === undefined
+          ? systemClosing
+          : toNumber(item.physical_quantity);
+        const variance = physical - systemClosing;
+        acc.total_stock_value += physical * cost;
+        acc.total_cogs_value += toNumber(item.issued_quantity) * cost;
+        acc.total_variance_value += variance * cost;
+        return acc;
+      },
+      { total_stock_value: 0, total_cogs_value: 0, total_variance_value: 0 }
+    );
 
-  const { error: updateError } = await supabase
-    .from('stock_counts')
-    .update(totals)
-    .eq('id', stockCountId);
+    const { error: updateError } = await supabase
+      .from('stock_counts')
+      .update(totals)
+      .eq('id', stockCountId);
 
-  if (updateError) throw updateError;
+    if (updateError) {
+      logger.warn('recalculateStockCountTotals update failed (skipped):', updateError.message);
+    }
+  } catch (e: any) {
+    logger.warn('recalculateStockCountTotals threw (skipped):', e?.message || e);
+  }
 };
 
 const getEnrichedStockCountItems = async (
@@ -961,24 +997,31 @@ const getEnrichedStockCountItems = async (
   let items = itemResult.data;
 
   if ((!items || items.length === 0) && branchId) {
-    const { data: count } = await supabase
-      .from('stock_counts')
-      .select('store_type, count_date')
-      .eq('id', stockCountId)
-      .maybeSingle();
-    await seedStockCountItemsFromBranchStock(
-      stockCountId,
-      branchId,
-      count?.store_type,
-      count?.count_date
-    );
-    const seeded = await supabase
-      .from('stock_count_items')
-      .select('*')
-      .eq('stock_count_id', stockCountId)
-      .order('created_at', { ascending: true });
-    if (seeded.error) throw seeded.error;
-    items = seeded.data || [];
+    try {
+      const { data: count } = await supabase
+        .from('stock_counts')
+        .select('store_type, count_date')
+        .eq('id', stockCountId)
+        .maybeSingle();
+      await seedStockCountItemsFromBranchStock(
+        stockCountId,
+        branchId,
+        count?.store_type,
+        count?.count_date
+      );
+      const seeded = await supabase
+        .from('stock_count_items')
+        .select('*')
+        .eq('stock_count_id', stockCountId)
+        .order('created_at', { ascending: true });
+      if (seeded.error) throw seeded.error;
+      items = seeded.data || [];
+    } catch (seedErr: any) {
+      // Non-fatal: return whatever exists rather than 500. The sheet can be
+      // re-seeded on next open once data/migrations catch up.
+      logger.warn('Stock count seeding failed (returning current items):', seedErr?.message || seedErr);
+      items = items || [];
+    }
   }
 
   if (!items || items.length === 0) return [];

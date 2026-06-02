@@ -40,9 +40,20 @@ class PrintService {
       logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
     } catch (_) {}
 
+    // 80mm thermal roll. Use generous side margins so content always sits
+    // within the printer's guaranteed printable area (~72mm) — prevents the
+    // right-edge character clipping seen on physical thermal printers.
+    const receiptFormat = PdfPageFormat(
+      80 * PdfPageFormat.mm,
+      double.infinity,
+      marginLeft: 5 * PdfPageFormat.mm,
+      marginRight: 5 * PdfPageFormat.mm,
+      marginTop: 5 * PdfPageFormat.mm,
+      marginBottom: 5 * PdfPageFormat.mm,
+    );
     doc.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
+        pageFormat: receiptFormat,
         build: (pw.Context context) {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.center,
@@ -101,27 +112,30 @@ class PrintService {
               _dashedLine(context),
               pw.SizedBox(height: 4),
               pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('Description',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    pw.Expanded(
+                      child: pw.Text('Description',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    ),
                     pw.Text('Price',
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 8)),
                   ]),
               pw.SizedBox(height: 2),
               ...items.map((item) {
-                final name = item.name.length > 25
-                    ? '${item.name.substring(0, 22)}...'
-                    : item.name;
                 return pw.Padding(
                   padding: const pw.EdgeInsets.only(bottom: 1),
                   child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('${item.qty}x $name',
-                          style: const pw.TextStyle(fontSize: 8)),
+                      pw.Expanded(
+                        child: pw.Text('${item.qty}x ${item.name}',
+                            maxLines: 2,
+                            style: const pw.TextStyle(fontSize: 8)),
+                      ),
+                      pw.SizedBox(width: 6),
                       pw.Text('KES ${money.format(item.lineTotal)}',
                           style: const pw.TextStyle(fontSize: 8)),
                     ],
@@ -135,11 +149,14 @@ class PrintService {
               _totalRow('TAX (16% incl.)', 'KES ${money.format(taxAmount)}', 9),
               pw.SizedBox(height: 2),
               pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('TOTAL:',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    pw.Expanded(
+                      child: pw.Text('TOTAL:',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    ),
+                    pw.SizedBox(width: 6),
                     pw.Text('KES ${money.format(totalAmount)}',
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 11)),
@@ -168,7 +185,8 @@ class PrintService {
                             ? barcodeValue.trim().toUpperCase()
                             : sale.receiptNumber!,
                     barcode: pw.Barcode.code128(),
-                    width: 200,
+                    // Keep within the ~70mm usable width of an 80mm roll
+                    width: 60 * PdfPageFormat.mm,
                     height: 28,
                     drawText: false,
                   ),
@@ -205,9 +223,11 @@ class PrintService {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 1),
       child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
+          pw.Expanded(
+              child: pw.Text(label, style: const pw.TextStyle(fontSize: 8))),
+          pw.SizedBox(width: 6),
           pw.Text(value, style: const pw.TextStyle(fontSize: 8)),
         ],
       ),
@@ -218,9 +238,11 @@ class PrintService {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 1),
       child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(label, style: pw.TextStyle(fontSize: fontSize)),
+          pw.Expanded(
+              child: pw.Text(label, style: pw.TextStyle(fontSize: fontSize))),
+          pw.SizedBox(width: 6),
           pw.Text(value, style: pw.TextStyle(fontSize: fontSize)),
         ],
       ),

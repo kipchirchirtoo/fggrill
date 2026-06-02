@@ -32,6 +32,7 @@ import {
 } from '../controllers/restaurant/wastage.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import notificationService from '../services/notification.service';
 
 // Import new sub-routes
 import tableRoutes from './restaurant.table.routes';
@@ -44,7 +45,21 @@ const normalizeKitchenStatus = (value: any): string => {
   return ['pending', 'confirmed'].includes(status) ? 'pending' : status;
 };
 
-const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'void_requested']);
+const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'void_requested', 'cancelled', 'voided']);
+const KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS = 36;
+
+const isKitchenVisiblePosOrder = (order: any): boolean => {
+  const orderStatus = String(order?.status || '').toLowerCase();
+  const paymentStatus = String(order?.payment_status || '').toLowerCase();
+  const kitchenStatus = normalizeKitchenStatus(order?.kitchen_status || orderStatus);
+  const voidRequestStatus = String(order?.void_request_status || '').toLowerCase();
+
+  if (['served', 'completed', 'paid'].includes(kitchenStatus)) return false;
+  if (orderStatus === 'open' && ['unpaid', 'partial'].includes(paymentStatus)) return true;
+  if (['pending', 'approved'].includes(voidRequestStatus)) return true;
+  if (['void_requested', 'cancelled', 'voided'].includes(kitchenStatus)) return true;
+  return orderStatus === 'voided' || paymentStatus === 'voided';
+};
 
 const resolveKitchenBranchId = (req: express.Request): number | undefined => {
   const queryBranch = Number(req.query.branch_id);
@@ -57,6 +72,61 @@ const resolveKitchenBranchId = (req: express.Request): number | undefined => {
 const posItemKey = (item: any, index: number): string =>
   String(item?.outlet_item_id || item?.id || item?.menu_item_id || item?.sku || item?.name || index);
 
+const posOrderType = (order: any): string => {
+  const explicit = String(order?.order_type || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  if (String(order?.customer_name || '').match(/^Table\s+/i)) return 'dine_in';
+  if (String(order?.customer_name || '').match(/^Room\s+/i)) return 'room_service';
+  return 'takeaway';
+};
+
+const posOrderTableNumber = (order: any): string | null => {
+  const explicit = order?.table_number;
+  if (explicit !== undefined && explicit !== null && String(explicit).trim()) return String(explicit).trim();
+  const match = String(order?.customer_name || '').match(/^Table\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+};
+
+const posOrderRoomNumber = (order: any): string | null => {
+  const explicit = order?.room_number;
+  if (explicit !== undefined && explicit !== null && String(explicit).trim()) return String(explicit).trim();
+  const match = String(order?.customer_name || '').match(/^Room\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+};
+
+const notifyWaiterCaptainOrderReady = async (order: any): Promise<void> => {
+  const waiterId = order?.waiter_id || order?.created_by;
+  if (!waiterId) return;
+
+  let branchId: number | null = null;
+  if (order?.shift_id) {
+    const { data } = await supabase
+      .from('pos_outlet_shifts')
+      .select('branch_id')
+      .eq('id', order.shift_id)
+      .maybeSingle();
+    branchId = Number(data?.branch_id) || null;
+  }
+
+  await notificationService.notifyUser(
+    String(waiterId),
+    'Captain order ready',
+    `${order?.order_number || 'Captain order'} is ready. Open Active Orders to serve or collect it.`,
+    {
+      type: 'success',
+      category: 'restaurant_order',
+      priority: 'high',
+      actionUrl: '/dashboard/pos-kitchen?view=active-orders',
+      metadata: {
+        target: 'active_orders',
+        source: 'pos_shift_order',
+        order_id: order?.id,
+        branch_id: branchId
+      }
+    }
+  );
+};
+
 const updatePosCaptainOrderKitchenStatus = async (rawOrderId: string, status: string) => {
   const orderId = rawOrderId.replace(/^pos:/, '');
   const patch: Record<string, any> = {
@@ -65,6 +135,7 @@ const updatePosCaptainOrderKitchenStatus = async (rawOrderId: string, status: st
   };
   if (status === 'preparing') patch.kitchen_started_at = new Date().toISOString();
   if (status === 'ready') patch.kitchen_ready_at = new Date().toISOString();
+  if (status === 'served') patch.kitchen_served_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('pos_shift_orders')
@@ -74,6 +145,11 @@ const updatePosCaptainOrderKitchenStatus = async (rawOrderId: string, status: st
     .single();
 
   if (error) throw error;
+  if (status === 'ready') {
+    notifyWaiterCaptainOrderReady(data).catch((error) => {
+      console.warn('[KDS] Failed to notify waiter for ready captain order', error);
+    });
+  }
   return data;
 };
 
@@ -191,11 +267,12 @@ router.get('/kitchen/orders',
   async (req, res) => {
     try {
       const branchId = resolveKitchenBranchId(req);
+      const stopSignalSince = new Date(Date.now() - KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
 
       let ordersQuery = supabase
         .from('restaurant_orders')
         .select('*')
-        .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
+        .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'cancelled', 'voided'])
         .order('created_at', { ascending: true });
 
       if (branchId) {
@@ -252,8 +329,10 @@ router.get('/kitchen/orders',
       try {
         let shiftQuery = supabase
           .from('pos_outlet_shifts')
-          .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
-          .eq('status', 'open');
+          .select('id, branch_id, outlet_id, status, opened_at, outlet:pos_outlets(name, outlet_type)')
+          .or(`status.eq.open,opened_at.gte.${stopSignalSince}`)
+          .order('opened_at', { ascending: false })
+          .limit(250);
 
         if (branchId) {
           shiftQuery = shiftQuery.eq('branch_id', branchId);
@@ -275,16 +354,14 @@ router.get('/kitchen/orders',
             .from('pos_shift_orders')
             .select('*')
             .in('shift_id', restaurantShiftIds)
-            .in('status', ['open'])
-            .in('payment_status', ['unpaid', 'partial'])
+            .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided)')
             .order('created_at', { ascending: true });
 
           if (posOrdersError) throw posOrdersError;
 
-          posOrdersWithTime = (posOrders || []).map((order: any) => {
+          posOrdersWithTime = (posOrders || []).filter(isKitchenVisiblePosOrder).map((order: any) => {
             const shift = shiftsById.get(order.shift_id) || {};
             const orderItems = Array.isArray(order.items) ? order.items : [];
-            const tableMatch = String(order.customer_name || '').match(/^Table\s+(\d+)/i);
             return {
               id: `pos:${order.id}`,
               source: 'pos_shift_order',
@@ -294,14 +371,18 @@ router.get('/kitchen/orders',
               branch_id: shift.branch_id,
               outlet_id: order.outlet_id,
               shift_id: order.shift_id,
-              order_type: tableMatch ? 'dine_in' : 'takeaway',
-              table_number: tableMatch ? Number(tableMatch[1]) : null,
+              order_type: posOrderType(order),
+              table_number: posOrderTableNumber(order),
+              room_number: posOrderRoomNumber(order),
               waiter_name: order.waiter_name,
               customer_name: order.customer_name || 'Walk-in',
               status: normalizeKitchenStatus(order.kitchen_status || order.status),
               order_status: order.status,
               payment_status: order.payment_status,
               void_request_status: order.void_request_status,
+              void_reason: order.void_reason,
+              voided_at: order.voided_at,
+              voided_by: order.voided_by,
               created_at: order.created_at,
               elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
               items_count: orderItems.length,
@@ -347,7 +428,7 @@ router.get('/kitchen/orders/history',
       let ordersQuery = supabase
         .from('restaurant_orders')
         .select('*')
-        .in('status', ['served', 'delivered', 'completed', 'paid'])
+        .in('status', ['served', 'delivered', 'completed', 'paid', 'cancelled', 'voided'])
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -358,18 +439,17 @@ router.get('/kitchen/orders/history',
       const { data: orders, error: ordersError } = await ordersQuery;
       if (ordersError) throw ordersError;
 
-      if (!orders || orders.length === 0) {
-        return res.json({ success: true, data: [] });
-      }
-
-      const orderIds = orders.map((o: any) => o.id);
-      const { data: allItems, error: itemsError } = await supabase
-        .from('restaurant_order_items')
-        .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name, kitchen_status, kitchen_ready_at')
-        .in('order_id', orderIds);
-
-      if (itemsError) {
-        console.warn('Failed to fetch kitchen order history items:', itemsError.message);
+      const orderIds = (orders || []).map((o: any) => o.id);
+      let allItems: any[] = [];
+      if (orderIds.length) {
+        const itemsResult = await supabase
+          .from('restaurant_order_items')
+          .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name, kitchen_status, kitchen_ready_at')
+          .in('order_id', orderIds);
+        allItems = itemsResult.data || [];
+        if (itemsResult.error) {
+          console.warn('Failed to fetch kitchen order history items:', itemsResult.error.message);
+        }
       }
 
       const itemsByOrder: Record<string, any[]> = {};
@@ -378,7 +458,7 @@ router.get('/kitchen/orders/history',
         itemsByOrder[item.order_id].push(item);
       }
 
-      const history = orders.map((order: any) => {
+      const history = (orders || []).map((order: any) => {
         const items = itemsByOrder[order.id] || [];
         return {
           ...order,
@@ -398,7 +478,94 @@ router.get('/kitchen/orders/history',
         };
       });
 
-      res.json({ success: true, data: history });
+      let posHistory: any[] = [];
+      try {
+        let shiftQuery = supabase
+          .from('pos_outlet_shifts')
+          .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
+          .order('opened_at', { ascending: false })
+          .limit(250);
+
+        if (branchId) {
+          shiftQuery = shiftQuery.eq('branch_id', branchId);
+        }
+
+        const { data: outletShifts, error: shiftError } = await shiftQuery;
+        if (shiftError) throw shiftError;
+
+        const restaurantShiftIds = (outletShifts || [])
+          .filter((shift: any) => {
+            const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+            return String(outlet?.outlet_type || '').toLowerCase() === 'restaurant';
+          })
+          .map((shift: any) => shift.id);
+        const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
+
+        if (restaurantShiftIds.length) {
+          const { data: posOrders, error: posOrdersError } = await supabase
+            .from('pos_shift_orders')
+            .select('*')
+            .in('shift_id', restaurantShiftIds)
+            .or('kitchen_status.in.(served,cancelled,voided),status.in.(paid,credit_bill,voided,cancelled),payment_status.in.(paid,credit_bill,voided)')
+            .order('updated_at', { ascending: false })
+            .limit(limit);
+
+          if (posOrdersError) throw posOrdersError;
+
+          posHistory = (posOrders || []).map((order: any) => {
+            const shift = shiftsById.get(order.shift_id) || {};
+            const orderItems = Array.isArray(order.items) ? order.items : [];
+            return {
+              id: `pos:${order.id}`,
+              source: 'pos_shift_order',
+              source_id: order.id,
+              order_number: order.order_number,
+              short_code: order.short_code,
+              branch_id: shift.branch_id,
+              outlet_id: order.outlet_id,
+              shift_id: order.shift_id,
+              order_type: posOrderType(order),
+              table_number: posOrderTableNumber(order),
+              room_number: posOrderRoomNumber(order),
+              waiter_name: order.waiter_name,
+              customer_name: order.customer_name || 'Walk-in',
+              status: normalizeKitchenStatus(order.kitchen_status || order.status),
+              order_status: order.status,
+              payment_status: order.payment_status,
+              void_request_status: order.void_request_status,
+              void_reason: order.void_reason,
+              voided_at: order.voided_at,
+              voided_by: order.voided_by,
+              created_at: order.created_at,
+              updated_at: order.updated_at,
+              elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
+              items_count: orderItems.length,
+              total: order.total_amount,
+              total_amount: order.total_amount,
+              items: orderItems.map((item: any, index: number) => {
+                const itemStatus = normalizeKitchenStatus(item.kitchen_status || item.status || order.kitchen_status || 'ready');
+                return {
+                  id: posItemKey(item, index),
+                  name: item.name || item.item_name || 'POS item',
+                  quantity: Number(item.quantity || item.qty || 1),
+                  unit_price: Number(item.unit_price || item.price || 0),
+                  notes: item.notes,
+                  status: itemStatus,
+                  is_ready: itemStatus === 'ready'
+                };
+              })
+            };
+          });
+        }
+      } catch (posError: any) {
+        console.warn('Failed to fetch POS captain order history for kitchen display:', posError?.message || posError);
+      }
+
+      const combinedHistory = [...history, ...posHistory]
+        .sort((a: any, b: any) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+        .slice(0, limit);
+
+      res.json({ success: true, data: combinedHistory });
     } catch (error) {
       console.error('Kitchen order history error:', error);
       res.status(500).json({ success: false, error: 'Failed to fetch kitchen order history' });
@@ -454,7 +621,7 @@ router.put('/kitchen/orders/:orderId/items/:itemId/ready',
         const posOrderId = orderId.replace(/^pos:/, '');
         const { data: order, error: getError } = await supabase
           .from('pos_shift_orders')
-          .select('id, items')
+          .select('id, shift_id, order_number, short_code, waiter_id, created_by, items')
           .eq('id', posOrderId)
           .single();
 
@@ -483,6 +650,12 @@ router.put('/kitchen/orders/:orderId/items/:itemId/ready',
           })
           .eq('id', posOrderId);
         if (updateError) throw updateError;
+
+        if (allReady) {
+          notifyWaiterCaptainOrderReady(order).catch((error) => {
+            console.warn('[KDS] Failed to notify waiter for ready captain item order', error);
+          });
+        }
 
         return res.json({
           success: true,

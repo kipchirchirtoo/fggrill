@@ -17,6 +17,15 @@ const numberValue = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const normalizePaymentMethod = (value: unknown): 'cash' | 'mpesa' | 'card' | 'credit_bill' | 'other' => {
+  const method = String(value || 'cash').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (method === 'cash') return 'cash';
+  if (['mpesa', 'm_pesa', 'mpesa_manual', 'm_pesa_manual', 'mobile_money'].includes(method)) return 'mpesa';
+  if (['card', 'card_manual', 'swipe', 'bank_card', 'pos_card'].includes(method)) return 'card';
+  if (['credit_bill', 'credit_bill_manual', 'bill', 'staff_credit', 'staff_credit_bill'].includes(method)) return 'credit_bill';
+  return 'other';
+};
+
 const todayIsoDate = (): string => new Date().toISOString().slice(0, 10);
 
 const shortRef = (value: unknown): string => String(value || '').replace(/-/g, '').slice(0, 10).toUpperCase();
@@ -391,16 +400,16 @@ const createGeneratedLogbook = async (
   if (paymentError) throw paymentError;
 
   const totalMpesa = (payments || [])
-    .filter((payment: any) => payment.payment_method === 'mpesa')
+    .filter((payment: any) => normalizePaymentMethod(payment.payment_method) === 'mpesa')
     .reduce((sum: number, payment: any) => sum + numberValue(payment.amount), 0);
   const totalSwipe = (payments || [])
-    .filter((payment: any) => payment.payment_method === 'card')
+    .filter((payment: any) => normalizePaymentMethod(payment.payment_method) === 'card')
     .reduce((sum: number, payment: any) => sum + numberValue(payment.amount), 0);
   const totalCash = (payments || [])
-    .filter((payment: any) => payment.payment_method === 'cash')
+    .filter((payment: any) => normalizePaymentMethod(payment.payment_method) === 'cash')
     .reduce((sum: number, payment: any) => sum + numberValue(payment.amount), 0);
   const totalCredit = (payments || [])
-    .filter((payment: any) => payment.payment_method === 'credit_bill')
+    .filter((payment: any) => normalizePaymentMethod(payment.payment_method) === 'credit_bill')
     .reduce((sum: number, payment: any) => sum + numberValue(payment.amount), 0);
 
   const logDate = String(shift.opened_at || new Date().toISOString()).slice(0, 10);
@@ -478,7 +487,8 @@ const createGeneratedLogbook = async (
   const paymentLines = ((payments || []) as Array<Record<string, any>>).map((payment) => {
     const order = ((orders || []) as Array<Record<string, any>>).find((item) => String(item.id) === String(payment.order_id));
     const staff = order ? staffByOrderId.get(String(order.id)) || null : null;
-    const isCredit = payment.payment_method === 'credit_bill';
+    const normalizedPaymentMethod = normalizePaymentMethod(payment.payment_method);
+    const isCredit = normalizedPaymentMethod === 'credit_bill';
     return {
       logbook_id: logbook.id,
       section: isCredit ? 'credit_bill' : 'paid_bill',
@@ -490,7 +500,7 @@ const createGeneratedLogbook = async (
       staff_id: isCredit ? staff?.id || null : null,
       source_table: 'pos_shift_payments',
       source_id: payment.id,
-      payment_method: payment.payment_method,
+      payment_method: normalizedPaymentMethod === 'other' ? payment.payment_method : normalizedPaymentMethod,
       outlet_shift_id: shift.id,
       automation_run_id: run.id
     };

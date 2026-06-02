@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
@@ -16,6 +17,10 @@ class OverviewSection extends ConsumerStatefulWidget {
 }
 
 class _OverviewSectionState extends ConsumerState<OverviewSection> {
+  static final NumberFormat _wholeNumber = NumberFormat.decimalPattern();
+
+  String _money(num value) => 'KES ${_wholeNumber.format(value.round())}';
+
   @override
   Widget build(BuildContext context) {
     final dashboardAsync = ref.watch(adminDashboardProvider);
@@ -56,13 +61,13 @@ class _OverviewSectionState extends ConsumerState<OverviewSection> {
     final stats = [
       AdminStatCard(
         label: 'Today Revenue',
-        value: '\$${dashboard.todayRevenue.toStringAsFixed(0)}',
+        value: _money(dashboard.todayRevenue),
         icon: PhosphorIcons.trendUp(),
         color: AppColors.kSuccess,
       ),
       AdminStatCard(
         label: 'Monthly Revenue',
-        value: '\$${dashboard.monthlyRevenue.toStringAsFixed(0)}',
+        value: _money(dashboard.monthlyRevenue),
         icon: PhosphorIcons.chartLine(),
         color: AppColors.kPrimary,
       ),

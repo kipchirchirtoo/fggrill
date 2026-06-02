@@ -42,6 +42,12 @@ router.post('/emergency/lockdown-branch/:branchId', ctrl.lockdownBranch);
 router.post('/override/approval/:id/force-approve', ctrl.forceApproveRecord);
 router.post('/override/user/:id/unlock', ctrl.unlockUserAccount);
 
+// Non-Consumables POS catalogue (dynamic_services)
+router.get('/non-consumables', ctrl.getNonConsumables);
+router.post('/non-consumables', ctrl.createNonConsumable);
+router.put('/non-consumables/:id', ctrl.updateNonConsumable);
+router.delete('/non-consumables/:id', ctrl.deleteNonConsumable);
+
 // SSE Stream (protect only — authorize not applied since it's long-lived)
 router.get('/stream', ctrl.getSystemStream);
 

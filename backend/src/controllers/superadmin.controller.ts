@@ -812,3 +812,142 @@ export const getSystemStream = async (req: Request, res: Response): Promise<void
     clearInterval(interval);
   });
 };
+
+// ─── Non-Consumables POS Items (dynamic_services) ───────────────────────────────
+// The non-consumables POS station reads its catalogue from `dynamic_services`
+// (synced into pos_outlet_items). These endpoints let SuperAdmin manage that
+// catalogue per branch with name + price.
+
+const NON_CONSUMABLE_SERVICE_TYPES = [
+  'swimming',
+  'pool',
+  'pool_token',
+  'pool_tokens',
+  'car_wash',
+  'sauna',
+  'non_consumable',
+  'non_consumables',
+];
+
+export const getNonConsumables = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { branch_id } = req.query;
+    let query = supabase
+      .from('dynamic_services')
+      .select('id, branch_id, service_type, name, pricing_model, base_price, price_per_hour, is_active, created_at, updated_at')
+      .in('service_type', NON_CONSUMABLE_SERVICE_TYPES)
+      .order('name', { ascending: true });
+
+    if (branch_id !== undefined && branch_id !== null && branch_id !== '') {
+      const bid = Number(branch_id);
+      // include global (null branch) + the requested branch
+      query = query.or(`branch_id.is.null,branch_id.eq.${bid}`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const createNonConsumable = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      name,
+      base_price,
+      service_type = 'non_consumable',
+      branch_id,
+      pricing_model = 'fixed',
+      price_per_hour,
+      is_active = true,
+    } = req.body;
+
+    if (!name || `${name}`.trim() === '') {
+      res.status(400).json({ success: false, message: 'Name is required' });
+      return;
+    }
+    const price = Number(base_price);
+    if (!Number.isFinite(price) || price < 0) {
+      res.status(400).json({ success: false, message: 'A valid base price is required' });
+      return;
+    }
+    if (!NON_CONSUMABLE_SERVICE_TYPES.includes(service_type)) {
+      res.status(400).json({ success: false, message: 'Invalid service type for non-consumables' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('dynamic_services')
+      .insert({
+        name: `${name}`.trim(),
+        base_price: price,
+        service_type,
+        branch_id: branch_id === undefined || branch_id === null || branch_id === ''
+          ? null
+          : Number(branch_id),
+        pricing_model,
+        price_per_hour: price_per_hour !== undefined ? Number(price_per_hour) : 0,
+        is_active,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateNonConsumable = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { name, base_price, service_type, branch_id, pricing_model, price_per_hour, is_active } = req.body;
+
+    const update: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (name !== undefined) update.name = `${name}`.trim();
+    if (base_price !== undefined) update.base_price = Number(base_price);
+    if (service_type !== undefined) {
+      if (!NON_CONSUMABLE_SERVICE_TYPES.includes(service_type)) {
+        res.status(400).json({ success: false, message: 'Invalid service type' });
+        return;
+      }
+      update.service_type = service_type;
+    }
+    if (branch_id !== undefined) {
+      update.branch_id = branch_id === null || branch_id === '' ? null : Number(branch_id);
+    }
+    if (pricing_model !== undefined) update.pricing_model = pricing_model;
+    if (price_per_hour !== undefined) update.price_per_hour = Number(price_per_hour);
+    if (is_active !== undefined) update.is_active = is_active;
+
+    const { data, error } = await supabase
+      .from('dynamic_services')
+      .update(update)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteNonConsumable = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    // Soft-delete: deactivate so it stops appearing in the POS catalogue
+    const { error } = await supabase
+      .from('dynamic_services')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+    res.json({ success: true, message: 'Non-consumable item deactivated' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

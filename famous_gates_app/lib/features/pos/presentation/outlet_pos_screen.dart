@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -5,6 +7,7 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../services/print_service.dart';
+import '../../auth/domain/auth_notifier.dart';
 import '../data/outlet_pos_repository.dart';
 import '../domain/models.dart';
 
@@ -29,6 +32,8 @@ class OutletPOSScreen extends ConsumerStatefulWidget {
 }
 
 class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
+  static const _sessionTimeout = Duration(minutes: 10);
+
   static const _unifiedStationTypes = [
     'restaurant',
     'main_bar',
@@ -62,15 +67,18 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
+  Timer? _sessionTimeoutTimer;
 
   @override
   void initState() {
     super.initState();
+    _resetSessionTimeout();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
+    _sessionTimeoutTimer?.cancel();
     _searchController.dispose();
     _tableController.dispose();
     _roomController.dispose();
@@ -226,7 +234,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             icon: PhosphorIcons.receipt()),
       ],
       onSectionSelected: (section) => setState(() => _section = section),
-      child: _buildBody(),
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _resetSessionTimeout(),
+        onPointerSignal: (_) => _resetSessionTimeout(),
+        child: _buildBody(),
+      ),
     );
   }
 
@@ -670,11 +683,16 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               orderId: recalled.id,
               items: _cart,
               customerName: _orderCustomerLabel(),
+              orderType: _isRestaurant ? _orderType : null,
+              tableNumber: _tableController.text.trim(),
+              roomNumber: _roomController.text.trim(),
+              appendItems: true,
             );
       await _printCaptainOrderReceipt(order);
       _cart = [];
       _recalledOrder = null;
       _orders = await repo.getOrders(_shift!.id);
+      await _logoutAfterOrderPlacement();
     });
   }
 
@@ -778,38 +796,23 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   }
 
   void _recallOrder(OutletShiftOrder order) {
-    final recalledCart = <OutletCartItem>[];
-    for (final raw in order.items.whereType<Map>()) {
-      final itemId = '${raw['outlet_item_id'] ?? raw['product_id'] ?? ''}';
-      final item = _findOutletItem(itemId);
-      if (item == null) continue;
-      final qty =
-          ((double.tryParse('${raw['quantity'] ?? raw['qty'] ?? 1}') ?? 1)
-                  .round()
-                  .clamp(1, 999) as num)
-              .toInt();
-      recalledCart.add(OutletCartItem(item: item, quantity: qty));
-    }
-    if (recalledCart.isEmpty) {
-      AppNotifier.showSnackBar(
-        context,
-        const SnackBar(content: Text('This bill has no recallable items')),
-      );
-      return;
-    }
     setState(() {
       _section = OutletPosSection.station;
-      _cart = recalledCart;
+      _cart = [];
       _recalledOrder = order;
       _customerController.text = order.customerName;
+      _orderType =
+          order.orderType?.isNotEmpty == true ? order.orderType! : _orderType;
+      _tableController.text = order.tableNumber ?? '';
+      _roomController.text = order.roomNumber ?? '';
     });
-  }
-
-  OutletPosItem? _findOutletItem(String itemId) {
-    for (final item in _items) {
-      if (item.id == itemId) return item;
-    }
-    return null;
+    AppNotifier.showSnackBar(
+      context,
+      const SnackBar(
+        content: Text(
+            'Bill recalled. Add new items only; previous items are locked.'),
+      ),
+    );
   }
 
   Future<void> _showSplitOrderDialog(OutletShiftOrder order) async {
@@ -908,6 +911,32 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _resetSessionTimeout() {
+    _sessionTimeoutTimer?.cancel();
+    _sessionTimeoutTimer = Timer(_sessionTimeout, _logoutForTimeout);
+  }
+
+  Future<void> _logoutForTimeout() async {
+    if (!mounted) return;
+    AppNotifier.showSnackBar(
+      context,
+      const SnackBar(
+          content: Text('POS session timed out. Please log in again.')),
+    );
+    await ref.read(authNotifierProvider.notifier).logout();
+  }
+
+  Future<void> _logoutAfterOrderPlacement() async {
+    if (!mounted) return;
+    AppNotifier.showSnackBar(
+      context,
+      const SnackBar(
+          content:
+              Text('Captain order printed. Please log in for the next order.')),
+    );
+    await ref.read(authNotifierProvider.notifier).logout();
   }
 }
 

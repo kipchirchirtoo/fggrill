@@ -25,7 +25,19 @@ class CashierDashboard extends ConsumerStatefulWidget {
 }
 
 class _CashierDashboardState extends ConsumerState<CashierDashboard> {
-  late int _tab = widget.initialTab.index;
+  static const _visibleTabs = [
+    CashierTab.station,
+    CashierTab.bills,
+    CashierTab.credit,
+    CashierTab.shifts,
+    CashierTab.barcode,
+    CashierTab.insights,
+  ];
+
+  late int _tab = () {
+    final index = _visibleTabs.indexOf(widget.initialTab);
+    return index >= 0 ? index : 0;
+  }();
 
   @override
   Widget build(BuildContext context) {
@@ -33,22 +45,17 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
       const DashboardTab(
         label: 'Station',
         icon: Icons.point_of_sale,
-        content: _StationTab(),
-      ),
-      const DashboardTab(
-        label: 'POS Cart',
-        icon: Icons.shopping_cart,
-        content: _PosCartTab(),
+        content: _RequiresOpenShift(child: _StationTab()),
       ),
       const DashboardTab(
         label: 'Unpaid Bills',
         icon: Icons.receipt_long,
-        content: _UnpaidBillsTab(),
+        content: _RequiresOpenShift(child: _UnpaidBillsTab()),
       ),
       const DashboardTab(
         label: 'Credit Bills',
         icon: Icons.credit_score,
-        content: _CreditBillsTab(),
+        content: _RequiresOpenShift(child: _CreditBillsTab()),
       ),
       const DashboardTab(
         label: 'Shifts',
@@ -68,7 +75,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     ];
 
     return DashboardShell(
-      title: 'Cashier Station',
+      title: 'Cashier Desk',
       currentTab: _tab,
       onTabChanged: (index) => setState(() => _tab = index),
       tabs: tabs,
@@ -82,6 +89,69 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           label: const Text('Refresh'),
         ),
       ],
+    );
+  }
+}
+
+class _RequiresOpenShift extends ConsumerWidget {
+  const _RequiresOpenShift({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final openShift = ref.watch(
+        cashierShiftsProvider(const CashierShiftFilters(status: 'open')));
+
+    return openShift.when(
+      data: (rows) {
+        if (rows.any((row) => _shiftStatus(row) == 'open')) return child;
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor:
+                            AppColors.kWarning.withValues(alpha: 0.12),
+                        child: const Icon(Icons.lock_clock,
+                            color: AppColors.kWarning, size: 30),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Open shift required',
+                        style: Theme.of(context).textTheme.titleLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Request a cashier shift opening from the Shifts tab. A branch accountant must approve it before cashier operations can begin.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.kTextSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => const Padding(
+        padding: EdgeInsets.all(24),
+        child: LoadingSkeleton(type: SkeletonType.list),
+      ),
+      error: (error, _) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: ErrorState(message: apiErrorMessage(error)),
+      ),
     );
   }
 }
@@ -1123,7 +1193,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
               rows: rows,
               emptyMessage: 'No unpaid bills found for $_date',
               onPay: (row) => _recordPayment(row),
-              onMigrateToCredit: (row) => _migrateToCreditBill(row),
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(message: apiErrorMessage(error)),
@@ -1177,19 +1246,44 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
     final payments = _paymentLinesFromPayload(body);
     try {
       final source = _text(row, ['source']);
+      final responses = <Map<String, dynamic>>[];
+      final receiptRefs = <String>[];
+      final totalPaid = payments.fold<num>(
+        0,
+        (sum, payment) => sum + _num(payment['payment_amount']),
+      );
       if (row['is_waiter_order'] == true &&
           (source == 'restaurant' || source == 'bar' || source == 'pos')) {
         for (final payment in payments) {
-          await ref
+          final response = await ref
               .read(cashierRepositoryProvider)
               .clearWaiterOrder(source, _text(row, ['id']), payment);
+          responses.add(response);
+          receiptRefs.add(_receiptReferenceForPayment(payment));
         }
       } else {
         for (final payment in payments) {
-          await ref
+          final response = await ref
               .read(cashierRepositoryProvider)
               .recordUnpaidBillPayment(_text(row, ['id']), payment);
+          responses.add(response);
+          receiptRefs.add(_receiptReferenceForPayment(payment));
         }
+      }
+      try {
+        await _printCashierBillReceipt(
+          ref: ref,
+          bill: row,
+          amount: totalPaid,
+          method: payments.length == 1
+              ? _text(payments.first, ['payment_method'])
+              : 'split',
+          response: responses.isEmpty ? const {} : responses.last,
+          fallbackReference: receiptRefs.join(' | '),
+        );
+      } catch (error) {
+        _snack(
+            'Payment recorded, but receipt failed: ${apiErrorMessage(error)}');
       }
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierStatsProvider);
@@ -1197,86 +1291,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           payments.length > 1 ? 'Split payment recorded' : 'Payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
-    }
-  }
-
-  Future<void> _migrateToCreditBill(Map<String, dynamic> row) async {
-    final balance = _num(row['balance_amount'] ?? row['balance']);
-    if (balance <= 0) {
-      _snack('This bill has no balance to migrate.');
-      return;
-    }
-
-    final staff = await ref
-        .read(cashierRepositoryProvider)
-        .getBranchStaff()
-        .catchError((_) => <Map<String, dynamic>>[]);
-    if (!mounted) return;
-
-    final staffOptions = _shiftStaffMembers(staff);
-    final matchedStaff = _staffMemberForBill(row, staffOptions);
-    final migrationRemark = _migrationRemark(row);
-    final credit = matchedStaff == null
-        ? await _creditBillPayload(
-            context,
-            balance,
-            staffMembers: staff,
-            initialRemarks: migrationRemark,
-          )
-        : _creditBillPayloadFromStaff(
-            matchedStaff,
-            balance,
-            remarks: migrationRemark,
-          );
-    if (credit == null) return;
-
-    try {
-      final source = _text(row, ['source']);
-      final createdCredit =
-          await ref.read(cashierRepositoryProvider).createCreditBill({
-        ...credit,
-        'reference_type':
-            _text(row, ['bill_type', 'source', 'reference_type']).isEmpty
-                ? 'unpaid_bill'
-                : _text(row, ['bill_type', 'source', 'reference_type']),
-        'reference_id': _text(row, ['id']),
-        'remarks': [
-          _text(credit, ['remarks']),
-        ].where((part) => part.trim().isNotEmpty).join(' | '),
-      });
-      final createdCreditData = _payload(createdCredit);
-      final creditNumber = _text(createdCreditData, ['credit_number', 'id']);
-      final payment = {
-        'payment_amount': balance,
-        'payment_method': 'credit_bill',
-        'payment_reference': creditNumber.isEmpty
-            ? 'MIGRATED-CREDIT-${DateTime.now().millisecondsSinceEpoch}'
-            : creditNumber,
-        if (_text(createdCreditData, ['id']).isNotEmpty)
-          'credit_bill_id': _text(createdCreditData, ['id']),
-        if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
-          'staff_credit_bill_id':
-              _text(createdCreditData, ['staff_credit_bill_id']),
-        'skip_credit_bill_creation': true,
-      };
-
-      if (row['is_waiter_order'] == true &&
-          (source == 'restaurant' || source == 'bar' || source == 'pos')) {
-        await ref
-            .read(cashierRepositoryProvider)
-            .clearWaiterOrder(source, _text(row, ['id']), payment);
-      } else {
-        await ref
-            .read(cashierRepositoryProvider)
-            .recordUnpaidBillPayment(_text(row, ['id']), payment);
-      }
-
-      ref.invalidate(cashierUnpaidBillsProvider);
-      ref.invalidate(cashierCreditBillsProvider);
-      ref.invalidate(cashierStatsProvider);
-      _snack('Bill migrated to credit bill.');
-    } catch (error) {
-      _snack('Migration failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1387,10 +1401,34 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
     try {
+      final responses = <Map<String, dynamic>>[];
+      final receiptRefs = <String>[];
+      final totalPaid = payments.fold<num>(
+        0,
+        (sum, payment) => sum + _num(payment['payment_amount']),
+      );
       for (final payment in payments) {
-        await ref
+        final response = await ref
             .read(cashierRepositoryProvider)
             .recordCreditPayment(_text(row, ['id']), payment);
+        responses.add(response);
+        receiptRefs.add(_receiptReferenceForPayment(payment));
+      }
+      try {
+        await _printCashierBillReceipt(
+          ref: ref,
+          bill: row,
+          amount: totalPaid,
+          method: payments.length == 1
+              ? _text(payments.first, ['payment_method'])
+              : 'split',
+          response: responses.isEmpty ? const {} : responses.last,
+          fallbackReference: receiptRefs.join(' | '),
+          receiptType: 'CREDIT BILL RECEIPT',
+        );
+      } catch (error) {
+        _snack(
+            'Credit payment recorded, but receipt failed: ${apiErrorMessage(error)}');
       }
       ref.invalidate(cashierCreditBillsProvider);
       ref.invalidate(cashierStatsProvider);
@@ -1428,6 +1466,11 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
       data: (rows) => rows.any((row) => _shiftStatus(row) == 'open'),
       orElse: () => true,
     );
+    final hasPendingShift = allShifts.maybeWhen(
+      data: (rows) => rows.any((row) => _shiftStatus(row) == 'pending_open'),
+      orElse: () => false,
+    );
+    final canRequestShift = !hasOpenShift && !hasPendingShift;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -1443,6 +1486,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                 value: _status,
                 items: const [
                   DropdownMenuItem(value: 'all', child: Text('All')),
+                  DropdownMenuItem(
+                      value: 'pending_open', child: Text('Pending Approval')),
                   DropdownMenuItem(value: 'open', child: Text('Open')),
                   DropdownMenuItem(value: 'closed', child: Text('Closed')),
                   DropdownMenuItem(
@@ -1452,13 +1497,16 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
               ),
               const SizedBox(width: 12),
               Tooltip(
-                message: hasOpenShift
-                    ? 'Close the current open shift before starting another'
-                    : 'Start a new cashier shift',
+                message: hasPendingShift
+                    ? 'Your shift opening request is waiting for branch accountant approval'
+                    : hasOpenShift
+                        ? 'Close the current open shift before starting another'
+                        : 'Request approval to open a cashier shift',
                 child: ElevatedButton.icon(
-                  onPressed: hasOpenShift ? null : _startShift,
+                  onPressed: canRequestShift ? _startShift : null,
                   icon: const Icon(Icons.play_arrow, size: 16),
-                  label: const Text('Start Shift'),
+                  label: Text(
+                      hasPendingShift ? 'Awaiting Approval' : 'Request Shift'),
                 ),
               ),
             ],
@@ -1494,7 +1542,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                               ),
                               title: Text(_text(row, ['shift_number', 'id'])),
                               subtitle: Text(
-                                  '${_date(row['shift_start'] ?? row['opened_at'] ?? row['start_time'])} - $status'),
+                                  '${_date(row['requested_at'] ?? row['shift_start'] ?? row['opened_at'] ?? row['start_time'])} - ${_statusLabel(status)}'),
                               trailing: Text(_money(row['total_sales'] ??
                                   row['total_collections'] ??
                                   row['closing_float'] ??
@@ -1524,15 +1572,18 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                       icon: const Icon(Icons.stop, size: 16),
                                       label: const Text('Close'),
                                     ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: status == 'closed'
-                                          ? () => _reconcileShift(row)
-                                          : null,
-                                      icon: const Icon(Icons.fact_check,
-                                          size: 16),
-                                      label: const Text('Reconcile'),
-                                    ),
+                                    if (status == 'pending_open') ...[
+                                      const SizedBox(width: 8),
+                                      const Expanded(
+                                        child: Text(
+                                          'Waiting for branch accountant approval',
+                                          style: TextStyle(
+                                            color: AppColors.kTextSecondary,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ],
@@ -1552,12 +1603,12 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
 
   Future<void> _startShift() async {
     final opening =
-        await _numberDialog(context, 'Start Shift', 'Opening float');
+        await _numberDialog(context, 'Request Shift Opening', 'Opening float');
     if (opening == null) return;
     try {
       await ref.read(cashierRepositoryProvider).startShift(opening);
       ref.invalidate(cashierShiftsProvider);
-      _snack('Shift started');
+      _snack('Shift opening requested. Wait for branch accountant approval.');
     } catch (error) {
       _snack('Start shift failed: ${apiErrorMessage(error)}');
     }
@@ -1575,22 +1626,6 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
       _snack('Shift closed. Lina generated the logbook for accountant review.');
     } catch (error) {
       _snack('Close shift failed: ${apiErrorMessage(error)}');
-    }
-  }
-
-  Future<void> _reconcileShift(Map<String, dynamic> row) async {
-    final notes = await _textDialog(context, 'Reconcile Shift', 'Notes');
-    if (notes == null) return;
-    try {
-      await ref
-          .read(cashierRepositoryProvider)
-          .reconcileShift(_text(row, ['id']), {
-        'reconciliation_notes': notes,
-      });
-      ref.invalidate(cashierShiftsProvider);
-      _snack('Shift reconciled');
-    } catch (error) {
-      _snack('Reconcile failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -2198,101 +2233,6 @@ _ShiftStaffMember? _shiftStaffById(
   return null;
 }
 
-_ShiftStaffMember? _staffMemberForBill(
-  Map<String, dynamic> bill,
-  List<_ShiftStaffMember> members,
-) {
-  if (members.isEmpty) return null;
-
-  final waiter = _asMap(bill['waiter']);
-  final directIds = [
-    _text(bill, [
-      'waiter_staff_id',
-      'staff_profile_id',
-      'staff_id',
-      'waiter_id',
-      'created_by',
-      'created_by_id',
-    ]),
-    _text(waiter, ['staff_id', 'staff_profile_id', 'id', 'user_id']),
-  ].where((value) => value.trim().isNotEmpty).toSet();
-
-  for (final id in directIds) {
-    for (final member in members) {
-      if (member.id == id || member.userId == id || member.employeeId == id) {
-        return member;
-      }
-    }
-  }
-
-  final emails = [
-    _text(bill, ['waiter_email', 'staff_email', 'created_by_email', 'email']),
-    _text(waiter, ['email']),
-  ]
-      .map((value) => value.trim().toLowerCase())
-      .where((value) => value.isNotEmpty)
-      .toSet();
-
-  for (final email in emails) {
-    for (final member in members) {
-      if (member.email.toLowerCase() == email) return member;
-    }
-  }
-
-  final names = [
-    _text(bill, ['waiter_name', 'staff_name']),
-    _text(waiter, ['name', 'full_name']),
-    [
-      _text(waiter, ['first_name']),
-      _text(waiter, ['last_name']),
-    ].where((part) => part.trim().isNotEmpty).join(' '),
-  ].map(_normaliseName).where((value) => value.isNotEmpty).toSet();
-
-  for (final name in names) {
-    final matches =
-        members.where((member) => _normaliseName(member.name) == name).toList();
-    if (matches.length == 1) return matches.first;
-  }
-
-  return null;
-}
-
-String _normaliseName(String value) =>
-    value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-
-String _migrationRemark(Map<String, dynamic> bill) {
-  final reference = _text(bill, [
-    'order_number',
-    'bill_number',
-    'short_code',
-    'scan_reference',
-    'id',
-  ]);
-  return reference.isEmpty
-      ? 'Migrated from unpaid bill'
-      : 'Migrated from unpaid bill $reference';
-}
-
-Map<String, dynamic> _creditBillPayloadFromStaff(
-  _ShiftStaffMember staff,
-  num amount, {
-  String? remarks,
-}) {
-  return {
-    'staff_id': staff.id,
-    'staff_name': staff.name,
-    'employee_id': staff.employeeId,
-    'department': staff.department,
-    'bill_type': 'cashier_payment',
-    'reference_type': 'cashier_payment',
-    'total_amount': amount,
-    'due_date': _dateOnly(DateTime.now().add(const Duration(days: 30))),
-    'payment_method': 'credit_bill',
-    'deduction_months': 1,
-    'remarks': remarks ?? '',
-  };
-}
-
 List<_ShiftCreditEntry> _shiftCreditEntries(
   Map<String, dynamic> shift, {
   required List<String> detailKeys,
@@ -2872,13 +2812,11 @@ class _BillList extends StatelessWidget {
     required this.rows,
     required this.emptyMessage,
     required this.onPay,
-    this.onMigrateToCredit,
   });
 
   final List<Map<String, dynamic>> rows;
   final String emptyMessage;
   final ValueChanged<Map<String, dynamic>> onPay;
-  final ValueChanged<Map<String, dynamic>>? onMigrateToCredit;
 
   @override
   Widget build(BuildContext context) {
@@ -2967,12 +2905,6 @@ class _BillList extends StatelessWidget {
                     icon: const Icon(Icons.payments, size: 16),
                     label: const Text('Confirm Payment'),
                   ),
-                  if (onMigrateToCredit != null)
-                    OutlinedButton.icon(
-                      onPressed: () => onMigrateToCredit!(row),
-                      icon: const Icon(Icons.credit_score, size: 16),
-                      label: const Text('Migrate to Credit Bill'),
-                    ),
                 ],
               ),
             ],
@@ -3842,30 +3774,6 @@ Future<num?> _numberDialog(BuildContext context, String title, String label) {
   ).whenComplete(controller.dispose);
 }
 
-Future<String?> _textDialog(BuildContext context, String title, String label) {
-  final controller = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        decoration: InputDecoration(labelText: label),
-        maxLines: 3,
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, controller.text.trim()),
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  ).whenComplete(controller.dispose);
-}
-
 void _exportRows(List<Map<String, dynamic>> rows, String name) {
   final columns = rows.expand((row) => row.keys).toSet().take(24).toList();
   final csv = [
@@ -3908,6 +3816,8 @@ String _shiftStatus(Map<String, dynamic> row) =>
 
 String _statusLabel(String status) {
   switch (status.toLowerCase()) {
+    case 'pending_open':
+      return 'Pending Approval';
     case 'open':
       return 'Open';
     case 'closed':
@@ -3952,6 +3862,8 @@ Color _statusColor(String status) {
     case 'active':
     case 'partial':
       return AppColors.kPrimary;
+    case 'pending_open':
+      return AppColors.kWarning;
     case 'cancelled':
     case 'failed':
     case 'rejected':
@@ -3977,6 +3889,53 @@ String _backendPaymentMethod(String method) {
   if (normalized.contains('card')) return 'card';
   if (normalized.contains('credit')) return 'credit_bill';
   return normalized.isEmpty ? 'cash' : normalized;
+}
+
+String _receiptReferenceForPayment(Map<String, dynamic> payment) {
+  final method = _receiptMethodLabel(_text(payment, ['payment_method']));
+  final amount = _num(payment['payment_amount']);
+  final reference = _text(payment, ['payment_reference', 'reference']);
+  return '$method ${_money(amount)}${reference.isEmpty ? '' : ' ($reference)'}';
+}
+
+Future<void> _printCashierBillReceipt({
+  required WidgetRef ref,
+  required Map<String, dynamic> bill,
+  required num amount,
+  required String method,
+  required Map<String, dynamic> response,
+  required String fallbackReference,
+  String? receiptType,
+}) async {
+  final payload = _payload(response);
+  final data = _payload(payload['data']);
+  final reference =
+      _text(data, ['reference', 'transaction_number', 'id']).isNotEmpty
+          ? _text(data, ['reference', 'transaction_number', 'id'])
+          : fallbackReference;
+  final nav = ref.read(dashboardNavProvider);
+  final methodLabel = _receiptMethodLabel(method);
+  await PrintService().printReceipt(
+    SaleResult(
+      transactionId: reference.isEmpty ? DateTime.now().toString() : reference,
+      createdAt: DateTime.now(),
+      receiptNumber: reference.isEmpty ? null : reference,
+      cashierName: nav.user?.name,
+      total: amount.toDouble(),
+      paymentMethod: methodLabel,
+    ),
+    _receiptItemsFromBill(bill, amount),
+    nav.branchName,
+    receiptType: receiptType ?? '$methodLabel RECEIPT',
+    customerName: _customerName(bill),
+    publicCode: _text(bill, [
+      'short_code',
+      'shortCode',
+      'bill_number',
+      'order_number',
+      'invoice_number'
+    ]),
+  );
 }
 
 List<CartItem> _receiptItemsFromBill(Map<String, dynamic> bill, num amount) {

@@ -20,6 +20,7 @@ import {
 } from '../utils/posStationAccess';
 import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
+import PDFDocument from 'pdfkit';
 
 function isImmediateCashierPaymentMethod(method?: string): boolean {
     const normalized = (method || '').toLowerCase();
@@ -4880,6 +4881,425 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
             data: decoratedLogbooks
         });
 
+    } catch (error) {
+        next(error);
+    }
+};
+
+function logbookNumber(value: unknown, fallback = 0): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function logbookText(value: unknown, fallback = ''): string {
+    const text = value === null || value === undefined ? '' : String(value).trim();
+    return text || fallback;
+}
+
+function logbookMoney(value: unknown): string {
+    return `KES ${logbookNumber(value).toLocaleString('en-KE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    })}`;
+}
+
+function normalizeLogbookPaymentMethod(method: unknown): string {
+    const normalized = String(method || '').toLowerCase().replace(/[\s_-]/g, '');
+    if (normalized.includes('mpesa')) return 'mpesa';
+    if (normalized.includes('card') || normalized.includes('swipe')) return 'card';
+    if (normalized.includes('credit')) return 'credit_bill';
+    if (normalized.includes('bank')) return 'bank';
+    if (normalized.includes('cash')) return 'cash';
+    return normalized || 'other';
+}
+
+function addAmount(bucket: Record<string, number>, key: string, amount: unknown): void {
+    const normalized = normalizeLogbookPaymentMethod(key);
+    bucket[normalized] = logbookNumber(bucket[normalized]) + logbookNumber(amount);
+}
+
+async function safeLogbookQuery(label: string, query: any): Promise<any[]> {
+    const { data, error } = await query;
+    if (error) {
+        logger.warn(`Cashier logbook detail ${label} query failed`, {
+            code: error.code,
+            message: error.message
+        });
+        return [];
+    }
+    return data || [];
+}
+
+function normalizeLogbookLine(line: any, fallbackSection = 'transaction'): any {
+    const amount = logbookNumber(line?.amount ?? line?.total_amount ?? line?.total ?? line?.paid_amount);
+    return {
+        id: line?.id || line?.source_id || null,
+        section: logbookText(line?.section, fallbackSection),
+        reference: logbookText(line?.reference ?? line?.order_number ?? line?.short_code ?? line?.transaction_reference, 'Linked record'),
+        customer_name: logbookText(line?.customer_name ?? line?.guest_name ?? line?.staff_name ?? line?.description, 'Walk-in customer'),
+        payment_method: normalizeLogbookPaymentMethod(line?.payment_method ?? line?.method ?? line?.type),
+        amount,
+        status: logbookText(line?.status ?? line?.payment_status, 'recorded'),
+        created_at: line?.created_at || line?.transaction_date || line?.paid_at || null,
+        source_table: line?.source_table || null,
+        source_id: line?.source_id || line?.id || null
+    };
+}
+
+async function buildCashierLogbookDetail(req: Request, id: string): Promise<any> {
+    let query = supabase
+        .from('cashier_logbooks')
+        .select('*')
+        .eq('id', id);
+
+    query = applyBranchFilter(query, req);
+
+    const { data: logbook, error } = await query.maybeSingle();
+    if (error) throw error;
+    if (!logbook) throw new AppError('Cashier logbook not found', 404);
+
+    const [cashier] = (await fetchCashierUsersById([logbook.cashier_id])).values();
+    const breakdown = logbook.sales_breakdown && typeof logbook.sales_breakdown === 'object'
+        ? logbook.sales_breakdown
+        : {};
+    const branchResult = logbook.branch_id
+        ? await supabase.from('branches').select('id, name, code').eq('id', logbook.branch_id).maybeSingle()
+        : { data: null, error: null };
+    if (branchResult.error) throw branchResult.error;
+    const branch = branchResult.data;
+    const storedRawLines = await safeLogbookQuery(
+        'cashier_logbook_lines',
+        supabase
+            .from('cashier_logbook_lines')
+            .select('*')
+            .eq('logbook_id', logbook.id)
+            .order('created_at', { ascending: true })
+    );
+
+    let shift: any = null;
+    let shiftTransactions: any[] = [];
+    let cashierTransactions: any[] = [];
+    let restaurantOrders: any[] = [];
+    let barOrders: any[] = [];
+    let outletOrders: any[] = [];
+    let outletPayments: any[] = [];
+
+    if (logbook.cashier_shift_id) {
+        const shiftResult = await supabase
+            .from('cashier_shift_logs')
+            .select('*')
+            .eq('id', logbook.cashier_shift_id)
+            .maybeSingle();
+        if (shiftResult.error) throw shiftResult.error;
+        shift = shiftResult.data;
+
+        shiftTransactions = await safeLogbookQuery(
+            'cashier_shift_transactions',
+            supabase
+                .from('cashier_shift_transactions')
+                .select('*')
+                .eq('shift_id', logbook.cashier_shift_id)
+                .order('created_at', { ascending: true })
+        );
+
+        if (shift?.branch_id && shift?.cashier_id && shift?.shift_start) {
+            const startedAt = shift.shift_start;
+            const endedAt = shift.shift_end || new Date().toISOString();
+
+            cashierTransactions = await safeLogbookQuery(
+                'cashier_transactions',
+                supabase
+                    .from('cashier_transactions')
+                    .select('*')
+                    .eq('branch_id', shift.branch_id)
+                    .eq('cashier_id', shift.cashier_id)
+                    .gte('created_at', startedAt)
+                    .lte('created_at', endedAt)
+                    .order('created_at', { ascending: true })
+            );
+
+            restaurantOrders = await safeLogbookQuery(
+                'restaurant_orders',
+                supabase
+                    .from('restaurant_orders')
+                    .select('*')
+                    .eq('branch_id', shift.branch_id)
+                    .eq('created_by', shift.cashier_id)
+                    .gte('created_at', startedAt)
+                    .lte('created_at', endedAt)
+                    .order('created_at', { ascending: true })
+            );
+
+            barOrders = await safeLogbookQuery(
+                'bar_orders',
+                supabase
+                    .from('bar_orders')
+                    .select('*')
+                    .eq('branch_id', shift.branch_id)
+                    .eq('created_by', shift.cashier_id)
+                    .gte('created_at', startedAt)
+                    .lte('created_at', endedAt)
+                    .order('created_at', { ascending: true })
+            );
+        }
+    }
+
+    if (logbook.outlet_shift_id) {
+        outletOrders = await safeLogbookQuery(
+            'pos_shift_orders',
+            supabase
+                .from('pos_shift_orders')
+                .select('*')
+                .eq('shift_id', logbook.outlet_shift_id)
+                .order('created_at', { ascending: true })
+        );
+        outletPayments = await safeLogbookQuery(
+            'pos_shift_payments',
+            supabase
+                .from('pos_shift_payments')
+                .select('*')
+                .eq('shift_id', logbook.outlet_shift_id)
+                .order('created_at', { ascending: true })
+        );
+    }
+
+    const storedLines = storedRawLines.map((line: any) => normalizeLogbookLine(line, 'logbook_line'));
+    const generatedLines = [
+        ...shiftTransactions.map((line) => normalizeLogbookLine(line, 'cashier_shift_transaction')),
+        ...cashierTransactions.map((line) => normalizeLogbookLine(line, 'cashier_transaction')),
+        ...restaurantOrders.map((line) => normalizeLogbookLine({
+            ...line,
+            amount: line.total_amount,
+            section: 'restaurant_sale',
+            customer_name: line.customer_name || line.guest_name || line.order_type
+        })),
+        ...barOrders.map((line) => normalizeLogbookLine({
+            ...line,
+            amount: line.total_amount ?? line.total,
+            section: 'bar_sale',
+            customer_name: line.customer_name || line.guest_name || line.order_type
+        })),
+        ...outletOrders.map((line) => normalizeLogbookLine({
+            ...line,
+            amount: line.total_amount,
+            section: 'outlet_order',
+            customer_name: line.customer_name || line.order_type
+        })),
+        ...outletPayments.map((line) => normalizeLogbookLine({
+            ...line,
+            amount: line.amount,
+            section: 'outlet_payment',
+            customer_name: line.reference || line.payment_method
+        }))
+    ];
+
+    const allLines = [...storedLines, ...generatedLines];
+    const payments: Record<string, number> = {
+        cash: logbookNumber(breakdown.total_cash ?? shift?.total_cash_sales),
+        mpesa: logbookNumber(breakdown.total_mpesa ?? logbook.total_mpesa ?? shift?.total_mpesa_sales),
+        card: logbookNumber(breakdown.total_card ?? logbook.total_swipe ?? shift?.total_card_sales),
+        credit_bill: logbookNumber(breakdown.total_credit_bill ?? shift?.credit_bills_taken),
+        bank: 0,
+        other: 0
+    };
+
+    if (!Object.values(payments).some((value) => value > 0)) {
+        allLines.forEach((line) => addAmount(payments, line.payment_method, line.amount));
+    }
+
+    const totalCash = logbookNumber(payments.cash);
+    const totalMpesa = logbookNumber(payments.mpesa);
+    const totalCard = logbookNumber(payments.card);
+    const totalCreditBill = logbookNumber(payments.credit_bill);
+    const totalBank = logbookNumber(payments.bank);
+    const totalOther = logbookNumber(payments.other);
+    const totalSales = logbookNumber(
+        breakdown.total_sales ?? shift?.total_sales,
+        totalCash + totalMpesa + totalCard + totalCreditBill + totalBank + totalOther
+    ) || (totalCash + totalMpesa + totalCard + totalCreditBill + totalBank + totalOther);
+    const openingFloat = logbookNumber(logbook.opening_float ?? shift?.opening_float);
+    const closingFloat = logbookNumber(logbook.closing_float ?? shift?.closing_float ?? shift?.cash_at_hand);
+    const cashDrops = logbookNumber(breakdown.cash_drops ?? shift?.cash_deposited);
+    const payouts = logbookNumber(breakdown.payouts ?? breakdown.paid_outs);
+    const expectedCash = logbookNumber(
+        breakdown.expected_closing_float ?? shift?.expected_closing_float,
+        openingFloat + totalCash - cashDrops - payouts
+    );
+    const variance = logbookNumber(logbook.variance ?? breakdown.variance ?? shift?.variance, closingFloat - expectedCash);
+
+    const revenueBreakdown = [
+        { label: 'Restaurant', amount: logbookNumber(breakdown.restaurant_revenue ?? shift?.restaurant_revenue) },
+        { label: 'Bar', amount: logbookNumber(breakdown.bar_revenue ?? shift?.bar_revenue) },
+        { label: 'Rooms', amount: logbookNumber(breakdown.room_booking_revenue ?? shift?.room_booking_revenue) },
+        { label: 'Conference', amount: logbookNumber(breakdown.conference_revenue ?? shift?.conference_revenue) },
+        { label: 'Pool', amount: logbookNumber(breakdown.swimming_pool_revenue ?? shift?.swimming_pool_revenue) },
+        { label: 'Other', amount: logbookNumber(breakdown.other_revenue ?? shift?.other_revenue) }
+    ];
+
+    const paymentBreakdown = Object.entries(payments)
+        .filter(([method, amount]) => amount > 0 || ['cash', 'mpesa', 'card', 'credit_bill'].includes(method))
+        .map(([method, amount]) => ({
+            method,
+            amount: logbookNumber(amount),
+            count: allLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
+        }));
+
+    const voidLines = allLines.filter((line) => /void|cancel/i.test(`${line.status} ${line.section}`));
+    const complianceFlags = [
+        {
+            label: 'Shift close logbook',
+            status: logbook.cashier_shift_id || logbook.outlet_shift_id ? 'OK' : 'Review',
+            detail: logbook.cashier_shift_id || logbook.outlet_shift_id
+                ? 'Linked to a shift record'
+                : 'No shift link was found'
+        },
+        {
+            label: 'Payment capture',
+            status: totalSales > 0 || allLines.length > 0 ? 'OK' : 'Review',
+            detail: totalSales > 0 || allLines.length > 0
+                ? `${allLines.length} evidence line(s) attached`
+                : 'No sales or payment lines were captured'
+        },
+        {
+            label: 'Cash variance',
+            status: Math.abs(variance) < 0.01 ? 'OK' : 'Variance',
+            detail: logbookMoney(variance)
+        },
+        {
+            label: 'Voids and cancellations',
+            status: voidLines.length ? 'Review' : 'OK',
+            detail: voidLines.length ? `${voidLines.length} void/cancelled line(s)` : 'No void lines recorded'
+        }
+    ];
+
+    return {
+        id: logbook.id,
+        status: logbook.status,
+        type: logbook.type,
+        log_date: logbook.log_date,
+        submitted_at: logbook.submitted_at,
+        created_at: logbook.created_at,
+        source: logbook.source,
+        notes: logbook.notes,
+        branch: branch || { id: logbook.branch_id, name: `Branch ${logbook.branch_id}` },
+        cashier: cashier || {
+            id: logbook.cashier_id,
+            first_name: logbookText(shift?.cashier_name || breakdown.cashier_name || 'Cashier'),
+            last_name: '',
+            email: ''
+        },
+        shift: shift ? {
+            id: shift.id,
+            shift_number: shift.shift_number,
+            shift_start: shift.shift_start,
+            shift_end: shift.shift_end,
+            status: shift.status,
+            opening_approved_at: shift.opening_approved_at,
+            opening_review_notes: shift.opening_review_notes
+        } : null,
+        cash_reconciliation: {
+            opening_float: openingFloat,
+            cash_sales: totalCash,
+            credit_payments_received: logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value),
+            cash_drops: cashDrops,
+            payouts,
+            expected_closing: expectedCash,
+            actual_closing: closingFloat,
+            variance
+        },
+        summary: {
+            total_sales: totalSales,
+            transaction_count: logbookNumber(breakdown.transaction_count ?? shift?.transaction_count, allLines.length),
+            paid_bills_value: logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value),
+            paid_bills_count: logbookNumber(breakdown.paid_bills_count ?? shift?.paid_bills_count),
+            unpaid_bills_value: logbookNumber(breakdown.unpaid_bills_value ?? shift?.unpaid_bills_value),
+            unpaid_bills_count: logbookNumber(breakdown.unpaid_bills_count ?? shift?.unpaid_bills_count)
+        },
+        payment_breakdown: paymentBreakdown,
+        revenue_breakdown: revenueBreakdown,
+        lines: allLines,
+        compliance_flags: complianceFlags
+    };
+}
+
+export const getCashierLogbookDetail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const detail = await buildCashierLogbookDetail(req, req.params.id);
+        res.json({ success: true, data: detail });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const downloadCashierLogbookReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const detail = await buildCashierLogbookDetail(req, req.params.id);
+        const shiftNumber = logbookText(detail.shift?.shift_number, 'cashier-shift');
+        const filename = `Cashier_Logbook_${shiftNumber}_${detail.log_date || 'report'}.pdf`;
+        const doc = new PDFDocument({ margin: 42, size: 'A4' });
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        doc.pipe(res);
+
+        doc.font('Helvetica-Bold').fontSize(18).text('FamousGateHotels', { align: 'left' });
+        doc.fontSize(13).text('Cashier Shift Logbook Report', { align: 'right' });
+        doc.moveDown(0.5).strokeColor('#d6b25e').lineWidth(2).moveTo(42, doc.y).lineTo(553, doc.y).stroke();
+        doc.moveDown();
+
+        const cashierName = cashierUserName(detail.cashier);
+        doc.font('Helvetica-Bold').fontSize(11).text(`Shift: ${shiftNumber}`);
+        doc.font('Helvetica').fontSize(9)
+            .text(`Branch: ${detail.branch?.name || 'Unknown branch'}`)
+            .text(`Cashier: ${cashierName}`)
+            .text(`Log Date: ${detail.log_date || '—'}`)
+            .text(`Status: ${detail.status || '—'}`)
+            .text(`Submitted: ${detail.submitted_at || detail.created_at || '—'}`);
+        doc.moveDown();
+
+        const summaryRows = [
+            ['Opening Float', logbookMoney(detail.cash_reconciliation.opening_float)],
+            ['Cash Sales', logbookMoney(detail.cash_reconciliation.cash_sales)],
+            ['Expected Closing', logbookMoney(detail.cash_reconciliation.expected_closing)],
+            ['Actual Closing', logbookMoney(detail.cash_reconciliation.actual_closing)],
+            ['Variance', logbookMoney(detail.cash_reconciliation.variance)],
+            ['Total Sales', logbookMoney(detail.summary.total_sales)]
+        ];
+
+        doc.font('Helvetica-Bold').fontSize(11).text('Cash Reconciliation');
+        summaryRows.forEach(([label, value]) => {
+            doc.font('Helvetica-Bold').fontSize(9).text(label, { continued: true, width: 190 });
+            doc.font('Helvetica').text(`  ${value}`);
+        });
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').fontSize(11).text('Sales By Payment Method');
+        detail.payment_breakdown.forEach((row: any) => {
+            doc.font('Helvetica').fontSize(9)
+                .text(`${String(row.method).toUpperCase()}  ${logbookMoney(row.amount)}  (${row.count || 0} line(s))`);
+        });
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').fontSize(11).text('Compliance Flags');
+        detail.compliance_flags.forEach((flag: any) => {
+            doc.font('Helvetica').fontSize(9).text(`${flag.status} - ${flag.label}: ${flag.detail}`);
+        });
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').fontSize(11).text('Transaction Evidence');
+        const lines = detail.lines.slice(0, 36);
+        if (!lines.length) {
+            doc.font('Helvetica').fontSize(9).text('No transaction lines were captured for this shift.');
+        } else {
+            lines.forEach((line: any, index: number) => {
+                if (doc.y > 740) doc.addPage();
+                doc.font('Helvetica').fontSize(8).text(
+                    `${index + 1}. ${line.section} | ${line.reference} | ${line.customer_name} | ${line.payment_method} | ${logbookMoney(line.amount)} | ${line.status}`
+                );
+            });
+        }
+
+        doc.end();
     } catch (error) {
         next(error);
     }

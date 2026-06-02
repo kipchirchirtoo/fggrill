@@ -6,12 +6,22 @@ import 'package:updat/updat_window_manager.dart';
 import 'core/router/app_router.dart';
 import 'core/services/desktop_update_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/working_directory_guard.dart';
 
 bool _updateNoticeShown = false;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  ensureStableWorkingDirectory();
   FlutterError.onError = (details) {
+    final message = details.exceptionAsString();
+    if (message.contains('AssetManifest.bin') &&
+        message.contains('Unable to load asset')) {
+      debugPrint(
+        'Ignored stale Flutter asset manifest error. Fully restart the app if an image is missing.',
+      );
+      return;
+    }
     FlutterError.presentError(details);
   };
   ErrorWidget.builder = (details) {

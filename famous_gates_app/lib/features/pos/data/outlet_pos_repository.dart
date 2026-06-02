@@ -139,12 +139,23 @@ class OutletPosRepository {
     required String orderId,
     required List<OutletCartItem> items,
     String? customerName,
+    String? orderType,
+    String? tableNumber,
+    String? roomNumber,
+    bool appendItems = false,
   }) async {
     final total = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
     final response =
         await _dio.patch('/pos/shifts/$shiftId/orders/$orderId', data: {
       if (customerName != null && customerName.trim().isNotEmpty)
         'customer_name': customerName.trim(),
+      if (orderType != null && orderType.trim().isNotEmpty)
+        'order_type': orderType.trim(),
+      if (tableNumber != null && tableNumber.trim().isNotEmpty)
+        'table_number': tableNumber.trim(),
+      if (roomNumber != null && roomNumber.trim().isNotEmpty)
+        'room_number': roomNumber.trim(),
+      if (appendItems) 'append_items': true,
       'items': items.map((item) => item.toJson()).toList(),
       'total_amount': total,
     });
@@ -237,7 +248,8 @@ class OutletPosRepository {
     String? varianceReason,
   }) async {
     final response = await _dio.post('/pos/shifts/$shiftId/close', data: {
-      if (closingCashCounted != null) 'closing_cash_counted': closingCashCounted,
+      if (closingCashCounted != null)
+        'closing_cash_counted': closingCashCounted,
       if (varianceReason != null && varianceReason.trim().isNotEmpty)
         'cash_variance_reason': varianceReason.trim(),
     });
@@ -480,6 +492,9 @@ class OutletShiftOrder {
     required this.paymentStatus,
     required this.status,
     required this.totalAmount,
+    this.orderType,
+    this.tableNumber,
+    this.roomNumber,
     this.amountPaid = 0,
     this.balanceAmount = 0,
     this.waiterName,
@@ -497,6 +512,9 @@ class OutletShiftOrder {
   final String paymentStatus;
   final String status;
   final double totalAmount;
+  final String? orderType;
+  final String? tableNumber;
+  final String? roomNumber;
   final double amountPaid;
   final double balanceAmount;
   final String? waiterName;
@@ -516,6 +534,10 @@ class OutletShiftOrder {
       paymentStatus: '${json['payment_status'] ?? 'unpaid'}',
       status: '${json['status'] ?? 'open'}',
       totalAmount: _num(json['total_amount']),
+      orderType: json['order_type'] == null ? null : '${json['order_type']}',
+      tableNumber:
+          json['table_number'] == null ? null : '${json['table_number']}',
+      roomNumber: json['room_number'] == null ? null : '${json['room_number']}',
       amountPaid: _num(json['amount_paid']),
       balanceAmount: _num(json['balance_amount'] ?? json['balance']),
       waiterName: json['waiter_name'] as String?,

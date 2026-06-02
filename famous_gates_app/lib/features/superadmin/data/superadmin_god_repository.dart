@@ -205,4 +205,38 @@ class SuperadminGodRepository {
     await _guard(() async => _dio.post('/superadmin/backup/trigger',
         data: {'justification': justification}));
   }
+
+  // ── Non-Consumables POS catalogue (dynamic_services) ──────────────────────
+  Future<List<Map<String, dynamic>>> getNonConsumables({int? branchId}) async {
+    return _guard(() async {
+      final r = await _dio.get('/superadmin/non-consumables', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
+      });
+      final data = r.data['data'] ?? r.data;
+      return List<Map<String, dynamic>>.from(data is List ? data : []);
+    });
+  }
+
+  Future<void> createNonConsumable(Map<String, dynamic> body) async {
+    await _guard(
+        () async => _dio.post('/superadmin/non-consumables', data: body));
+  }
+
+  Future<void> updateNonConsumable(int id, Map<String, dynamic> body) async {
+    await _guard(
+        () async => _dio.put('/superadmin/non-consumables/$id', data: body));
+  }
+
+  Future<void> deleteNonConsumable(int id) async {
+    await _guard(() async => _dio.delete('/superadmin/non-consumables/$id'));
+  }
+
+  // Branches (for the branch selector) — uses the mounted system route
+  Future<List<Map<String, dynamic>>> getBranches() async {
+    return _guard(() async {
+      final r = await _dio.get('/system/branches');
+      final data = r.data['data'] ?? r.data;
+      return List<Map<String, dynamic>>.from(data is List ? data : []);
+    });
+  }
 }

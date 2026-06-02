@@ -51,6 +51,8 @@ class AppUpdateButton extends StatelessWidget {
                 if (isDesktopUpdateAvailable(status)) {
                   startUpdate();
                 } else if (status == UpdatStatus.readyToInstall) {
+                  // Record this release as installed so it stops being flagged.
+                  markDesktopUpdateApplied();
                   launchInstaller();
                 } else {
                   checkForUpdate();

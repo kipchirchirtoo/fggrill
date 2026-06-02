@@ -156,6 +156,18 @@ const PROFIT_VIEW_ROLES = new Set([
   'branch_manager'
 ]);
 
+const ORDER_OWNER_SCOPED_ROLES = new Set([
+  'restaurant',
+  'waiter',
+  'waitress',
+  'head_waiter',
+  'bartender',
+  'barman',
+  'barmaid',
+  'barista',
+  'food_runner'
+]);
+
 const numberValue = (value: unknown): number => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -174,6 +186,62 @@ const isGlobalUser = (req: Request): boolean => GLOBAL_ROLES.has(roleFor(req));
 const canViewProfit = (req: Request): boolean => PROFIT_VIEW_ROLES.has(roleFor(req));
 
 const canManageOutlets = (req: Request): boolean => MANAGE_OUTLET_ROLES.has(roleFor(req));
+
+const shouldScopeOrdersToOwner = (req: Request): boolean => ORDER_OWNER_SCOPED_ROLES.has(roleFor(req));
+
+const ensureOrderOwnerAccess = (req: Request, order: Record<string, any>): void => {
+  if (!shouldScopeOrdersToOwner(req)) return;
+  const userId = String(req.user?.id || '');
+  if (!userId) throw new AppError('Authentication required', 401);
+  const waiterId = String(order.waiter_id || '');
+  const createdBy = String(order.created_by || '');
+  if (waiterId !== userId && createdBy !== userId) {
+    throw new AppError('Forbidden: waiters can only access their own orders', 403);
+  }
+};
+
+const normalizePaymentMethod = (value: unknown): PaymentMethod | null => {
+  const method = String(value || 'cash').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (method === 'cash') return 'cash';
+  if (['mpesa', 'm_pesa', 'mpesa_manual', 'm_pesa_manual', 'mobile_money'].includes(method)) return 'mpesa';
+  if (['card', 'card_manual', 'swipe', 'bank_card', 'pos_card'].includes(method)) return 'card';
+  if (['credit_bill', 'credit_bill_manual', 'bill', 'staff_credit', 'staff_credit_bill'].includes(method)) return 'credit_bill';
+  return null;
+};
+
+const nullableText = (value: unknown): string | null => {
+  const text = String(value ?? '').trim();
+  return text ? text : null;
+};
+
+const normalizeOrderType = (value: unknown, outletType: unknown): string => {
+  const requested = String(value || '').trim().toLowerCase();
+  if (['dine_in', 'takeaway', 'room_service', 'bar', 'counter', 'non_consumable'].includes(requested)) {
+    return requested;
+  }
+  const stationType = String(outletType || '').trim().toLowerCase();
+  if (stationType === 'restaurant') return 'takeaway';
+  if (stationType === 'non_consumables') return 'non_consumable';
+  if (stationType.includes('bar')) return 'bar';
+  return 'counter';
+};
+
+const orderContextPatch = (
+  body: Record<string, any>,
+  order: Record<string, any> | null,
+  outletType: unknown
+): Record<string, any> => {
+  const orderType = normalizeOrderType(body.order_type ?? order?.order_type, outletType);
+  return {
+    order_type: orderType,
+    table_number: orderType === 'dine_in'
+      ? nullableText(body.table_number ?? order?.table_number)
+      : null,
+    room_number: orderType === 'room_service'
+      ? nullableText(body.room_number ?? order?.room_number)
+      : null
+  };
+};
 
 const assertUser = (req: Request): void => {
   if (!req.user?.id) {
@@ -272,6 +340,13 @@ const normalizeOrderItems = (items: Array<Record<string, any>>): Array<Record<st
   });
 };
 
+const orderItemsTotal = (items: Array<Record<string, any>>): number =>
+  items.reduce((sum, item) => {
+    const lineTotal = numberValue(item.line_total ?? item.total_price ?? item.total);
+    if (lineTotal > 0) return sum + lineTotal;
+    return sum + numberValue(item.quantity ?? item.qty) * numberValue(item.unit_price ?? item.price);
+  }, 0);
+
 const sanitizeSummary = (summary: Record<string, any>, includeProfit: boolean): Record<string, any> => {
   if (includeProfit) return summary;
   const {
@@ -314,8 +389,8 @@ const calculateShiftSummary = async (shiftId: string) => {
   const orderRows = (orders || []) as Array<Record<string, any>>;
   const salesByMethod = paymentRows.reduce<Record<PaymentMethod, number>>(
     (acc, row) => {
-      const method = String(row.payment_method || 'cash').toLowerCase() as PaymentMethod;
-      if (acc[method] !== undefined) {
+      const method = normalizePaymentMethod(row.payment_method);
+      if (method && acc[method] !== undefined) {
         acc[method] += numberValue(row.amount);
       }
       return acc;
@@ -1156,6 +1231,11 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
     assertUser(req);
     const { outletId } = req.params;
     const openingFloat = numberValue(req.body.opening_float);
+    const requestedCashierId = nullableText(req.body.cashier_id ?? req.body.cashierId);
+    const canOpenForCashier = MANAGE_OUTLET_ROLES.has(roleFor(req));
+    const targetCashierId = canOpenForCashier && requestedCashierId
+      ? requestedCashierId
+      : String(req.user.id);
 
     const { data: outlet, error: outletError } = await supabase
       .from('pos_outlets')
@@ -1175,12 +1255,25 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
     if (existingError) throw existingError;
     if (existing) throw new AppError('This outlet already has an open shift', 409);
 
+    if (targetCashierId !== String(req.user.id)) {
+      const { data: cashier, error: cashierError } = await supabase
+        .from('users')
+        .select('id, branch_id, role')
+        .eq('id', targetCashierId)
+        .maybeSingle();
+      if (cashierError) throw cashierError;
+      if (!cashier) throw new AppError('Selected cashier was not found', 404);
+      if (cashier.branch_id && Number(cashier.branch_id) !== Number(outlet.branch_id)) {
+        throw new AppError('Selected cashier does not belong to this outlet branch', 403);
+      }
+    }
+
     const { data: shift, error: shiftError } = await supabase
       .from('pos_outlet_shifts')
       .insert({
         outlet_id: outletId,
         branch_id: outlet.branch_id,
-        cashier_id: req.user.id,
+        cashier_id: targetCashierId,
         opening_float: openingFloat,
         status: 'open'
       })
@@ -1216,7 +1309,7 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
       if (stockError) throw stockError;
     }
 
-    ensureShiftAutomationOpened(shift.id, req.user.id)
+    ensureShiftAutomationOpened(shift.id, targetCashierId)
       .catch((error) => logger.warn('Unable to record shift open automation marker', error));
 
     res.status(201).json({ success: true, data: shift });
@@ -1230,11 +1323,17 @@ export const getShiftOrders = async (req: Request, res: Response, next: NextFunc
     assertUser(req);
     const { shiftId } = req.params;
     await ensureShiftAccess(req, shiftId);
-    const { data, error } = await supabase
+    let query = supabase
       .from('pos_shift_orders')
       .select('*')
       .eq('shift_id', shiftId)
       .order('created_at', { ascending: false });
+    if (shouldScopeOrdersToOwner(req)) {
+      query = query.or(`waiter_id.eq.${req.user.id},created_by.eq.${req.user.id}`);
+    } else if (req.query.waiter_id) {
+      query = query.eq('waiter_id', String(req.query.waiter_id));
+    }
+    const { data, error } = await query;
     if (error) throw error;
     res.json({ success: true, data: data || [] });
   } catch (error) {
@@ -1256,6 +1355,8 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
 
     const totalAmount = numberValue(req.body.total_amount) ||
       normalizedItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
+    const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+    const context = orderContextPatch(req.body, null, outlet?.outlet_type);
 
     const { data: order, error } = await supabase
       .from('pos_shift_orders')
@@ -1266,6 +1367,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
         source_id: req.body.source_id || null,
         order_number: req.body.order_number || `POS-${Date.now()}`,
         customer_name: req.body.customer_name || 'Walk-in',
+        ...context,
         waiter_id: req.body.waiter_id || req.user.id,
         waiter_name: req.body.waiter_name ||
           `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() ||
@@ -1295,6 +1397,7 @@ export const getShiftOrder = async (req: Request, res: Response, next: NextFunct
     const { shiftId, orderId } = req.params;
     await ensureShiftAccess(req, shiftId);
     const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
     res.json({ success: true, data: order });
   } catch (error) {
     next(error);
@@ -1309,24 +1412,33 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     if (shift.status !== 'open') throw new AppError('Bills can only be recalled on an open shift', 400);
 
     const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
     ensureEditableOrder(order, 'recall');
 
     const items = Array.isArray(req.body.items) ? req.body.items as Array<Record<string, any>> : [];
     if (!items.length) throw new AppError('At least one item is required', 400);
+    const appendItems = req.body.append_items === true || req.body.appendOnly === true || req.body.mode === 'append';
+    const existingItems = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
     const normalizedItems = normalizeOrderItems(items);
-    const totalAmount = normalizedItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
+    const nextItems = appendItems ? [...existingItems, ...normalizedItems] : normalizedItems;
+    const totalAmount = orderItemsTotal(nextItems);
     const amountPaid = numberValue(order.amount_paid);
     if (totalAmount + 0.01 < amountPaid) {
       throw new AppError('Recalled bill total cannot be less than the amount already paid', 400);
     }
 
-    await updateStockForItems(shiftId, shift.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+    if (!appendItems) {
+      await updateStockForItems(shiftId, shift.outlet_id, existingItems, -1);
+    }
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
+    const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+    const context = orderContextPatch(req.body, order, outlet?.outlet_type);
 
     const { data, error } = await supabase
       .from('pos_shift_orders')
       .update({
         customer_name: req.body.customer_name || order.customer_name || 'Walk-in',
+        ...context,
         total_amount: totalAmount,
         balance_amount: Math.max(0, totalAmount - amountPaid),
         payment_status: amountPaid > 0 ? 'partial' : 'unpaid',
@@ -1334,8 +1446,9 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         kitchen_status: 'pending',
         kitchen_started_at: null,
         kitchen_ready_at: null,
+        kitchen_served_at: null,
         void_request_status: null,
-        items: normalizedItems,
+        items: nextItems,
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId)
@@ -1358,6 +1471,7 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
     if (shift.status !== 'open') throw new AppError('Bills can only be split on an open shift', 400);
 
     const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
     ensureEditableOrder(order, 'split');
     const items = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
     const splits = Array.isArray(req.body.splits) ? req.body.splits as Array<Record<string, any>> : [];
@@ -1386,6 +1500,9 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
           source_id: order.id,
           order_number: `${order.order_number || 'POS'}-${childOrders.length + 1}`,
           customer_name: split.customer_name || order.customer_name || 'Walk-in',
+          order_type: order.order_type || null,
+          table_number: order.table_number || null,
+          room_number: order.room_number || null,
           waiter_id: order.waiter_id || req.user.id,
           waiter_name: order.waiter_name ||
           `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
@@ -1444,11 +1561,15 @@ export const mergeShiftOrders = async (req: Request, res: Response, next: NextFu
       .in('id', orderIds);
     if (error) throw error;
     if (!orders || orders.length !== orderIds.length) throw new AppError('One or more bills were not found', 404);
+    orders.forEach((order: any) => ensureOrderOwnerAccess(req, order));
     orders.forEach((order: any) => ensureEditableOrder(order, 'merge'));
 
     const mergedItems = orders.flatMap((order: any) => Array.isArray(order.items) ? order.items : []);
     const totalAmount = mergedItems.reduce((sum: number, item: any) => sum + numberValue(item.line_total), 0);
     const customerName = req.body.customer_name || orders.map((order: any) => order.customer_name).filter(Boolean).join(' / ') || 'Merged bill';
+    const firstContextOrder = orders[0] as Record<string, any>;
+    const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+    const context = orderContextPatch(req.body, firstContextOrder, outlet?.outlet_type);
 
     const { data: target, error: targetError } = await supabase
       .from('pos_shift_orders')
@@ -1458,6 +1579,7 @@ export const mergeShiftOrders = async (req: Request, res: Response, next: NextFu
         source_type: 'manual',
         order_number: req.body.order_number || `MERGE-${Date.now()}`,
         customer_name: customerName,
+        ...context,
         waiter_id: req.user.id,
         waiter_name: `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
         status: 'open',
@@ -1501,6 +1623,7 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
     if (!reason) throw new AppError('Void reason is required', 400);
     const shift = await ensureShiftAccess(req, shiftId);
     const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
     ensureEditableOrder(order, 'void');
 
     const { data: existing, error: existingError } = await supabase
@@ -1528,11 +1651,16 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
       .single();
     if (error || !requestRow) throw error || new AppError('Failed to create void request', 500);
 
+    const voidRequestedItems = Array.isArray(order.items)
+      ? order.items.map((item: any) => ({ ...item, kitchen_status: 'void_requested' }))
+      : order.items;
+
     await supabase
       .from('pos_shift_orders')
       .update({
         void_request_status: 'pending',
         kitchen_status: 'void_requested',
+        items: voidRequestedItems,
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId);
@@ -1547,6 +1675,42 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
         priority: 'high',
         branchId: shift.branch_id,
         metadata: { request_id: requestRow.id, order_id: orderId, shift_id: shiftId }
+      }
+    );
+
+    await notificationService.notifyRole(
+      'branch_manager',
+      'POS void request raised',
+      `${order.order_number || 'A POS bill'} has been stopped on kitchen display and needs review.`,
+      {
+        type: 'warning',
+        category: 'pos_void_request',
+        priority: 'high',
+        branchId: shift.branch_id,
+        metadata: {
+          request_id: requestRow.id,
+          order_id: orderId,
+          shift_id: shiftId,
+          kitchen_status: 'void_requested'
+        }
+      }
+    );
+
+    await notificationService.notifyRole(
+      'auditor',
+      'POS void request raised',
+      `${order.order_number || 'A POS bill'} was sent to kitchen display and is awaiting approval.`,
+      {
+        type: 'warning',
+        category: 'pos_void_request',
+        priority: 'high',
+        branchId: shift.branch_id,
+        metadata: {
+          request_id: requestRow.id,
+          order_id: orderId,
+          shift_id: shiftId,
+          kitchen_status: 'void_requested'
+        }
       }
     );
 
@@ -1661,12 +1825,16 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
 
     if (approved) {
       await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+      const voidedItems = Array.isArray(order.items)
+        ? order.items.map((item: any) => ({ ...item, kitchen_status: 'voided' }))
+        : order.items;
       const { error: voidOrderError } = await supabase
         .from('pos_shift_orders')
         .update({
           status: 'voided',
           payment_status: 'voided',
-          kitchen_status: 'cancelled',
+          kitchen_status: 'voided',
+          items: voidedItems,
           balance_amount: 0,
           void_request_status: 'approved',
           voided_at: new Date().toISOString(),
@@ -1676,6 +1844,42 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
         })
         .eq('id', requestRow.order_id);
       if (voidOrderError) throw voidOrderError;
+      await notificationService.notifyRole(
+        'auditor',
+        'POS void approved',
+        `${order.order_number || 'A POS bill'} was voided and is visible on the kitchen display until acknowledged.`,
+        {
+          type: 'warning',
+          category: 'pos_void_request',
+          priority: 'high',
+          branchId: requestRow.branch_id,
+          metadata: {
+            request_id: requestId,
+            order_id: requestRow.order_id,
+            shift_id: requestRow.shift_id,
+            kitchen_status: 'voided',
+            void_reason: requestRow.reason
+          }
+        }
+      );
+      await notificationService.notifyRole(
+        'branch_manager',
+        'POS void approved',
+        `${order.order_number || 'A POS bill'} was voided and remains visible on kitchen display until acknowledged.`,
+        {
+          type: 'warning',
+          category: 'pos_void_request',
+          priority: 'high',
+          branchId: requestRow.branch_id,
+          metadata: {
+            request_id: requestId,
+            order_id: requestRow.order_id,
+            shift_id: requestRow.shift_id,
+            kitchen_status: 'voided',
+            void_reason: requestRow.reason
+          }
+        }
+      );
     } else {
       await supabase
         .from('pos_shift_orders')
@@ -1685,6 +1889,42 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
           updated_at: new Date().toISOString()
         })
         .eq('id', requestRow.order_id);
+      await notificationService.notifyRole(
+        'auditor',
+        'POS void rejected',
+        `${order.order_number || 'A POS bill'} void request was rejected and returned to kitchen preparation.`,
+        {
+          type: 'info',
+          category: 'pos_void_request',
+          priority: 'medium',
+          branchId: requestRow.branch_id,
+          metadata: {
+            request_id: requestId,
+            order_id: requestRow.order_id,
+            shift_id: requestRow.shift_id,
+            kitchen_status: 'pending',
+            rejection_reason: rejectionReason
+          }
+        }
+      );
+      await notificationService.notifyRole(
+        'branch_manager',
+        'POS void rejected',
+        `${order.order_number || 'A POS bill'} void request was rejected and returned to kitchen preparation.`,
+        {
+          type: 'info',
+          category: 'pos_void_request',
+          priority: 'medium',
+          branchId: requestRow.branch_id,
+          metadata: {
+            request_id: requestId,
+            order_id: requestRow.order_id,
+            shift_id: requestRow.shift_id,
+            kitchen_status: 'pending',
+            rejection_reason: rejectionReason
+          }
+        }
+      );
     }
 
     res.json({ success: true, data: { id: requestId, status: approved ? 'approved' : 'rejected' } });
@@ -1700,8 +1940,8 @@ export const payShiftOrder = async (req: Request, res: Response, next: NextFunct
     const shift = await ensureShiftAccess(req, shiftId);
     if (shift.status !== 'open') throw new AppError('Payments can only be recorded on an open shift', 400);
 
-    const method = String(req.body.payment_method || req.body.method || 'cash').toLowerCase() as PaymentMethod;
-    if (!['cash', 'mpesa', 'card', 'credit_bill'].includes(method)) {
+    const method = normalizePaymentMethod(req.body.payment_method || req.body.method || 'cash');
+    if (!method) {
       throw new AppError('Unsupported payment method', 400);
     }
 
@@ -1712,6 +1952,7 @@ export const payShiftOrder = async (req: Request, res: Response, next: NextFunct
       .eq('shift_id', shiftId)
       .single();
     if (orderError || !order) throw new AppError('POS order not found', 404);
+    ensureOrderOwnerAccess(req, order);
     if (['paid', 'credit_bill', 'voided'].includes(String(order.payment_status))) {
       throw new AppError('Order is already cleared', 409);
     }

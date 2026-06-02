@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/branch_sales_payments_view.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
@@ -13,6 +14,7 @@ import 'mobile/mobile_manager_reviews_screen.dart';
 enum BranchManagerSection {
   overview,
   analytics,
+  salesPayments,
   cashierClearance,
   soldItems,
   waiterSales,
@@ -139,6 +141,9 @@ class _BranchManagerDashboardState
                   })
               .toList();
           _feed = List<Map<String, dynamic>>.from(results[2] as List);
+          break;
+        case BranchManagerSection.salesPayments:
+          // Self-contained view fetches its own data.
           break;
         case BranchManagerSection.analytics:
           _summary = await _repo.branchSalesAnalytics(
@@ -377,174 +382,192 @@ class _BranchManagerDashboardState
     );
   }
 
+  // Grouped to mirror the Next.js branch-manager sidebar:
+  // Analytics & Reports → Front Desk Operations → Guest Management →
+  // Restaurant Operations → Facility Management → Stock Management →
+  // Staff Management → Reports.
   List<MasterNavItem<BranchManagerSection>> get _navItems => [
+        // ── Analytics & Reports ──
         const MasterNavItem(
           section: BranchManagerSection.overview,
-          label: 'Overview',
+          label: 'Executive Dashboard',
           icon: Icons.dashboard_outlined,
-          group: 'Command',
+          group: 'Analytics & Reports',
         ),
         MasterNavItem(
           section: BranchManagerSection.analytics,
           label: 'Sales Analytics',
           icon: PhosphorIcons.chartLine(),
-          group: 'Command',
+          group: 'Analytics & Reports',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.salesPayments,
+          label: 'Sales & Payments',
+          icon: PhosphorIcons.creditCard(),
+          group: 'Analytics & Reports',
         ),
         MasterNavItem(
           section: BranchManagerSection.cashierClearance,
           label: 'Cashier Clearance',
           icon: PhosphorIcons.receipt(),
-          group: 'Command',
+          group: 'Analytics & Reports',
         ),
         MasterNavItem(
           section: BranchManagerSection.soldItems,
           label: 'Sold Items',
           icon: PhosphorIcons.shoppingBag(),
-          group: 'Command',
+          group: 'Analytics & Reports',
         ),
-        const MasterNavItem(
-          section: BranchManagerSection.waiterSales,
-          label: 'Waiter Sales',
-          icon: Icons.groups_outlined,
-          group: 'Command',
+        // ── Front Desk Operations ──
+        MasterNavItem(
+          section: BranchManagerSection.checkin,
+          label: 'Check-in/Check-out',
+          icon: PhosphorIcons.signIn(),
+          group: 'Front Desk Operations',
         ),
         MasterNavItem(
           section: BranchManagerSection.reservations,
           label: 'Reservations',
           icon: PhosphorIcons.calendarCheck(),
-          group: 'Front Office',
+          group: 'Front Desk Operations',
         ),
         MasterNavItem(
           section: BranchManagerSection.newReservation,
           label: 'New Reservation',
           icon: PhosphorIcons.plus(),
-          group: 'Front Office',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.checkin,
-          label: 'Check-in',
-          icon: PhosphorIcons.signIn(),
-          group: 'Front Office',
+          group: 'Front Desk Operations',
         ),
         const MasterNavItem(
           section: BranchManagerSection.arrivals,
-          label: 'Arrivals',
+          label: 'Expected Arrivals',
           icon: Icons.flight_land,
-          group: 'Front Office',
+          group: 'Front Desk Operations',
         ),
         const MasterNavItem(
           section: BranchManagerSection.departures,
-          label: 'Departures',
+          label: 'Expected Departures',
           icon: Icons.flight_takeoff,
-          group: 'Front Office',
+          group: 'Front Desk Operations',
+        ),
+        // ── Guest Management ──
+        MasterNavItem(
+          section: BranchManagerSection.guests,
+          label: 'Guest Directory',
+          icon: PhosphorIcons.identificationCard(),
+          group: 'Guest Management',
         ),
         MasterNavItem(
           section: BranchManagerSection.rooms,
-          label: 'Rooms',
+          label: 'Room Status',
           icon: PhosphorIcons.bed(),
-          group: 'Front Office',
+          group: 'Guest Management',
         ),
-        MasterNavItem(
-          section: BranchManagerSection.guests,
-          label: 'Guests',
-          icon: PhosphorIcons.identificationCard(),
-          group: 'Front Office',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.staff,
-          label: 'Staff',
-          icon: PhosphorIcons.users(),
-          group: 'HR',
-        ),
-        const MasterNavItem(
-          section: BranchManagerSection.staffPerformance,
-          label: 'Staff Performance',
-          icon: Icons.speed_outlined,
-          group: 'HR',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.attendance,
-          label: 'Attendance',
-          icon: PhosphorIcons.clock(),
-          group: 'HR',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.leave,
-          label: 'Leave',
-          icon: PhosphorIcons.paperPlaneTilt(),
-          group: 'HR',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.stock,
-          label: 'Stock',
-          icon: PhosphorIcons.package(),
-          group: 'Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.stockAnalytics,
-          label: 'Stock Analytics',
-          icon: PhosphorIcons.trendUp(),
-          group: 'Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.stockOut,
-          label: 'Stock Out',
-          icon: PhosphorIcons.trendDown(),
-          group: 'Operations',
-        ),
+        // ── Restaurant Operations ──
         MasterNavItem(
           section: BranchManagerSection.restaurant,
-          label: 'Restaurant',
+          label: 'Restaurant Overview',
           icon: PhosphorIcons.forkKnife(),
-          group: 'Restaurant',
+          group: 'Restaurant Operations',
+        ),
+        const MasterNavItem(
+          section: BranchManagerSection.waiterSales,
+          label: 'Waiter Performance',
+          icon: Icons.groups_outlined,
+          group: 'Restaurant Operations',
         ),
         const MasterNavItem(
           section: BranchManagerSection.orderIntelligence,
           label: 'Order Intelligence',
           icon: Icons.insights_outlined,
-          group: 'Restaurant',
+          group: 'Restaurant Operations',
         ),
         MasterNavItem(
           section: BranchManagerSection.menu,
           label: 'Restaurant Menu',
           icon: PhosphorIcons.listChecks(),
-          group: 'Restaurant',
+          group: 'Restaurant Operations',
         ),
         MasterNavItem(
           section: BranchManagerSection.barMenu,
           label: 'Bar Menu',
           icon: PhosphorIcons.wine(),
-          group: 'Restaurant',
+          group: 'Restaurant Operations',
         ),
+        // ── Facility Management ──
         const MasterNavItem(
           section: BranchManagerSection.housekeeping,
           label: 'Housekeeping',
           icon: Icons.cleaning_services_outlined,
-          group: 'Facilities',
+          group: 'Facility Management',
         ),
         MasterNavItem(
           section: BranchManagerSection.maintenance,
           label: 'Maintenance',
           icon: PhosphorIcons.wrench(),
-          group: 'Facilities',
+          group: 'Facility Management',
+        ),
+        // ── Stock Management ──
+        MasterNavItem(
+          section: BranchManagerSection.stock,
+          label: 'Stock Overview',
+          icon: PhosphorIcons.package(),
+          group: 'Stock Management',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.stockAnalytics,
+          label: 'Stock Analytics',
+          icon: PhosphorIcons.trendUp(),
+          group: 'Stock Management',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.stockOut,
+          label: 'Stock Issuance',
+          icon: PhosphorIcons.trendDown(),
+          group: 'Stock Management',
         ),
         MasterNavItem(
           section: BranchManagerSection.wastage,
-          label: 'Wastage',
+          label: 'Wastage Tracking',
           icon: PhosphorIcons.trash(),
-          group: 'Reporting',
+          group: 'Stock Management',
         ),
+        // ── Staff Management ──
+        MasterNavItem(
+          section: BranchManagerSection.staff,
+          label: 'Staff Directory',
+          icon: PhosphorIcons.users(),
+          group: 'Staff Management',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.attendance,
+          label: 'Attendance',
+          icon: PhosphorIcons.clock(),
+          group: 'Staff Management',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.leave,
+          label: 'Leave Requests',
+          icon: PhosphorIcons.paperPlaneTilt(),
+          group: 'Staff Management',
+        ),
+        const MasterNavItem(
+          section: BranchManagerSection.staffPerformance,
+          label: 'Performance',
+          icon: Icons.speed_outlined,
+          group: 'Staff Management',
+        ),
+        // ── Reports ──
         MasterNavItem(
           section: BranchManagerSection.reports,
           label: 'Reports',
           icon: PhosphorIcons.filePdf(),
-          group: 'Reporting',
+          group: 'Reports',
         ),
         MasterNavItem(
           section: BranchManagerSection.reviews,
           label: 'Review Management',
           icon: PhosphorIcons.chatCircle(),
-          group: 'Reporting',
+          group: 'Reports',
         ),
       ];
 
@@ -554,6 +577,8 @@ class _BranchManagerDashboardState
         return _overview();
       case BranchManagerSection.analytics:
         return _analytics();
+      case BranchManagerSection.salesPayments:
+        return const BranchSalesPaymentsView();
       case BranchManagerSection.newReservation:
         return _reservationBuilder();
       case BranchManagerSection.reservationDetail:
@@ -1996,6 +2021,8 @@ String _label(BranchManagerSection section) {
       return 'Overview';
     case BranchManagerSection.analytics:
       return 'Sales Analytics';
+    case BranchManagerSection.salesPayments:
+      return 'Sales & Payments';
     case BranchManagerSection.cashierClearance:
       return 'Cashier Clearance';
     case BranchManagerSection.soldItems:

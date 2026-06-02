@@ -11,11 +11,16 @@ import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 
 // ── AI Clients ────────────────────────────────────────────────────────────────
-const groq   = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
-const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const GEMINI_API_KEY =
+  process.env.GEMINI_API_KEY ||
+  process.env.GOOGLE_GEMINI_API_KEY ||
+  process.env.GOOGLE_API_KEY ||
+  '';
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
+const gemini = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 const GROQ_MODEL   = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const RETIRED_GEMINI_MODELS = new Set(['gemini-1.5-flash', 'models/gemini-1.5-flash']);
 const configuredGeminiModel = (process.env.GEMINI_MODEL || process.env.GOOGLE_GEMINI_MODEL || '').trim();
 const GEMINI_MODEL = configuredGeminiModel && !RETIRED_GEMINI_MODELS.has(configuredGeminiModel)
@@ -378,6 +383,24 @@ function localExecutiveSummary(ctx: Record<string, any>, reason: string) {
   return { summary, context: ctx, ...aiFallbackMeta(reason) };
 }
 
+async function generateGroqAnalysis(prompt: string, ctx: Record<string, any>, maxTokens = 2200): Promise<string | null> {
+  if (!process.env.GROQ_API_KEY?.trim()) {
+    return null;
+  }
+
+  const result = await groq.chat.completions.create({
+    model: GROQ_MODEL,
+    max_tokens: maxTokens,
+    temperature: 0.35,
+    messages: [
+      { role: 'system', content: GROQ_CHAT_SYSTEM + buildContextBlock(ctx) },
+      { role: 'user', content: prompt },
+    ],
+  });
+
+  return result.choices[0]?.message?.content?.trim() || null;
+}
+
 function localAnomalyReport(ctx: Record<string, any>, reason: string) {
   const anomalies = ctx.anomalies || {};
   const top = Array.isArray(anomalies.top_10) ? anomalies.top_10 : [];
@@ -607,12 +630,6 @@ export const getExecutiveSummary = async (req: Request, res: Response): Promise<
   let ctx: Record<string, any> | null = null;
   try {
     ctx = await gatherSystemContext();
-    if (!process.env.GEMINI_API_KEY?.trim()) {
-      res.json({ success: true, data: localExecutiveSummary(ctx, 'GEMINI_API_KEY is not configured.') });
-      return;
-    }
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
 
 TASK: Generate a comprehensive executive briefing for today's Famous Gates Hotel operations.
@@ -640,6 +657,17 @@ Structure your response as:
 
 Be specific with KES amounts, percentages, and counts. Reference actual branch names from the context.`;
 
+    if (!GEMINI_API_KEY.trim()) {
+      const groqSummary = await generateGroqAnalysis(prompt, ctx);
+      if (groqSummary) {
+        res.json({ success: true, data: { summary: groqSummary, model: `groq/${GROQ_MODEL}`, context: ctx, ai_available: true, generated_at: new Date().toISOString() } });
+        return;
+      }
+      res.json({ success: true, data: localExecutiveSummary(ctx, 'No AI provider key is configured.') });
+      return;
+    }
+    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
+
     const result = await model.generateContent(prompt);
     const summary = result.response.text();
 
@@ -650,6 +678,21 @@ Be specific with KES amounts, percentages, and counts. Reference actual branch n
       model: GEMINI_MODEL
     });
     if (ctx) {
+      try {
+        const groqSummary = await generateGroqAnalysis(
+          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same executive briefing from the live system context.`,
+          ctx,
+        );
+        if (groqSummary) {
+          res.json({ success: true, data: { summary: groqSummary, model: `groq/${GROQ_MODEL}`, context: ctx, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
+          return;
+        }
+      } catch (groqErr: any) {
+        logger.warn('Lina Groq executive summary fallback unavailable', {
+          error: aiFailureReason(groqErr),
+          model: GROQ_MODEL
+        });
+      }
       res.json({ success: true, data: localExecutiveSummary(ctx, aiFailureReason(err)) });
       return;
     }
@@ -662,12 +705,6 @@ export const getAnomalyReport = async (req: Request, res: Response): Promise<voi
   let ctx: Record<string, any> | null = null;
   try {
     ctx = await gatherSystemContext();
-    if (!process.env.GEMINI_API_KEY?.trim()) {
-      res.json({ success: true, data: localAnomalyReport(ctx, 'GEMINI_API_KEY is not configured.') });
-      return;
-    }
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
 
 TASK: Perform a full enterprise anomaly audit. Be thorough and ruthless.
@@ -693,14 +730,36 @@ For each finding:
 ### 🎯 Priority Action Queue
 [Top 5 things to fix right now, in order]`;
 
+    if (!GEMINI_API_KEY.trim()) {
+      const groq = await generateGroqAnalysis(prompt, ctx);
+      if (groq) {
+        res.json({ success: true, data: { report: groq, model: `groq/${GROQ_MODEL}`, ai_available: true, generated_at: new Date().toISOString() } });
+        return;
+      }
+      res.json({ success: true, data: localAnomalyReport(ctx, 'No AI provider key is configured.') });
+      return;
+    }
+    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
     const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { report: result.response.text(), model: GEMINI_MODEL, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { report: result.response.text(), model: GEMINI_MODEL, ai_available: true, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.warn('Lina Gemini anomaly report unavailable; serving local analysis', {
+    logger.warn('Lina Gemini anomaly report unavailable; trying Groq then local', {
       error: aiFailureReason(err),
       model: GEMINI_MODEL
     });
     if (ctx) {
+      try {
+        const groq = await generateGroqAnalysis(
+          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same anomaly audit from the live system context.`,
+          ctx,
+        );
+        if (groq) {
+          res.json({ success: true, data: { report: groq, model: `groq/${GROQ_MODEL}`, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
+          return;
+        }
+      } catch (groqErr: any) {
+        logger.warn('Lina Groq anomaly fallback unavailable', { error: aiFailureReason(groqErr) });
+      }
       res.json({ success: true, data: localAnomalyReport(ctx, aiFailureReason(err)) });
       return;
     }
@@ -729,12 +788,6 @@ export const getEmployeeIntelligence = async (req: Request, res: Response): Prom
       staff_audit_actions: disciplineRes.status === 'fulfilled' ? (disciplineRes.value.data || []) : [],
     };
 
-    if (!process.env.GEMINI_API_KEY?.trim()) {
-      res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, 'GEMINI_API_KEY is not configured.') });
-      return;
-    }
-
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
 
 ADDITIONAL EMPLOYEE DATA:
@@ -765,14 +818,37 @@ TASK: Deep employee intelligence analysis.
 ### 📋 HR Action Items
 [Priority recommendations for HR/management]`;
 
+    if (!GEMINI_API_KEY.trim()) {
+      const groq = await generateGroqAnalysis(prompt, ctx);
+      if (groq) {
+        res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: employeeData, ai_available: true, generated_at: new Date().toISOString() } });
+        return;
+      }
+      res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, 'No AI provider key is configured.') });
+      return;
+    }
+
+    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
     const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: employeeData, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: employeeData, ai_available: true, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.warn('Lina Gemini employee intelligence unavailable; serving local analysis', {
+    logger.warn('Lina Gemini employee intelligence unavailable; trying Groq then local', {
       error: aiFailureReason(err),
       model: GEMINI_MODEL
     });
     if (ctx && employeeData) {
+      try {
+        const groq = await generateGroqAnalysis(
+          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same employee intelligence report from the live system context and employee data:\n${JSON.stringify(employeeData)}`,
+          ctx,
+        );
+        if (groq) {
+          res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: employeeData, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
+          return;
+        }
+      } catch (groqErr: any) {
+        logger.warn('Lina Groq employee fallback unavailable', { error: aiFailureReason(groqErr) });
+      }
       res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, aiFailureReason(err)) });
       return;
     }
@@ -805,12 +881,6 @@ export const getFinancialIntelligence = async (req: Request, res: Response): Pro
       revenue_context: ctx.revenue,
     };
 
-    if (!process.env.GEMINI_API_KEY?.trim()) {
-      res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, 'GEMINI_API_KEY is not configured.') });
-      return;
-    }
-
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
 
 ADDITIONAL FINANCIAL DATA (30 days):
@@ -841,14 +911,37 @@ TASK: Comprehensive financial intelligence analysis.
 ### 🎯 Financial Action Items
 [Ranked by financial impact — CRITICAL first]`;
 
+    if (!GEMINI_API_KEY.trim()) {
+      const groq = await generateGroqAnalysis(prompt, ctx);
+      if (groq) {
+        res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: financialData, ai_available: true, generated_at: new Date().toISOString() } });
+        return;
+      }
+      res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, 'No AI provider key is configured.') });
+      return;
+    }
+
+    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
     const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: financialData, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: financialData, ai_available: true, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.warn('Lina Gemini financial intelligence unavailable; serving local analysis', {
+    logger.warn('Lina Gemini financial intelligence unavailable; trying Groq then local', {
       error: aiFailureReason(err),
       model: GEMINI_MODEL
     });
     if (ctx && financialData) {
+      try {
+        const groq = await generateGroqAnalysis(
+          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same financial intelligence report from the live system context and financial data:\n${JSON.stringify(financialData)}`,
+          ctx,
+        );
+        if (groq) {
+          res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: financialData, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
+          return;
+        }
+      } catch (groqErr: any) {
+        logger.warn('Lina Groq financial fallback unavailable', { error: aiFailureReason(groqErr) });
+      }
       res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, aiFailureReason(err)) });
       return;
     }
@@ -861,12 +954,6 @@ export const getRecommendations = async (req: Request, res: Response): Promise<v
   let ctx: Record<string, any> | null = null;
   try {
     ctx = await gatherSystemContext();
-    if (!process.env.GEMINI_API_KEY?.trim()) {
-      res.json({ success: true, data: localRecommendations(ctx, 'GEMINI_API_KEY is not configured.') });
-      return;
-    }
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-
     const prompt = `${GEMINI_ANALYSIS_SYSTEM}${buildContextBlock(ctx)}
 
 TASK: Generate 6-8 prioritized, actionable recommendations for Famous Gates management.
@@ -887,26 +974,66 @@ Format:
   }
 ]`;
 
-    const result = await model.generateContent(prompt);
-    let rawText = result.response.text().trim();
+    const parseRecs = (raw: string): any[] | null => {
+      const cleaned = raw.trim().replace(/^```json?\s*/i, '').replace(/\s*```$/i, '');
+      try {
+        const parsed = JSON.parse(cleaned);
+        return Array.isArray(parsed) ? parsed : null;
+      } catch {
+        // Try to extract the first JSON array substring
+        const match = cleaned.match(/\[[\s\S]*\]/);
+        if (match) {
+          try {
+            const parsed = JSON.parse(match[0]);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      }
+    };
 
-    // Strip markdown fences if present
-    rawText = rawText.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '');
-
-    let recommendations: any[] = [];
-    try {
-      recommendations = JSON.parse(rawText);
-    } catch {
-      recommendations = [{ title: 'AI analysis unavailable', severity: 'LOW', remediation_level: 'MANUAL_ONLY', suggested_action: 'Retry recommendation engine' }];
+    if (!GEMINI_API_KEY.trim()) {
+      const groqText = await generateGroqAnalysis(prompt, ctx, 1800);
+      const recs = groqText ? parseRecs(groqText) : null;
+      if (recs) {
+        res.json({ success: true, data: { recommendations: recs, model: `groq/${GROQ_MODEL}`, ai_available: true, generated_at: new Date().toISOString() } });
+        return;
+      }
+      res.json({ success: true, data: localRecommendations(ctx, 'No AI provider key is configured.') });
+      return;
     }
 
-    res.json({ success: true, data: { recommendations, model: GEMINI_MODEL, generated_at: new Date().toISOString() } });
+    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
+    const result = await model.generateContent(prompt);
+    const recommendations = parseRecs(result.response.text()) ?? [
+      { title: 'AI analysis unavailable', severity: 'LOW', remediation_level: 'MANUAL_ONLY', suggested_action: 'Retry recommendation engine' },
+    ];
+
+    res.json({ success: true, data: { recommendations, model: GEMINI_MODEL, ai_available: true, generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.warn('Lina Gemini recommendations unavailable; serving local recommendations', {
+    logger.warn('Lina Gemini recommendations unavailable; trying Groq then local', {
       error: aiFailureReason(err),
       model: GEMINI_MODEL
     });
     if (ctx) {
+      try {
+        const groqText = await generateGroqAnalysis(
+          `Gemini was unavailable (${aiFailureReason(err)}). Return ONLY a JSON array of 6-8 prioritized recommendations with fields title, severity, impact, suggested_action, remediation_level, estimated_effort, module, kpi_impact — from the live system context.`,
+          ctx,
+          1800,
+        );
+        const cleaned = (groqText || '').trim().replace(/^```json?\s*/i, '').replace(/\s*```$/i, '');
+        const match = cleaned.match(/\[[\s\S]*\]/);
+        const recs = match ? JSON.parse(match[0]) : null;
+        if (Array.isArray(recs) && recs.length > 0) {
+          res.json({ success: true, data: { recommendations: recs, model: `groq/${GROQ_MODEL}`, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
+          return;
+        }
+      } catch (groqErr: any) {
+        logger.warn('Lina Groq recommendations fallback unavailable', { error: aiFailureReason(groqErr) });
+      }
       res.json({ success: true, data: localRecommendations(ctx, aiFailureReason(err)) });
       return;
     }
@@ -957,7 +1084,7 @@ export const getLiveMonitoring = async (req: Request, res: Response): Promise<vo
         database: { status: dbErr ? 'degraded' : 'healthy', latency_ms: dbMs, error: dbErr?.message || null },
         ai_providers: {
           groq: { model: GROQ_MODEL, status: process.env.GROQ_API_KEY ? 'configured' : 'missing_key' },
-          gemini: { model: GEMINI_MODEL, status: process.env.GEMINI_API_KEY ? 'configured' : 'missing_key' },
+          gemini: { model: GEMINI_MODEL, status: GEMINI_API_KEY ? 'configured' : 'missing_key' },
         },
         maintenance_mode: maintenanceOn,
         pending_remediations: Array.from(pendingRemediations.values()).filter((r: any) => r.status === 'pending').length,

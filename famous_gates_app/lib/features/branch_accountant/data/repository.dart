@@ -255,9 +255,25 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<Map<String, dynamic>> getShiftLog(String id) {
+    return _getMap('/cashier/shifts/$id');
+  }
+
   Future<void> reconcileShift(String id, String notes) async {
     await _dio.put('/cashier/shifts/$id/reconcile', data: {
       'reconciliation_notes': notes,
+    });
+  }
+
+  Future<void> approveShiftOpening(String id, {String? notes}) async {
+    await _dio.put('/cashier/shifts/$id/approve-open', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> rejectShiftOpening(String id, {String? notes}) async {
+    await _dio.put('/cashier/shifts/$id/reject-open', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
     });
   }
 
@@ -266,6 +282,18 @@ class BranchAccountantRepository {
     return _getList('/cashier/logbook/pending', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
     });
+  }
+
+  Future<Map<String, dynamic>> getCashierLogbookDetail(String id) {
+    return _getMap('/cashier/logbook/$id');
+  }
+
+  Future<File> downloadCashierLogbookReport(String id) async {
+    final res = await _dio.get<List<int>>(
+      '/cashier/logbook/$id/pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(res.data ?? const [], 'Cashier_Logbook_$id.pdf');
   }
 
   Future<void> auditCashierLogbook(
@@ -414,16 +442,35 @@ class BranchAccountantRepository {
 
   Future<List<Map<String, dynamic>>> getFinanceInvoices() async {
     final branchId = await getBranchId();
-    return _getList('/finance/invoices', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
+    try {
+      return await _getList('/finance/invoices', query: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
+    } on DioException catch (e) {
+      // Invoice register is optional; degrade to empty instead of an error page
+      if (e.response?.statusCode == 500 ||
+          e.response?.statusCode == 404 ||
+          e.response?.statusCode == 403) {
+        return [];
+      }
+      rethrow;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getFinanceTransactions() async {
     final branchId = await getBranchId();
-    return _getList('/finance/transactions', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
+    try {
+      return await _getList('/finance/transactions', query: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 500 ||
+          e.response?.statusCode == 404 ||
+          e.response?.statusCode == 403) {
+        return [];
+      }
+      rethrow;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getPendingFoodVariances() async {

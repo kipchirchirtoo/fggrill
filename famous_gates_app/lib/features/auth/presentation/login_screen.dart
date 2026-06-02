@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
+import 'package:famous_gates_app/core/widgets/safe_asset_image.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/auth_notifier.dart';
 import '../domain/role_routes.dart';
@@ -94,12 +95,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     autofocus: true,
                     child: Container(
                       color: Colors.white,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 64),
+                      padding: const EdgeInsets.symmetric(horizontal: 64),
                       child: Center(
                         child: ConstrainedBox(
-                          constraints:
-                              const BoxConstraints(maxWidth: 400),
+                          constraints: const BoxConstraints(maxWidth: 400),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,12 +111,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
-                                    borderRadius:
-                                        BorderRadius.circular(14),
-                                    border: Border.all(
-                                        color: Colors.black12),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: Colors.black12),
                                   ),
-                                  child: Image.asset(
+                                  child: const SafeAssetImage(
                                     'assets/frontend_public/fglogo.png',
                                     fit: BoxFit.contain,
                                   ),
@@ -126,32 +123,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ],
                               Text(
                                 'Login',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .displaySmall,
+                                style: Theme.of(context).textTheme.displaySmall,
                               ),
                               const SizedBox(height: 6),
                               const Text(
                                 'Sign in to your account to continue.',
-                                style: TextStyle(
-                                    color: AppColors.kTextSecondary),
+                                style:
+                                    TextStyle(color: AppColors.kTextSecondary),
                               ),
                               const SizedBox(height: 32),
                               // ── Email ──────────────────────────────
                               TextField(
                                 controller: _emailController,
-                                keyboardType:
-                                    TextInputType.emailAddress,
-                                autofillHints: const [
-                                  AutofillHints.email
-                                ],
+                                keyboardType: TextInputType.emailAddress,
+                                autofillHints: const [AutofillHints.email],
                                 textInputAction: TextInputAction.next,
                                 onSubmitted: (_) =>
                                     _passwordFocus.requestFocus(),
                                 decoration: const InputDecoration(
                                   labelText: 'Email Address',
-                                  prefixIcon:
-                                      Icon(Icons.email_outlined),
+                                  prefixIcon: Icon(Icons.email_outlined),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -160,16 +151,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 controller: _passwordController,
                                 focusNode: _passwordFocus,
                                 obscureText: _obscurePassword,
-                                autofillHints: const [
-                                  AutofillHints.password
-                                ],
+                                autofillHints: const [AutofillHints.password],
                                 textInputAction: TextInputAction.done,
                                 onSubmitted: (_) =>
                                     _isLoading ? null : _login(),
                                 decoration: InputDecoration(
                                   labelText: 'Password',
-                                  prefixIcon:
-                                      const Icon(Icons.lock_outline),
+                                  prefixIcon: const Icon(Icons.lock_outline),
                                   suffixIcon: IconButton(
                                     tooltip: _obscurePassword
                                         ? 'Show password'
@@ -177,13 +165,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     icon: Icon(
                                       _obscurePassword
                                           ? Icons.visibility_outlined
-                                          : Icons
-                                              .visibility_off_outlined,
+                                          : Icons.visibility_off_outlined,
                                       size: 20,
                                     ),
                                     onPressed: () => setState(() =>
-                                        _obscurePassword =
-                                            !_obscurePassword),
+                                        _obscurePassword = !_obscurePassword),
                                   ),
                                 ),
                               ),
@@ -197,8 +183,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         () => _rememberMe = v ?? false),
                                   ),
                                   GestureDetector(
-                                    onTap: () => setState(() =>
-                                        _rememberMe = !_rememberMe),
+                                    onTap: () => setState(
+                                        () => _rememberMe = !_rememberMe),
                                     child: const Text('Remember me'),
                                   ),
                                 ],
@@ -208,8 +194,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton(
-                                  onPressed:
-                                      _isLoading ? null : _login,
+                                  onPressed: _isLoading ? null : _login,
                                   child: _isLoading
                                       ? const SizedBox(
                                           height: 20,
@@ -266,8 +251,7 @@ class _BrandPanel extends StatelessWidget {
       'assets/frontend_public/fggallery/294216767_538857271357927_3834486940661836835_n.jpeg';
 
   // Official golden gate icon — works perfectly on dark overlays
-  static const _logoImage =
-      'assets/frontend_public/fglogo.png';
+  static const _logoImage = 'assets/frontend_public/fglogo.png';
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +259,7 @@ class _BrandPanel extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         // ── 1. Background photo ──────────────────────────────────────────
-        Image.asset(_bgImage, fit: BoxFit.cover),
+        const SafeAssetImage(_bgImage, fit: BoxFit.cover),
 
         // ── 2. Dark gradient overlay (ensures text legibility) ───────────
         DecoratedBox(
@@ -296,8 +280,7 @@ class _BrandPanel extends StatelessWidget {
         // ── 3. Content ───────────────────────────────────────────────────
         SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 44, vertical: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 40),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -320,7 +303,8 @@ class _BrandPanel extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: Image.asset(_logoImage, fit: BoxFit.contain),
+                      child:
+                          const SafeAssetImage(_logoImage, fit: BoxFit.contain),
                     ),
                     const SizedBox(width: 14),
                     const Column(
@@ -469,8 +453,8 @@ class _FeatureRow extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.kAccent.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: AppColors.kAccent.withValues(alpha: 0.30)),
+            border:
+                Border.all(color: AppColors.kAccent.withValues(alpha: 0.30)),
           ),
           child: Icon(icon, color: AppColors.kAccent, size: 16),
         ),

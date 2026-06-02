@@ -23,6 +23,8 @@ import {
     saveCashierLogbook,
     submitLogbookForAudit,
     getLogbooksForAudit,
+    getCashierLogbookDetail,
+    downloadCashierLogbookReport,
     auditLogbook,
     getCashierPOSItems,
     createPOSTransaction,
@@ -95,6 +97,8 @@ router.get('/logbook/today', getCashierLogbookToday);
 router.post('/logbook', saveCashierLogbook);
 router.post('/logbook/:id/submit', submitLogbookForAudit);
 router.get('/logbook/pending', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.FINANCE_MANAGER, UserRole.NIGHT_AUDITOR] as any), getLogbooksForAudit);
+router.get('/logbook/:id', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.FINANCE_MANAGER, UserRole.NIGHT_AUDITOR] as any), getCashierLogbookDetail);
+router.get('/logbook/:id/pdf', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.FINANCE_MANAGER, UserRole.NIGHT_AUDITOR] as any), downloadCashierLogbookReport);
 router.post('/logbook/:id/audit', authorize(['auditor', UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.FINANCE_MANAGER, UserRole.NIGHT_AUDITOR] as any), auditLogbook);
 
 // ============================================

@@ -3950,6 +3950,9 @@ class _CashierLogbooksSectionState
     extends ConsumerState<_CashierLogbooksSection> {
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks();
+  Map<String, dynamic>? _selectedLogbook;
+  Future<Map<String, dynamic>>? _detailFuture;
+  bool _downloadingReport = false;
 
   void _refresh() {
     final nextFuture = ref
@@ -3960,8 +3963,65 @@ class _CashierLogbooksSectionState
     });
   }
 
+  void _openDetail(Map<String, dynamic> logbook) {
+    final id = '${logbook['id'] ?? ''}';
+    if (id.isEmpty) {
+      _toast('Logbook ID is missing');
+      return;
+    }
+    setState(() {
+      _selectedLogbook = logbook;
+      _detailFuture = ref
+          .read(branchAccountantRepositoryProvider)
+          .getCashierLogbookDetail(id);
+    });
+  }
+
+  void _refreshDetail() {
+    final id = '${_selectedLogbook?['id'] ?? ''}';
+    if (id.isEmpty) return;
+    final nextFuture = ref
+        .read(branchAccountantRepositoryProvider)
+        .getCashierLogbookDetail(id);
+    setState(() {
+      _detailFuture = nextFuture;
+    });
+  }
+
+  Future<void> _downloadReport(Map<String, dynamic> detail) async {
+    final id = '${detail['id'] ?? _selectedLogbook?['id'] ?? ''}';
+    if (id.isEmpty || _downloadingReport) return;
+    setState(() => _downloadingReport = true);
+    try {
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadCashierLogbookReport(id);
+      _toast('Shift report saved to ${file.path}');
+    } finally {
+      if (mounted) setState(() => _downloadingReport = false);
+    }
+  }
+
+  void _backToList() {
+    setState(() {
+      _selectedLogbook = null;
+      _detailFuture = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final detailFuture = _detailFuture;
+    if (_selectedLogbook != null && detailFuture != null) {
+      return _CashierLogbookDetailScreen(
+        future: detailFuture,
+        onBack: _backToList,
+        onRefresh: _refreshDetail,
+        onDownloadReport: _downloadReport,
+        downloadingReport: _downloadingReport,
+      );
+    }
+
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
@@ -3975,40 +4035,11 @@ class _CashierLogbooksSectionState
           children: [
             _SectionCard(
               title: 'Pending Audit',
-              child: _SimpleTable(
-                columns: const [
-                  'Date',
-                  'Type',
-                  'Cashier',
-                  'Branch',
-                  'Closing',
-                  'Variance',
-                  'Actions'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e, ['log_date', 'date']),
-                          _text(e, ['type']),
-                          '${_text(_map(e['cashier']), [
-                                'first_name'
-                              ])} ${_text(_map(e['cashier']), ['last_name'])}'
-                              .trim(),
-                          _text(_map(e['branch']), ['name']),
-                          _money(_num(e['closing_float'])),
-                          _money(_num(e['variance'])),
-                          Wrap(spacing: 8, children: [
-                            TextButton(
-                                onPressed: () => _showRecord(context, e),
-                                child: const Text('View')),
-                            FilledButton.tonal(
-                                onPressed: () => _audit(e, true),
-                                child: const Text('Approve')),
-                            OutlinedButton(
-                                onPressed: () => _audit(e, false),
-                                child: const Text('Reject')),
-                          ]),
-                        ])
-                    .toList(),
+              child: _CashierLogbooksTable(
+                items: items,
+                onView: _openDetail,
+                onApprove: (logbook) => _audit(logbook, true),
+                onReject: (logbook) => _audit(logbook, false),
               ),
             ),
           ],
@@ -4032,6 +4063,581 @@ class _CashierLogbooksSectionState
         );
     _toast(approve ? 'Logbook approved' : 'Logbook rejected');
     _refresh();
+  }
+}
+
+class _CashierLogbooksTable extends StatelessWidget {
+  const _CashierLogbooksTable({
+    required this.items,
+    required this.onView,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final List<Map<String, dynamic>> items;
+  final void Function(Map<String, dynamic> logbook) onView;
+  final void Function(Map<String, dynamic> logbook) onApprove;
+  final void Function(Map<String, dynamic> logbook) onReject;
+
+  static const _columns = <_LogbookColumn>[
+    _LogbookColumn('Date', 130),
+    _LogbookColumn('Type', 120),
+    _LogbookColumn('Cashier', 220),
+    _LogbookColumn('Branch', 180),
+    _LogbookColumn('Closing', 120),
+    _LogbookColumn('Variance', 120),
+    _LogbookColumn('Actions', 270),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            'No pending cashier logbooks',
+            style: TextStyle(color: AppColors.kTextSecondary),
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final contentWidth = _columns.fold<double>(
+          0,
+          (total, column) => total + column.width,
+        );
+        final tableWidth = constraints.maxWidth > contentWidth
+            ? constraints.maxWidth
+            : contentWidth;
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: tableWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _CashierLogbooksHeader(columns: _columns),
+                ...items.map(
+                  (logbook) => _CashierLogbooksRow(
+                    logbook: logbook,
+                    columns: _columns,
+                    onView: () => onView(logbook),
+                    onApprove: () => onApprove(logbook),
+                    onReject: () => onReject(logbook),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LogbookColumn {
+  const _LogbookColumn(this.label, this.width);
+  final String label;
+  final double width;
+}
+
+class _CashierLogbooksHeader extends StatelessWidget {
+  const _CashierLogbooksHeader({required this.columns});
+
+  final List<_LogbookColumn> columns;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 56,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.kDivider)),
+      ),
+      child: Row(
+        children: columns
+            .map(
+              (column) => SizedBox(
+                width: column.width,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Text(
+                    column.label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.kTextPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _CashierLogbooksRow extends StatelessWidget {
+  const _CashierLogbooksRow({
+    required this.logbook,
+    required this.columns,
+    required this.onView,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final Map<String, dynamic> logbook;
+  final List<_LogbookColumn> columns;
+  final VoidCallback onView;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final cashier = _map(logbook['cashier']);
+    final cashierName = '${_text(cashier, ['first_name'])} '
+            '${_text(cashier, ['last_name'])}'
+        .trim();
+    final cells = <Widget>[
+      _LogbookText(_text(logbook, ['log_date', 'date'])),
+      _LogbookText(_text(logbook, ['type'])),
+      _LogbookText(
+          cashierName.isEmpty ? _text(logbook, ['cashier_name']) : cashierName),
+      _LogbookText(_text(_map(logbook['branch']), ['name', 'branch_name'])),
+      _LogbookText(_money(_num(logbook['closing_float']))),
+      _LogbookText(_money(_num(logbook['variance']))),
+      _CashierLogbookActions(
+        onView: onView,
+        onApprove: onApprove,
+        onReject: onReject,
+      ),
+    ];
+
+    return Container(
+      height: 64,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.kDivider)),
+      ),
+      child: Row(
+        children: List.generate(
+          columns.length,
+          (index) => SizedBox(
+            width: columns[index].width,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: cells[index],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LogbookText extends StatelessWidget {
+  const _LogbookText(this.value);
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value.isEmpty ? '-' : value,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(color: AppColors.kTextPrimary),
+    );
+  }
+}
+
+class _CashierLogbookActions extends StatelessWidget {
+  const _CashierLogbookActions({
+    required this.onView,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final VoidCallback onView;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton(
+          onPressed: onView,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          child: const Text('View'),
+        ),
+        const SizedBox(width: 6),
+        FilledButton.tonal(
+          onPressed: onApprove,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+          ),
+          child: const Text('Approve'),
+        ),
+        const SizedBox(width: 6),
+        OutlinedButton(
+          onPressed: onReject,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+          child: const Text('Reject'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CashierLogbookDetailScreen extends StatelessWidget {
+  const _CashierLogbookDetailScreen({
+    required this.future,
+    required this.onBack,
+    required this.onRefresh,
+    required this.onDownloadReport,
+    required this.downloadingReport,
+  });
+
+  final Future<Map<String, dynamic>> future;
+  final VoidCallback onBack;
+  final VoidCallback onRefresh;
+  final Future<void> Function(Map<String, dynamic> detail) onDownloadReport;
+  final bool downloadingReport;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: future,
+      builder: (context, snapshot) => _FuturePage(
+        snapshot: snapshot,
+        onRefresh: onRefresh,
+        builder: (detail) {
+          final branch = _map(detail['branch']);
+          final cashier = _map(detail['cashier']);
+          final shift = _map(detail['shift']);
+          final summary = _map(detail['summary']);
+          final reconciliation = _map(detail['cash_reconciliation']);
+          final payments = _list(detail['payment_breakdown']);
+          final revenue = _list(detail['revenue_breakdown']);
+          final flags = _list(detail['compliance_flags']);
+          final lines = _list(detail['lines']);
+          final cashierName = _logbookPersonName(cashier);
+          final subtitleParts = [
+            _text(branch, ['name']),
+            cashierName,
+            _text(detail, ['log_date']),
+          ].where((value) => value.isNotEmpty).join(' • ');
+
+          return _Page(
+            title: 'Cashier Shift Logbook',
+            subtitle: subtitleParts.isEmpty
+                ? 'Automated shift compliance and sales evidence'
+                : subtitleParts,
+            actions: [
+              OutlinedButton.icon(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Back'),
+              ),
+              _RefreshButton(onPressed: onRefresh),
+              FilledButton.icon(
+                onPressed:
+                    downloadingReport ? null : () => onDownloadReport(detail),
+                icon: downloadingReport
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.picture_as_pdf),
+                label:
+                    Text(downloadingReport ? 'Preparing PDF' : 'Download PDF'),
+              ),
+            ],
+            children: [
+              _ResponsiveGrid(
+                children: [
+                  _MetricCard(
+                    'Total Sales',
+                    _money(_num(summary['total_sales'])),
+                    Icons.point_of_sale,
+                    Colors.green,
+                  ),
+                  _MetricCard(
+                    'Transactions',
+                    '${_num(summary['transaction_count']).toInt()}',
+                    Icons.receipt_long,
+                    AppColors.kPrimary,
+                  ),
+                  _MetricCard(
+                    'Expected Cash',
+                    _money(_num(reconciliation['expected_closing'])),
+                    Icons.account_balance_wallet,
+                    Colors.blue,
+                  ),
+                  _MetricCard(
+                    'Actual Cash',
+                    _money(_num(reconciliation['actual_closing'])),
+                    Icons.payments,
+                    Colors.teal,
+                  ),
+                  _MetricCard(
+                    'Variance',
+                    _money(_num(reconciliation['variance'])),
+                    Icons.warning_amber,
+                    _num(reconciliation['variance']).abs() < 0.01
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                  _MetricCard(
+                    'Evidence Lines',
+                    '${lines.length}',
+                    Icons.fact_check,
+                    Colors.orange,
+                  ),
+                ],
+              ),
+              _TwoColumn(
+                left: _SectionCard(
+                  title: 'Shift Identity',
+                  child: _KeyValueList({
+                    'shift_number': _text(shift, ['shift_number']).isEmpty
+                        ? '-'
+                        : _text(shift, ['shift_number']),
+                    'branch': _text(branch, ['name']).isEmpty
+                        ? '-'
+                        : _text(branch, ['name']),
+                    'cashier': cashierName.isEmpty ? '-' : cashierName,
+                    'log_date': _text(detail, ['log_date']).isEmpty
+                        ? '-'
+                        : _text(detail, ['log_date']),
+                    'shift_start': _text(shift, ['shift_start']).isEmpty
+                        ? '-'
+                        : _text(shift, ['shift_start']),
+                    'shift_end': _text(shift, ['shift_end']).isEmpty
+                        ? '-'
+                        : _text(shift, ['shift_end']),
+                    'status': _text(detail, ['status']).isEmpty
+                        ? '-'
+                        : _text(detail, ['status']),
+                  }),
+                ),
+                right: _SectionCard(
+                  title: 'Cash Reconciliation',
+                  child: _KeyValueList({
+                    'opening_float': _num(reconciliation['opening_float']),
+                    'cash_sales': _num(reconciliation['cash_sales']),
+                    'credit_payments_received':
+                        _num(reconciliation['credit_payments_received']),
+                    'cash_drops': _num(reconciliation['cash_drops']),
+                    'payouts': _num(reconciliation['payouts']),
+                    'expected_closing':
+                        _num(reconciliation['expected_closing']),
+                    'actual_closing': _num(reconciliation['actual_closing']),
+                    'variance': _num(reconciliation['variance']),
+                  }),
+                ),
+              ),
+              _TwoColumn(
+                left: _SectionCard(
+                  title: 'Sales By Payment Method',
+                  child: _LogbookBreakdownList(
+                    rows: payments,
+                    labelKey: 'method',
+                    amountKey: 'amount',
+                    countKey: 'count',
+                    emptyText: 'No payment methods captured',
+                  ),
+                ),
+                right: _SectionCard(
+                  title: 'Revenue Streams',
+                  child: _LogbookBreakdownList(
+                    rows: revenue,
+                    labelKey: 'label',
+                    amountKey: 'amount',
+                    emptyText: 'No revenue stream data captured',
+                  ),
+                ),
+              ),
+              _SectionCard(
+                title: 'Compliance Checks',
+                child: _ComplianceFlagList(flags: flags),
+              ),
+              _SectionCard(
+                title: 'Transaction Evidence',
+                child: _LogbookEvidenceTable(lines: lines),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+String _logbookPersonName(Map<String, dynamic> person) {
+  final name =
+      '${_text(person, ['first_name'])} ${_text(person, ['last_name'])}'.trim();
+  if (name.isNotEmpty) return name;
+  return _text(person, ['name', 'email']);
+}
+
+class _LogbookBreakdownList extends StatelessWidget {
+  const _LogbookBreakdownList({
+    required this.rows,
+    required this.labelKey,
+    required this.amountKey,
+    this.countKey,
+    required this.emptyText,
+  });
+
+  final List<dynamic> rows;
+  final String labelKey;
+  final String amountKey;
+  final String? countKey;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          emptyText,
+          style: const TextStyle(color: AppColors.kTextSecondary),
+        ),
+      );
+    }
+
+    return Column(
+      children: rows.map((row) {
+        final item = _map(row);
+        final count = countKey == null ? 0 : _num(item[countKey]).toInt();
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _title('${item[labelKey] ?? 'other'}'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (countKey != null) ...[
+                Text(
+                  '$count line${count == 1 ? '' : 's'}',
+                  style: const TextStyle(color: AppColors.kTextSecondary),
+                ),
+                const SizedBox(width: 18),
+              ],
+              Text(
+                _money(_num(item[amountKey])),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _ComplianceFlagList extends StatelessWidget {
+  const _ComplianceFlagList({required this.flags});
+
+  final List<dynamic> flags;
+
+  @override
+  Widget build(BuildContext context) {
+    if (flags.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          'No compliance checks were returned',
+          style: TextStyle(color: AppColors.kTextSecondary),
+        ),
+      );
+    }
+
+    return Column(
+      children: flags.map((flag) {
+        final item = _map(flag);
+        final status = '${item['status'] ?? 'Review'}';
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StatusPill(status),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item['label'] ?? 'Compliance check'}',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${item['detail'] ?? '-'}',
+                      style: const TextStyle(color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _LogbookEvidenceTable extends StatelessWidget {
+  const _LogbookEvidenceTable({required this.lines});
+
+  final List<dynamic> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = lines.map<List<Object>>((line) {
+      final item = _map(line);
+      return <Object>[
+        _title('${item['section'] ?? 'transaction'}'),
+        '${item['reference'] ?? '-'}',
+        '${item['customer_name'] ?? '-'}',
+        _title('${item['payment_method'] ?? 'other'}'),
+        _money(_num(item['amount'])),
+        '${item['status'] ?? '-'}',
+      ];
+    }).toList();
+
+    return _SimpleTable(
+      columns: const [
+        'Section',
+        'Reference',
+        'Customer',
+        'Payment',
+        'Amount',
+        'Status',
+      ],
+      rows: rows,
+    );
   }
 }
 
