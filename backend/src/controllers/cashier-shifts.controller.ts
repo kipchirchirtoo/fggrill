@@ -3,10 +3,49 @@ import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import notificationService from '../services/notification.service';
 
 // ==========================================
 // SHIFT LOGBOOK
 // ==========================================
+
+const SHIFT_MANAGER_ROLES = new Set([
+    'super_admin',
+    'general_manager',
+    'director',
+    'branch_manager',
+    'accountant',
+    'branch_accountant',
+    'auditor',
+    'it_manager'
+]);
+
+function parsePositiveInt(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isShiftManager(role?: unknown): boolean {
+    const normalized = String(role || '').toLowerCase();
+    return SHIFT_MANAGER_ROLES.has(normalized) || isGlobalRole(normalized);
+}
+
+function isLegacyUnapprovedOpenShift(shift: any): boolean {
+    return String(shift?.status || '').toLowerCase() === 'open'
+        && !shift?.opening_requested_by
+        && !shift?.opening_approved_by
+        && !shift?.opening_approved_at;
+}
+
+function normalizeShiftOpeningStatus(shift: any): any {
+    if (!isLegacyUnapprovedOpenShift(shift)) return shift;
+    return {
+        ...shift,
+        status: 'pending_open',
+        legacy_unapproved_open: true,
+        opening_requires_approval: true
+    };
+}
 
 // @desc    Get shift logs
 // @route   GET /api/cashier/shifts
@@ -28,6 +67,13 @@ export const getShiftLogs = async (
 
         // Apply branch isolation automatically
         query = applyBranchFilter(query, req);
+        const requestedBranchId = parsePositiveInt(branch_id);
+        if (requestedBranchId) {
+            const userBranchId = parsePositiveInt(req.user?.branch_id ?? req.user?.branchId);
+            if (isGlobalRole(userRole?.toString()) || !userBranchId || requestedBranchId === userBranchId) {
+                query = query.eq('branch_id', requestedBranchId);
+            }
+        }
         
         // Cashiers can only see their own shifts unless they're admin/accountant/auditor
         const managerRoles = [
@@ -50,9 +96,15 @@ export const getShiftLogs = async (
             query = query.eq('cashier_id', cashier_id);
         }
 
-        // Filter by status
-        if (status) {
-            query = query.eq('status', status);
+        const requestedStatus = status ? String(status).trim() : '';
+        const normalizedStatus = requestedStatus === 'pending_approval'
+            ? 'pending_open'
+            : requestedStatus;
+
+        // pending_open/open are normalized after fetch so legacy unapproved
+        // open rows can still be routed to branch-accountant approval.
+        if (normalizedStatus && !['pending_open', 'open'].includes(normalizedStatus)) {
+            query = query.eq('status', normalizedStatus);
         }
 
         // Filter by date range
@@ -67,7 +119,14 @@ export const getShiftLogs = async (
 
         if (error) throw error;
 
-        const shifts = data || [];
+        let shifts = (data || []).map(normalizeShiftOpeningStatus);
+        if (normalizedStatus === 'pending_open') {
+            shifts = shifts.filter((shift: any) => String(shift.status || '').toLowerCase() === 'pending_open');
+        } else if (normalizedStatus === 'open') {
+            shifts = shifts.filter((shift: any) =>
+                String(shift.status || '').toLowerCase() === 'open' && !shift.opening_requires_approval
+            );
+        }
 
         // Batch-fetch user names for shifts missing cashier_name
         const missingNameIds = [...new Set(
@@ -196,10 +255,11 @@ export const getShiftLog = async (
 
         let query = supabase.from("cashier_shift_logs").select("*").eq("id", id);
         query = applyBranchFilter(query, req);
-        const { data: shift, error: shiftError } = await query.single();
+        const { data: rawShift, error: shiftError } = await query.single();
 
         if (shiftError) throw shiftError;
-        if (!shift) throw new AppError('Shift not found', 404);
+        if (!rawShift) throw new AppError('Shift not found', 404);
+        const shift = normalizeShiftOpeningStatus(rawShift);
 
         // Verify ownership - cashiers can only view their own shifts
         const userId = req.user?.id;
@@ -413,25 +473,79 @@ export const startShift = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { opening_float, notes } = req.body;
+        const { opening_float, notes, cashier_id, cashierId, branch_id, branchId } = req.body;
         const userId = req.user?.id;
-        const userName = `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim();
-        const branchId = req.user?.branch_id;
+        const userRole = req.user?.role;
+        const manager = isShiftManager(userRole);
+        const requestedCashierId = cashier_id || cashierId;
+        const targetCashierId = manager && requestedCashierId ? requestedCashierId : userId;
+        const requestedBranchId = parsePositiveInt(branch_id ?? branchId);
+        const userBranchId = parsePositiveInt(req.user?.branch_id ?? req.user?.branchId);
 
-        if (!branchId) {
+        if (!targetCashierId) {
+            throw new AppError('Cashier ID is required to open a shift', 400);
+        }
+
+        if (requestedCashierId && !manager) {
+            throw new AppError('Only branch accountants or managers can open shifts for another cashier', 403);
+        }
+
+        let targetUser: any = {
+            id: userId,
+            first_name: req.user?.first_name,
+            last_name: req.user?.last_name,
+            email: req.user?.email,
+            role: req.user?.role,
+            branch_id: req.user?.branch_id ?? req.user?.branchId
+        };
+
+        if (targetCashierId !== userId) {
+            const { data: cashier, error: cashierError } = await supabase
+                .from('users')
+                .select('id, first_name, last_name, email, role, branch_id')
+                .eq('id', targetCashierId)
+                .maybeSingle();
+
+            if (cashierError) throw cashierError;
+            if (!cashier) throw new AppError('Selected cashier was not found', 404);
+            targetUser = cashier;
+        }
+
+        const targetBranchId =
+            requestedBranchId ||
+            parsePositiveInt(targetUser.branch_id) ||
+            userBranchId;
+
+        if (!targetBranchId) {
             throw new AppError('Branch ID is required', 400);
         }
 
-        // Check if cashier has an open shift
-        const { data: openShift } = await supabase
-            .from('cashier_shift_logs')
-            .select('id')
-            .eq('cashier_id', userId)
-            .eq('status', 'open')
-            .single();
+        if (!isGlobalRole(userRole?.toString()) && userBranchId && targetBranchId !== userBranchId) {
+            throw new AppError('Forbidden: cannot open a cashier shift for another branch', 403);
+        }
 
-        if (openShift) {
-            throw new AppError('You already have an open shift. Please close it first.', 400);
+        const userName = `${targetUser.first_name || ''} ${targetUser.last_name || ''}`.trim() ||
+            targetUser.email ||
+            'Cashier';
+
+        // Check if cashier already has an open shift or a pending opening request.
+        const { data: openShift, error: openShiftError } = await supabase
+            .from('cashier_shift_logs')
+            .select('id, status, opening_requested_by, opening_approved_by, opening_approved_at')
+            .eq('cashier_id', targetCashierId)
+            .in('status', ['pending_open', 'open'])
+            .limit(1);
+
+        if (openShiftError) throw openShiftError;
+
+        if (openShift && openShift.length > 0) {
+            const activeStatus = normalizeShiftOpeningStatus(openShift[0]).status;
+            throw new AppError(
+                activeStatus === 'pending_open'
+                    ? 'This cashier already has a shift opening request awaiting branch accountant approval.'
+                    : 'This cashier already has an open shift. Please close it first.',
+                400
+            );
         }
 
         // Generate shift number
@@ -440,26 +554,253 @@ export const startShift = async (
 
         if (numberError) throw numberError;
 
-        // Create shift
+        const now = new Date().toISOString();
+        const explicitlyApproved = req.body.approve_immediately === true || req.body.open_immediately === true;
+        const opensImmediately = manager && targetCashierId !== userId && explicitlyApproved;
+
+        // Create shift. Cashiers request opening; branch accountants/managers can open for another cashier.
         const { data: newShift, error: shiftError } = await supabase
             .from('cashier_shift_logs')
             .insert({
                 shift_number: shiftNumber,
-                branch_id: branchId,
-                cashier_id: userId,
+                branch_id: targetBranchId,
+                cashier_id: targetCashierId,
                 cashier_name: userName,
-                shift_start: new Date().toISOString(),
+                shift_start: now,
                 opening_float: opening_float || 0,
-                notes
+                status: opensImmediately ? 'open' : 'pending_open',
+                notes,
+                requested_at: now,
+                opening_requested_by: userId,
+                opening_approved_by: opensImmediately ? userId : null,
+                opening_approved_at: opensImmediately ? now : null,
+                opening_review_notes: opensImmediately
+                    ? (notes || 'Opened directly by branch accountant or manager')
+                    : notes
             })
             .select()
             .single();
 
         if (shiftError) throw shiftError;
 
+        if (opensImmediately) {
+            if (targetCashierId !== userId) {
+                void notificationService.notifyUser(
+                    targetCashierId,
+                    'Cashier shift opened',
+                    `Your shift ${shiftNumber} has been opened by ${req.user?.first_name || 'a branch manager'}.`,
+                    {
+                        type: 'success',
+                        category: 'cashier_shift',
+                        priority: 'medium',
+                        actionUrl: '/cashier/shifts',
+                        metadata: {
+                            shift_id: newShift.id,
+                            shift_number: shiftNumber,
+                            branch_id: targetBranchId,
+                            status: 'open'
+                        }
+                    }
+                ).catch((notifyError) => logger.warn('Shift open notification failed:', notifyError));
+            }
+        } else {
+            const amount = Number(opening_float || 0).toLocaleString('en-KE');
+            void notificationService.notifyRole(
+                'branch_accountant',
+                'Shift opening approval needed',
+                `${userName} requested to open shift ${shiftNumber} with opening float KES ${amount}.`,
+                {
+                    type: 'warning',
+                    category: 'cashier_shift',
+                    priority: 'high',
+                    actionUrl: '/dashboard/branch-accounting/shift-review',
+                    branchId: targetBranchId,
+                    metadata: {
+                        shift_id: newShift.id,
+                        shift_number: shiftNumber,
+                        cashier_id: targetCashierId,
+                        cashier_name: userName,
+                        branch_id: targetBranchId,
+                        opening_float: Number(opening_float || 0),
+                        status: 'pending_open'
+                    }
+                }
+            ).catch((notifyError) => logger.warn('Shift opening approval notification failed:', notifyError));
+        }
+
         res.status(201).json({
             success: true,
+            message: opensImmediately
+                ? 'Shift opened successfully.'
+                : 'Shift opening request submitted. A branch accountant must approve it before cashier operations can begin.',
             data: newShift
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Approve cashier shift opening request
+// @route   PUT /api/cashier/shifts/:id/approve-open
+// @access  Private (Branch Accountant / Accountant / Manager)
+export const approveShiftOpening = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { notes } = req.body;
+        const userId = req.user?.id;
+        const userRole = req.user?.role;
+
+        let fetchQuery = supabase
+            .from('cashier_shift_logs')
+            .select('*')
+            .eq('id', id);
+        fetchQuery = applyBranchFilter(fetchQuery, req);
+
+        const { data: shift, error: shiftError } = await fetchQuery.single();
+        if (shiftError) throw shiftError;
+        if (!shift) throw new AppError('Shift opening request not found', 404);
+        const legacyUnapprovedOpen = isLegacyUnapprovedOpenShift(shift);
+        if (shift.status !== 'pending_open' && !legacyUnapprovedOpen) {
+            throw new AppError('Only pending shift opening requests can be approved.', 400);
+        }
+
+        if (!isShiftManager(userRole)) {
+            throw new AppError('Only branch accountants or managers can approve cashier shift openings.', 403);
+        }
+
+        const now = new Date().toISOString();
+        let updateQuery = supabase
+            .from('cashier_shift_logs')
+            .update({
+                status: 'open',
+                shift_start: legacyUnapprovedOpen && shift.shift_start ? shift.shift_start : now,
+                opening_approved_by: userId,
+                opening_approved_at: now,
+                opening_review_notes: notes || (legacyUnapprovedOpen
+                    ? 'Approved by branch accountant after pending-open migration'
+                    : 'Approved by branch accountant'),
+                updated_at: now
+            })
+            .eq('id', id);
+
+        if (!isGlobalRole(userRole?.toString())) {
+            updateQuery = updateQuery.eq('branch_id', req.user?.branch_id);
+        }
+
+        const { data, error } = await updateQuery.select().single();
+        if (error) throw error;
+
+        if (data?.cashier_id) {
+            void notificationService.notifyUser(
+                data.cashier_id,
+                'Shift approved',
+                `Your shift ${data.shift_number || id} is now open. You can start cashier operations.`,
+                {
+                    type: 'success',
+                    category: 'cashier_shift',
+                    priority: 'high',
+                    actionUrl: '/cashier/shifts',
+                    metadata: {
+                        shift_id: data.id,
+                        shift_number: data.shift_number,
+                        branch_id: data.branch_id,
+                        status: 'open'
+                    }
+                }
+            ).catch((notifyError) => logger.warn('Shift approval notification failed:', notifyError));
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Cashier shift opened.',
+            data
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Reject cashier shift opening request
+// @route   PUT /api/cashier/shifts/:id/reject-open
+// @access  Private (Branch Accountant / Accountant / Manager)
+export const rejectShiftOpening = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { notes, reason } = req.body;
+        const userId = req.user?.id;
+        const userRole = req.user?.role;
+
+        let fetchQuery = supabase
+            .from('cashier_shift_logs')
+            .select('*')
+            .eq('id', id);
+        fetchQuery = applyBranchFilter(fetchQuery, req);
+
+        const { data: shift, error: shiftError } = await fetchQuery.single();
+        if (shiftError) throw shiftError;
+        if (!shift) throw new AppError('Shift opening request not found', 404);
+        const legacyUnapprovedOpen = isLegacyUnapprovedOpenShift(shift);
+        if (shift.status !== 'pending_open' && !legacyUnapprovedOpen) {
+            throw new AppError('Only pending shift opening requests can be rejected.', 400);
+        }
+
+        if (!isShiftManager(userRole)) {
+            throw new AppError('Only branch accountants or managers can reject cashier shift openings.', 403);
+        }
+
+        const now = new Date().toISOString();
+        let updateQuery = supabase
+            .from('cashier_shift_logs')
+            .update({
+                status: 'rejected',
+                shift_end: legacyUnapprovedOpen ? now : shift.shift_end,
+                opening_rejected_by: userId,
+                opening_rejected_at: now,
+                opening_review_notes: notes || reason || 'Rejected by branch accountant',
+                updated_at: now
+            })
+            .eq('id', id);
+
+        if (!isGlobalRole(userRole?.toString())) {
+            updateQuery = updateQuery.eq('branch_id', req.user?.branch_id);
+        }
+
+        const { data, error } = await updateQuery.select().single();
+        if (error) throw error;
+
+        if (data?.cashier_id) {
+            void notificationService.notifyUser(
+                data.cashier_id,
+                'Shift opening rejected',
+                `Your shift opening request ${data.shift_number || id} was rejected. ${data.opening_review_notes || ''}`.trim(),
+                {
+                    type: 'error',
+                    category: 'cashier_shift',
+                    priority: 'high',
+                    actionUrl: '/cashier/shifts',
+                    metadata: {
+                        shift_id: data.id,
+                        shift_number: data.shift_number,
+                        branch_id: data.branch_id,
+                        status: 'rejected',
+                        notes: data.opening_review_notes
+                    }
+                }
+            ).catch((notifyError) => logger.warn('Shift rejection notification failed:', notifyError));
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Cashier shift opening request rejected.',
+            data
         });
     } catch (error) {
         next(error);
@@ -539,6 +880,10 @@ export const closeShift = async (
 
         if (shift.status !== 'open') {
             throw new AppError('Shift is already closed', 400);
+        }
+
+        if (isLegacyUnapprovedOpenShift(shift)) {
+            throw new AppError('This shift opening is still awaiting branch accountant approval.', 403);
         }
 
         // ==========================================
