@@ -56,6 +56,51 @@ function toArray(value: unknown): any[] {
     return Array.isArray(value) ? value : [];
 }
 
+function normalizePaymentMethod(value: unknown): string {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (!normalized) return 'other';
+    if (normalized.includes('mpesa') || normalized.includes('m_pesa') || normalized.includes('m-pesa')) return 'mpesa';
+    if (normalized.includes('card') || normalized.includes('swipe') || normalized.includes('visa')) return 'card';
+    if (normalized.includes('credit')) return 'credit_bill';
+    if (normalized.includes('cash')) return 'cash';
+    return normalized;
+}
+
+function summarizeShiftTransactions(transactions: any[]): {
+    total_cash: number;
+    total_mpesa: number;
+    total_card: number;
+    total_credit_bill: number;
+    total_other: number;
+    total_sales: number;
+    transaction_count: number;
+} {
+    const summary = {
+        total_cash: 0,
+        total_mpesa: 0,
+        total_card: 0,
+        total_credit_bill: 0,
+        total_other: 0,
+        total_sales: 0,
+        transaction_count: 0
+    };
+
+    transactions.forEach((transaction) => {
+        const amount = toNumber(transaction?.amount);
+        if (amount <= 0) return;
+        const method = normalizePaymentMethod(transaction?.payment_method);
+        if (method === 'cash') summary.total_cash += amount;
+        else if (method === 'mpesa') summary.total_mpesa += amount;
+        else if (method === 'card') summary.total_card += amount;
+        else if (method === 'credit_bill') summary.total_credit_bill += amount;
+        else summary.total_other += amount;
+        summary.total_sales += amount;
+        summary.transaction_count += 1;
+    });
+
+    return summary;
+}
+
 async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Promise<any> {
     const logDate = String(shift.shift_start || new Date().toISOString()).slice(0, 10);
     const creditBills = toArray(shift.credit_bills_details);
@@ -91,6 +136,8 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
             total_sales: totalSales,
             expected_closing_float: toNumber(shift.expected_closing_float),
             variance: toNumber(shift.variance),
+            cash_drops: toNumber(shift.cash_deposited),
+            payouts: toNumber(shift.payouts ?? shift.paid_outs),
             transaction_count: toNumber(shift.transaction_count),
             restaurant_revenue: toNumber(shift.restaurant_revenue),
             bar_revenue: toNumber(shift.bar_revenue),
@@ -1055,20 +1102,52 @@ export const closeShift = async (
         }
         // ==========================================
 
-        // Calculate summary from transactions
+        const { data: shiftTransactionRows, error: shiftTransactionsError } = await supabase
+            .from('cashier_shift_transactions')
+            .select('amount, payment_method')
+            .eq('shift_id', id);
+
+        if (shiftTransactionsError) {
+            logger.warn('Unable to load cashier shift transaction evidence for close calculation', {
+                shiftId: id,
+                error: shiftTransactionsError.message
+            });
+        }
+
+        const transactionSummary = summarizeShiftTransactions(shiftTransactionRows || []);
+
+        // Calculate summary from the RPC as a fallback only. The transaction
+        // rows are the source of truth because they are what the logbook displays.
         const { data: summary } = await supabase
             .rpc('calculate_shift_summary', { p_shift_id: id });
 
-        const cash_sales = summary?.total_cash || 0;
-        const mpesa_sales = summary?.total_mpesa || 0;
-        const card_sales = summary?.total_card || 0;
-        const total_sales_rpc = summary?.total_sales || 0;
-        const credit_paid_cash = paid_bills_value || 0;
+        const hasTransactionEvidence = transactionSummary.transaction_count > 0;
+        const cash_sales = hasTransactionEvidence ? transactionSummary.total_cash : toNumber(summary?.total_cash);
+        const mpesa_sales = hasTransactionEvidence ? transactionSummary.total_mpesa : toNumber(summary?.total_mpesa);
+        const card_sales = hasTransactionEvidence ? transactionSummary.total_card : toNumber(summary?.total_card);
+        const credit_bill_sales = hasTransactionEvidence ? transactionSummary.total_credit_bill : 0;
+        const other_sales = hasTransactionEvidence ? transactionSummary.total_other : toNumber(other_revenue);
+        const total_sales = hasTransactionEvidence ? transactionSummary.total_sales : toNumber(summary?.total_sales);
+        const transaction_count = hasTransactionEvidence ? transactionSummary.transaction_count : toNumber(summary?.transaction_count);
+        const credit_paid_cash = toNumber(paid_bills_value);
+        const cashDrops = toNumber(cash_deposited);
+        const payouts = toNumber(req.body.payouts ?? req.body.paid_outs);
 
-        // Strict accounting formula: Expected = Opening Float + Cash Sales + Cash Received for Credit Payments
+        // Strict accounting formula: Expected = Opening Float + Cash Sales + Cash Received for Credit Payments - Cash Drops/Payouts
         // NOTE: Only cash-affecting items count toward expected closing float
-        const expectedClosingFloat = (shift.opening_float || 0) + cash_sales + credit_paid_cash;
-        const variance = (closing_float || 0) - expectedClosingFloat;
+        const expectedClosingFloat = toNumber(shift.opening_float) + cash_sales + credit_paid_cash - cashDrops - payouts;
+        const hasDeclaredClosingFloat = closing_float !== undefined
+            && closing_float !== null
+            && `${closing_float}`.trim() !== '';
+        const hasDeclaredCashAtHand = cash_at_hand !== undefined
+            && cash_at_hand !== null
+            && `${cash_at_hand}`.trim() !== '';
+        const actualClosingFloat = hasDeclaredClosingFloat
+            ? toNumber(closing_float)
+            : hasDeclaredCashAtHand
+                ? toNumber(cash_at_hand)
+                : expectedClosingFloat;
+        const variance = actualClosingFloat - expectedClosingFloat;
 
         // Compute unpaid_bills server-side (credit issued minus credit paid)
         const creditTaken = (credit_bills_details || []).reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
@@ -1076,9 +1155,9 @@ export const closeShift = async (
         const computedUnpaidBills = Math.max(0, creditTaken - creditPaid);
 
         // Reconciliation warning: payment method sum should equal total_sales
-        const methodSum = cash_sales + mpesa_sales + card_sales + (other_revenue || 0);
-        if (total_sales_rpc > 0 && Math.abs(methodSum - total_sales_rpc) > 0.01) {
-            logger.warn(`Shift ${id} reconciliation warning: method sum ${methodSum} ≠ total_sales ${total_sales_rpc}`);
+        const methodSum = cash_sales + mpesa_sales + card_sales + credit_bill_sales + other_sales;
+        if (total_sales > 0 && Math.abs(methodSum - total_sales) > 0.01) {
+            logger.warn(`Shift ${id} reconciliation warning: method sum ${methodSum} ≠ total_sales ${total_sales}`);
         }
 
         // Update shift with all revenue breakdown
@@ -1086,15 +1165,15 @@ export const closeShift = async (
             .from('cashier_shift_logs')
             .update({
                 shift_end: new Date().toISOString(),
-                closing_float,
+                closing_float: actualClosingFloat,
                 expected_closing_float: expectedClosingFloat,
                 variance,
                 // Payment method totals
                 total_cash_sales: cash_sales,
-                total_mpesa_sales: summary?.total_mpesa || 0,
-                total_card_sales: summary?.total_card || 0,
-                total_sales: summary?.total_sales || 0,
-                transaction_count: summary?.transaction_count || 0,
+                total_mpesa_sales: mpesa_sales,
+                total_card_sales: card_sales,
+                total_sales,
+                transaction_count,
                 // Revenue by source
                 swimming_pool_revenue: swimming_pool_revenue || 0,
                 pool_token_revenue: pool_token_revenue || 0,
@@ -1102,19 +1181,19 @@ export const closeShift = async (
                 room_booking_revenue: room_booking_revenue || 0,
                 restaurant_revenue: restaurant_revenue || 0,
                 bar_revenue: bar_revenue || 0,
-                other_revenue: other_revenue || 0,
+                other_revenue: other_sales,
                 // Credit & bills
                 credit_bills_taken: credit_bills_taken || 0,
                 credit_bills_count: credit_bills_count || 0,
                 credit_bills_details: credit_bills_details || [],
-                unpaid_bills_value: unpaid_bills_value || 0,
+                unpaid_bills_value: computedUnpaidBills,
                 unpaid_bills_count: unpaid_bills_count || 0,
                 paid_bills_value: paid_bills_value || 0,
                 paid_bills_count: paid_bills_count || 0,
                 paid_bills_details: paid_bills_details || [],
                 // Cash management
-                cash_at_hand: cash_at_hand || 0,
-                cash_deposited: cash_deposited || 0,
+                cash_at_hand: toNumber(cash_at_hand ?? actualClosingFloat),
+                cash_deposited: cashDrops,
                 bank_deposit_ref,
                 // N/A flags
                 pool_na: pool_na || false,

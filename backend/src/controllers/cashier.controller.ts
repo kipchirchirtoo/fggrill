@@ -5121,11 +5121,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const closingFloat = logbookNumber(logbook.closing_float ?? shift?.closing_float ?? shift?.cash_at_hand);
     const cashDrops = logbookNumber(breakdown.cash_drops ?? shift?.cash_deposited);
     const payouts = logbookNumber(breakdown.payouts ?? breakdown.paid_outs);
-    const expectedCash = logbookNumber(
-        breakdown.expected_closing_float ?? shift?.expected_closing_float,
-        openingFloat + totalCash - cashDrops - payouts
-    );
-    const variance = logbookNumber(logbook.variance ?? breakdown.variance ?? shift?.variance, closingFloat - expectedCash);
+    const creditPaymentsReceived = logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value);
+    const expectedCash = openingFloat + totalCash + creditPaymentsReceived - cashDrops - payouts;
+    const variance = closingFloat - expectedCash;
 
     const revenueBreakdown = [
         { label: 'Restaurant', amount: logbookNumber(breakdown.restaurant_revenue ?? shift?.restaurant_revenue) },
@@ -5200,7 +5198,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         cash_reconciliation: {
             opening_float: openingFloat,
             cash_sales: totalCash,
-            credit_payments_received: logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value),
+            credit_payments_received: creditPaymentsReceived,
             cash_drops: cashDrops,
             payouts,
             expected_closing: expectedCash,
