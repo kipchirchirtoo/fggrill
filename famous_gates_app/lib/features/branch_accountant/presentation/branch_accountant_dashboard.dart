@@ -4335,6 +4335,9 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
           final revenue = _list(detail['revenue_breakdown']);
           final flags = _list(detail['compliance_flags']);
           final lines = _list(detail['lines']);
+          final transactionHistory = _list(detail['transaction_history']);
+          final clearedTransactions =
+              transactionHistory.isEmpty ? lines : transactionHistory;
           final cashierName = _logbookPersonName(cashier);
           final subtitleParts = [
             _text(branch, ['name']),
@@ -4404,8 +4407,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                         : Colors.red,
                   ),
                   _MetricCard(
-                    'Evidence Lines',
-                    '${lines.length}',
+                    'Cleared Lines',
+                    '${clearedTransactions.length}',
                     Icons.fact_check,
                     Colors.orange,
                   ),
@@ -4478,8 +4481,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                 child: _ComplianceFlagList(flags: flags),
               ),
               _SectionCard(
-                title: 'Transaction Evidence',
-                child: _LogbookEvidenceTable(lines: lines),
+                title: 'Cleared Transaction History',
+                child: _LogbookEvidenceTable(lines: clearedTransactions),
               ),
             ],
           );
@@ -4618,9 +4621,10 @@ class _LogbookEvidenceTable extends StatelessWidget {
     final rows = lines.map<List<Object>>((line) {
       final item = _map(line);
       return <Object>[
-        _title('${item['section'] ?? 'transaction'}'),
+        _formatCompactDateTime('${item['created_at'] ?? ''}'),
         '${item['reference'] ?? '-'}',
         '${item['customer_name'] ?? '-'}',
+        _title('${item['section'] ?? 'transaction'}'),
         _title('${item['payment_method'] ?? 'other'}'),
         _money(_num(item['amount'])),
         '${item['status'] ?? '-'}',
@@ -4629,9 +4633,10 @@ class _LogbookEvidenceTable extends StatelessWidget {
 
     return _SimpleTable(
       columns: const [
-        'Section',
+        'Time',
         'Reference',
         'Customer',
+        'Source',
         'Payment',
         'Amount',
         'Status',
@@ -5111,17 +5116,30 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                           _money(_num(e['amount'] ?? e['total_amount'])),
                           _StatusPill(_text(e, ['status'])),
                           _text(e, ['bill_date', 'created_at']),
-                          Wrap(spacing: 8, children: [
-                            TextButton(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _CompactAction(
+                                label: 'View',
+                                icon: Icons.visibility_outlined,
                                 onPressed: () => _showRecord(context, e),
-                                child: const Text('View')),
-                            FilledButton.tonal(
+                              ),
+                              const SizedBox(width: 6),
+                              _CompactAction(
+                                label: 'Confirm',
+                                icon: Icons.check,
+                                filled: true,
                                 onPressed: () => _confirmBill(e),
-                                child: const Text('Confirm')),
-                            OutlinedButton(
+                              ),
+                              const SizedBox(width: 6),
+                              _CompactAction(
+                                label: 'Paid',
+                                icon: Icons.payments_outlined,
+                                outlined: true,
                                 onPressed: () => _recordPayment(e),
-                                child: const Text('Paid Bill')),
-                          ]),
+                              ),
+                            ],
+                          ),
                         ])
                     .toList(),
               ),
@@ -5144,18 +5162,48 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   }
 
   Future<void> _recordPayment(Map<String, dynamic> bill) async {
-    final data = await _formDialog(context, 'Record Paid Bill', const [
-      'amount',
-      'payment_method',
-      'reference',
-      'notes',
-    ]);
+    final balance = _num(bill['balance_amount'] ??
+        bill['balance'] ??
+        bill['amount'] ??
+        bill['total_amount']);
+    final data = await _formDialog(
+      context,
+      'Record Paid Bill',
+      const ['amount', 'payment_method', 'reference', 'notes'],
+      initial: {
+        if (balance > 0) 'amount': '${balance.toStringAsFixed(0)}',
+        'payment_method': 'cash',
+      },
+    );
     if (data == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .recordCreditBillPayment('${bill['id']}', data);
-    _toast('Paid bill recorded');
-    _refresh();
+    final amount = num.tryParse('${data['amount']}'.trim()) ?? 0;
+    if (amount <= 0) {
+      if (mounted) _notify(context, 'Enter a payment amount greater than zero');
+      return;
+    }
+    final method = '${data['payment_method'] ?? ''}'.trim();
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .recordCreditBillPayment(
+        '${bill['id']}',
+        {
+          'payment_amount': amount,
+          'payment_method': method.isEmpty ? 'cash' : method,
+          if ('${data['reference'] ?? ''}'.trim().isNotEmpty)
+            'payment_reference': '${data['reference']}'.trim(),
+          if ('${data['notes'] ?? ''}'.trim().isNotEmpty)
+            'notes': '${data['notes']}'.trim(),
+        },
+      );
+      if (mounted) _notify(context, 'Paid bill recorded');
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        _notify(context,
+            'Payment failed: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
+    }
   }
 
   // ── Customer credit bills view ──────────────────────────────────────────────
@@ -5268,21 +5316,47 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   }
 
   Future<void> _payCustomerBill(Map<String, dynamic> bill) async {
-    final data = await _formDialog(context, 'Record Customer Payment', const [
-      'amount',
-      'payment_method',
-      'reference',
-      'notes',
-    ]);
+    final balance = _num(bill['balance_amount'] ??
+        bill['outstanding_amount'] ??
+        bill['total_amount'] ??
+        bill['amount']);
+    final data = await _formDialog(
+      context,
+      'Record Customer Payment',
+      const ['amount', 'payment_method', 'reference', 'notes'],
+      initial: {
+        if (balance > 0) 'amount': balance.toStringAsFixed(0),
+        'payment_method': 'cash',
+      },
+    );
     if (data == null) return;
+    final amount = num.tryParse('${data['amount']}'.trim()) ?? 0;
+    if (amount <= 0) {
+      if (mounted) _notify(context, 'Enter a payment amount greater than zero');
+      return;
+    }
+    final method = '${data['payment_method'] ?? ''}'.trim();
     try {
       await ref
           .read(branchAccountantRepositoryProvider)
-          .recordUnpaidBillPayment('${bill['id']}', data);
+          .recordUnpaidBillPayment(
+        '${bill['id']}',
+        {
+          'payment_amount': amount,
+          'payment_method': method.isEmpty ? 'cash' : method,
+          if ('${data['reference'] ?? ''}'.trim().isNotEmpty)
+            'payment_reference': '${data['reference']}'.trim(),
+          if ('${data['notes'] ?? ''}'.trim().isNotEmpty)
+            'notes': '${data['notes']}'.trim(),
+        },
+      );
       if (mounted) _notify(context, 'Payment recorded');
       _refresh();
     } catch (e) {
-      if (mounted) _notify(context, 'Failed to record payment: $e');
+      if (mounted) {
+        _notify(context,
+            'Failed to record payment: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
     }
   }
 
@@ -8962,6 +9036,49 @@ class _KeyValueList extends StatelessWidget {
   }
 }
 
+/// Compact, single-line action button for dense table action cells so several
+/// buttons fit on one row without wrapping/overlapping.
+class _CompactAction extends StatelessWidget {
+  const _CompactAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.filled = false,
+    this.outlined = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool filled;
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    const padding = EdgeInsets.symmetric(horizontal: 10, vertical: 6);
+    final style = ButtonStyle(
+      padding: WidgetStatePropertyAll(padding),
+      minimumSize: const WidgetStatePropertyAll(Size(0, 34)),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      textStyle: const WidgetStatePropertyAll(
+          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+    final child = Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 14),
+      const SizedBox(width: 4),
+      Text(label),
+    ]);
+    if (filled) {
+      return FilledButton(onPressed: onPressed, style: style, child: child);
+    }
+    if (outlined) {
+      return OutlinedButton(onPressed: onPressed, style: style, child: child);
+    }
+    return TextButton(onPressed: onPressed, style: style, child: child);
+  }
+}
+
 class _SimpleTable extends StatelessWidget {
   const _SimpleTable({required this.columns, required this.rows});
   final List<String> columns;
@@ -8981,6 +9098,11 @@ class _SimpleTable extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
+        // Allow rows to grow so multi-button action cells don't overlap the
+        // next row (default DataTable row height is too short for them).
+        dataRowMinHeight: 52,
+        dataRowMaxHeight: 88,
+        columnSpacing: 24,
         columns: columns
             .map((column) => DataColumn(
                   label: Text(column,
@@ -9185,10 +9307,11 @@ Future<String?> _textDialog(
 Future<Map<String, dynamic>?> _formDialog(
   BuildContext context,
   String title,
-  List<String> fields,
-) {
+  List<String> fields, {
+  Map<String, String> initial = const {},
+}) {
   final controllers = {
-    for (final f in fields) f: TextEditingController(),
+    for (final f in fields) f: TextEditingController(text: initial[f] ?? ''),
   };
   return showDialog<Map<String, dynamic>>(
     context: context,
@@ -9416,6 +9539,14 @@ String _shortDate(String value) {
   final parsed = DateTime.tryParse(value);
   if (parsed == null) return value;
   return DateFormat('MMM d').format(parsed);
+}
+
+String _formatCompactDateTime(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty || trimmed == 'null') return '-';
+  final parsed = DateTime.tryParse(trimmed);
+  if (parsed == null) return trimmed;
+  return DateFormat('MMM d HH:mm').format(parsed.toLocal());
 }
 
 String _title(String value) => value

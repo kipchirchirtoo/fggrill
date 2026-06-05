@@ -4932,18 +4932,60 @@ async function safeLogbookQuery(label: string, query: any): Promise<any[]> {
 
 function normalizeLogbookLine(line: any, fallbackSection = 'transaction'): any {
     const amount = logbookNumber(line?.amount ?? line?.total_amount ?? line?.total ?? line?.paid_amount);
+    const fallbackSourceTable = fallbackSection === 'cashier_shift_transaction'
+        ? 'cashier_shift_transactions'
+        : fallbackSection === 'cashier_transaction'
+            ? 'cashier_transactions'
+            : fallbackSection === 'outlet_payment'
+                ? 'pos_shift_payments'
+                : fallbackSection === 'outlet_order'
+                    ? 'pos_shift_orders'
+                    : null;
     return {
         id: line?.id || line?.source_id || null,
         section: logbookText(line?.section, fallbackSection),
-        reference: logbookText(line?.reference ?? line?.order_number ?? line?.short_code ?? line?.transaction_reference, 'Linked record'),
-        customer_name: logbookText(line?.customer_name ?? line?.guest_name ?? line?.staff_name ?? line?.description, 'Walk-in customer'),
+        reference: logbookText(
+            line?.reference
+                ?? line?.transaction_ref
+                ?? line?.transaction_reference
+                ?? line?.order_number
+                ?? line?.short_code
+                ?? line?.transaction_id,
+            'Linked record'
+        ),
+        customer_name: logbookText(
+            line?.customer_name
+                ?? line?.guest_name
+                ?? line?.staff_name
+                ?? line?.description
+                ?? line?.source
+                ?? line?.section,
+            fallbackSection === 'cashier_shift_transaction' ? 'Cashier cleared payment' : 'Walk-in customer'
+        ),
         payment_method: normalizeLogbookPaymentMethod(line?.payment_method ?? line?.method ?? line?.type),
         amount,
         status: logbookText(line?.status ?? line?.payment_status, 'recorded'),
-        created_at: line?.created_at || line?.transaction_date || line?.paid_at || null,
-        source_table: line?.source_table || null,
+        created_at: line?.transaction_time || line?.transaction_date || line?.paid_at || line?.created_at || null,
+        source_table: line?.source_table || fallbackSourceTable,
         source_id: line?.source_id || line?.id || null
     };
+}
+
+function dedupeLogbookLines(lines: any[]): any[] {
+    const seen = new Set<string>();
+    const unique: any[] = [];
+
+    for (const line of lines) {
+        const key = line.source_table && line.source_id
+            ? `${line.source_table}:${line.source_id}:${line.section}`
+            : `${line.section}:${line.reference}:${line.amount}:${line.created_at || ''}`;
+
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(line);
+    }
+
+    return unique;
 }
 
 async function buildCashierLogbookDetail(req: Request, id: string): Promise<any> {
@@ -4999,7 +5041,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                 .from('cashier_shift_transactions')
                 .select('*')
                 .eq('shift_id', logbook.cashier_shift_id)
-                .order('created_at', { ascending: true })
+                .order('transaction_time', { ascending: true })
         );
 
         if (shift?.branch_id && shift?.cashier_id && shift?.shift_start) {
@@ -5093,7 +5135,14 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         }))
     ];
 
-    const allLines = [...storedLines, ...generatedLines];
+    const allLines = dedupeLogbookLines([...generatedLines, ...storedLines]);
+    const transactionHistory = [...allLines]
+        .filter((line) => logbookNumber(line.amount) > 0)
+        .sort((a, b) => {
+            const left = new Date(a.created_at || 0).getTime();
+            const right = new Date(b.created_at || 0).getTime();
+            return left - right;
+        });
     const payments: Record<string, number> = {
         cash: logbookNumber(breakdown.total_cash ?? shift?.total_cash_sales),
         mpesa: logbookNumber(breakdown.total_mpesa ?? logbook.total_mpesa ?? shift?.total_mpesa_sales),
@@ -5155,7 +5204,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             label: 'Payment capture',
             status: totalSales > 0 || allLines.length > 0 ? 'OK' : 'Review',
             detail: totalSales > 0 || allLines.length > 0
-                ? `${allLines.length} evidence line(s) attached`
+                ? `${transactionHistory.length} cleared transaction line(s) attached`
                 : 'No sales or payment lines were captured'
         },
         {
@@ -5216,6 +5265,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         payment_breakdown: paymentBreakdown,
         revenue_breakdown: revenueBreakdown,
         lines: allLines,
+        transaction_history: transactionHistory,
         compliance_flags: complianceFlags
     };
 }
@@ -5284,15 +5334,15 @@ export const downloadCashierLogbookReport = async (req: Request, res: Response, 
         });
         doc.moveDown();
 
-        doc.font('Helvetica-Bold').fontSize(11).text('Transaction Evidence');
-        const lines = detail.lines.slice(0, 36);
+        doc.font('Helvetica-Bold').fontSize(11).text('Cleared Transaction History');
+        const lines = (detail.transaction_history || detail.lines || []).slice(0, 48);
         if (!lines.length) {
             doc.font('Helvetica').fontSize(9).text('No transaction lines were captured for this shift.');
         } else {
             lines.forEach((line: any, index: number) => {
                 if (doc.y > 740) doc.addPage();
                 doc.font('Helvetica').fontSize(8).text(
-                    `${index + 1}. ${line.section} | ${line.reference} | ${line.customer_name} | ${line.payment_method} | ${logbookMoney(line.amount)} | ${line.status}`
+                    `${index + 1}. ${line.created_at || '—'} | ${line.reference} | ${line.customer_name} | ${line.payment_method} | ${logbookMoney(line.amount)} | ${line.status}`
                 );
             });
         }

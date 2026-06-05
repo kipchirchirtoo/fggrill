@@ -169,6 +169,13 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       subtitle:
           'Live restaurant order queue from POS. Bar orders are excluded by using restaurant order tables only.',
       actions: [
+        if (voided > 0)
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.kError),
+            onPressed: () => _acknowledgeAllVoids(orders),
+            icon: const Icon(Icons.block, size: 18),
+            label: Text('Clear All Voids ($voided)'),
+          ),
         OutlinedButton.icon(
           onPressed: _refresh,
           icon: const Icon(Icons.refresh, size: 18),
@@ -361,6 +368,35 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   ) async {
     await _run(() => _repo.updateOrderStatus(orderId, status),
         successMessage: successMessage);
+  }
+
+  Future<void> _acknowledgeAllVoids(List<KitchenOrder> orders) async {
+    final voids = orders.where((o) => o.isVoided).toList();
+    if (voids.isEmpty) {
+      AppNotifier.showSnackBar(
+          context, const SnackBar(content: Text('No void orders to clear.')));
+      return;
+    }
+    var ok = 0;
+    var failed = 0;
+    for (final order in voids) {
+      try {
+        await _repo.updateOrderStatus(order.id, 'served');
+        ok++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    AppNotifier.showSnackBar(
+      context,
+      SnackBar(
+        content: Text(failed == 0
+            ? 'Cleared $ok void order${ok == 1 ? '' : 's'} from the display.'
+            : 'Cleared $ok void order${ok == 1 ? '' : 's'}, $failed failed.'),
+      ),
+    );
+    _refresh();
   }
 
   Future<void> _run(

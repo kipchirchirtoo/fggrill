@@ -109,6 +109,22 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
     const totalMpesa = toNumber(shift.total_mpesa_sales);
     const totalCard = toNumber(shift.total_card_sales);
     const totalSales = toNumber(shift.total_sales);
+    let shiftTransactions: any[] = [];
+
+    const { data: transactionRows, error: transactionError } = await supabase
+        .from('cashier_shift_transactions')
+        .select('*')
+        .eq('shift_id', shift.id)
+        .order('transaction_time', { ascending: true });
+
+    if (transactionError) {
+        logger.warn('Unable to load cashier shift transactions for logbook generation', {
+            shiftId: shift.id,
+            error: transactionError.message
+        });
+    } else {
+        shiftTransactions = transactionRows || [];
+    }
 
     const { data: existingLogbook, error: existingError } = await supabase
         .from('cashier_logbooks')
@@ -182,6 +198,21 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
         .eq('logbook_id', logbook.id);
 
     const lines = [
+        ...shiftTransactions.map((transaction: any, index: number) => ({
+            logbook_id: logbook.id,
+            section: 'cleared_transaction',
+            customer_name: transaction.customer_name
+                || transaction.description
+                || `Cashier cleared ${normalizePaymentMethod(transaction.payment_method)}`,
+            amount: toNumber(transaction.amount),
+            reference: transaction.transaction_ref
+                || transaction.reference
+                || transaction.transaction_id
+                || `${shift.shift_number}-txn-${index + 1}`,
+            source_table: 'cashier_shift_transactions',
+            source_id: transaction.id || null,
+            payment_method: normalizePaymentMethod(transaction.payment_method)
+        })),
         ...creditBills.map((bill: any, index: number) => ({
             logbook_id: logbook.id,
             section: 'credit_bill',

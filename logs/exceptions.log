@@ -1,0 +1,143 @@
+2026-05-30T11:59:54.656Z [ERROR]: uncaughtException: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
+/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/lib/helpers.js:53
+        throw new Error('Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.');
+        ^
+
+Error: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
+    at validateSupabaseUrl (/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/lib/helpers.js:53:15)
+    at new SupabaseClient (/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/SupabaseClient.js:41:59)
+    at createClient (/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/index.js:46:12)
+    at Object.<anonymous> (/home/allansamuel/Desktop/fggrill/backend/dist/config/database.js:20:49)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18) {
+  "error": {},
+  "exception": true,
+  "date": "Sat May 30 2026 14:59:54 GMT+0300 (East Africa Time)",
+  "process": {
+    "pid": 2,
+    "uid": 1000,
+    "gid": 1000,
+    "cwd": "/home/allansamuel/Desktop/fggrill",
+    "execPath": "/usr/bin/node",
+    "version": "v20.20.2",
+    "argv": [
+      "/usr/bin/node"
+    ],
+    "memoryUsage": {
+      "rss": 71135232,
+      "heapTotal": 21921792,
+      "heapUsed": 16478432,
+      "external": 2093346,
+      "arrayBuffers": 420105
+    }
+  },
+  "os": {
+    "loadavg": [
+      3,
+      2.69,
+      2.09
+    ],
+    "uptime": 19750.46
+  },
+  "trace": [
+    {
+      "column": 15,
+      "file": "/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/lib/helpers.js",
+      "function": "validateSupabaseUrl",
+      "line": 53,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 59,
+      "file": "/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/SupabaseClient.js",
+      "function": "new SupabaseClient",
+      "line": 41,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/index.js",
+      "function": "createClient",
+      "line": 46,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 49,
+      "file": "/home/allansamuel/Desktop/fggrill/backend/dist/config/database.js",
+      "function": null,
+      "line": 20,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 14,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module._compile",
+      "line": 1521,
+      "method": "_compile",
+      "native": false
+    },
+    {
+      "column": 10,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module._extensions..js",
+      "line": 1623,
+      "method": ".js",
+      "native": false
+    },
+    {
+      "column": 32,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module.load",
+      "line": 1266,
+      "method": "load",
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module._load",
+      "line": 1091,
+      "method": "_load",
+      "native": false
+    },
+    {
+      "column": 19,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module.require",
+      "line": 1289,
+      "method": "require",
+      "native": false
+    },
+    {
+      "column": 18,
+      "file": "node:internal/modules/helpers",
+      "function": "require",
+      "line": 182,
+      "method": null,
+      "native": false
+    }
+  ]
+}
+/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/lib/helpers.js:53
+        throw new Error('Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.');
+        ^
+
+Error: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
+    at validateSupabaseUrl (/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/lib/helpers.js:53:15)
+    at new SupabaseClient (/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/SupabaseClient.js:41:59)
+    at createClient (/home/allansamuel/Desktop/fggrill/backend/node_modules/@supabase/supabase-js/dist/main/index.js:46:12)
+    at Object.<anonymous> (/home/allansamuel/Desktop/fggrill/backend/dist/config/database.js:20:49)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18)
