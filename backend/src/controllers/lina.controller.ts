@@ -140,20 +140,23 @@ You are performing thorough, structured enterprise analysis. Take full advantage
 async function gatherSystemContext(): Promise<Record<string, any>> {
   const since24h  = new Date(Date.now() - 24  * 60 * 60 * 1000).toISOString();
   const since7d   = new Date(Date.now() - 7   * 24 * 60 * 60 * 1000).toISOString();
+  const sincePrev7d = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(); // 14d→7d ago window
   const since30d  = new Date(Date.now() - 30  * 24 * 60 * 60 * 1000).toISOString();
   const today     = new Date().toISOString().split('T')[0];
 
   const [
-    branchesRes, usersRes, shiftsRes, shifts7dRes, anomaliesRes,
+    branchesRes, usersRes, shiftsRes, shifts7dRes, shiftsPrev7dRes, anomaliesRes,
     auditRes, bookingsRes, staffTodayRes, voidBillsRes, payrollRes,
     leaveRes, authLogsRes, featureFlagsRes, secConfigRes,
-    invoicesRes, purchaseOrdersRes, impersonationRes
+    invoicesRes, purchaseOrdersRes, impersonationRes,
+    posRes, restaurantRes, barRes, roomsRes, expensesRes
   ] = await Promise.allSettled([
     supabase.from('branches').select('id,name,code,status,is_main_branch,manager_id').order('name'),
     supabase.from('users').select('id,role,branch_id,first_name,last_name,created_at,force_logout_at').limit(500),
     supabase.from('cashier_shifts').select('id,branch_id,status,total_sales,discrepancy_amount,opened_at,closed_at').gte('opened_at', since24h).limit(200),
     supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status,opened_at').gte('opened_at', since7d).limit(500),
-    supabase.from('audit_exceptions').select('id,exception_type,severity,description,amount,status,detected_at').gte('detected_at', since7d).order('detected_at', { ascending: false }).limit(100),
+    supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,opened_at').gte('opened_at', sincePrev7d).lt('opened_at', since7d).limit(500),
+    supabase.from('audit_exceptions').select('id,exception_type,severity,description,amount,status,detected_at,branch_id').gte('detected_at', since7d).order('detected_at', { ascending: false }).limit(100),
     supabase.from('audit_trail').select('id,user_id,action,entity_type,old_values,new_values,performed_at').gte('performed_at', since24h).order('performed_at', { ascending: false }).limit(150),
     supabase.from('bookings').select('id,branch_id,status,check_in,check_out,total_amount,created_at').gte('created_at', since7d).limit(200),
     supabase.from('staff_attendance').select('staff_id,status,attendance_date,clock_in,clock_out,overtime_hours,shift_type').eq('attendance_date', today).limit(300),
@@ -166,6 +169,11 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
     supabase.from('finance_invoices').select('id,branch_id,amount,status,created_at').gte('created_at', since7d).limit(100),
     supabase.from('store_purchase_orders').select('id,branch_id,total_amount,status,created_at').gte('created_at', since30d).limit(100),
     supabase.from('impersonation_sessions').select('id,superadmin_id,impersonated_user_id,started_at,ended_at').gte('started_at', since24h).limit(20),
+    supabase.from('pos_transactions').select('amount,total,payment_method,source,branch_id,created_at').gte('created_at', since7d).limit(2000),
+    supabase.from('restaurant_orders').select('total_amount,branch_id,status,created_at').gte('created_at', since7d).limit(2000),
+    supabase.from('bar_orders').select('total,branch_id,status,created_at').gte('created_at', since7d).limit(2000),
+    supabase.from('rooms').select('id,branch_id,status').limit(2000),
+    supabase.from('expenses').select('amount,branch_id,status,created_at').gte('created_at', since30d).limit(1000),
   ]);
 
   const extract = (r: PromiseSettledResult<any>) =>
@@ -177,6 +185,7 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   const users       = extract(usersRes);
   const shifts24h   = extract(shiftsRes);
   const shifts7d    = extract(shifts7dRes);
+  const shiftsPrev7d = extract(shiftsPrev7dRes);
   const anomalies   = extract(anomaliesRes);
   const auditTrail  = extract(auditRes);
   const bookings    = extract(bookingsRes);
@@ -190,18 +199,64 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   const invoices    = extract(invoicesRes);
   const purchaseOrders = extract(purchaseOrdersRes);
   const impersonations = extract(impersonationRes);
+  const posTxns     = extract(posRes);
+  const restaurantOrders = extract(restaurantRes);
+  const barOrders   = extract(barRes);
+  const rooms       = extract(roomsRes);
+  const expenses    = extract(expensesRes);
+
+  // ── Branch name lookup ──────────────────────────────────────────────────────
+  const branchNameById: Record<string, string> = {};
+  branches.forEach((b: any) => { branchNameById[String(b.id)] = b.name || b.code || `Branch ${b.id}`; });
 
   // ── Compute aggregates ──────────────────────────────────────────────────────
   const revenue24h = shifts24h.reduce((s: number, sh: any) => s + (sh.total_sales || 0), 0);
   const revenue7d  = shifts7d.reduce((s: number, sh: any) => s + (sh.total_sales || 0), 0);
+  const revenuePrev7d = shiftsPrev7d.reduce((s: number, sh: any) => s + (sh.total_sales || 0), 0);
+  const revenueTrendPct = revenuePrev7d > 0
+    ? Math.round(((revenue7d - revenuePrev7d) / revenuePrev7d) * 1000) / 10
+    : (revenue7d > 0 ? 100 : 0);
   const openShifts = shifts24h.filter((s: any) => s.status === 'open').length;
   const cashDiscrepancies = shifts7d.filter((s: any) => Math.abs(s.discrepancy_amount || 0) > 0);
+  const totalDiscrepancyAmount = shifts7d.reduce((s: number, sh: any) => s + Math.abs(sh.discrepancy_amount || 0), 0);
 
-  // Revenue by branch (7d)
+  // Revenue by branch (7d) — id-keyed + name-keyed
   const revByBranch: Record<string, number> = {};
+  const revByBranchName: Record<string, number> = {};
   shifts7d.forEach((sh: any) => {
-    if (sh.branch_id) revByBranch[sh.branch_id] = (revByBranch[sh.branch_id] || 0) + (sh.total_sales || 0);
+    if (sh.branch_id == null) return;
+    const key = String(sh.branch_id);
+    revByBranch[key] = (revByBranch[key] || 0) + (sh.total_sales || 0);
+    const name = branchNameById[key] || key;
+    revByBranchName[name] = (revByBranchName[name] || 0) + (sh.total_sales || 0);
   });
+
+  // POS payment-method mix (7d)
+  const paymentMix: Record<string, number> = {};
+  const posSourceMix: Record<string, number> = {};
+  let posTotal7d = 0;
+  posTxns.forEach((t: any) => {
+    const amt = Number(t.amount ?? t.total ?? 0) || 0;
+    posTotal7d += amt;
+    const pm = (t.payment_method || 'unknown').toString().toLowerCase();
+    paymentMix[pm] = (paymentMix[pm] || 0) + amt;
+    const src = (t.source || 'other').toString().toLowerCase();
+    posSourceMix[src] = (posSourceMix[src] || 0) + amt;
+  });
+
+  // Restaurant vs Bar (7d)
+  const restaurantRevenue7d = restaurantOrders.reduce((s: number, o: any) => s + (Number(o.total_amount) || 0), 0);
+  const barRevenue7d = barOrders.reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
+
+  // Rooms occupancy
+  const roomsTotal = rooms.length;
+  const roomsOccupied = rooms.filter((r: any) => (r.status || '').toLowerCase() === 'occupied').length;
+  const roomsMaintenance = rooms.filter((r: any) => /maintenance/.test((r.status || '').toLowerCase())).length;
+  const occupancyPct = roomsTotal > 0 ? Math.round((roomsOccupied / roomsTotal) * 1000) / 10 : 0;
+
+  // Expenses (30d)
+  const expenses30dTotal = expenses.reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  const expensesPending = expenses.filter((e: any) => (e.status || '') === 'pending').length;
 
   const criticalAnomalies = anomalies.filter((a: any) => a.severity === 'CRITICAL').length;
   const highAnomalies     = anomalies.filter((a: any) => a.severity === 'HIGH').length;
@@ -214,6 +269,9 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   const failedLogins      = authLogs.filter((l: any) => l.status === 'failed').length;
   const pendingLeaves     = leaves.filter((l: any) => l.status === 'pending').length;
   const totalVoidAmount   = voidBills.reduce((s: number, v: any) => s + (v.amount || 0), 0);
+  const attendanceRate    = attendance.length > 0 ? Math.round((presentStaff / attendance.length) * 1000) / 10 : 0;
+  const payrollTotal      = payroll.reduce((s: number, p: any) => s + (p.net_salary || 0), 0);
+  const staffCostRatio    = revenue7d > 0 ? Math.round(((payrollTotal / 4) / revenue7d) * 1000) / 10 : 0; // weekly payroll vs weekly rev
 
   // Role distribution
   const roleDistribution: Record<string, number> = {};
@@ -232,6 +290,7 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
       total: branches.length,
       active: branches.filter((b: any) => b.status === 'active').length,
       maintenance: branches.filter((b: any) => b.status === 'maintenance').length,
+      name_by_id: branchNameById,
       list: branches.map((b: any) => ({ id: b.id, name: b.name, code: b.code, status: b.status, is_main: b.is_main_branch })),
     },
 
@@ -244,10 +303,33 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
     revenue: {
       total_24h: revenue24h,
       total_7d: revenue7d,
+      total_prev_7d: revenuePrev7d,
+      trend_pct: revenueTrendPct,
       by_branch_7d: revByBranch,
+      by_branch_name_7d: revByBranchName,
       open_shifts_now: openShifts,
       void_bills_7d: voidBills.length,
       void_amount_7d: totalVoidAmount,
+      discrepancy_shifts_7d: cashDiscrepancies.length,
+      discrepancy_amount_7d: totalDiscrepancyAmount,
+      pos_total_7d: posTotal7d,
+      payment_mix_7d: paymentMix,
+      pos_source_mix_7d: posSourceMix,
+      restaurant_7d: restaurantRevenue7d,
+      bar_7d: barRevenue7d,
+    },
+
+    occupancy: {
+      rooms_total: roomsTotal,
+      rooms_occupied: roomsOccupied,
+      rooms_maintenance: roomsMaintenance,
+      occupancy_pct: occupancyPct,
+    },
+
+    expenses: {
+      total_30d: expenses30dTotal,
+      pending_count: expensesPending,
+      staff_cost_ratio_pct: staffCostRatio,
     },
 
     anomalies: {
@@ -266,6 +348,7 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
       late: lateStaff,
       overtime: overtimeStaff,
       total_records: attendance.length,
+      attendance_rate_pct: attendanceRate,
       attendance_list: attendance.slice(0, 50).map((a: any) => ({
         status: a.status, shift: a.shift_type, clock_in: a.clock_in, overtime_h: a.overtime_hours,
       })),
@@ -307,8 +390,49 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
     invoices_7d: invoices.length,
     purchase_orders_30d: purchaseOrders.length,
     feature_flags: featureFlagMap,
+    health_scores: computeHealthScores({
+      revenueTrendPct, occupancyPct, attendanceRate,
+      criticalAnomalies, highAnomalies,
+      suspiciousLogins, failedLogins,
+      discrepancyShifts: cashDiscrepancies.length, voidBills: voidBills.length,
+      staffCostRatio,
+    }),
     system_uptime_seconds: Math.floor(process.uptime()),
     memory_usage_mb: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
+  };
+}
+
+// ── Health-score engine — 0-100 per pillar + weighted overall ─────────────────
+function computeHealthScores(m: {
+  revenueTrendPct: number; occupancyPct: number; attendanceRate: number;
+  criticalAnomalies: number; highAnomalies: number;
+  suspiciousLogins: number; failedLogins: number;
+  discrepancyShifts: number; voidBills: number; staffCostRatio: number;
+}) {
+  const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+
+  // Revenue health: 70 baseline, +/- by trend, occupancy contributes
+  const revenue = clamp(60 + m.revenueTrendPct * 1.2 + (m.occupancyPct - 50) * 0.4);
+  // Compliance: penalised by anomalies, discrepancies, voids
+  const compliance = clamp(100 - m.criticalAnomalies * 18 - m.highAnomalies * 8 - m.discrepancyShifts * 4 - m.voidBills * 2);
+  // Staffing: attendance rate + cost-ratio sanity (ideal 20-35%)
+  const costPenalty = m.staffCostRatio > 45 ? (m.staffCostRatio - 45) * 1.5 : 0;
+  const staffing = clamp(40 + m.attendanceRate * 0.6 - costPenalty);
+  // Security: penalised by suspicious + failed logins
+  const security = clamp(100 - m.suspiciousLogins * 12 - Math.min(40, m.failedLogins * 2));
+
+  const overall = clamp(revenue * 0.35 + compliance * 0.25 + staffing * 0.2 + security * 0.2);
+  const grade = (s: number) => s >= 85 ? 'A' : s >= 70 ? 'B' : s >= 55 ? 'C' : s >= 40 ? 'D' : 'F';
+
+  return {
+    overall, overall_grade: grade(overall),
+    revenue, compliance, staffing, security,
+    pillars: [
+      { key: 'revenue', label: 'Revenue Health', score: revenue, grade: grade(revenue) },
+      { key: 'compliance', label: 'Compliance & Audit', score: compliance, grade: grade(compliance) },
+      { key: 'staffing', label: 'Workforce', score: staffing, grade: grade(staffing) },
+      { key: 'security', label: 'Security', score: security, grade: grade(security) },
+    ],
   };
 }
 
@@ -323,11 +447,35 @@ function formatKes(value: number): string {
 
 function aiFallbackMeta(reason: string) {
   return {
-    model: 'local-fallback',
+    model: 'lina-engine',
+    engine: 'deterministic',
     ai_available: false,
-    fallback_reason: reason,
     generated_at: new Date().toISOString(),
   };
+}
+
+// ── Engine formatting helpers ─────────────────────────────────────────────────
+function trendBadge(pct: number): string {
+  if (pct > 1) return `📈 +${pct}%`;
+  if (pct < -1) return `📉 ${pct}%`;
+  return `➡️ ${pct}%`;
+}
+
+function rankBranches(byName: Record<string, number>): Array<{ name: string; value: number }> {
+  return Object.entries(byName || {})
+    .map(([name, value]) => ({ name, value: Number(value) || 0 }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function paymentMixLines(mix: Record<string, number>): string {
+  const entries = Object.entries(mix || {}).filter(([, v]) => (Number(v) || 0) > 0).sort((a, b) => Number(b[1]) - Number(a[1]));
+  const total = entries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
+  if (!entries.length) return '- No POS transactions recorded in window.';
+  const labels: Record<string, string> = { cash: '💵 Cash', mpesa: '📱 M-Pesa', card: '💳 Card', mixed: '🔀 Split', credit_bill: '🧾 Credit', credit: '🧾 Credit', unknown: '❔ Unspecified' };
+  return entries.map(([k, v]) => {
+    const pct = total > 0 ? Math.round((Number(v) / total) * 100) : 0;
+    return `- ${labels[k] || k}: **${formatKes(Number(v))}** (${pct}%)`;
+  }).join('\n');
 }
 
 function aiFailureReason(err: any): string {
@@ -350,34 +498,47 @@ function localExecutiveSummary(ctx: Record<string, any>, reason: string) {
   const anomalies = ctx.anomalies || {};
   const staff = ctx.staff_today || {};
   const security = ctx.security || {};
+  const occ = ctx.occupancy || {};
+  const hs = ctx.health_scores || {};
+  const ranked = rankBranches(revenue.by_branch_name_7d || {});
+  const top = ranked[0];
+  const bottom = ranked.length > 1 ? ranked[ranked.length - 1] : null;
+
+  const actions: string[] = [];
+  if ((anomalies.critical_count || 0) > 0) actions.push(`🔴 Resolve **${anomalies.critical_count} critical** audit exception(s) before close of business.`);
+  if ((revenue.discrepancy_shifts_7d || 0) > 0) actions.push(`💰 Reconcile **${revenue.discrepancy_shifts_7d}** cashier shift(s) carrying **${formatKes(revenue.discrepancy_amount_7d || 0)}** in discrepancies.`);
+  if ((revenue.void_bills_7d || 0) > 0) actions.push(`🧾 Review **${revenue.void_bills_7d}** void bill(s) worth **${formatKes(revenue.void_amount_7d || 0)}** for abuse patterns.`);
+  if (bottom && top && top.value > 0 && bottom.value < top.value * 0.4) actions.push(`🏢 **${bottom.name}** is underperforming (only ${Math.round((bottom.value / top.value) * 100)}% of top branch ${top.name}) — investigate footfall & pricing.`);
+  if ((security.suspicious_logins_24h || 0) > 0) actions.push(`🔐 Investigate **${security.suspicious_logins_24h}** suspicious login(s) in the last 24h.`);
+  if ((staff.absent || 0) > (staff.present || 0) * 0.2) actions.push(`👥 Absenteeism is elevated (${staff.absent} absent vs ${staff.present} present) — confirm shift coverage.`);
+  while (actions.length < 3) actions.push('✅ No further critical action — maintain monitoring cadence.');
+
   const summary = [
-    `## Executive Briefing - ${ctx.snapshot_date_local}`,
+    `## 🏨 Executive Briefing — ${ctx.snapshot_date_local}`,
     '',
-    `AI narrative generation is unavailable, so Lina is showing a live system-data briefing. Reason: ${reason}`,
+    `**System Health: ${hs.overall ?? '—'}/100 (Grade ${hs.overall_grade ?? '—'})** · Revenue ${trendBadge(revenue.trend_pct || 0)} week-over-week`,
     '',
-    `### Revenue Performance`,
-    `- Revenue in the last 24 hours: **${formatKes(revenue.total_24h || 0)}**`,
-    `- Revenue in the last 7 days: **${formatKes(revenue.total_7d || 0)}**`,
-    `- Open cashier shifts now: **${revenue.open_shifts_now || 0}**`,
+    `### 💰 Revenue Performance`,
+    `- Last 24h: **${formatKes(revenue.total_24h || 0)}**  ·  Last 7d: **${formatKes(revenue.total_7d || 0)}** (${trendBadge(revenue.trend_pct || 0)} vs prior week)`,
+    `- POS take 7d: **${formatKes(revenue.pos_total_7d || 0)}**  ·  Restaurant **${formatKes(revenue.restaurant_7d || 0)}**  ·  Bar **${formatKes(revenue.bar_7d || 0)}**`,
+    top ? `- 🥇 Top branch: **${top.name}** (${formatKes(top.value)})${bottom ? `  ·  🔻 Lowest: **${bottom.name}** (${formatKes(bottom.value)})` : ''}` : '- No branch revenue recorded this week.',
     '',
-    `### Operations`,
-    `- Active branches: **${branches.active || 0} / ${branches.total || 0}**`,
-    `- Confirmed bookings in 7 days: **${ctx.bookings?.active || 0}**`,
+    `### 💳 Payment Mix (7d)`,
+    paymentMixLines(revenue.payment_mix_7d || {}),
     '',
-    `### Risk Signals`,
-    `- Critical anomalies: **${anomalies.critical_count || 0}**`,
-    `- High anomalies: **${anomalies.high_count || 0}**`,
-    `- Suspicious logins in 24 hours: **${security.suspicious_logins_24h || 0}**`,
+    `### 🏢 Operations`,
+    `- Active branches: **${branches.active || 0} / ${branches.total || 0}**  ·  Open shifts now: **${revenue.open_shifts_now || 0}**`,
+    `- Room occupancy: **${occ.occupancy_pct || 0}%** (${occ.rooms_occupied || 0}/${occ.rooms_total || 0})  ·  Confirmed bookings 7d: **${ctx.bookings?.active || 0}**`,
     '',
-    `### Staff`,
-    `- Present today: **${staff.present || 0}**`,
-    `- Absent today: **${staff.absent || 0}**`,
-    `- Late today: **${staff.late || 0}**`,
+    `### ⚠️ Risk Signals`,
+    `- Critical anomalies: **${anomalies.critical_count || 0}**  ·  High: **${anomalies.high_count || 0}**  ·  Total 7d: **${anomalies.total_7d || 0}**`,
+    `- Suspicious logins 24h: **${security.suspicious_logins_24h || 0}**  ·  Failed logins 24h: **${security.failed_logins_24h || 0}**`,
     '',
-    `### Recommended Actions`,
-    `1. Review critical and high anomalies first.`,
-    `2. Reconcile open shifts and void bills before close of business.`,
-    `3. Restore AI provider configuration if narrative intelligence is required.`,
+    `### 👥 Workforce Today`,
+    `- Present **${staff.present || 0}** · Absent **${staff.absent || 0}** · Late **${staff.late || 0}** · Overtime **${staff.overtime || 0}**  (attendance **${staff.attendance_rate_pct || 0}%**)`,
+    '',
+    `### 📋 Top Action Items`,
+    ...actions.slice(0, 5).map((a, i) => `${i + 1}. ${a}`),
   ].join('\n');
 
   return { summary, context: ctx, ...aiFallbackMeta(reason) };
@@ -403,28 +564,52 @@ async function generateGroqAnalysis(prompt: string, ctx: Record<string, any>, ma
 
 function localAnomalyReport(ctx: Record<string, any>, reason: string) {
   const anomalies = ctx.anomalies || {};
+  const revenue = ctx.revenue || {};
+  const security = ctx.security || {};
   const top = Array.isArray(anomalies.top_10) ? anomalies.top_10 : [];
-  const findings = top.length
-    ? top.map((a: any, i: number) =>
-        `${i + 1}. **${a.severity || 'UNKNOWN'}** ${a.type || 'anomaly'} - ${a.description || 'No description'} (${formatKes(a.amount || 0)})`
-      ).join('\n')
-    : 'No anomaly rows are visible in the current snapshot.';
+
+  // ── Lina derives its own risk signals (not just stored exceptions) ───────────
+  const critical: string[] = [];
+  const high: string[] = [];
+  const medium: string[] = [];
+
+  top.forEach((a: any) => {
+    const line = `**${a.type || 'anomaly'}** — ${a.description || 'no description'} (${formatKes(a.amount || 0)})`;
+    const sev = (a.severity || '').toUpperCase();
+    if (sev === 'CRITICAL') critical.push(line);
+    else if (sev === 'HIGH') high.push(line);
+    else medium.push(line);
+  });
+
+  if ((revenue.discrepancy_amount_7d || 0) > 5000) high.push(`Cash discrepancies total **${formatKes(revenue.discrepancy_amount_7d)}** across ${revenue.discrepancy_shifts_7d} shift(s) — exceeds KES 5,000 tolerance.`);
+  if ((revenue.void_bills_7d || 0) >= 5) high.push(`**${revenue.void_bills_7d}** void bills (${formatKes(revenue.void_amount_7d || 0)}) in 7 days — possible void abuse; verify reasons & authorising staff.`);
+  if ((security.suspicious_logins_24h || 0) > 0) critical.push(`**${security.suspicious_logins_24h}** suspicious login(s) flagged in 24h — confirm geo/device and force-logout if needed.`);
+  if ((security.failed_logins_24h || 0) >= 10) high.push(`**${security.failed_logins_24h}** failed logins in 24h — possible brute-force; review IP blocking.`);
+  if ((revenue.trend_pct || 0) < -15) high.push(`Revenue fell **${revenue.trend_pct}%** week-over-week — investigate branch footfall & promotions.`);
+  const pm = revenue.payment_mix_7d || {};
+  const credit = Number(pm.credit_bill || pm.credit || 0);
+  if (credit > (revenue.pos_total_7d || 0) * 0.35 && credit > 0) medium.push(`Credit bills are **${Math.round((credit / (revenue.pos_total_7d || 1)) * 100)}%** of POS volume — credit exposure is high; tighten approval.`);
+
+  const fmt = (arr: string[]) => arr.length ? arr.map((l, i) => `${i + 1}. ${l}`).join('\n') : '_None detected in current snapshot._';
+
   const report = [
-    `## Lina Anomaly Audit - ${ctx.snapshot_date_local}`,
+    `## 🔍 Lina Anomaly Audit — ${ctx.snapshot_date_local}`,
     '',
-    `AI narrative generation is unavailable. Reason: ${reason}`,
+    `Scanned ${anomalies.total_7d || 0} stored exception(s) + live financial/security signals. **${critical.length} critical**, **${high.length} high**, **${medium.length} medium** risk items identified.`,
     '',
-    `### Risk Summary`,
-    `- Critical findings: **${anomalies.critical_count || 0}**`,
-    `- High findings: **${anomalies.high_count || 0}**`,
-    `- Total findings in 7 days: **${anomalies.total_7d || 0}**`,
+    `### 🔴 CRITICAL`,
+    fmt(critical),
     '',
-    `### Top Findings`,
-    findings,
+    `### 🟠 HIGH RISK`,
+    fmt(high),
     '',
-    `### Recommended Actions`,
-    `- Start with critical/high findings and assign owners.`,
-    `- Re-run Lina after restoring AI provider credentials for deeper narrative analysis.`,
+    `### 🟡 MEDIUM RISK`,
+    fmt(medium),
+    '',
+    `### 🎯 Priority Action Queue`,
+    critical.length ? `1. Address all ${critical.length} critical item(s) immediately and assign owners.` : `1. No critical items — maintain audit cadence.`,
+    `2. Reconcile ${revenue.discrepancy_shifts_7d || 0} discrepant shift(s) and ${revenue.void_bills_7d || 0} void bill(s).`,
+    `3. Review security exceptions and rotate any compromised sessions.`,
   ].join('\n');
   return { report, raw_context: ctx, ...aiFallbackMeta(reason) };
 }
@@ -432,50 +617,93 @@ function localAnomalyReport(ctx: Record<string, any>, reason: string) {
 function localEmployeeAnalysis(ctx: Record<string, any>, employeeData: Record<string, any>, reason: string) {
   const staff = ctx.staff_today || {};
   const hr = ctx.hr || {};
+  const exp = ctx.expenses || {};
+  const perf = Array.isArray(employeeData.performance) ? employeeData.performance : [];
+  const ratings = perf.map((p: any) => Number(p.rating) || 0).filter((n: number) => n > 0);
+  const avgRating = ratings.length ? Math.round((ratings.reduce((s: number, n: number) => s + n, 0) / ratings.length) * 10) / 10 : 0;
+  const lowPerformers = ratings.filter((r: number) => r <= 2).length;
+  const highPerformers = ratings.filter((r: number) => r >= 4).length;
+  const payroll = hr.payroll_month && hr.payroll_month !== 'no_data' ? hr.payroll_month : null;
+
+  const flags: string[] = [];
+  if ((staff.attendance_rate_pct || 100) < 85) flags.push(`Attendance is **${staff.attendance_rate_pct}%** — below 85% target.`);
+  if ((staff.late || 0) > (staff.present || 1) * 0.15) flags.push(`Lateness elevated: **${staff.late}** late arrivals today.`);
+  if ((staff.overtime || 0) > (staff.present || 1) * 0.25) flags.push(`Overtime concentration high (**${staff.overtime}** staff) — check rota balance / cost.`);
+  if ((exp.staff_cost_ratio_pct || 0) > 45) flags.push(`Staff cost ratio **${exp.staff_cost_ratio_pct}%** of revenue — above healthy 35% band.`);
+  if (lowPerformers > 0) flags.push(`**${lowPerformers}** staff rated ≤2/5 — schedule performance reviews.`);
+
   const analysis = [
-    `## Employee Intelligence Report - ${ctx.snapshot_date_local}`,
+    `## 👥 Employee Intelligence — ${ctx.snapshot_date_local}`,
     '',
-    `AI narrative generation is unavailable. Reason: ${reason}`,
+    `Workforce signal: attendance **${staff.attendance_rate_pct || 0}%**, avg performance **${avgRating || '—'}/5**, staff-cost ratio **${exp.staff_cost_ratio_pct || 0}%**.`,
     '',
-    `### Attendance Snapshot`,
-    `- Present: **${staff.present || 0}**`,
-    `- Absent: **${staff.absent || 0}**`,
-    `- Late: **${staff.late || 0}**`,
-    `- On overtime: **${staff.overtime || 0}**`,
+    `### 📊 Attendance Today`,
+    `- Present **${staff.present || 0}** · Absent **${staff.absent || 0}** · Late **${staff.late || 0}** · Overtime **${staff.overtime || 0}** (of ${staff.total_records || 0} records)`,
     '',
-    `### HR Snapshot`,
+    `### 💰 Payroll & Cost`,
+    payroll
+      ? `- ${payroll.total_staff_on_payroll} staff on payroll · Net **${formatKes(payroll.total_net_salary || 0)}** · Unpaid: **${payroll.unpaid_count || 0}**`
+      : `- No payroll data for the current month yet.`,
+    `- Staff cost ratio: **${exp.staff_cost_ratio_pct || 0}%** of weekly revenue`,
+    '',
+    `### 📈 Performance`,
+    `- Reviews loaded: **${perf.length}** · Avg rating **${avgRating || '—'}/5** · High performers (≥4): **${highPerformers}** · Low (≤2): **${lowPerformers}**`,
+    '',
+    `### 🏖️ Leave`,
     `- Pending leave requests: **${hr.pending_leaves || 0}**`,
-    `- Performance records loaded: **${employeeData.performance?.length || 0}**`,
-    `- Staff audit actions loaded: **${employeeData.staff_audit_actions?.length || 0}**`,
     '',
-    `### Recommended Actions`,
-    `- Review absences, lateness, and overtime exceptions by branch.`,
-    `- Confirm pending leave approvals before shift planning.`,
+    `### 🚩 Risk Flags`,
+    flags.length ? flags.map((f, i) => `${i + 1}. ${f}`).join('\n') : '_No workforce risk flags in current snapshot._',
+    '',
+    `### 📋 HR Action Items`,
+    `1. ${(staff.absent || 0) > 0 ? `Follow up on ${staff.absent} absence(s) and confirm coverage.` : 'Coverage is healthy — maintain.'}`,
+    `2. ${(hr.pending_leaves || 0) > 0 ? `Clear ${hr.pending_leaves} pending leave request(s) before next rota.` : 'No leave backlog.'}`,
+    `3. ${lowPerformers > 0 ? `Book reviews for ${lowPerformers} low-rated staff.` : 'Recognise high performers to retain talent.'}`,
   ].join('\n');
   return { analysis, raw_context: employeeData, ...aiFallbackMeta(reason) };
 }
 
 function localFinancialAnalysis(ctx: Record<string, any>, financialData: Record<string, any>, reason: string) {
   const revenue = ctx.revenue || {};
+  const exp = ctx.expenses || {};
+  const ranked = rankBranches(revenue.by_branch_name_7d || {});
+  const totalRev = ranked.reduce((s, b) => s + b.value, 0);
+  const branchTable = ranked.length
+    ? ['| Rank | Branch | Revenue 7d | Share |', '|---|---|---|---|',
+        ...ranked.map((b, i) => `| ${i + 1} | ${b.name} | ${formatKes(b.value)} | ${totalRev > 0 ? Math.round((b.value / totalRev) * 100) : 0}% |`)
+      ].join('\n')
+    : '_No branch revenue recorded this week._';
+
+  const grossMargin = totalRev > 0 ? Math.round(((totalRev - (exp.total_30d || 0) / 4) / totalRev) * 100) : 0;
+
   const analysis = [
-    `## Financial Intelligence Report - 30-Day Analysis`,
+    `## 💰 Financial Intelligence — ${ctx.snapshot_date_local}`,
     '',
-    `AI narrative generation is unavailable. Reason: ${reason}`,
+    `7-day revenue **${formatKes(revenue.total_7d || 0)}** (${trendBadge(revenue.trend_pct || 0)} WoW). POS take **${formatKes(revenue.pos_total_7d || 0)}**, est. weekly gross margin **${grossMargin}%**.`,
     '',
-    `### Revenue Snapshot`,
-    `- 24-hour revenue: **${formatKes(revenue.total_24h || 0)}**`,
-    `- 7-day revenue: **${formatKes(revenue.total_7d || 0)}**`,
-    `- Void bill value in 7 days: **${formatKes(revenue.void_amount_7d || 0)}**`,
+    `### 📈 Revenue by Branch (7d)`,
+    branchTable,
     '',
-    `### Records Loaded`,
-    `- Shift records: **${financialData.shifts_30d?.length || 0}**`,
-    `- Expense records: **${financialData.expenses_30d?.length || 0}**`,
-    `- Credit bill exceptions: **${financialData.credit_bills_30d?.length || 0}**`,
-    `- Purchase orders: **${financialData.purchase_orders_30d?.length || 0}**`,
+    `### 🍽️ Revenue by Channel (7d)`,
+    `- Restaurant: **${formatKes(revenue.restaurant_7d || 0)}**  ·  Bar: **${formatKes(revenue.bar_7d || 0)}**  ·  Rooms/Other via shifts`,
     '',
-    `### Recommended Actions`,
-    `- Reconcile shift discrepancies and void bills.`,
-    `- Review unpaid expenses and pending purchase orders.`,
+    `### 💳 Payment Mix (7d)`,
+    paymentMixLines(revenue.payment_mix_7d || {}),
+    '',
+    `### ⚠️ Cashier Discrepancies`,
+    `- Discrepant shifts: **${revenue.discrepancy_shifts_7d || 0}** · Net exposure: **${formatKes(revenue.discrepancy_amount_7d || 0)}**`,
+    '',
+    `### 🔴 Void Bills`,
+    `- Count: **${revenue.void_bills_7d || 0}** · Value: **${formatKes(revenue.void_amount_7d || 0)}**`,
+    '',
+    `### 🧾 Cost Side (30d)`,
+    `- Recorded expenses: **${formatKes(exp.total_30d || 0)}** · Pending approval: **${exp.pending_count || 0}** · Purchase orders: **${ctx.purchase_orders_30d || 0}**`,
+    `- Staff cost ratio: **${exp.staff_cost_ratio_pct || 0}%** of revenue`,
+    '',
+    `### 🎯 Financial Action Items`,
+    `1. ${(revenue.discrepancy_shifts_7d || 0) > 0 ? `Reconcile ${revenue.discrepancy_shifts_7d} discrepant shift(s) (${formatKes(revenue.discrepancy_amount_7d || 0)}).` : 'No shift discrepancies — clean.'}`,
+    `2. ${(revenue.void_bills_7d || 0) > 0 ? `Audit ${revenue.void_bills_7d} void bill(s) for legitimacy.` : 'No void-bill exposure.'}`,
+    `3. ${ranked.length > 1 && ranked[ranked.length - 1].value < (ranked[0].value || 1) * 0.4 ? `Build a recovery plan for ${ranked[ranked.length - 1].name} (lowest revenue).` : 'Revenue spread across branches is balanced.'}`,
   ].join('\n');
   return { analysis, raw_context: financialData, ...aiFallbackMeta(reason) };
 }
@@ -484,51 +712,77 @@ function localRecommendations(ctx: Record<string, any>, reason: string) {
   const revenue = ctx.revenue || {};
   const anomalies = ctx.anomalies || {};
   const security = ctx.security || {};
-  return {
-    recommendations: [
-      {
-        title: 'Restore Lina AI provider configuration',
-        severity: 'HIGH',
-        impact: 'AI narrative reports are unavailable and screens fall back to live aggregate data.',
-        suggested_action: reason,
-        remediation_level: 'APPROVAL_REQUIRED',
-        estimated_effort: 'minutes',
-        module: 'Lina AI Service',
-        kpi_impact: 'operations',
-      },
-      {
-        title: 'Review critical and high anomalies',
-        severity: (anomalies.critical_count || 0) > 0 ? 'CRITICAL' : 'MEDIUM',
-        impact: `${anomalies.critical_count || 0} critical and ${anomalies.high_count || 0} high anomalies are visible.`,
-        suggested_action: 'Open the Audit tab and assign owners to unresolved exceptions.',
-        remediation_level: 'MANUAL_ONLY',
-        estimated_effort: 'hours',
-        module: 'Audit',
-        kpi_impact: 'compliance',
-      },
-      {
-        title: 'Reconcile cashier shifts and void bills',
-        severity: (revenue.void_bills_7d || 0) > 0 ? 'HIGH' : 'LOW',
-        impact: `${revenue.void_bills_7d || 0} void bills with value ${formatKes(revenue.void_amount_7d || 0)} are visible in 7 days.`,
-        suggested_action: 'Branch accountants should verify void reasons and close open shifts.',
-        remediation_level: 'MANUAL_ONLY',
-        estimated_effort: 'hours',
-        module: 'Finance',
-        kpi_impact: 'revenue',
-      },
-      {
-        title: 'Check suspicious login activity',
-        severity: (security.suspicious_logins_24h || 0) > 0 ? 'HIGH' : 'LOW',
-        impact: `${security.suspicious_logins_24h || 0} suspicious logins detected in 24 hours.`,
-        suggested_action: 'Review Security Center and terminate risky sessions if needed.',
-        remediation_level: 'APPROVAL_REQUIRED',
-        estimated_effort: 'minutes',
-        module: 'Security',
-        kpi_impact: 'security',
-      },
-    ],
-    ...aiFallbackMeta(reason),
-  };
+  const staff = ctx.staff_today || {};
+  const exp = ctx.expenses || {};
+  const ranked = rankBranches(revenue.by_branch_name_7d || {});
+  const recs: any[] = [];
+
+  if ((anomalies.critical_count || 0) > 0) recs.push({
+    title: `Resolve ${anomalies.critical_count} critical audit exception(s)`,
+    severity: 'CRITICAL',
+    impact: 'Unresolved critical exceptions indicate possible fraud or financial loss.',
+    suggested_action: 'Open Audit Center, assign owners, and require justification on each exception.',
+    remediation_level: 'MANUAL_ONLY', estimated_effort: 'hours', module: 'Audit', kpi_impact: 'compliance',
+  });
+  if ((revenue.discrepancy_shifts_7d || 0) > 0) recs.push({
+    title: `Reconcile ${revenue.discrepancy_shifts_7d} cashier shift discrepancy(ies)`,
+    severity: (revenue.discrepancy_amount_7d || 0) > 5000 ? 'HIGH' : 'MEDIUM',
+    impact: `${formatKes(revenue.discrepancy_amount_7d || 0)} in cash variance detected this week.`,
+    suggested_action: 'Branch accountants verify till counts vs system and document overages/shortages.',
+    remediation_level: 'MANUAL_ONLY', estimated_effort: 'hours', module: 'Finance', kpi_impact: 'revenue',
+  });
+  if ((revenue.void_bills_7d || 0) > 0) recs.push({
+    title: `Audit ${revenue.void_bills_7d} void bill(s)`,
+    severity: (revenue.void_bills_7d || 0) >= 5 ? 'HIGH' : 'MEDIUM',
+    impact: `${formatKes(revenue.void_amount_7d || 0)} voided — risk of revenue leakage / staff abuse.`,
+    suggested_action: 'Cross-check void reasons and authorising staff; flag repeat offenders.',
+    remediation_level: 'MANUAL_ONLY', estimated_effort: 'hours', module: 'Audit', kpi_impact: 'revenue',
+  });
+  if ((revenue.trend_pct || 0) < -10) recs.push({
+    title: `Reverse ${revenue.trend_pct}% week-over-week revenue decline`,
+    severity: 'HIGH',
+    impact: 'Sustained decline erodes margin and cash position.',
+    suggested_action: 'Run targeted promotions, review pricing, and check occupancy at lagging branches.',
+    remediation_level: 'APPROVAL_REQUIRED', estimated_effort: 'days', module: 'Revenue', kpi_impact: 'revenue',
+  });
+  if (ranked.length > 1 && ranked[0].value > 0 && ranked[ranked.length - 1].value < ranked[0].value * 0.4) recs.push({
+    title: `Recovery plan for ${ranked[ranked.length - 1].name}`,
+    severity: 'MEDIUM',
+    impact: `Lowest branch earns only ${Math.round((ranked[ranked.length - 1].value / ranked[0].value) * 100)}% of the top branch.`,
+    suggested_action: 'Benchmark staffing, pricing and footfall vs the top branch and close the gap.',
+    remediation_level: 'APPROVAL_REQUIRED', estimated_effort: 'days', module: 'Operations', kpi_impact: 'revenue',
+  });
+  if ((security.suspicious_logins_24h || 0) > 0) recs.push({
+    title: `Investigate ${security.suspicious_logins_24h} suspicious login(s)`,
+    severity: 'HIGH',
+    impact: 'Possible account compromise or unauthorised access.',
+    suggested_action: 'Review Security Center, verify geo/device, force-logout and reset where needed.',
+    remediation_level: 'APPROVAL_REQUIRED', estimated_effort: 'minutes', module: 'Security', kpi_impact: 'security',
+  });
+  if ((exp.staff_cost_ratio_pct || 0) > 45) recs.push({
+    title: `Bring staff cost ratio (${exp.staff_cost_ratio_pct}%) under control`,
+    severity: 'MEDIUM',
+    impact: 'Labour cost above 45% of revenue compresses margin.',
+    suggested_action: 'Rebalance rotas, curb avoidable overtime, align headcount to demand.',
+    remediation_level: 'APPROVAL_REQUIRED', estimated_effort: 'days', module: 'HR', kpi_impact: 'operations',
+  });
+  if ((staff.absent || 0) > (staff.present || 1) * 0.2) recs.push({
+    title: `Address elevated absenteeism (${staff.absent} absent today)`,
+    severity: 'MEDIUM',
+    impact: 'Understaffing risks service quality and overtime spikes.',
+    suggested_action: 'Confirm coverage, follow up unexplained absences, update the rota.',
+    remediation_level: 'SAFE_AUTO', estimated_effort: 'minutes', module: 'HR', kpi_impact: 'staff',
+  });
+
+  if (!recs.length) recs.push({
+    title: 'System healthy — maintain monitoring cadence',
+    severity: 'LOW',
+    impact: 'No material risks detected in the current snapshot.',
+    suggested_action: 'Keep daily audit reviews and weekly branch benchmarking active.',
+    remediation_level: 'SAFE_AUTO', estimated_effort: 'minutes', module: 'Operations', kpi_impact: 'operations',
+  });
+
+  return { recommendations: recs, ...aiFallbackMeta(reason) };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1127,4 +1381,122 @@ export const rejectRemediation = async (req: Request, res: Response): Promise<vo
   if (!rem) { res.status(404).json({ success: false, message: 'Remediation not found' }); return; }
   rem.status = 'rejected'; rem.rejected_by = req.user?.id; rem.rejected_at = new Date().toISOString();
   res.json({ success: true, data: rem });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BRANCH BENCHMARK — deterministic per-branch scorecards (always available)
+// ═══════════════════════════════════════════════════════════════════════════════
+export const getBranchBenchmark = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const [branchesRes, shiftsRes, roomsRes, exceptionsRes] = await Promise.allSettled([
+      supabase.from('branches').select('id,name,code,status').order('name'),
+      supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status').gte('opened_at', since7d).limit(2000),
+      supabase.from('rooms').select('branch_id,status').limit(5000),
+      supabase.from('audit_exceptions').select('branch_id,exception_type,severity,amount').gte('detected_at', since7d).limit(1000),
+    ]);
+    const extract = (r: PromiseSettledResult<any>) => r.status === 'fulfilled' ? (r.value.data ?? []) : [];
+    const branches = extract(branchesRes);
+    const shifts = extract(shiftsRes);
+    const rooms = extract(roomsRes);
+    const exceptions = extract(exceptionsRes);
+
+    const byBranch: Record<string, any> = {};
+    branches.forEach((b: any) => {
+      byBranch[String(b.id)] = {
+        branch_id: b.id, name: b.name || b.code || `Branch ${b.id}`, status: b.status,
+        revenue_7d: 0, shifts: 0, discrepancy_amount: 0, discrepancy_shifts: 0,
+        rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0,
+      };
+    });
+    const ensure = (id: any) => {
+      const k = String(id);
+      if (!byBranch[k]) byBranch[k] = { branch_id: id, name: `Branch ${id}`, status: 'unknown', revenue_7d: 0, shifts: 0, discrepancy_amount: 0, discrepancy_shifts: 0, rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0 };
+      return byBranch[k];
+    };
+    shifts.forEach((s: any) => { if (s.branch_id == null) return; const b = ensure(s.branch_id); b.revenue_7d += Number(s.total_sales) || 0; b.shifts += 1; const d = Math.abs(Number(s.discrepancy_amount) || 0); if (d > 0) { b.discrepancy_amount += d; b.discrepancy_shifts += 1; } });
+    rooms.forEach((r: any) => { if (r.branch_id == null) return; const b = ensure(r.branch_id); b.rooms_total += 1; if ((r.status || '').toLowerCase() === 'occupied') b.rooms_occupied += 1; });
+    exceptions.forEach((e: any) => { if (e.branch_id == null) return; const b = ensure(e.branch_id); if (e.exception_type === 'void_bill') b.voids += 1; if ((e.severity || '').toUpperCase() === 'CRITICAL') b.critical += 1; });
+
+    const maxRev = Math.max(1, ...Object.values(byBranch).map((b: any) => b.revenue_7d));
+    const scorecards = Object.values(byBranch).map((b: any) => {
+      const occupancy = b.rooms_total > 0 ? Math.round((b.rooms_occupied / b.rooms_total) * 1000) / 10 : 0;
+      const revScore = Math.round((b.revenue_7d / maxRev) * 100);
+      const cleanScore = Math.max(0, 100 - b.discrepancy_shifts * 8 - b.voids * 5 - b.critical * 15);
+      const occScore = Math.min(100, Math.round(occupancy * 1.4));
+      const score = Math.round(revScore * 0.5 + cleanScore * 0.3 + occScore * 0.2);
+      const grade = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F';
+      return { ...b, occupancy_pct: occupancy, score, grade };
+    }).sort((a: any, b: any) => b.score - a.score).map((b: any, i: number) => ({ ...b, rank: i + 1 }));
+
+    res.json({ success: true, data: { scorecards, generated_at: new Date().toISOString(), window: '7d' } });
+  } catch (err: any) {
+    logger.error('Lina branch benchmark error', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FORECAST — revenue projection from 30-day daily history (linear + moving avg)
+// ═══════════════════════════════════════════════════════════════════════════════
+export const getForecast = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const days = 30;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const { data: shifts } = await supabase
+      .from('cashier_shifts')
+      .select('total_sales,opened_at')
+      .gte('opened_at', since)
+      .limit(5000);
+
+    // Bucket revenue by local day
+    const buckets: Record<string, number> = {};
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      buckets[d] = 0;
+    }
+    (shifts || []).forEach((s: any) => {
+      const d = (s.opened_at || '').split('T')[0];
+      if (d in buckets) buckets[d] += Number(s.total_sales) || 0;
+    });
+    const series = Object.entries(buckets).map(([date, value]) => ({ date, value }));
+    const ys = series.map((p) => p.value);
+    const n = ys.length;
+
+    // Linear regression (least squares) on day index
+    const sumX = (n * (n - 1)) / 2;
+    const sumY = ys.reduce((s, y) => s + y, 0);
+    const sumXY = ys.reduce((s, y, x) => s + x * y, 0);
+    const sumXX = ys.reduce((s, _y, x) => s + x * x, 0);
+    const denom = n * sumXX - sumX * sumX;
+    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+    const intercept = (sumY - slope * sumX) / Math.max(1, n);
+
+    const avg7 = ys.slice(-7).reduce((s, y) => s + y, 0) / Math.max(1, Math.min(7, n));
+    const project = (offset: number) => Math.max(0, Math.round(intercept + slope * (n - 1 + offset)));
+    const forecast = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      return { date: d, value: project(i + 1) };
+    });
+    const next7Total = forecast.reduce((s, p) => s + p.value, 0);
+    const next30Projection = Math.max(0, Math.round((intercept + slope * (n + 15)) * 30)); // mid-point * 30
+    const trendDirection = slope > avg7 * 0.02 ? 'up' : slope < -avg7 * 0.02 ? 'down' : 'flat';
+
+    res.json({
+      success: true,
+      data: {
+        history: series,
+        forecast,
+        avg_daily_7d: Math.round(avg7),
+        slope_per_day: Math.round(slope),
+        next_7d_projection: next7Total,
+        next_30d_projection: next30Projection,
+        trend: trendDirection,
+        generated_at: new Date().toISOString(),
+      },
+    });
+  } catch (err: any) {
+    logger.error('Lina forecast error', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
 };

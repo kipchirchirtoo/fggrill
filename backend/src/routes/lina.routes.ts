@@ -24,6 +24,10 @@ router.get('/employee-intelligence', lina.getEmployeeIntelligence);
 router.get('/financial-intelligence', lina.getFinancialIntelligence);
 router.get('/recommendations', lina.getRecommendations);
 
+// Analytics engine (deterministic — always available)
+router.get('/branch-benchmark', lina.getBranchBenchmark);
+router.get('/forecast', lina.getForecast);
+
 // Remediation workflow
 router.post('/remediate', lina.proposeRemediation);
 router.get('/remediations/pending', lina.getPendingRemediations);
