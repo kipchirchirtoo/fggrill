@@ -1159,11 +1159,13 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
 
   @override
   Widget build(BuildContext context) {
+    // Bills for the current open shift (this tab is gated by _RequiresOpenShift,
+    // so reaching here means a shift is open). Always scoped to today.
     final filters =
         CashierBillFilters(status: _status, search: _search, date: _date);
     final bills = ref.watch(cashierUnpaidBillsProvider(filters));
     return _BillsScaffold(
-      title: 'Unpaid Bills - $_date',
+      title: 'Unpaid Bills — Current Shift',
       status: _status,
       onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
       onSearch: (value) => setState(() => _search = value),
@@ -1172,41 +1174,10 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() {
-                  _date = _dateOnly(
-                    DateTime.parse(_date).subtract(const Duration(days: 1)),
-                  );
-                }),
-                icon: const Icon(Icons.chevron_left, size: 16),
-                label: const Text('Previous day'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () =>
-                    setState(() => _date = _dateOnly(DateTime.now())),
-                icon: const Icon(Icons.today, size: 16),
-                label: const Text('Today'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => setState(() {
-                  _date = _dateOnly(
-                    DateTime.parse(_date).add(const Duration(days: 1)),
-                  );
-                }),
-                icon: const Icon(Icons.chevron_right, size: 16),
-                label: const Text('Next day'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           bills.when(
             data: (rows) => _BillList(
               rows: rows,
-              emptyMessage: 'No unpaid bills found for $_date',
+              emptyMessage: 'No unpaid bills for the current shift',
               onPay: (row) => _recordPayment(row),
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
@@ -1251,36 +1222,59 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
   }
 
   Future<void> _recordPayment(Map<String, dynamic> row) async {
+    final staff = await ref
+        .read(cashierRepositoryProvider)
+        .getBranchStaff()
+        .catchError((_) => <Map<String, dynamic>>[]);
+    if (!mounted) return;
     final body = await _paymentPayload(
       context,
       _num(row['balance_amount'] ?? row['balance']),
       title: 'Confirm Payment',
-      allowCreditBill: false,
+      allowCreditBill: true,
+      staffMembers: staff,
     );
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
+    final repo = ref.read(cashierRepositoryProvider);
     try {
       final source = _text(row, ['source']);
+      final isWaiter = row['is_waiter_order'] == true &&
+          (source == 'restaurant' || source == 'bar' || source == 'pos');
       final responses = <Map<String, dynamic>>[];
       final receiptRefs = <String>[];
       final totalPaid = payments.fold<num>(
         0,
         (sum, payment) => sum + _num(payment['payment_amount']),
       );
-      if (row['is_waiter_order'] == true &&
-          (source == 'restaurant' || source == 'bar' || source == 'pos')) {
-        for (final payment in payments) {
-          final response = await ref
-              .read(cashierRepositoryProvider)
-              .clearWaiterOrder(source, _text(row, ['id']), payment);
+      for (final payment in payments) {
+        if (_text(payment, ['payment_method']) == 'credit_bill') {
+          // Convert this portion into a staff credit bill (settled later by the
+          // branch accountant — cash receipt or payroll deduction).
+          final response = await repo.createCreditBill({
+            'staff_id': _text(payment, ['staff_id']),
+            'staff_name': _text(payment, ['staff_name']),
+            'bill_type': 'cashier_payment',
+            'reference_type': 'cashier_payment',
+            'reference_id': _text(row, ['id']),
+            'total_amount': _num(payment['payment_amount']),
+            'amount': _num(payment['payment_amount']),
+            'due_date': _dateOnly(DateTime.now().add(const Duration(days: 30))),
+            'payment_method': 'credit_bill',
+            'deduction_months': 1,
+            'remarks':
+                'Credit settlement for bill ${_text(row, ['bill_number', 'order_number', 'id'])}',
+          });
           responses.add(response);
           receiptRefs.add(_receiptReferenceForPayment(payment));
-        }
-      } else {
-        for (final payment in payments) {
-          final response = await ref
-              .read(cashierRepositoryProvider)
-              .recordUnpaidBillPayment(_text(row, ['id']), payment);
+        } else if (isWaiter) {
+          final response =
+              await repo.clearWaiterOrder(source, _text(row, ['id']), payment);
+          responses.add(response);
+          receiptRefs.add(_receiptReferenceForPayment(payment));
+        } else {
+          final response =
+              await repo.recordUnpaidBillPayment(_text(row, ['id']), payment);
           responses.add(response);
           receiptRefs.add(_receiptReferenceForPayment(payment));
         }
@@ -1608,6 +1602,105 @@ class _ShiftStaffMember {
   final String employeeId;
   final String department;
   final String email;
+}
+
+/// Searchable, branch-filtered staff selector (Autocomplete) for assigning a
+/// credit bill to a staff member. Loads from the branch staff list.
+class _StaffSearchField extends StatefulWidget {
+  const _StaffSearchField({
+    required this.staff,
+    required this.onSelected,
+    this.initialId,
+    this.label = 'Staff member (search)',
+  });
+
+  final List<_ShiftStaffMember> staff;
+  final ValueChanged<_ShiftStaffMember?> onSelected;
+  final String? initialId;
+  final String label;
+
+  @override
+  State<_StaffSearchField> createState() => _StaffSearchFieldState();
+}
+
+class _StaffSearchFieldState extends State<_StaffSearchField> {
+  String _label(_ShiftStaffMember s) => [
+        s.name,
+        if (s.employeeId.isNotEmpty) s.employeeId,
+        if (s.department.isNotEmpty) s.department,
+      ].join(' · ');
+
+  @override
+  Widget build(BuildContext context) {
+    _ShiftStaffMember? initial;
+    for (final s in widget.staff) {
+      if (s.id == widget.initialId) {
+        initial = s;
+        break;
+      }
+    }
+    return Autocomplete<_ShiftStaffMember>(
+      initialValue: TextEditingValue(text: initial != null ? _label(initial) : ''),
+      displayStringForOption: _label,
+      optionsBuilder: (value) {
+        final q = value.text.trim().toLowerCase();
+        if (q.isEmpty) return widget.staff;
+        return widget.staff.where((s) =>
+            s.name.toLowerCase().contains(q) ||
+            s.employeeId.toLowerCase().contains(q) ||
+            s.department.toLowerCase().contains(q) ||
+            s.email.toLowerCase().contains(q));
+      },
+      onSelected: widget.onSelected,
+      fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            isDense: true,
+            prefixIcon: const Icon(Icons.search, size: 18),
+            hintText: 'Type a name…',
+          ),
+          onChanged: (v) {
+            if (v.trim().isEmpty) widget.onSelected(null);
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 460),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, i) {
+                  final s = options.elementAt(i);
+                  return ListTile(
+                    dense: true,
+                    title: Text(s.name),
+                    subtitle: ([s.employeeId, s.department]
+                            .where((e) => e.isNotEmpty)
+                            .isEmpty)
+                        ? null
+                        : Text([s.employeeId, s.department]
+                            .where((e) => e.isNotEmpty)
+                            .join(' · ')),
+                    onTap: () => onSelected(s),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _ShiftStockEntry {
@@ -2998,12 +3091,18 @@ class _PaymentDraftLine {
   final TextEditingController amountController;
   final TextEditingController referenceController = TextEditingController();
 
+  // Populated when method == 'credit_bill' (staff the credit is assigned to).
+  String staffId = '';
+  String staffName = '';
+
   num get amount => _num(amountController.text);
 
   Map<String, dynamic> toPayload() => {
         'payment_amount': amount,
         'payment_method': method,
         'payment_reference': referenceController.text.trim(),
+        if (method == 'credit_bill') 'staff_id': staffId,
+        if (method == 'credit_bill') 'staff_name': staffName,
       };
 
   void dispose() {
@@ -3017,7 +3116,9 @@ Future<Map<String, dynamic>?> _paymentPayload(
   num amount, {
   String title = 'Record Payment',
   bool allowCreditBill = true,
+  List<Map<String, dynamic>> staffMembers = const [],
 }) {
+  final staffOptions = _shiftStaffMembers(staffMembers);
   final lines = <_PaymentDraftLine>[
     _PaymentDraftLine(amount: amount > 0 ? amount.toStringAsFixed(0) : ''),
   ];
@@ -3037,6 +3138,19 @@ Future<Map<String, dynamic>?> _paymentPayload(
         }
 
         Map<String, dynamic>? buildPayload() {
+          // Credit-bill lines must have a staff member selected.
+          for (final line in lines) {
+            if (line.method == 'credit_bill' &&
+                line.amount > 0 &&
+                line.staffId.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text(
+                        'Select the staff member for the credit bill')),
+              );
+              return null;
+            }
+          }
           final payments = lines
               .map((line) => line.toPayload())
               .where((line) => _num(line['payment_amount']) > 0)
@@ -3114,6 +3228,7 @@ Future<Map<String, dynamic>?> _paymentPayload(
                       line: lines[index],
                       canRemove: lines.length > 1,
                       allowCreditBill: allowCreditBill,
+                      staffOptions: staffOptions,
                       onChanged: () => setState(() {}),
                       onRemove: () {
                         setState(() {
@@ -3171,6 +3286,7 @@ class _PaymentLineEditor extends StatelessWidget {
     required this.line,
     required this.canRemove,
     required this.allowCreditBill,
+    required this.staffOptions,
     required this.onChanged,
     required this.onRemove,
   });
@@ -3178,6 +3294,7 @@ class _PaymentLineEditor extends StatelessWidget {
   final _PaymentDraftLine line;
   final bool canRemove;
   final bool allowCreditBill;
+  final List<_ShiftStaffMember> staffOptions;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
@@ -3240,6 +3357,24 @@ class _PaymentLineEditor extends StatelessWidget {
               ],
             ],
           ),
+          if (line.method == 'credit_bill') ...[
+            const SizedBox(height: 10),
+            if (staffOptions.isEmpty)
+              const Text(
+                'No branch staff loaded — cannot assign a credit bill.',
+                style: TextStyle(color: AppColors.kError, fontSize: 12),
+              )
+            else
+              _StaffSearchField(
+                staff: staffOptions,
+                initialId: line.staffId.isEmpty ? null : line.staffId,
+                onSelected: (selected) {
+                  line.staffId = selected?.id ?? '';
+                  line.staffName = selected?.name ?? '';
+                  onChanged();
+                },
+              ),
+          ],
           const SizedBox(height: 10),
           TextField(
             controller: line.referenceController,
@@ -3439,35 +3574,11 @@ Future<Map<String, dynamic>?> _creditBillPayload(
                       decoration:
                           const InputDecoration(labelText: 'Staff profile ID'))
                 else
-                  DropdownButtonFormField<String>(
-                    initialValue: staffOptions.any(
-                      (staff) => staff.id == initialStaffId,
-                    )
-                        ? initialStaffId
-                        : null,
-                    isExpanded: true,
-                    menuMaxHeight: 360,
-                    decoration:
-                        const InputDecoration(labelText: 'Branch staff member'),
-                    items: staffOptions
-                        .map(
-                          (staff) => DropdownMenuItem<String>(
-                            value: staff.id,
-                            child: Text(
-                              [
-                                staff.name,
-                                if (staff.employeeId.isNotEmpty)
-                                  staff.employeeId,
-                                if (staff.department.isNotEmpty)
-                                  staff.department,
-                              ].join(' - '),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      final selected = _shiftStaffById(staffOptions, value);
+                  _StaffSearchField(
+                    staff: staffOptions,
+                    initialId: initialStaffId.isEmpty ? null : initialStaffId,
+                    label: 'Branch staff member (search)',
+                    onSelected: (selected) {
                       setState(() {
                         staffIdController.text = selected?.id ?? '';
                         staffNameController.text = selected?.name ?? '';
