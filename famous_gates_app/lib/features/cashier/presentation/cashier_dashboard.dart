@@ -1318,35 +1318,65 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       final receiptRefs = <String>[];
       for (final payment in payments) {
         if (_text(payment, ['payment_method']) == 'credit_bill') {
-          // Convert this portion into a staff credit bill (settled later by the
-          // branch accountant — cash receipt or payroll deduction).
-          final response = await repo.createCreditBill({
-            'staff_id': _text(payment, ['staff_id']),
-            'staff_name': _text(payment, ['staff_name']),
-            'bill_type': 'cashier_payment',
-            'reference_type': 'cashier_payment',
-            'reference_id': _text(row, ['id']),
-            'total_amount': _num(payment['payment_amount']),
-            'amount': _num(payment['payment_amount']),
-            'due_date': _dateOnly(DateTime.now().add(const Duration(days: 30))),
-            'payment_method': 'credit_bill',
-            'deduction_months': 1,
-            'remarks':
-                'Credit settlement for bill ${_text(row, ['bill_number', 'order_number', 'id'])}',
-          });
-          responses.add(response);
-          receiptRefs.add(_receiptReferenceForPayment(payment));
+          // Settle as a staff credit bill. This must CLEAR the source order and
+          // record to the active shift — the credit is owed by the SELECTED
+          // staff (not the waiter), settled later by the branch accountant.
+          final amt = _num(payment['payment_amount']);
+          final reference = _receiptReferenceForPayment(payment);
+          Map<String, dynamic> created;
+          if (isWaiter) {
+            // markWaiterOrderPaid creates the staff credit bill (for the
+            // selected staff_id), marks the order credit_bill, and records the
+            // shift sale in one call.
+            created = _payload(await repo.clearWaiterOrder(
+                source, _text(row, ['id']), {
+              'payment_method': 'credit_bill',
+              'payment_amount': amt,
+              'payment_reference': reference,
+              'staff_id': _text(payment, ['staff_id']),
+              'staff_name': _text(payment, ['staff_name']),
+            }));
+          } else {
+            // Manual unpaid bill: create the staff credit bill, then mark the
+            // bill settled-by-credit (records the shift sale).
+            final credit = _payload(await repo.createCreditBill({
+              'staff_id': _text(payment, ['staff_id']),
+              'staff_name': _text(payment, ['staff_name']),
+              'bill_type': 'cashier_payment',
+              'reference_type': 'cashier_payment',
+              'reference_id': _text(row, ['id']),
+              'total_amount': amt,
+              'amount': amt,
+              'due_date':
+                  _dateOnly(DateTime.now().add(const Duration(days: 30))),
+              'payment_method': 'credit_bill',
+              'deduction_months': 1,
+            }));
+            final creditId =
+                _text(credit, ['staff_credit_bill_id', 'id', 'credit_number']);
+            await repo.recordUnpaidBillPayment(_text(row, ['id']), {
+              'payment_amount': amt,
+              'payment_method': 'credit_bill',
+              'payment_reference': reference,
+              if (creditId.isNotEmpty) 'credit_bill_id': creditId,
+            });
+            created = credit;
+          }
+          responses.add(created);
+          receiptRefs.add(reference);
           // Print a dedicated staff credit-bill receipt for this line.
           try {
-            final created = _payload(response);
             await PrintService().printCreditBillReceipt(
               branchName: ref.read(dashboardNavProvider).branchName,
               staffName: _text(payment, ['staff_name']),
-              amount: _num(payment['payment_amount']),
-              items: _receiptItemsFromBill(row, _num(payment['payment_amount'])),
-              creditNumber: _text(created, ['credit_number', 'id']).isNotEmpty
-                  ? _text(created, ['credit_number', 'id'])
-                  : _receiptReferenceForPayment(payment),
+              amount: amt,
+              items: _receiptItemsFromBill(row, amt),
+              creditNumber:
+                  _text(created, ['credit_number', 'staff_credit_bill_id', 'id'])
+                          .isNotEmpty
+                      ? _text(created,
+                          ['credit_number', 'staff_credit_bill_id', 'id'])
+                      : reference,
               cashierName: ref.read(dashboardNavProvider).user?.name,
               sourceReference:
                   _text(row, ['bill_number', 'order_number', 'id']),

@@ -394,6 +394,9 @@ export const getShiftLogs = async (
                 if (summary && summary.total_sales > 0) {
                     const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0);
                     const closingFloat = Number(shift.closing_float || 0);
+                    const liveCredit = Number(
+                        summary.total_credit_bill ?? summary.total_credit ?? 0
+                    );
                     return {
                         ...shift,
                         cashier_name: cashierName,
@@ -401,6 +404,7 @@ export const getShiftLogs = async (
                         total_cash_sales: summary.total_cash || 0,
                         total_mpesa_sales: summary.total_mpesa || 0,
                         total_card_sales: summary.total_card || 0,
+                        credit_bills_taken: liveCredit || shift.credit_bills_taken || 0,
                         transaction_count: summary.transaction_count || 0,
                         expected_closing_float: expectedClosingFloat,
                         variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,

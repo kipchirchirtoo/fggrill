@@ -6573,19 +6573,26 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
         let linkedStaffCreditBillId = staff_credit_bill_id || null;
 
         if (normalizedMethod === 'credit_bill' && !linkedStaffCreditBillId && !skip_credit_bill_creation) {
-            const waiterUserId = (order as any)[waiterField] || (order as any).created_by;
+            // The credit bill is owed by the staff the cashier SELECTS (passed as
+            // staff_id), not the waiter who served the order. Fall back to the
+            // waiter only when no staff was selected.
+            const selectedStaffRef = req.body.staff_id
+                || (order as any)[waiterField]
+                || (order as any).created_by;
             const { data: staffProfile } = await supabase
                 .from('staff_profiles')
                 .select('id, first_name, last_name')
-                .or(`user_id.eq.${waiterUserId},id.eq.${waiterUserId}`)
+                .or(`user_id.eq.${selectedStaffRef},id.eq.${selectedStaffRef}`)
                 .maybeSingle();
 
             if (staffProfile?.id) {
                 const billNumber = (order as any).order_number || (order as any).short_code || id;
+                const staffLabel = req.body.staff_name
+                    || `${staffProfile.first_name || ''} ${staffProfile.last_name || ''}`.trim();
                 const { data: staffCreditBill } = await supabase.from('staff_credit_bills').insert({
                     staff_id: staffProfile.id,
                     amount: amountPaid,
-                    description: `Uncleared ${isPosCaptainOrder ? 'captain POS' : normalizedSource} order ${billNumber} migrated from cashier`,
+                    description: `Credit bill for ${staffLabel || 'staff'} — ${isPosCaptainOrder ? 'captain POS' : normalizedSource} order ${billNumber}`,
                     bill_date: new Date().toISOString().slice(0, 10),
                     status: 'pending',
                     branch_id: orderBranchId,
@@ -6682,9 +6689,15 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
             message: isCleared ? 'Order cleared' : 'Partial payment recorded',
             data: {
                 id,
-                payment_status: isCleared ? 'paid' : 'partial',
+                payment_status: isCleared
+                    ? (isPosCaptainOrder && normalizedMethod === 'credit_bill'
+                        ? 'credit_bill'
+                        : 'paid')
+                    : 'partial',
                 amount_paid: nextPaid,
-                balance_amount: nextBalance
+                balance_amount: nextBalance,
+                staff_credit_bill_id: linkedStaffCreditBillId,
+                credit_number: linkedStaffCreditBillId
             }
         });
     } catch (error) {
