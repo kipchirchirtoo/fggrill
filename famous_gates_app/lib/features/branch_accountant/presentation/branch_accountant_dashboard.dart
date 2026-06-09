@@ -182,38 +182,39 @@ class _NavItem {
 
 const _navItems = [
   _NavItem(BranchAccountantSection.overview, 'Overview', Icons.dashboard),
-  _NavItem(BranchAccountantSection.cashierClearance, 'Cashier Clearance',
-      Icons.fact_check),
-  _NavItem(
-      BranchAccountantSection.analytics, 'Branch Analytics', Icons.analytics),
-  _NavItem(BranchAccountantSection.salesPayments, 'Sales & Payments',
-      Icons.point_of_sale),
-  _NavItem(BranchAccountantSection.financialWorkspace, 'Financial Workspace',
-      Icons.calendar_month),
-  _NavItem(
-      BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
-  _NavItem(
-      BranchAccountantSection.profitLoss, 'Profit & Loss', Icons.bar_chart),
-  _NavItem(BranchAccountantSection.revenueOversight, 'Revenue Oversight',
-      Icons.trending_up),
-  _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
-  _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
-  _NavItem(
-      BranchAccountantSection.shiftOpenings, 'Shift Openings', Icons.lock_open),
+  // ── Daily cashier, shift & bill operations (most accessed) ──
   _NavItem(BranchAccountantSection.shiftReview, 'Shift Reconciliation',
       Icons.schedule),
   _NavItem(
+      BranchAccountantSection.shiftOpenings, 'Shift Openings', Icons.lock_open),
+  _NavItem(
       BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
   _NavItem(
-      BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
-  _NavItem(BranchAccountantSection.banking, 'Banking', Icons.account_balance),
+      BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
   _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
       Icons.receipt_long),
+  _NavItem(BranchAccountantSection.salesPayments, 'Sales & Payments',
+      Icons.point_of_sale),
+  _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
   _NavItem(
-      BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
+      BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
+  _NavItem(
+      BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
+  // ── Finance & oversight ──
+  _NavItem(BranchAccountantSection.financialWorkspace, 'Financial Workspace',
+      Icons.calendar_month),
+  _NavItem(BranchAccountantSection.banking, 'Banking', Icons.account_balance),
+  _NavItem(BranchAccountantSection.shiftPnl, 'Shift P&L', Icons.insights),
+  _NavItem(
+      BranchAccountantSection.analytics, 'Branch Analytics', Icons.analytics),
+  _NavItem(BranchAccountantSection.revenueOversight, 'Revenue Oversight',
+      Icons.trending_up),
+  _NavItem(
+      BranchAccountantSection.profitLoss, 'Profit & Loss', Icons.bar_chart),
+  // ── Inventory & operations ──
+  _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
   _NavItem(
       BranchAccountantSection.foodVariance, 'Food Variance', Icons.warning),
-  _NavItem(BranchAccountantSection.shiftPnl, 'Shift P&L', Icons.insights),
   _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings Invoices',
       Icons.hotel),
   _NavItem(BranchAccountantSection.stockTake, 'Stock Takes', Icons.inventory),
@@ -472,9 +473,9 @@ class _BranchAccountantBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     const items = [
       BranchAccountantSection.overview,
-      BranchAccountantSection.cashierClearance,
-      BranchAccountantSection.shiftOpenings,
-      BranchAccountantSection.financialWorkspace,
+      BranchAccountantSection.shiftReview,
+      BranchAccountantSection.cashierLogbooks,
+      BranchAccountantSection.creditBills,
       BranchAccountantSection.discrepancies,
     ];
     return BottomNavigationBar(
@@ -607,9 +608,9 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = <(String, IconData, BranchAccountantSection)>[
       (
-        'Cashier Clearance',
-        Icons.fact_check,
-        BranchAccountantSection.cashierClearance
+        'Shift Reconciliation',
+        Icons.schedule,
+        BranchAccountantSection.shiftReview
       ),
       (
         'Shift Openings',

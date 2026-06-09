@@ -1306,8 +1306,6 @@ const _branchManagerSectionRouteSpecs =
 
 const _branchAccountantSectionRouteSpecs =
     <MapEntry<String, BranchAccountantSection>>[
-  MapEntry('/branch-accountant/cashier-clearance',
-      BranchAccountantSection.cashierClearance),
   MapEntry('/branch-accountant/analytics', BranchAccountantSection.analytics),
   MapEntry('/branch-accountant/financial-workspace',
       BranchAccountantSection.financialWorkspace),

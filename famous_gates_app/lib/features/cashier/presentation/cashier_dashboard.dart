@@ -252,24 +252,33 @@ class _StationTabState extends ConsumerState<_StationTab> {
 
   @override
   Widget build(BuildContext context) {
-    final stats = ref.watch(cashierStatsProvider);
+    final currentShift = ref.watch(cashierCurrentShiftProvider);
+    final unpaidBills =
+        ref.watch(cashierUnpaidBillsProvider(const CashierBillFilters()));
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          stats.when(
-            data: (data) {
-              final s = _payload(data);
+          currentShift.when(
+            data: (raw) {
+              final shift = _payload(raw);
+              // Verified collections actually taken in this shift
+              // (cash + M-Pesa + card; credit bills are not "collected").
+              final verified = _num(shift['total_cash_sales']) +
+                  _num(shift['total_mpesa_sales']) +
+                  _num(shift['total_card_sales']);
+              final collections =
+                  verified > 0 ? verified : _num(shift['total_sales']);
+              final txns = _num(shift['transaction_count']).toInt();
+              final unpaidCount = unpaidBills.maybeWhen(
+                  data: (bills) => bills.length, orElse: () => null);
               return Row(
                 children: [
                   Expanded(
                     child: StatCard(
-                      label: 'Today Collections',
-                      value: _money(s['todayRevenue'] ??
-                          s['today_collections'] ??
-                          s['total_collections'] ??
-                          s['total_sales']),
+                      label: 'Shift Collections',
+                      value: _money(collections),
                       icon: Icons.payments,
                       color: AppColors.kSuccess,
                     ),
@@ -277,17 +286,17 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: StatCard(
-                      label: 'Pending Bills',
-                      value: '${s['pendingCreditApprovals'] ?? s['unpaidBills'] ?? s['pending_verification'] ?? s['pending'] ?? 0}',
-                      icon: Icons.verified,
+                      label: 'Unpaid Bills (Shift)',
+                      value: unpaidCount == null ? '…' : '$unpaidCount',
+                      icon: Icons.receipt_long,
                       color: AppColors.kWarning,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: StatCard(
-                      label: 'Open Shifts',
-                      value: '${_openShiftCount(s)}',
+                      label: 'Shift Transactions',
+                      value: '$txns',
                       icon: Icons.access_time,
                       color: AppColors.kPrimary,
                     ),
@@ -735,6 +744,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
     if (payments.isEmpty) return _snack('Add at least one payment line');
+    final changeGiven = _num(body['change_given']);
 
     final totalPaid = payments.fold<num>(
       0,
@@ -805,13 +815,17 @@ class _StationTabState extends ConsumerState<_StationTab> {
             : 'split',
         response: responses.isEmpty ? const {} : responses.last,
         fallbackReference: receiptRefs.join(' | '),
+        changeGiven: changeGiven,
       );
       _snack(
-        totalPaid >= balance
-            ? 'Split payment recorded and bill cleared'
-            : 'Partial payment recorded. Remaining: ${_money(balance - totalPaid)}',
+        changeGiven > 0
+            ? 'Payment recorded · Give change ${_money(changeGiven)}'
+            : totalPaid >= balance
+                ? 'Split payment recorded and bill cleared'
+                : 'Partial payment recorded. Remaining: ${_money(balance - totalPaid)}',
       );
       ref.invalidate(cashierStatsProvider);
+      ref.invalidate(cashierCurrentShiftProvider);
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierCreditBillsProvider);
       await _lookupBill();
@@ -1393,6 +1407,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
     );
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
+    final changeGiven = _num(body['change_given']);
     final repo = ref.read(cashierRepositoryProvider);
     try {
       final source = _text(row, ['source']);
@@ -1503,13 +1518,16 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       ref.invalidate(cashierStatsProvider);
       ref.invalidate(cashierCreditBillsProvider);
       ref.invalidate(cashierShiftsProvider);
+      ref.invalidate(cashierCurrentShiftProvider);
       final hasCredit = payments
           .any((p) => _text(p, ['payment_method']) == 'credit_bill');
-      _snack(hasCredit
-          ? 'Credit bill issued and order cleared'
-          : payments.length > 1
-              ? 'Split payment recorded'
-              : 'Payment recorded');
+      _snack(changeGiven > 0
+          ? 'Payment recorded · Give change ${_money(changeGiven)}'
+          : hasCredit
+              ? 'Credit bill issued and order cleared'
+              : payments.length > 1
+                  ? 'Split payment recorded'
+                  : 'Payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
     }
@@ -3589,6 +3607,15 @@ Future<Map<String, dynamic>?> _paymentPayload(
       builder: (context, setState) {
         final allocated = lines.fold<num>(0, (sum, line) => sum + line.amount);
         final remaining = amount - allocated;
+        // Cash overpayment becomes change handed back to the customer.
+        final cashTendered = lines
+            .where((line) => line.method == 'cash')
+            .fold<num>(0, (sum, line) => sum + line.amount);
+        final overpay = amount > 0 && allocated > amount ? allocated - amount : 0;
+        final changeDue = overpay > 0 && overpay <= cashTendered + 0.001
+            ? overpay
+            : 0;
+        final overpaidByNonCash = overpay > 0 && overpay > cashTendered + 0.001;
 
         void addLine() {
           setState(() {
@@ -3627,25 +3654,60 @@ Future<Map<String, dynamic>?> _paymentPayload(
             );
             return null;
           }
+          num changeGiven = 0;
+          num amountTendered = 0;
+          var applied = payments;
           if (amount > 0 && total > amount) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Payment exceeds balance by ${_money(total - amount)}',
+            final cashTotal = payments
+                .where((p) => p['payment_method'] == 'cash')
+                .fold<num>(0, (sum, p) => sum + _num(p['payment_amount']));
+            final overAmount = total - amount;
+            // Overpayment is only valid when covered by cash (it becomes change).
+            if (overAmount > cashTotal + 0.001) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Payment exceeds balance by ${_money(overAmount)}. Only cash overpayment is allowed (returned as change).',
+                  ),
                 ),
-              ),
-            );
-            return null;
+              );
+              return null;
+            }
+            changeGiven = overAmount;
+            amountTendered = cashTotal;
+            // Cap the recorded cash so the applied total equals the balance.
+            num cut = overAmount;
+            applied = payments
+                .map((p) {
+                  final m = Map<String, dynamic>.from(p);
+                  if (cut > 0 && p['payment_method'] == 'cash') {
+                    final amt = _num(p['payment_amount']);
+                    final reduce = amt >= cut ? cut : amt;
+                    m['payment_amount'] = amt - reduce;
+                    cut -= reduce;
+                  }
+                  return m;
+                })
+                .where((p) => _num(p['payment_amount']) > 0)
+                .toList();
           }
-          if (payments.length == 1) return payments.first;
+
+          final extras = <String, dynamic>{
+            if (changeGiven > 0) 'change_given': changeGiven,
+            if (amountTendered > 0) 'amount_tendered': amountTendered,
+          };
+          if (applied.length == 1) return {...applied.first, ...extras};
+          final appliedTotal = applied.fold<num>(
+              0, (sum, p) => sum + _num(p['payment_amount']));
           return {
-            'payment_amount': total,
+            'payment_amount': appliedTotal,
             'payment_method': 'split',
-            'payment_reference': payments
+            'payment_reference': applied
                 .map((payment) => _text(payment, ['payment_reference']))
                 .where((reference) => reference.isNotEmpty)
                 .join(' / '),
-            'payments': payments,
+            'payments': applied,
+            ...extras,
           };
         }
 
@@ -3672,14 +3734,29 @@ Future<Map<String, dynamic>?> _paymentPayload(
                       children: [
                         Text('Outstanding: ${_money(amount)}'),
                         Text('Allocated: ${_money(allocated)}'),
-                        Text(
-                          'Remaining: ${_money(remaining > 0 ? remaining : 0)}',
-                          style: TextStyle(
-                            color: remaining < 0
-                                ? AppColors.kError
-                                : AppColors.kTextSecondary,
+                        if (changeDue > 0)
+                          Text(
+                            'Change to give: ${_money(changeDue)}',
+                            style: const TextStyle(
+                              color: AppColors.kSuccess,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        else if (overpaidByNonCash)
+                          Text(
+                            'Overpaid by ${_money(overpay)} (only cash overpayment allowed)',
+                            style: const TextStyle(
+                              color: AppColors.kError,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        else
+                          Text(
+                            'Remaining: ${_money(remaining > 0 ? remaining : 0)}',
+                            style: const TextStyle(
+                              color: AppColors.kTextSecondary,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -4194,14 +4271,6 @@ List<Map<String, dynamic>> _creditBillDetails(Map<String, dynamic> row) {
 
 // Open-shift count from cashier stats: backend returns the cashier's own open
 // shift as `activeShift` (object or null); fall back to numeric count keys.
-int _openShiftCount(Map<String, dynamic> s) {
-  if (s['open_shifts'] != null) return _num(s['open_shifts']).toInt();
-  if (s['active_shifts'] != null) return _num(s['active_shifts']).toInt();
-  final active = s['activeShift'] ?? s['active_shift'];
-  if (active is Map) return active.isNotEmpty ? 1 : 0;
-  return active != null ? 1 : 0;
-}
-
 String _date(dynamic value) {
   if (value == null || value.toString().isEmpty) return '-';
   final parsed = DateTime.tryParse(value.toString());

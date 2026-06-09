@@ -69,6 +69,10 @@ class BarPOSTab extends ConsumerWidget {
 
 final selectedBarCategoryProvider = StateProvider<String?>((ref) => null);
 
+/// Which bar POS station this screen represents. Defaults to the main bar;
+/// an Executive Bar screen overrides this to 'executive_bar'.
+final barStationProvider = StateProvider<String>((ref) => 'main_bar');
+
 class _CategoryBar extends ConsumerWidget {
   final AsyncValue<List<BarCategory>> categoriesAsync;
 
@@ -331,7 +335,14 @@ class _OrderPanel extends ConsumerWidget {
 
     try {
       await ref.read(barRepositoryProvider).createOrder(
-            CreateBarOrderRequest(items: items, totalAmount: subtotal),
+            CreateBarOrderRequest(
+              items: items,
+              totalAmount: subtotal,
+              // This is the Main Bar POS station; routes the bill to the
+              // main-bar cashier and requires their shift to be open.
+              // (The Executive Bar screen sends 'executive_bar'.)
+              outletType: ref.read(barStationProvider),
+            ),
           );
       ref.read(barCartProvider.notifier).state = {};
       if (context.mounted) {

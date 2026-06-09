@@ -3,6 +3,7 @@ import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { autoDeductIngredients, deductIngredientsForItem } from './kitchen/recipes.controller';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import { assertStationShiftOpen } from '../utils/posStationShift';
 import notificationService from '../services/notification.service';
 
 /**
@@ -395,6 +396,14 @@ export const createOrder = async (
       // Proceeding might be okay for super admin or specific cases, but let's log it.
       // Ideally we should probably require it, but legacy data might not have it.
     }
+
+    // A waiter may only place an order when the Restaurant station cashier
+    // has an open shift (the bill/captain order is routed to that cashier).
+    await assertStationShiftOpen({
+      branchId,
+      role: req.user?.role,
+      types: ['restaurant'],
+    });
 
     // Generate order number
     // Generate a collision-resistant order number locally — skip the non-atomic RPC

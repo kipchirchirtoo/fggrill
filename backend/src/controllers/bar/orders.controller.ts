@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
+import { assertStationShiftOpen, normalizeBarStation } from '../../utils/posStationShift';
 
 export const getOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -68,6 +69,23 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
       throw new Error('Branch ID is required');
     }
 
+    // Which bar station this order belongs to (sent by the POS tab).
+    const station = normalizeBarStation(
+      req.body.outlet_type ?? req.body.station ?? req.body.bar_station ?? req.body.bar_type
+    );
+
+    // A waiter may only place the order when THAT bar station's cashier has an
+    // open shift. If the station isn't specified, fall back to any bar station.
+    await assertStationShiftOpen({
+      branchId,
+      role: (req as any).user?.role,
+      label: station
+        ? station.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+        : 'Bar',
+      types: station ? [station] : undefined,
+      like: station ? undefined : '%bar%',
+    });
+
     // 1. Calculate totals
     let subtotal = 0;
     const orderItems = items.map((item: any) => {
@@ -103,6 +121,14 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
       .single();
 
     if (orderError) throw orderError;
+
+    // Tag the order with its bar station (best-effort so a missing column
+    // never blocks order creation; it routes the bill to that station cashier).
+    if (station) {
+      try {
+        await supabase.from('bar_orders').update({ outlet_type: station }).eq('id', order.id);
+      } catch (_) { /* column may not exist yet */ }
+    }
 
     // 3. Create Order Items
     const itemsWithOrderId = orderItems.map((item: any) => ({

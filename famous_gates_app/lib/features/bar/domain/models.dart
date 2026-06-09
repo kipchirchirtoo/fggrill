@@ -249,11 +249,17 @@ class CreateBarOrderRequest {
   final String? customerName;
   final String? tabId;
 
+  /// The bar POS station this order is placed at (e.g. 'main_bar',
+  /// 'executive_bar'). Routes the bill to that station's cashier and gates
+  /// the order on that cashier having an open shift.
+  final String? outletType;
+
   const CreateBarOrderRequest({
     required this.items,
     required this.totalAmount,
     this.customerName,
     this.tabId,
+    this.outletType,
   });
 
   Map<String, dynamic> toJson() => {
@@ -261,6 +267,7 @@ class CreateBarOrderRequest {
         'total_amount': totalAmount,
         if (customerName != null) 'customer_name': customerName,
         if (tabId != null) 'tab_id': tabId,
+        if (outletType != null) 'outlet_type': outletType,
       };
 }
 
