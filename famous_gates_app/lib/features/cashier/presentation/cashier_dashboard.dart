@@ -243,7 +243,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   Expanded(
                     child: StatCard(
                       label: 'Today Collections',
-                      value: _money(s['today_collections'] ??
+                      value: _money(s['todayRevenue'] ??
+                          s['today_collections'] ??
                           s['total_collections'] ??
                           s['total_sales']),
                       icon: Icons.payments,
@@ -253,9 +254,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: StatCard(
-                      label: 'Pending Verification',
-                      value:
-                          '${s['pending_verification'] ?? s['pending'] ?? 0}',
+                      label: 'Pending Bills',
+                      value: '${s['pendingCreditApprovals'] ?? s['unpaidBills'] ?? s['pending_verification'] ?? s['pending'] ?? 0}',
                       icon: Icons.verified,
                       color: AppColors.kWarning,
                     ),
@@ -264,7 +264,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   Expanded(
                     child: StatCard(
                       label: 'Open Shifts',
-                      value: '${s['open_shifts'] ?? s['active_shifts'] ?? 0}',
+                      value: '${_openShiftCount(s)}',
                       icon: Icons.access_time,
                       color: AppColors.kPrimary,
                     ),
@@ -3866,6 +3866,16 @@ num _num(dynamic value) {
 String _money(dynamic value) {
   final amount = _num(value);
   return NumberFormat.currency(symbol: 'KES ', decimalDigits: 0).format(amount);
+}
+
+// Open-shift count from cashier stats: backend returns the cashier's own open
+// shift as `activeShift` (object or null); fall back to numeric count keys.
+int _openShiftCount(Map<String, dynamic> s) {
+  if (s['open_shifts'] != null) return _num(s['open_shifts']).toInt();
+  if (s['active_shifts'] != null) return _num(s['active_shifts']).toInt();
+  final active = s['activeShift'] ?? s['active_shift'];
+  if (active is Map) return active.isNotEmpty ? 1 : 0;
+  return active != null ? 1 : 0;
 }
 
 String _date(dynamic value) {
