@@ -188,6 +188,25 @@ class _StationTabState extends ConsumerState<_StationTab> {
   Map<String, dynamic>? _bill;
   List<Map<String, dynamic>> _mpesaMatches = const [];
 
+  // Credit-bill staff selection (inline, searchable, branch-filtered).
+  List<_ShiftStaffMember> _staffOptions = const [];
+  _ShiftStaffMember? _selectedStaff;
+  bool _staffLoading = false;
+
+  Future<void> _loadStaff() async {
+    if (_staffOptions.isNotEmpty || _staffLoading) return;
+    setState(() => _staffLoading = true);
+    final staff = await ref
+        .read(cashierRepositoryProvider)
+        .getBranchStaff()
+        .catchError((_) => <Map<String, dynamic>>[]);
+    if (!mounted) return;
+    setState(() {
+      _staffOptions = _shiftStaffMembers(staff);
+      _staffLoading = false;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -394,6 +413,40 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     _bill == null ? null : 'Balance: ${_money(balance)}',
               ),
             ),
+            if (_method == 'credit_bill') ...[
+              const SizedBox(height: 12),
+              if (_staffLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: LinearProgressIndicator(),
+                )
+              else if (_staffOptions.isEmpty)
+                const Text(
+                  'No branch staff loaded — cannot assign a credit bill.',
+                  style: TextStyle(color: AppColors.kError, fontSize: 12),
+                )
+              else
+                _StaffSearchField(
+                  staff: _staffOptions,
+                  initialId: _selectedStaff?.id,
+                  label: 'Assign to staff (search)',
+                  onSelected: (s) => setState(() => _selectedStaff = s),
+                ),
+              if (_selectedStaff != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(children: [
+                    const Icon(Icons.check_circle,
+                        size: 14, color: AppColors.kSuccess),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('Credit assigned to ${_selectedStaff!.name}',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.kTextSecondary)),
+                    ),
+                  ]),
+                ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _referenceController,
@@ -460,7 +513,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
       selected: _method == value,
       avatar: Icon(icon, size: 16),
       label: Text(label),
-      onSelected: (_) => setState(() => _method = value),
+      onSelected: (_) {
+        setState(() => _method = value);
+        if (value == 'credit_bill') _loadStaff();
+      },
     );
   }
 
@@ -494,14 +550,27 @@ class _StationTabState extends ConsumerState<_StationTab> {
 
     Map<String, dynamic>? creditBill;
     if (_method == 'credit_bill') {
-      final staff = await ref
-          .read(cashierRepositoryProvider)
-          .getBranchStaff()
-          .catchError((_) => <Map<String, dynamic>>[]);
-      if (!mounted) return;
-      creditBill =
-          await _creditBillPayload(context, amount, staffMembers: staff);
-      if (creditBill == null) return;
+      final staff = _selectedStaff;
+      if (staff == null) {
+        return _snack('Select the staff member for the credit bill');
+      }
+      creditBill = {
+        'staff_id': staff.id,
+        'staff_name': staff.name,
+        'employee_id': staff.employeeId,
+        'department': staff.department,
+        'bill_type': 'cashier_payment',
+        'reference_type': 'cashier_payment',
+        'reference_id': _text(bill, ['id']),
+        'total_amount': amount,
+        'amount': amount,
+        'due_date': _dateOnly(DateTime.now().add(const Duration(days: 30))),
+        'payment_method': 'credit_bill',
+        'deduction_months': 1,
+        'remarks': _referenceController.text.trim().isEmpty
+            ? 'Credit bill issued at cashier station'
+            : _referenceController.text.trim(),
+      };
     }
 
     setState(() => _loading = true);
