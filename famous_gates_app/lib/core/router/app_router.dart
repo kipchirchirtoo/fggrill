@@ -79,9 +79,12 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       return auth.when(
         loading: () => null,
-        error: (_, __) => '/login',
+        // Unauthenticated users land on the terminal hub (POS PIN entry), not
+        // the back-office login. The terminal screen links to /login for staff
+        // who need the back-office sign-in.
+        error: (_, __) => '/terminal',
         data: (user) {
-          if (user == null) return '/login';
+          if (user == null) return '/terminal';
           if (user.role == 'super_admin' || user.roles.contains('super_admin')) {
             return null;
           }
