@@ -1156,29 +1156,59 @@ export const closeShift = async (
         // VALIDATION: Check for unpaid bills
         // ==========================================
         const shiftEndTimestamp = new Date().toISOString();
-        
+        const UNSETTLED = ['pending', 'unpaid', 'partial'];
+
         const [
             { data: unpaidRestOrders },
-            { data: unpaidBarOrders }
+            { data: unpaidBarOrders },
+            { data: unpaidShiftBills }
         ] = await Promise.all([
             supabase.from('restaurant_orders')
-                .select('id, order_number')
+                .select('id')
                 .eq('branch_id', shift.branch_id)
                 .gte('created_at', shift.shift_start)
                 .lte('created_at', shiftEndTimestamp)
-                .eq('payment_status', 'pending'),
+                .in('payment_status', UNSETTLED),
             supabase.from('bar_orders')
-                .select('id, order_number')
+                .select('id')
                 .eq('branch_id', shift.branch_id)
                 .gte('created_at', shift.shift_start)
                 .lte('created_at', shiftEndTimestamp)
-                .eq('payment_status', 'pending')
+                .in('payment_status', UNSETTLED),
+            // Kyogong / POS "bill" transactions still owed.
+            supabase.from('shift_transactions')
+                .select('id')
+                .eq('branch_id', shift.branch_id)
+                .eq('payment_method', 'BILL')
+                .eq('is_voided', false)
+                .gte('created_at', shift.shift_start)
+                .lte('created_at', shiftEndTimestamp)
         ]);
 
-        const totalUnpaid = (unpaidRestOrders?.length || 0) + (unpaidBarOrders?.length || 0);
+        // POS shift orders link to their branch via the outlet shift.
+        let unpaidPosOrders = 0;
+        try {
+            const { data } = await supabase
+                .from('pos_shift_orders')
+                .select('id, shift:pos_outlet_shifts!inner(branch_id)')
+                .eq('shift.branch_id', shift.branch_id)
+                .in('payment_status', ['unpaid', 'partial'])
+                .gte('created_at', shift.shift_start);
+            unpaidPosOrders = data?.length || 0;
+        } catch (posErr) {
+            logger.warn('Unpaid POS order check failed during shift close', {
+                shiftId: id,
+                error: (posErr as any)?.message
+            });
+        }
+
+        const totalUnpaid = (unpaidRestOrders?.length || 0)
+            + (unpaidBarOrders?.length || 0)
+            + (unpaidShiftBills?.length || 0)
+            + unpaidPosOrders;
 
         if (totalUnpaid > 0) {
-            throw new AppError(`Cannot close shift. There are ${totalUnpaid} unsettled bills for this shift period. Please clear all bills or record them as credit bills before closing.`, 400);
+            throw new AppError(`Cannot close shift: ${totalUnpaid} unsettled bill(s) remain. Settle every bill (cash, M-Pesa or card) or record it as a credit bill before closing the shift.`, 400);
         }
         // ==========================================
 

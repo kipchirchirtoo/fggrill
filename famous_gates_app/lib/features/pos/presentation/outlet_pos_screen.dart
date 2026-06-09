@@ -1029,13 +1029,50 @@ class _OrderContextPanel extends StatelessWidget {
   }
 }
 
+/// Eye-friendly POS palette — muted/desaturated tones to reduce glare on
+/// long shifts (60% neutral canvas, 30% soft surfaces, 10% accent action).
+class _PosPalette {
+  static const canvas = Color(0xFFECEAE3); // soft warm gray-cream (60%)
+  static const surface = Color(0xFFFBFAF6); // off-white card (30%)
+  static const surfaceAlt = Color(0xFFF1EFE8); // unselected chip
+  static const border = Color(0xFFE3E0D7); // soft warm border
+  static const accent = Color(0xFF3B7A75); // muted forest/teal — primary action (10%)
+  static const text = Color(0xFF2B2B28); // soft off-black
+}
+
 class _Surface extends StatelessWidget {
   const _Surface({required this.child});
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(color: const Color(0xFFF6F7FB), child: child);
+    final base = Theme.of(context);
+    // Scope the muted palette to the POS only (doesn't touch the rest of the app).
+    return Theme(
+      data: base.copyWith(
+        scaffoldBackgroundColor: _PosPalette.canvas,
+        canvasColor: _PosPalette.canvas,
+        cardColor: _PosPalette.surface,
+        cardTheme: base.cardTheme.copyWith(
+          color: _PosPalette.surface,
+          elevation: 0.5,
+          surfaceTintColor: Colors.transparent,
+        ),
+        colorScheme: base.colorScheme.copyWith(
+          primary: _PosPalette.accent,
+          onPrimary: Colors.white,
+          surface: _PosPalette.surface,
+          surfaceTint: Colors.transparent,
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: _PosPalette.accent,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ),
+      child: ColoredBox(color: _PosPalette.canvas, child: child),
+    );
   }
 }
 
@@ -1069,12 +1106,12 @@ class _CategoryTabStripState extends State<_CategoryTabStrip> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _PosPalette.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: _PosPalette.border),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x11000000),
+            color: Color(0x0D000000),
             blurRadius: 8,
             offset: Offset(0, 2),
           ),
@@ -1121,8 +1158,8 @@ class _CategoryTabButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final background =
-        selected ? const Color(0xFF2563EB) : const Color(0xFFF9FAFB);
-    final foreground = selected ? Colors.white : const Color(0xFF1F2937);
+        selected ? _PosPalette.accent : _PosPalette.surfaceAlt;
+    final foreground = selected ? Colors.white : _PosPalette.text;
     return Material(
       color: background,
       borderRadius: BorderRadius.circular(10),

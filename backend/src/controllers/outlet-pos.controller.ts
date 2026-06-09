@@ -2105,6 +2105,17 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
     const shift = await ensureShiftAccess(req, shiftId);
     if (shift.status !== 'open') throw new AppError('Only an open shift can be closed', 400);
 
+    // Block close until every order on this station is settled (paid or
+    // recorded as a credit bill).
+    const { data: openOrders } = await supabase
+      .from('pos_shift_orders')
+      .select('id')
+      .eq('shift_id', shiftId)
+      .in('payment_status', ['unpaid', 'partial']);
+    if (openOrders && openOrders.length > 0) {
+      throw new AppError(`Cannot close shift: ${openOrders.length} unsettled bill(s) on this station. Settle every order or record it as a credit bill before closing.`, 400);
+    }
+
     const requestedClosingCash = req.body.closing_cash_counted ?? req.body.closingCashCounted;
     const closingCashInput = requestedClosingCash === null || requestedClosingCash === undefined || requestedClosingCash === ''
       ? null
