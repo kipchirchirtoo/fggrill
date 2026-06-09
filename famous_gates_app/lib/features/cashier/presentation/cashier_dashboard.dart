@@ -603,16 +603,32 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     : _text(_payload(createdCredit), ['credit_number', 'id']),
                 creditBill: paymentCreditBill,
               );
-      await _printStationReceipt(
-        bill: bill,
-        amount: amount,
-        method: _method,
-        response: paymentResponse,
-        fallbackReference: createdCredit == null
-            ? _referenceController.text.trim()
-            : _text(_payload(createdCredit), ['credit_number', 'id']),
-      );
-      _snack('Payment recorded');
+      if (_method == 'credit_bill' && creditBill != null) {
+        final staff = _selectedStaff;
+        await PrintService().printCreditBillReceipt(
+          branchName: ref.read(dashboardNavProvider).branchName,
+          staffName: staff?.name ?? _text(creditBill, ['staff_name']),
+          employeeId: staff?.employeeId,
+          department: staff?.department,
+          amount: amount,
+          items: _receiptItemsFromBill(bill, amount),
+          creditNumber: _text(_payload(createdCredit), ['credit_number', 'id']),
+          cashierName: ref.read(dashboardNavProvider).user?.name,
+          sourceReference: _text(bill, ['bill_number', 'order_number', 'id']),
+        );
+        _snack('Credit bill issued for ${staff?.name ?? 'staff'}');
+      } else {
+        await _printStationReceipt(
+          bill: bill,
+          amount: amount,
+          method: _method,
+          response: paymentResponse,
+          fallbackReference: createdCredit == null
+              ? _referenceController.text.trim()
+              : _text(_payload(createdCredit), ['credit_number', 'id']),
+        );
+        _snack('Payment recorded');
+      }
       ref.invalidate(cashierStatsProvider);
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierCreditBillsProvider);
@@ -1300,10 +1316,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           (source == 'restaurant' || source == 'bar' || source == 'pos');
       final responses = <Map<String, dynamic>>[];
       final receiptRefs = <String>[];
-      final totalPaid = payments.fold<num>(
-        0,
-        (sum, payment) => sum + _num(payment['payment_amount']),
-      );
       for (final payment in payments) {
         if (_text(payment, ['payment_method']) == 'credit_bill') {
           // Convert this portion into a staff credit bill (settled later by the
@@ -1324,6 +1336,22 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           });
           responses.add(response);
           receiptRefs.add(_receiptReferenceForPayment(payment));
+          // Print a dedicated staff credit-bill receipt for this line.
+          try {
+            final created = _payload(response);
+            await PrintService().printCreditBillReceipt(
+              branchName: ref.read(dashboardNavProvider).branchName,
+              staffName: _text(payment, ['staff_name']),
+              amount: _num(payment['payment_amount']),
+              items: _receiptItemsFromBill(row, _num(payment['payment_amount'])),
+              creditNumber: _text(created, ['credit_number', 'id']).isNotEmpty
+                  ? _text(created, ['credit_number', 'id'])
+                  : _receiptReferenceForPayment(payment),
+              cashierName: ref.read(dashboardNavProvider).user?.name,
+              sourceReference:
+                  _text(row, ['bill_number', 'order_number', 'id']),
+            );
+          } catch (_) {}
         } else if (isWaiter) {
           final response =
               await repo.clearWaiterOrder(source, _text(row, ['id']), payment);
@@ -1336,20 +1364,28 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           receiptRefs.add(_receiptReferenceForPayment(payment));
         }
       }
-      try {
-        await _printCashierBillReceipt(
-          ref: ref,
-          bill: row,
-          amount: totalPaid,
-          method: payments.length == 1
-              ? _text(payments.first, ['payment_method'])
-              : 'split',
-          response: responses.isEmpty ? const {} : responses.last,
-          fallbackReference: receiptRefs.join(' | '),
-        );
-      } catch (error) {
-        _snack(
-            'Payment recorded, but receipt failed: ${apiErrorMessage(error)}');
+      // Only print the standard payment receipt if there was a real (non-credit)
+      // payment — credit lines already printed their own credit-bill receipt.
+      final nonCredit = payments
+          .where((p) => _text(p, ['payment_method']) != 'credit_bill')
+          .toList();
+      if (nonCredit.isNotEmpty) {
+        try {
+          await _printCashierBillReceipt(
+            ref: ref,
+            bill: row,
+            amount: nonCredit.fold<num>(
+                0, (s, p) => s + _num(p['payment_amount'])),
+            method: nonCredit.length == 1
+                ? _text(nonCredit.first, ['payment_method'])
+                : 'split',
+            response: responses.isEmpty ? const {} : responses.last,
+            fallbackReference: receiptRefs.join(' | '),
+          );
+        } catch (error) {
+          _snack(
+              'Payment recorded, but receipt failed: ${apiErrorMessage(error)}');
+        }
       }
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierStatsProvider);
