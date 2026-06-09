@@ -1946,22 +1946,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                               childrenPadding:
                                   const EdgeInsets.fromLTRB(16, 0, 16, 16),
                               children: [
-                                _KeyValueGrid(values: {
-                                  'Opening float': _money(row['opening_float']),
-                                  'Cash': _money(row['total_cash_sales'] ??
-                                      row['total_cash']),
-                                  'M-Pesa': _money(row['total_mpesa_sales'] ??
-                                      row['total_mpesa']),
-                                  'Card': _money(row['total_card_sales'] ??
-                                      row['total_card']),
-                                  'Credit Bills': _money(
-                                      row['credit_bills_taken'] ??
-                                          row['total_credit'] ??
-                                          row['credit_bills_value']),
-                                  'Expected cash': _money(
-                                      row['expected_closing_float'] ??
-                                          row['expected_cash']),
-                                }),
+                                _KeyValueGrid(values: _shiftSummaryValues(row)),
                                 if (_creditBillDetails(row).isNotEmpty) ...[
                                   const SizedBox(height: 10),
                                   Align(
@@ -4558,6 +4543,64 @@ num _num(dynamic value) {
 String _money(dynamic value) {
   final amount = _num(value);
   return NumberFormat.currency(symbol: 'KES ', decimalDigits: 0).format(amount);
+}
+
+// Paid credits recorded on a shift, split by how the staff paid.
+Map<String, num> _shiftPaidCredits(Map<String, dynamic> row) {
+  final result = <String, num>{'cash': 0, 'mpesa': 0, 'card': 0, 'total': 0};
+  final raw = row['paid_bills_details'] ?? row['paid_bills'];
+  if (raw is List) {
+    for (final item in raw) {
+      final entry = _payload(item);
+      final amount = _num(entry['amount']);
+      if (amount <= 0) continue;
+      final method = _text(entry, ['payment_method', 'method']).toLowerCase();
+      final key = method.contains('mpesa') || method.contains('m-pesa')
+          ? 'mpesa'
+          : method.contains('card') || method.contains('swipe')
+              ? 'card'
+              : 'cash';
+      result[key] = result[key]! + amount;
+      result['total'] = result['total']! + amount;
+    }
+  }
+  // No detail rows but a stored total — show it (cannot fold by method).
+  if (result['total'] == 0) {
+    result['total'] = _num(row['paid_bills_value']);
+  }
+  return result;
+}
+
+// Shift-summary card values for the logbook list. Paid credits fold into the
+// matching method tally — but only for OPEN shifts, since the backend already
+// folds them into the stored totals when the shift is closed.
+Map<String, String> _shiftSummaryValues(Map<String, dynamic> row) {
+  final status = _shiftStatus(row);
+  final isOpen = status == 'open' || status == 'pending_open';
+  final paid = _shiftPaidCredits(row);
+  final baseCash = _num(row['total_cash_sales'] ?? row['total_cash']);
+  final baseMpesa = _num(row['total_mpesa_sales'] ?? row['total_mpesa']);
+  final baseCard = _num(row['total_card_sales'] ?? row['total_card']);
+  final cash = isOpen ? baseCash + paid['cash']! : baseCash;
+  final mpesa = isOpen ? baseMpesa + paid['mpesa']! : baseMpesa;
+  final card = isOpen ? baseCard + paid['card']! : baseCard;
+  final openingFloat = _num(row['opening_float']);
+  final storedExpected =
+      _num(row['expected_closing_float'] ?? row['expected_cash']);
+  final expected = (!isOpen && storedExpected > 0)
+      ? storedExpected
+      : openingFloat + cash;
+  return {
+    'Opening float': _money(openingFloat),
+    'Cash': _money(cash),
+    'M-Pesa': _money(mpesa),
+    'Card': _money(card),
+    'Credit Bills': _money(row['credit_bills_taken'] ??
+        row['total_credit'] ??
+        row['credit_bills_value']),
+    'Paid Credits': _money(paid['total']),
+    'Expected cash': _money(expected),
+  };
 }
 
 // Choose a short, human/scannable CREDIT BILL CODE for the receipt. Avoid raw
