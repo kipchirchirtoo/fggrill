@@ -95,6 +95,7 @@ import securityRoutes from './security.routes';
 import communicationsRoutes from './communications.routes';
 import superadminRoutes from './superadmin.routes';
 import linaRoutes from './lina.routes';
+import documentTemplateRoutes from './document-template.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
@@ -213,6 +214,7 @@ router.use('/dispatch', dispatchRoutes);
 router.use('/security', securityRoutes);
 router.use('/superadmin', superadminRoutes);
 router.use('/lina', linaRoutes);
+router.use('/document-templates', documentTemplateRoutes);
 
 // Food Control System routes
 router.use('/buffet', buffetRoutes);

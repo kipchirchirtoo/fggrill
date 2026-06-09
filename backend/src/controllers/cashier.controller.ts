@@ -6582,6 +6582,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const queryBranchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
         const effectiveBranchId = isGlobal ? queryBranchId : ((req.user as any)?.branch_id || null);
         const status = String(req.query.status || 'all').toLowerCase();
+        const wantsVoidedOrders = ['voided', 'void'].includes(status);
         const search = String(req.query.search || '').trim().toLowerCase();
         const requestedDate = String(req.query.date || '').trim();
         // An unpaid bill stays unpaid until it is settled, so by default we show
@@ -6617,7 +6618,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
 
         // Fetch pending restaurant orders
         let restaurantOrders: any[] = [];
-        if (canSeeLegacyRestaurant && (!requestedOutletType || requestedOutletType === 'restaurant')) {
+        if (!wantsVoidedOrders && canSeeLegacyRestaurant && (!requestedOutletType || requestedOutletType === 'restaurant')) {
             let restaurantQuery = supabase
                 .from('restaurant_orders')
                 .select(`
@@ -6649,7 +6650,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
 
         // Fetch pending bar orders
         let barOrders: any[] = [];
-        if (canSeeLegacyBar && (!requestedOutletType || isBarStationType(requestedOutletType))) {
+        if (!wantsVoidedOrders && canSeeLegacyBar && (!requestedOutletType || isBarStationType(requestedOutletType))) {
             let barQuery = supabase
                 .from('bar_orders')
                 .select(`
@@ -6703,9 +6704,19 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     .from('pos_shift_orders')
                     .select('*')
                     .in('shift_id', posShiftIds)
-                    .in('payment_status', allowedStatuses)
-                    .neq('status', 'cancelled')
                     .order('created_at', { ascending: false });
+                if (wantsVoidedOrders) {
+                    posOrdersQuery = posOrdersQuery
+                        .or('status.eq.voided,payment_status.eq.voided,void_request_status.eq.approved');
+                } else {
+                    posOrdersQuery = posOrdersQuery
+                        .in('payment_status', allowedStatuses)
+                        .neq('status', 'cancelled')
+                        // Pending void approvals are stopped from payment. Once
+                        // approved, they move to the cashier voided-orders view
+                        // and never count as unpaid bills.
+                        .or('void_request_status.is.null,void_request_status.eq.rejected');
+                }
                 if (from && to) {
                     posOrdersQuery = posOrdersQuery
                         .gte('created_at', from.toISOString())
@@ -6791,6 +6802,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
                 const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
                 const location = posOrderLocation(o, stationName);
+                const isVoided = o.status === 'voided' || o.payment_status === 'voided' || o.void_request_status === 'approved';
                 return {
                     id: o.id,
                     source: 'pos',
@@ -6805,9 +6817,9 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     customer_name: o.customer_name || 'Walk-in',
                     total_amount: Number(o.total_amount || 0),
                     paid_amount: Number(o.amount_paid || 0),
-                    balance_amount: Number(o.balance_amount || o.total_amount || 0),
-                    payment_status: o.payment_status === 'paid' ? 'cleared' : o.payment_status,
-                    status: o.payment_status === 'paid' ? 'cleared' : o.payment_status,
+                    balance_amount: isVoided ? 0 : Number(o.balance_amount || o.total_amount || 0),
+                    payment_status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
+                    status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
                     created_at: o.created_at,
                     bill_date: o.created_at,
                     branch_id: shift?.branch_id || effectiveBranchId,
@@ -6815,6 +6827,10 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     outlet_type: outlet?.outlet_type || null,
                     outlet_name: outlet?.name || null,
                     station_name: stationName,
+                    void_request_status: o.void_request_status || null,
+                    void_reason: o.void_reason || null,
+                    voided_at: o.voided_at || null,
+                    voided_by: o.voided_by || null,
                     waiter: null,
                     waiter_id: o.waiter_id || o.created_by,
                     waiter_name: o.waiter_name || '',
@@ -6826,7 +6842,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                         total_price: Number(item.line_total || 0)
                     })),
                     is_waiter_order: true,
-                    is_captain_order: true
+                    is_captain_order: true,
+                    is_voided: isVoided
                 };
             })
         ].filter((row) => {
@@ -6876,11 +6893,22 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
 
         const { data: order, error: fetchErr } = await (supabase
             .from(table)
-            .select(`id, status, ${amountField}, amount_paid, balance_amount, order_number, short_code, created_by${waiterSelect}, ${customerField}${isPosCaptainOrder ? ', shift_id, outlet_id, staff_credit_bill_id' : ', branch_id'}`)
+            .select(`id, status, payment_status, ${amountField}, amount_paid, balance_amount, order_number, short_code, created_by${waiterSelect}, ${customerField}${isPosCaptainOrder ? ', shift_id, outlet_id, staff_credit_bill_id, void_request_status' : ', branch_id'}`)
             .eq('id', id)
             .single() as any);
 
         if (fetchErr || !order) throw new AppError('Order not found', 404);
+        if (isPosCaptainOrder) {
+            const orderStatus = String((order as any).status || '').toLowerCase();
+            const paymentStatus = String((order as any).payment_status || '').toLowerCase();
+            const voidRequestStatus = String((order as any).void_request_status || '').toLowerCase();
+            if (orderStatus === 'voided' || paymentStatus === 'voided' || voidRequestStatus === 'approved') {
+                throw new AppError('This captain order has been voided and cannot be paid', 400);
+            }
+            if (voidRequestStatus === 'pending') {
+                throw new AppError('This captain order is awaiting branch accountant void approval and cannot be paid', 400);
+            }
+        }
         const totalAmount = Number((order as any)[amountField] || 0);
         const previousPaid = Number((order as any).amount_paid || 0);
         const currentBalance = Number((order as any).balance_amount || Math.max(0, totalAmount - previousPaid));

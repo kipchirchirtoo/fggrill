@@ -1745,7 +1745,7 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
     await notificationService.notifyRole(
       'branch_manager',
       'POS void request raised',
-      `${order.order_number || 'A POS bill'} has been stopped on kitchen display and needs review.`,
+      `${order.order_number || 'A POS bill'} has been stopped at the POS station and needs review.`,
       {
         type: 'warning',
         category: 'pos_void_request',
@@ -1763,7 +1763,7 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
     await notificationService.notifyRole(
       'auditor',
       'POS void request raised',
-      `${order.order_number || 'A POS bill'} was sent to kitchen display and is awaiting approval.`,
+      `${order.order_number || 'A POS bill'} is awaiting branch accountant void approval.`,
       {
         type: 'warning',
         category: 'pos_void_request',
@@ -1911,7 +1911,7 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
       await notificationService.notifyRole(
         'auditor',
         'POS void approved',
-        `${order.order_number || 'A POS bill'} was voided and is visible on the kitchen display until acknowledged.`,
+        `${order.order_number || 'A POS bill'} was voided and moved out of unpaid captain orders.`,
         {
           type: 'warning',
           category: 'pos_void_request',
@@ -1929,7 +1929,7 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
       await notificationService.notifyRole(
         'branch_manager',
         'POS void approved',
-        `${order.order_number || 'A POS bill'} was voided and remains visible on kitchen display until acknowledged.`,
+        `${order.order_number || 'A POS bill'} was voided and moved out of unpaid captain orders.`,
         {
           type: 'warning',
           category: 'pos_void_request',
@@ -1956,7 +1956,7 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
       await notificationService.notifyRole(
         'auditor',
         'POS void rejected',
-        `${order.order_number || 'A POS bill'} void request was rejected and returned to kitchen preparation.`,
+        `${order.order_number || 'A POS bill'} void request was rejected and returned to active POS orders.`,
         {
           type: 'info',
           category: 'pos_void_request',
@@ -1974,7 +1974,7 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
       await notificationService.notifyRole(
         'branch_manager',
         'POS void rejected',
-        `${order.order_number || 'A POS bill'} void request was rejected and returned to kitchen preparation.`,
+        `${order.order_number || 'A POS bill'} void request was rejected and returned to active POS orders.`,
         {
           type: 'info',
           category: 'pos_void_request',
