@@ -40,7 +40,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   static const _visibleTabs = [
     CashierTab.station,
     CashierTab.bills,
-    CashierTab.credit,
     CashierTab.shifts,
     CashierTab.barcode,
     CashierTab.insights,
@@ -68,11 +67,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         label: 'Unpaid Bills',
         icon: Icons.receipt_long,
         content: _RequiresOpenShift(child: _UnpaidBillsTab()),
-      ),
-      const DashboardTab(
-        label: 'Credit Bills',
-        icon: Icons.credit_score,
-        content: _RequiresOpenShift(child: _CreditBillsTab()),
       ),
       const DashboardTab(
         label: 'Shifts',
@@ -309,20 +303,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Bill Lookup',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _createDynamicBill,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('New Bill'),
-                ),
-              ],
+            Text(
+              'Bill Lookup',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -748,23 +731,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
       _snack('STK push failed: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _createDynamicBill() async {
-    final body = await _unpaidBillPayload(context);
-    if (body == null) return;
-    try {
-      final res =
-          await ref.read(cashierRepositoryProvider).createUnpaidBill(body);
-      final data = _payload(res);
-      _lookupController.text =
-          _text(data, ['bill_number', 'invoice_number', 'id']);
-      ref.invalidate(cashierUnpaidBillsProvider);
-      _snack('Bill created');
-      await _lookupBill();
-    } catch (error) {
-      _snack('Bill creation failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1340,111 +1306,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           payments.length > 1 ? 'Split payment recorded' : 'Payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
-    }
-  }
-
-  void _snack(String message) {
-    if (!mounted) return;
-    AppNotifier.show(context, message);
-  }
-}
-
-class _CreditBillsTab extends ConsumerStatefulWidget {
-  const _CreditBillsTab();
-
-  @override
-  ConsumerState<_CreditBillsTab> createState() => _CreditBillsTabState();
-}
-
-class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
-  String _status = 'all';
-  String _search = '';
-  String _date = _dateOnly(DateTime.now());
-
-  @override
-  Widget build(BuildContext context) {
-    final filters =
-        CashierBillFilters(status: _status, search: _search, date: _date);
-    final bills = ref.watch(cashierCreditBillsProvider(filters));
-    return _BillsScaffold(
-      title: 'Credit Bills - $_date',
-      status: _status,
-      onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
-      onSearch: (value) => setState(() => _search = value),
-      onCreate: _createCredit,
-      onExport: () =>
-          _exportRows(bills.valueOrNull ?? const [], 'credit_bills'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() {
-                  _date = _dateOnly(
-                    DateTime.parse(_date).subtract(const Duration(days: 1)),
-                  );
-                }),
-                icon: const Icon(Icons.chevron_left, size: 16),
-                label: const Text('Previous day'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () =>
-                    setState(() => _date = _dateOnly(DateTime.now())),
-                icon: const Icon(Icons.today, size: 16),
-                label: const Text('Today'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => setState(() {
-                  _date = _dateOnly(
-                    DateTime.parse(_date).add(const Duration(days: 1)),
-                  );
-                }),
-                icon: const Icon(Icons.chevron_right, size: 16),
-                label: const Text('Next day'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          bills.when(
-            data: (rows) => _BillList(
-              rows: rows,
-              emptyMessage: 'No credit bills found for $_date',
-              // Cashiers cannot settle credit bills — the branch accountant
-              // records the receipt or deducts it from payroll.
-              onPay: null,
-              readOnlyNote:
-                  'Settled by the Branch Accountant (cash receipt or payroll deduction).',
-            ),
-            loading: () => const LoadingSkeleton(type: SkeletonType.list),
-            error: (error, _) => ErrorState(message: apiErrorMessage(error)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _createCredit() async {
-    final staff = await ref
-        .read(cashierRepositoryProvider)
-        .getBranchStaff()
-        .catchError((_) => <Map<String, dynamic>>[]);
-    if (!mounted) return;
-    final body = await _creditBillPayload(
-      context,
-      0,
-      allowAmountEdit: true,
-      staffMembers: staff,
-    );
-    if (body == null) return;
-    try {
-      await ref.read(cashierRepositoryProvider).createCreditBill(body);
-      ref.invalidate(cashierCreditBillsProvider);
-      _snack('Credit bill created');
-    } catch (error) {
-      _snack('Create failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -2820,7 +2681,6 @@ class _BillList extends StatelessWidget {
     required this.rows,
     required this.emptyMessage,
     this.onPay,
-    this.readOnlyNote,
   });
 
   final List<Map<String, dynamic>> rows;
@@ -2829,7 +2689,6 @@ class _BillList extends StatelessWidget {
   /// When null, no payment action is shown (e.g. credit bills are settled by
   /// the branch accountant, not the cashier).
   final ValueChanged<Map<String, dynamic>>? onPay;
-  final String? readOnlyNote;
 
   @override
   Widget build(BuildContext context) {
@@ -2918,19 +2777,6 @@ class _BillList extends StatelessWidget {
                       onPressed: () => onPay!(row),
                       icon: const Icon(Icons.payments, size: 16),
                       label: const Text('Confirm Payment'),
-                    ),
-                  ],
-                )
-              else if (readOnlyNote != null)
-                Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 14, color: AppColors.kTextSecondary),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(readOnlyNote!,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.kTextSecondary)),
                     ),
                   ],
                 ),
@@ -3799,19 +3645,6 @@ Future<num?> _numberDialog(BuildContext context, String title, String label) {
       ],
     ),
   ).whenComplete(controller.dispose);
-}
-
-void _exportRows(List<Map<String, dynamic>> rows, String name) {
-  final columns = rows.expand((row) => row.keys).toSet().take(24).toList();
-  final csv = [
-    columns.join(','),
-    for (final row in rows)
-      columns
-          .map((column) =>
-              '"${(row[column] ?? '').toString().replaceAll('"', '""')}"')
-          .join(','),
-  ].join('\n');
-  Clipboard.setData(ClipboardData(text: csv));
 }
 
 Map<String, dynamic> _payload(dynamic data) {
