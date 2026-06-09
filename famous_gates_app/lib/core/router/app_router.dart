@@ -65,10 +65,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final location = state.matchedLocation;
       final auth = ref.read(authNotifierProvider);
       if (_publicRoutes.contains(location)) {
+        // Explicit hub navigation (Back button → /terminal?hub=1) lets a
+        // logged-in user sit on the terminal hub to switch user / log out,
+        // instead of being force-forwarded to their default module.
+        final wantsHub = state.uri.queryParameters['hub'] == '1';
         return auth.maybeWhen(
           data: (user) {
             if (user == null) return null;
-            if (_authEntryRoutes.contains(location)) {
+            if (!wantsHub && _authEntryRoutes.contains(location)) {
               return _defaultRouteForUser(user);
             }
             return null;
@@ -874,6 +878,12 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 }
 
 String _defaultRouteForUser(User user) {
+  // A cashier's home is the cashier desk — even though they're assigned to a
+  // POS outlet (e.g. restaurant) to clear its orders, their outletType must not
+  // route them into the POS module.
+  if (user.role == 'cashier' || user.roles.contains('cashier')) {
+    return '/cashier';
+  }
   switch (user.outletType) {
     case 'restaurant':
       return '/pos/restaurant';

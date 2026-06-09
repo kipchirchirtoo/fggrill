@@ -248,7 +248,9 @@ class _TopBar extends StatelessWidget {
       router.pop();
       return;
     }
-    context.go('/terminal');
+    // Land on the terminal hub (to switch user / log out) instead of being
+    // auto-forwarded to the default module (which could be POS).
+    context.go('/terminal?hub=1');
   }
 }
 

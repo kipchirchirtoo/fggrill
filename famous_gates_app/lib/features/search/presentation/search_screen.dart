@@ -55,7 +55,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             if (router.canPop()) {
               router.pop();
             } else {
-              router.go('/terminal');
+              router.go('/terminal?hub=1');
             }
           },
           icon: const Icon(Icons.arrow_back_ios_new_rounded),

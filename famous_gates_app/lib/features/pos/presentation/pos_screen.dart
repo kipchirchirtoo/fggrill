@@ -39,7 +39,7 @@ class POSScreen extends ConsumerWidget {
           ),
         );
         if (confirmed == true && context.mounted) {
-          context.go('/terminal');
+          context.go('/terminal?hub=1');
         }
       },
       child: Scaffold(
