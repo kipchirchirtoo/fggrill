@@ -1228,33 +1228,44 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
       .maybeSingle();
     if (error) throw error;
 
-    // Bridge: the POS station is "open" only when the branch's cashier has an
-    // open shift (cashier_shift_logs). When they do, open this station's POS
-    // shift so waiters can place orders against it. No cashier shift → stays
-    // closed (waiters can't order, and they can't open a shift themselves).
+    // Bridge (per-station): this station's POS is "open" only when a cashier
+    // whose role serves THIS station type (e.g. main_bar_cashier → main_bar)
+    // has an open shift (cashier_shift_logs). When they do, open the station's
+    // POS shift so waiters can order against it. No matching cashier shift →
+    // stays closed (waiters can't order, and can't open a shift themselves).
     if (!data) {
-      const { data: cashierShift } = await supabase
+      const { data: branchShifts } = await supabase
         .from('cashier_shift_logs')
         .select('id, cashier_id')
         .eq('branch_id', outlet.branch_id)
-        .eq('status', 'open')
-        .order('shift_start', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (cashierShift) {
-        const { data: created, error: createErr } = await supabase
-          .from('pos_outlet_shifts')
-          .insert({
-            outlet_id: outletId,
-            branch_id: outlet.branch_id,
-            cashier_id: cashierShift.cashier_id,
-            opening_float: 0,
-            status: 'open',
-          })
-          .select('*')
-          .single();
-        if (createErr) throw createErr;
-        data = created;
+        .eq('status', 'open');
+      const cashierIds = (branchShifts || [])
+        .map((s: any) => s.cashier_id)
+        .filter(Boolean);
+      if (cashierIds.length) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('id, role')
+          .in('id', cashierIds);
+        const roleById = new Map((users || []).map((u: any) => [u.id, u.role]));
+        const outletType = String(outlet.outlet_type || '').toLowerCase();
+        const match = (branchShifts || []).find((s: any) =>
+          stationTypesForCashierRole(roleById.get(s.cashier_id)).includes(outletType));
+        if (match) {
+          const { data: created, error: createErr } = await supabase
+            .from('pos_outlet_shifts')
+            .insert({
+              outlet_id: outletId,
+              branch_id: outlet.branch_id,
+              cashier_id: match.cashier_id,
+              opening_float: 0,
+              status: 'open',
+            })
+            .select('*')
+            .single();
+          if (createErr) throw createErr;
+          data = created;
+        }
       }
     }
 
