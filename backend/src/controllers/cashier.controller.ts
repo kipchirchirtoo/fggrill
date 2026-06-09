@@ -3116,6 +3116,123 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
 };
 
 /**
+ * Settle a payment for a bill that is not a manual `unpaid_bills` row.
+ * The cashier unpaid-bills list merges hotel reservations and Kyogong POS
+ * shift transactions; both surface their own id, so a payment may target either.
+ * Returns the updated record on success, or null if the id matches nothing.
+ */
+async function settleNonManualBill(
+    id: string,
+    opts: { paymentAmount: number; payment_method?: string; payment_reference?: string; cashierId?: string },
+): Promise<any | null> {
+    const { paymentAmount, payment_method, payment_reference, cashierId } = opts;
+
+    // ── 1. Hotel reservation ────────────────────────────────────────────────
+    const { data: reservation } = await supabase
+        .from('reservations')
+        .select('*, room:rooms(branch_id)')
+        .eq('id', id)
+        .maybeSingle();
+
+    if (reservation) {
+        const branchId = reservation.branch_id || reservation.room?.branch_id || null;
+        const total = Number(reservation.total_amount || 0);
+        const alreadyPaid = Number(reservation.advance_payment || reservation.amount_paid || 0);
+        const newPaid = alreadyPaid + paymentAmount;
+        const fullyPaid = total > 0 && newPaid >= total;
+
+        const { data: updated, error: updErr } = await supabase
+            .from('reservations')
+            .update({
+                advance_payment: newPaid,
+                payment_status: fullyPaid ? 'paid' : 'partial',
+            })
+            .eq('id', id)
+            .select()
+            .maybeSingle();
+        if (updErr) throw updErr;
+
+        await recordCashierTransactionSafe({
+            branchId, cashierId, paymentAmount, payment_method, payment_reference,
+            revenueType: 'hotel', referenceType: 'reservation', referenceId: id,
+            customerName: reservation.guest_name,
+        });
+        return updated || { id, paid_amount: newPaid, balance_amount: Math.max(0, total - newPaid), status: fullyPaid ? 'paid' : 'partial' };
+    }
+
+    // ── 2. Kyogong POS shift transaction ────────────────────────────────────
+    const { data: shiftTx } = await supabase
+        .from('shift_transactions')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+    if (shiftTx) {
+        // Convert the BILL placeholder into a real settled payment so it leaves
+        // the unpaid list.
+        const { data: updated, error: updErr } = await supabase
+            .from('shift_transactions')
+            .update({ payment_method: (payment_method || 'cash').toUpperCase() })
+            .eq('id', id)
+            .select()
+            .maybeSingle();
+        if (updErr) throw updErr;
+
+        await recordCashierTransactionSafe({
+            branchId: shiftTx.branch_id, cashierId, paymentAmount, payment_method, payment_reference,
+            revenueType: shiftTx.service_category || 'kyogong', referenceType: 'shift_transaction', referenceId: id,
+            customerName: shiftTx.customer_name,
+        });
+        return updated || { id, status: 'paid' };
+    }
+
+    return null;
+}
+
+/**
+ * Insert a cashier_transactions row + record the active-shift sale. Best-effort:
+ * never throws, so a payment is not lost if downstream bookkeeping fails.
+ */
+async function recordCashierTransactionSafe(p: {
+    branchId: number | null; cashierId?: string; paymentAmount: number;
+    payment_method?: string; payment_reference?: string;
+    revenueType?: string; referenceType: string; referenceId: string; customerName?: string;
+}): Promise<void> {
+    try {
+        const { data: txNum } = await supabase.rpc('generate_cashier_transaction_number');
+        const transaction_number = txNum || `CT${Date.now()}`;
+        const { data: ct } = await supabase
+            .from('cashier_transactions')
+            .insert({
+                transaction_number,
+                branch_id: p.branchId,
+                cashier_id: p.cashierId,
+                transaction_type: 'payment',
+                revenue_type: p.revenueType,
+                reference_type: p.referenceType,
+                reference_id: p.referenceId,
+                payment_method: p.payment_method,
+                amount: p.paymentAmount,
+                payment_reference: p.payment_reference,
+                customer_name: p.customerName,
+            })
+            .select('id, transaction_number')
+            .maybeSingle();
+
+        await recordActiveShiftSale({
+            cashierId: p.cashierId,
+            branchId: p.branchId || undefined,
+            transactionId: ct?.id || p.referenceId,
+            transactionRef: ct?.transaction_number || transaction_number,
+            paymentMethod: p.payment_method || 'cash',
+            amount: p.paymentAmount,
+        });
+    } catch (err) {
+        logger.error('recordCashierTransactionSafe failed', err);
+    }
+}
+
+/**
  * Record payment for unpaid bill
  */
 export const recordBillPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -3128,15 +3245,29 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
             throw new AppError('Payment amount must be greater than zero', 400);
         }
 
-        // Fetch current bill
+        // Fetch current bill — use maybeSingle so a missing row doesn't 500.
         const { data: bill, error: fetchError } = await supabase
             .from('unpaid_bills')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (fetchError) throw fetchError;
+
+        // The unpaid-bills list merges manual bills, hotel reservations and
+        // Kyogong POS shift transactions — all keyed by their own id. If this id
+        // is not a manual unpaid_bills row, settle the matching source instead.
         if (!bill) {
+            const settled = await settleNonManualBill(id, {
+                paymentAmount,
+                payment_method,
+                payment_reference,
+                cashierId: req.user?.id,
+            });
+            if (settled) {
+                res.json({ success: true, message: 'Payment recorded successfully', data: settled });
+                return;
+            }
             throw new AppError('Bill not found', 404);
         }
 
