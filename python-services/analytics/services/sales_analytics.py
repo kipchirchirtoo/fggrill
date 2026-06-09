@@ -10,12 +10,27 @@ class SalesAnalytics:
         """Calculates item sales speed (velocity)"""
         try:
             since = (datetime.now() - timedelta(days=days)).isoformat()
-            query = self.supabase.table('pos_transaction_items').select('name, qty, line_total, created_at')
+            # pos_transaction_items has no branch_id — it links to pos_transactions
+            # via transaction_id. When a branch is requested, scope the items to
+            # that branch's transactions within the window.
             if branch_id:
-                # Assuming branch_id is on pos_transactions, we might need a join or filter if stored on items
-                pass 
-            
-            res = query.gte('created_at', since).execute()
+                tx = (self.supabase.table('pos_transactions')
+                      .select('id')
+                      .eq('branch_id', branch_id)
+                      .gte('created_at', since)
+                      .execute())
+                tx_ids = [t['id'] for t in (tx.data or []) if t.get('id') is not None]
+                if not tx_ids:
+                    return []
+                res = (self.supabase.table('pos_transaction_items')
+                       .select('name, qty, line_total')
+                       .in_('transaction_id', tx_ids)
+                       .execute())
+            else:
+                res = (self.supabase.table('pos_transaction_items')
+                       .select('name, qty, line_total, created_at')
+                       .gte('created_at', since)
+                       .execute())
             if not res.data: return []
 
             df = pd.DataFrame(res.data)
@@ -33,7 +48,10 @@ class SalesAnalytics:
         """Identifies peak transaction times"""
         try:
             since = (datetime.now() - timedelta(days=days)).isoformat()
-            res = self.supabase.table('pos_transactions').select('created_at, total_amount').gte('created_at', since).execute()
+            query = self.supabase.table('pos_transactions').select('created_at, total_amount').gte('created_at', since)
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            res = query.execute()
             if not res.data: return []
 
             df = pd.DataFrame(res.data)
@@ -52,7 +70,10 @@ class SalesAnalytics:
         """Analyzes share of Cash vs M-Pesa vs Card"""
         try:
             since = (datetime.now() - timedelta(days=days)).isoformat()
-            res = self.supabase.table('pos_transactions').select('payment_method, total_amount').gte('created_at', since).execute()
+            query = self.supabase.table('pos_transactions').select('payment_method, total_amount').gte('created_at', since)
+            if branch_id:
+                query = query.eq('branch_id', branch_id)
+            res = query.execute()
             if not res.data: return []
 
             df = pd.DataFrame(res.data)
