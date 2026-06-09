@@ -1343,17 +1343,16 @@ class _UnpaidBillsTab extends ConsumerStatefulWidget {
 class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
   String _status = 'all';
   String _search = '';
-  String _date = _dateOnly(DateTime.now());
 
   @override
   Widget build(BuildContext context) {
-    // Bills for the current open shift (this tab is gated by _RequiresOpenShift,
-    // so reaching here means a shift is open). Always scoped to today.
-    final filters =
-        CashierBillFilters(status: _status, search: _search, date: _date);
+    // Show EVERY still-unpaid bill while a shift is open — no date scoping. A
+    // bill stays unpaid until it is settled, so one from yesterday must still
+    // appear here. (No `date` filter is sent, so the backend returns all unpaid.)
+    final filters = CashierBillFilters(status: _status, search: _search);
     final bills = ref.watch(cashierUnpaidBillsProvider(filters));
     return _BillsScaffold(
-      title: 'Unpaid Bills — Current Shift',
+      title: 'Unpaid Bills',
       status: _status,
       onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
       onSearch: (value) => setState(() => _search = value),
@@ -1364,7 +1363,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           bills.when(
             data: (rows) => _BillList(
               rows: rows,
-              emptyMessage: 'No unpaid bills for the current shift',
+              emptyMessage: 'No unpaid bills',
               onPay: (row) => _recordPayment(row),
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),

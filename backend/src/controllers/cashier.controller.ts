@@ -6584,13 +6584,22 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const status = String(req.query.status || 'all').toLowerCase();
         const search = String(req.query.search || '').trim().toLowerCase();
         const requestedDate = String(req.query.date || '').trim();
-        const date = requestedDate || new Date().toISOString().slice(0, 10);
-        const from = req.query.from_date
-            ? new Date(String(req.query.from_date))
-            : new Date(`${date}T00:00:00.000Z`);
-        const to = req.query.to_date
-            ? new Date(String(req.query.to_date))
-            : new Date(`${date}T23:59:59.999Z`);
+        // An unpaid bill stays unpaid until it is settled, so by default we show
+        // EVERY still-unpaid bill regardless of age (e.g. a bill from yesterday
+        // remains visible while the shift is open). Only bound by a time window
+        // when the caller explicitly requests a date or from/to range.
+        const hasDateFilter = !!(requestedDate || req.query.from_date || req.query.to_date);
+        let from: Date | null = null;
+        let to: Date | null = null;
+        if (hasDateFilter) {
+            const date = requestedDate || new Date().toISOString().slice(0, 10);
+            from = req.query.from_date
+                ? new Date(String(req.query.from_date))
+                : new Date(`${date}T00:00:00.000Z`);
+            to = req.query.to_date
+                ? new Date(String(req.query.to_date))
+                : new Date(`${date}T23:59:59.999Z`);
+        }
         const requestedOutletId = String(req.query.outlet_id || '').trim();
         const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
         const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
@@ -6621,10 +6630,13 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 `)
                 .neq('payment_status', 'paid')
                 .neq('status', 'cancelled')
-                .gte('created_at', from.toISOString())
-                .lte('created_at', to.toISOString())
                 .order('created_at', { ascending: false });
 
+            if (from && to) {
+                restaurantQuery = restaurantQuery
+                    .gte('created_at', from.toISOString())
+                    .lte('created_at', to.toISOString());
+            }
             if (effectiveBranchId) restaurantQuery = restaurantQuery.eq('branch_id', effectiveBranchId);
             if (status !== 'all') restaurantQuery = restaurantQuery.eq('payment_status', status);
 
@@ -6647,10 +6659,13 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 `)
                 .neq('payment_status', 'paid')
                 .neq('status', 'cancelled')
-                .gte('created_at', from.toISOString())
-                .lte('created_at', to.toISOString())
                 .order('created_at', { ascending: false });
 
+            if (from && to) {
+                barQuery = barQuery
+                    .gte('created_at', from.toISOString())
+                    .lte('created_at', to.toISOString());
+            }
             if (effectiveBranchId) barQuery = barQuery.eq('branch_id', effectiveBranchId);
             if (status !== 'all') barQuery = barQuery.eq('payment_status', status);
 
@@ -6681,15 +6696,19 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             posShiftIds = Object.keys(shiftLookup);
             if (posShiftIds.length) {
                 const allowedStatuses = status === 'all' ? ['unpaid', 'partial'] : [status];
-                const { data: fetchedPosOrders, error: posErr } = await supabase
+                let posOrdersQuery = supabase
                     .from('pos_shift_orders')
                     .select('*')
                     .in('shift_id', posShiftIds)
                     .in('payment_status', allowedStatuses)
                     .neq('status', 'cancelled')
-                    .gte('created_at', from.toISOString())
-                    .lte('created_at', to.toISOString())
                     .order('created_at', { ascending: false });
+                if (from && to) {
+                    posOrdersQuery = posOrdersQuery
+                        .gte('created_at', from.toISOString())
+                        .lte('created_at', to.toISOString());
+                }
+                const { data: fetchedPosOrders, error: posErr } = await posOrdersQuery;
                 if (posErr) throw posErr;
                 posOrders = fetchedPosOrders || [];
             }
