@@ -30,6 +30,8 @@ class CashierRepository {
     required String method,
     String? reference,
     Map<String, dynamic>? creditBill,
+    num? tendered,
+    num? change,
   }) {
     return _postMap('/cashier/pay', {
       'bookingId': bookingId,
@@ -37,6 +39,8 @@ class CashierRepository {
       'method': method,
       if (reference != null && reference.isNotEmpty) 'reference': reference,
       if (creditBill != null) 'credit_bill': creditBill,
+      if (tendered != null && tendered > 0) 'amount_tendered': tendered,
+      if (change != null && change > 0) 'change_given': change,
     });
   }
 
@@ -272,9 +276,16 @@ class CashierRepository {
   Future<Map<String, dynamic>> getMpesaStatus(String checkoutRequestId) =>
       _getMap('/payments/mpesa/status/$checkoutRequestId');
 
-  Future<Map<String, dynamic>> getPosInsights() async {
+  Future<Map<String, dynamic>> getPosInsights({
+    int? branchId,
+    int days = 7,
+  }) async {
     try {
-      final res = await _pythonDio.get('/api/analytics/pos/insights');
+      final res = await _pythonDio.get('/api/analytics/pos/insights',
+          queryParameters: {
+            if (branchId != null) 'branch_id': branchId,
+            'days': days,
+          });
       return _asMap(res.data);
     } on DioException {
       return {};

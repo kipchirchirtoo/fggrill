@@ -4335,6 +4335,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
           final revenue = _list(detail['revenue_breakdown']);
           final flags = _list(detail['compliance_flags']);
           final lines = _list(detail['lines']);
+          final creditBills = _list(detail['credit_bills']);
           final transactionHistory = _list(detail['transaction_history']);
           final clearedTransactions =
               transactionHistory.isEmpty ? lines : transactionHistory;
@@ -4477,21 +4478,14 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                 ),
               ),
               Builder(builder: (context) {
-                final creditLines = lines.where((l) {
-                  final m = _map(l);
-                  final section = '${m['section'] ?? ''}'.toLowerCase();
-                  final method = '${m['payment_method'] ?? ''}'.toLowerCase();
-                  return section.contains('credit') || method.contains('credit');
-                }).map(_map).toList();
-                final creditTotal = creditLines.fold<num>(
-                    0, (s, l) => s + _num(l['amount']));
-                final breakdownTotal =
-                    _num(summary['total_credit_bills']);
-                final total =
-                    creditTotal > 0 ? creditTotal : breakdownTotal;
+                final total = creditBills.isNotEmpty
+                    ? (_num(detail['credit_bills_total']) > 0
+                        ? _num(detail['credit_bills_total'])
+                        : creditBills.fold<num>(0, (s, c) => s + _num(c['amount'])))
+                    : _num(detail['credit_bills_total']);
                 return _SectionCard(
                   title: 'Credit Bills — Who For (${_money(total)})',
-                  child: creditLines.isEmpty
+                  child: creditBills.isEmpty
                       ? const Padding(
                           padding: EdgeInsets.all(8),
                           child: Text('No staff credit bills this shift',
@@ -4500,10 +4494,10 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                         )
                       : Column(
                           children: [
-                            for (final c in creditLines)
+                            for (final c in creditBills)
                               Padding(
                                 padding:
-                                    const EdgeInsets.symmetric(vertical: 4),
+                                    const EdgeInsets.symmetric(vertical: 5),
                                 child: Row(
                                   children: [
                                     const Icon(Icons.badge_outlined,
@@ -4511,19 +4505,49 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                         color: AppColors.kTextSecondary),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: Text(_text(c, [
-                                        'customer_name',
-                                        'staff_name',
-                                        'name'
-                                      ])),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _text(c, [
+                                              'staff_name',
+                                              'customer_name',
+                                              'name'
+                                            ]),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w600),
+                                          ),
+                                          if (_text(c, ['department']).isNotEmpty ||
+                                              _text(c, ['bill_type']).isNotEmpty)
+                                            Text(
+                                              [
+                                                _text(c, ['bill_type'])
+                                                    .replaceAll('_', ' '),
+                                                _text(c, ['department']),
+                                              ]
+                                                  .where((v) => v.isNotEmpty)
+                                                  .join(' · '),
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color:
+                                                      AppColors.kTextSecondary),
+                                            ),
+                                        ],
+                                      ),
                                     ),
-                                    if (_text(c, ['reference']).isNotEmpty) ...[
-                                      Text(_text(c, ['reference']),
+                                    if (_text(c, ['credit_number', 'reference'])
+                                        .isNotEmpty) ...[
+                                      Text(
+                                          _text(
+                                              c, ['credit_number', 'reference']),
                                           style: const TextStyle(
                                               fontSize: 12,
                                               color: AppColors.kTextSecondary)),
                                       const SizedBox(width: 12),
                                     ],
+                                    _StatusPill(_text(c, ['status'])),
+                                    const SizedBox(width: 12),
                                     Text(_money(_num(c['amount'])),
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w700)),

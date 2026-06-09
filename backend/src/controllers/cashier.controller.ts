@@ -5231,6 +5231,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     let barOrders: any[] = [];
     let outletOrders: any[] = [];
     let outletPayments: any[] = [];
+    let creditBillRecords: any[] = [];
 
     if (logbook.cashier_shift_id) {
         const shiftResult = await supabase
@@ -5285,6 +5286,20 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                     .select('*')
                     .eq('branch_id', shift.branch_id)
                     .eq('created_by', shift.cashier_id)
+                    .gte('created_at', startedAt)
+                    .lte('created_at', endedAt)
+                    .order('created_at', { ascending: true })
+            );
+
+            // Staff credit bills issued during this shift — fetched directly
+            // from credit_bills so we get the real staff/customer name, amount,
+            // department and status (not the generic cleared-line label).
+            creditBillRecords = await safeLogbookQuery(
+                'credit_bills',
+                supabase
+                    .from('credit_bills')
+                    .select('*')
+                    .eq('branch_id', shift.branch_id)
                     .gte('created_at', startedAt)
                     .lte('created_at', endedAt)
                     .order('created_at', { ascending: true })
@@ -5349,11 +5364,42 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             const right = new Date(b.created_at || 0).getTime();
             return left - right;
         });
+    // Authoritative per-method totals from the cleared cashier payment lines
+    // (cashier_transactions + cashier_shift_transactions). Order rows
+    // (restaurant/bar) are NOT included here so the same sale isn't counted
+    // twice (once as the order, once as its clearance).
+    const clearedPaymentTotals: Record<string, number> = {};
+    [
+        ...shiftTransactions.map((line) => normalizeLogbookLine(line, 'cashier_shift_transaction')),
+        ...cashierTransactions.map((line) => normalizeLogbookLine(line, 'cashier_transaction'))
+    ].forEach((line) => {
+        if (logbookNumber(line.amount) > 0) addAmount(clearedPaymentTotals, line.payment_method, line.amount);
+    });
+
+    // Normalized staff credit bills (who the credit was for, and how much).
+    const creditBills = creditBillRecords.map((bill: any) => ({
+        id: bill.id,
+        credit_number: bill.credit_number || bill.reference || null,
+        staff_name: logbookText(bill.staff_name || bill.customer_name || bill.employee_name, 'Staff'),
+        employee_id: bill.employee_id || null,
+        department: bill.department || null,
+        bill_type: bill.bill_type || 'credit_bill',
+        amount: logbookNumber(bill.total_amount ?? bill.amount),
+        balance: logbookNumber(bill.balance_amount ?? bill.balance ?? bill.total_amount ?? bill.amount),
+        status: bill.status || bill.approval_status || 'active',
+        created_at: bill.created_at || bill.credit_date || null
+    }));
+    const creditBillsTotal = creditBills.reduce((sum, b) => sum + logbookNumber(b.amount), 0);
+
     const payments: Record<string, number> = {
         cash: logbookNumber(breakdown.total_cash ?? shift?.total_cash_sales),
         mpesa: logbookNumber(breakdown.total_mpesa ?? logbook.total_mpesa ?? shift?.total_mpesa_sales),
         card: logbookNumber(breakdown.total_card ?? logbook.total_swipe ?? shift?.total_card_sales),
-        credit_bill: logbookNumber(breakdown.total_credit_bill ?? shift?.credit_bills_taken),
+        // Prefer the real credit_bills records; fall back to the stored
+        // breakdown and finally the cleared credit-bill payment lines.
+        credit_bill: creditBillsTotal
+            || logbookNumber(breakdown.total_credit_bill ?? shift?.credit_bills_taken)
+            || logbookNumber(clearedPaymentTotals.credit_bill),
         bank: 0,
         other: 0
     };
@@ -5470,6 +5516,8 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         },
         payment_breakdown: paymentBreakdown,
         revenue_breakdown: revenueBreakdown,
+        credit_bills: creditBills,
+        credit_bills_total: creditBillsTotal,
         lines: allLines,
         transaction_history: transactionHistory,
         compliance_flags: complianceFlags
@@ -5496,59 +5544,188 @@ export const downloadCashierLogbookReport = async (req: Request, res: Response, 
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         doc.pipe(res);
 
-        doc.font('Helvetica-Bold').fontSize(18).text('FamousGateHotels', { align: 'left' });
-        doc.fontSize(13).text('Cashier Shift Logbook Report', { align: 'right' });
-        doc.moveDown(0.5).strokeColor('#d6b25e').lineWidth(2).moveTo(42, doc.y).lineTo(553, doc.y).stroke();
-        doc.moveDown();
-
         const cashierName = cashierUserName(detail.cashier);
-        doc.font('Helvetica-Bold').fontSize(11).text(`Shift: ${shiftNumber}`);
-        doc.font('Helvetica').fontSize(9)
-            .text(`Branch: ${detail.branch?.name || 'Unknown branch'}`)
-            .text(`Cashier: ${cashierName}`)
-            .text(`Log Date: ${detail.log_date || '—'}`)
-            .text(`Status: ${detail.status || '—'}`)
-            .text(`Submitted: ${detail.submitted_at || detail.created_at || '—'}`);
-        doc.moveDown();
+        const LEFT = 42;
+        const RIGHT = 553;
+        const W = RIGHT - LEFT;
+        const NAVY = '#1A3C5E';
+        const GOLD = '#d6b25e';
+        const LIGHT = '#f4f1ea';
+        const MUTED = '#6B7280';
 
-        const summaryRows = [
-            ['Opening Float', logbookMoney(detail.cash_reconciliation.opening_float)],
-            ['Cash Sales', logbookMoney(detail.cash_reconciliation.cash_sales)],
-            ['Expected Closing', logbookMoney(detail.cash_reconciliation.expected_closing)],
-            ['Actual Closing', logbookMoney(detail.cash_reconciliation.actual_closing)],
-            ['Variance', logbookMoney(detail.cash_reconciliation.variance)],
-            ['Total Sales', logbookMoney(detail.summary.total_sales)]
-        ];
+        const pageGuard = (needed: number) => {
+            if (doc.y + needed > 800) doc.addPage();
+        };
 
-        doc.font('Helvetica-Bold').fontSize(11).text('Cash Reconciliation');
-        summaryRows.forEach(([label, value]) => {
-            doc.font('Helvetica-Bold').fontSize(9).text(label, { continued: true, width: 190 });
-            doc.font('Helvetica').text(`  ${value}`);
+        const sectionHeader = (label: string) => {
+            pageGuard(40);
+            const y = doc.y;
+            doc.save().rect(LEFT, y, W, 18).fill(NAVY).restore();
+            doc.fillColor('white').font('Helvetica-Bold').fontSize(9.5)
+                .text(label.toUpperCase(), LEFT + 8, y + 5, { lineBreak: false });
+            doc.fillColor('black');
+            doc.y = y + 26;
+        };
+
+        const pairRow = (label: string, value: string, o: any = {}) => {
+            const h = o.h || 15;
+            pageGuard(h);
+            const y = doc.y;
+            if (o.fill) doc.save().rect(LEFT, y, W, h).fill(o.fill).restore();
+            doc.fillColor(o.labelColor || '#333')
+                .font(o.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(o.size || 9)
+                .text(label, LEFT + 8, y + 4, { width: W * 0.62, lineBreak: false });
+            doc.fillColor(o.valueColor || '#111').font('Helvetica-Bold').fontSize(o.size || 9)
+                .text(value, LEFT, y + 4, { width: W - 8, align: 'right', lineBreak: false });
+            doc.fillColor('black');
+            doc.y = y + h;
+        };
+
+        const tableRow = (cells: string[], fracs: number[], o: any = {}) => {
+            const h = o.h || 14;
+            pageGuard(h);
+            const y = doc.y;
+            if (o.fill) doc.save().rect(LEFT, y, W, h).fill(o.fill).restore();
+            let x = LEFT + 6;
+            cells.forEach((c, i) => {
+                const w = W * fracs[i];
+                doc.fillColor(o.color || '#222')
+                    .font(o.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(o.size || 8)
+                    .text(String(c), x, y + 4, {
+                        width: w - 6,
+                        align: (o.aligns && o.aligns[i]) || 'left',
+                        lineBreak: false,
+                        ellipsis: true
+                    });
+                x += w;
+            });
+            doc.fillColor('black');
+            doc.y = y + h;
+        };
+
+        // ── Branded header band ────────────────────────────────────────────
+        const headerH = 56;
+        const hY = doc.y;
+        doc.save().rect(LEFT, hY, W, headerH).fill(NAVY).restore();
+        doc.fillColor('white').font('Helvetica-Bold').fontSize(17)
+            .text('FAMOUS GATES HOTELS', LEFT + 14, hY + 11, { lineBreak: false });
+        doc.font('Helvetica').fontSize(8.5).fillColor('#c8d4e2')
+            .text('Bomet, Kenya  ·  0706 782 828', LEFT + 14, hY + 34, { lineBreak: false });
+        doc.font('Helvetica-Bold').fontSize(13).fillColor('white')
+            .text('CASHIER SHIFT LOGBOOK', LEFT, hY + 14, { width: W - 14, align: 'right', lineBreak: false });
+        doc.font('Helvetica-Bold').fontSize(9).fillColor(GOLD)
+            .text(`Shift ${shiftNumber}`, LEFT, hY + 34, { width: W - 14, align: 'right', lineBreak: false });
+        doc.y = hY + headerH;
+        doc.save().rect(LEFT, doc.y, W, 4).fill(GOLD).restore();
+        doc.y += 16;
+        doc.fillColor('black');
+
+        // ── Shift meta ─────────────────────────────────────────────────────
+        const metaY = doc.y;
+        doc.font('Helvetica').fontSize(9).fillColor('#333');
+        doc.text(`Branch: ${detail.branch?.name || 'Unknown branch'}`, LEFT, metaY, { lineBreak: false });
+        doc.text(`Cashier: ${cashierName}`, LEFT, metaY + 13, { lineBreak: false });
+        doc.text(`Log Date: ${detail.log_date || '—'}`, LEFT, metaY + 26, { lineBreak: false });
+        doc.text(`Status: ${detail.status || '—'}`, LEFT + W / 2, metaY, { width: W / 2, align: 'right', lineBreak: false });
+        doc.text(`Submitted: ${detail.submitted_at || detail.created_at || '—'}`, LEFT + W / 2, metaY + 13, { width: W / 2, align: 'right', lineBreak: false });
+        doc.fillColor('black');
+        doc.y = metaY + 42;
+
+        // ── Cash Reconciliation ────────────────────────────────────────────
+        const cr = detail.cash_reconciliation;
+        sectionHeader('Cash Reconciliation');
+        pairRow('Opening Float', logbookMoney(cr.opening_float));
+        pairRow('+ Cash Sales', logbookMoney(cr.cash_sales), { fill: LIGHT });
+        pairRow('+ Credit Payments Received', logbookMoney(cr.credit_payments_received));
+        if (logbookNumber(cr.cash_drops) > 0) pairRow('- Cash Drops', logbookMoney(cr.cash_drops), { fill: LIGHT });
+        if (logbookNumber(cr.payouts) > 0) pairRow('- Payouts', logbookMoney(cr.payouts));
+        pairRow('= Expected Closing', logbookMoney(cr.expected_closing), { bold: true, fill: '#e8eef5' });
+        pairRow('Actual Cash Counted', logbookMoney(cr.actual_closing), { bold: true });
+        pairRow('Variance', logbookMoney(cr.variance), {
+            bold: true,
+            valueColor: Math.abs(logbookNumber(cr.variance)) < 0.01 ? '#16A34A' : '#DC2626'
         });
-        doc.moveDown();
+        pairRow('Total Sales', logbookMoney(detail.summary.total_sales), { bold: true, fill: NAVY, labelColor: 'white', valueColor: 'white' });
+        doc.y += 8;
 
-        doc.font('Helvetica-Bold').fontSize(11).text('Sales By Payment Method');
-        detail.payment_breakdown.forEach((row: any) => {
-            doc.font('Helvetica').fontSize(9)
-                .text(`${String(row.method).toUpperCase()}  ${logbookMoney(row.amount)}  (${row.count || 0} line(s))`);
+        // ── Sales By Payment Method ────────────────────────────────────────
+        sectionHeader('Sales by Payment Method');
+        tableRow(['Method', 'Lines', 'Amount'], [0.5, 0.2, 0.3],
+            { bold: true, fill: LIGHT, color: MUTED, aligns: ['left', 'center', 'right'] });
+        (detail.payment_breakdown || []).forEach((row: any) => {
+            tableRow(
+                [String(row.method).replace(/_/g, ' ').toUpperCase(), `${row.count || 0}`, logbookMoney(row.amount)],
+                [0.5, 0.2, 0.3],
+                { aligns: ['left', 'center', 'right'] }
+            );
         });
-        doc.moveDown();
+        doc.y += 8;
 
-        doc.font('Helvetica-Bold').fontSize(11).text('Compliance Flags');
-        detail.compliance_flags.forEach((flag: any) => {
-            doc.font('Helvetica').fontSize(9).text(`${flag.status} - ${flag.label}: ${flag.detail}`);
-        });
-        doc.moveDown();
+        // ── Revenue Streams ────────────────────────────────────────────────
+        const revenueRows = (detail.revenue_breakdown || []).filter((r: any) => logbookNumber(r.amount) > 0);
+        if (revenueRows.length) {
+            sectionHeader('Revenue Streams');
+            revenueRows.forEach((r: any, i: number) =>
+                pairRow(r.label, logbookMoney(r.amount), { fill: i % 2 ? LIGHT : undefined }));
+            doc.y += 8;
+        }
 
-        doc.font('Helvetica-Bold').fontSize(11).text('Cleared Transaction History');
-        const lines = (detail.transaction_history || detail.lines || []).slice(0, 48);
-        if (!lines.length) {
-            doc.font('Helvetica').fontSize(9).text('No transaction lines were captured for this shift.');
+        // ── Staff Credit Bills (who for) ───────────────────────────────────
+        sectionHeader(`Staff Credit Bills (${logbookMoney(detail.credit_bills_total || 0)})`);
+        const creditBillRows = detail.credit_bills || [];
+        if (!creditBillRows.length) {
+            doc.font('Helvetica').fontSize(9).fillColor(MUTED)
+                .text('No staff credit bills were issued during this shift.', LEFT + 8, doc.y, { lineBreak: false });
+            doc.fillColor('black');
+            doc.y += 16;
         } else {
+            tableRow(['Staff', 'Reference', 'Department', 'Amount'], [0.34, 0.24, 0.22, 0.2],
+                { bold: true, fill: LIGHT, color: MUTED, aligns: ['left', 'left', 'left', 'right'] });
+            creditBillRows.forEach((b: any, i: number) => {
+                tableRow(
+                    [b.staff_name || 'Staff', b.credit_number || '—', b.department || '—', logbookMoney(b.amount)],
+                    [0.34, 0.24, 0.22, 0.2],
+                    { aligns: ['left', 'left', 'left', 'right'], fill: i % 2 ? LIGHT : undefined }
+                );
+            });
+        }
+        doc.y += 8;
+
+        // ── Compliance Flags ───────────────────────────────────────────────
+        sectionHeader('Compliance Checks');
+        (detail.compliance_flags || []).forEach((flag: any) => {
+            pageGuard(15);
+            const y = doc.y;
+            const ok = String(flag.status).toUpperCase() === 'OK';
+            doc.save().roundedRect(LEFT + 8, y + 2, 46, 12, 3)
+                .fill(ok ? '#dcfce7' : '#fef3c7').restore();
+            doc.fillColor(ok ? '#16A34A' : '#B45309').font('Helvetica-Bold').fontSize(7.5)
+                .text(String(flag.status).toUpperCase(), LEFT + 8, y + 5, { width: 46, align: 'center', lineBreak: false });
+            doc.fillColor('#222').font('Helvetica').fontSize(8.5)
+                .text(`${flag.label}: ${flag.detail}`, LEFT + 62, y + 4, { width: W - 70, lineBreak: false, ellipsis: true });
+            doc.fillColor('black');
+            doc.y = y + 16;
+        });
+        doc.y += 8;
+
+        // ── Cleared Transaction History ────────────────────────────────────
+        sectionHeader('Cleared Transaction History');
+        const lines = (detail.transaction_history || detail.lines || []).slice(0, 80);
+        if (!lines.length) {
+            doc.font('Helvetica').fontSize(9).fillColor(MUTED)
+                .text('No transaction lines were captured for this shift.', LEFT + 8, doc.y, { lineBreak: false });
+            doc.fillColor('black');
+        } else {
+            tableRow(['#', 'Time', 'Reference', 'Customer', 'Method', 'Amount'],
+                [0.05, 0.16, 0.19, 0.28, 0.14, 0.18],
+                { bold: true, fill: LIGHT, color: MUTED, aligns: ['left', 'left', 'left', 'left', 'left', 'right'] });
             lines.forEach((line: any, index: number) => {
-                if (doc.y > 740) doc.addPage();
-                doc.font('Helvetica').fontSize(8).text(
-                    `${index + 1}. ${line.created_at || '—'} | ${line.reference} | ${line.customer_name} | ${line.payment_method} | ${logbookMoney(line.amount)} | ${line.status}`
+                const time = String(line.created_at || '—').replace('T', ' ').slice(0, 19);
+                tableRow(
+                    [`${index + 1}`, time, line.reference || '—', line.customer_name || '—',
+                        String(line.payment_method || '—').replace(/_/g, ' '), logbookMoney(line.amount)],
+                    [0.05, 0.16, 0.19, 0.28, 0.14, 0.18],
+                    { aligns: ['left', 'left', 'left', 'left', 'left', 'right'], fill: index % 2 ? LIGHT : undefined }
                 );
             });
         }

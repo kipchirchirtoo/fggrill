@@ -96,7 +96,19 @@ final cashierPOSItemsProvider =
   return ref.watch(cashierRepositoryProvider).getPOSItems();
 });
 
+/// The cashier's own currently open shift (with live payment breakdown).
+final cashierCurrentShiftProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final shifts =
+      await ref.watch(cashierRepositoryProvider).getShifts(status: 'open');
+  return shifts.isNotEmpty ? shifts.first : <String, dynamic>{};
+});
+
 final cashierInsightsProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
-  return ref.watch(cashierRepositoryProvider).getPosInsights();
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  // Scope Python insights to the current shift's branch so the analysis
+  // reflects this cashier's branch rather than the whole estate.
+  final shift = await ref.watch(cashierCurrentShiftProvider.future);
+  final branchId = (shift['branch_id'] as num?)?.toInt();
+  return ref.watch(cashierRepositoryProvider).getPosInsights(branchId: branchId);
 });

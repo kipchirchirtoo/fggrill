@@ -95,6 +95,8 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           onPressed: () {
             ref.invalidate(cashierStatsProvider);
             ref.invalidate(cashierReconciliationProvider);
+            ref.invalidate(cashierCurrentShiftProvider);
+            ref.invalidate(cashierInsightsProvider);
           },
           icon: const Icon(Icons.refresh, size: 16),
           label: const Text('Refresh'),
@@ -183,7 +185,14 @@ class _StationTabState extends ConsumerState<_StationTab> {
   final _amountController = TextEditingController();
   final _referenceController = TextEditingController();
   final _mpesaPhoneController = TextEditingController();
+  final _tenderedController = TextEditingController();
   String _method = 'cash';
+
+  /// Cash handed over by the customer (for computing change).
+  num get _tendered => num.tryParse(_tenderedController.text.trim()) ?? 0;
+  num get _amountDue => num.tryParse(_amountController.text.trim()) ?? 0;
+  num get _changeDue =>
+      _tendered > _amountDue ? _tendered - _amountDue : 0;
   bool _loading = false;
   Map<String, dynamic>? _bill;
   List<Map<String, dynamic>> _mpesaMatches = const [];
@@ -237,6 +246,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
     _amountController.dispose();
     _referenceController.dispose();
     _mpesaPhoneController.dispose();
+    _tenderedController.dispose();
     super.dispose();
   }
 
@@ -407,12 +417,73 @@ class _StationTabState extends ConsumerState<_StationTab> {
             TextField(
               controller: _amountController,
               keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 labelText: 'Amount',
                 helperText:
                     _bill == null ? null : 'Balance: ${_money(balance)}',
               ),
             ),
+            if (_method == 'cash') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _tenderedController,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Cash Given (Tendered)',
+                  helperText: 'Amount of cash handed over by the customer',
+                  prefixIcon: Icon(Icons.payments, size: 18),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: (_tendered > 0 && _tendered < _amountDue
+                          ? AppColors.kError
+                          : _changeDue > 0
+                              ? AppColors.kSuccess
+                              : AppColors.kTextSecondary)
+                      .withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _tendered > 0 && _tendered < _amountDue
+                          ? Icons.warning_amber
+                          : Icons.account_balance_wallet,
+                      size: 18,
+                      color: _tendered > 0 && _tendered < _amountDue
+                          ? AppColors.kError
+                          : _changeDue > 0
+                              ? AppColors.kSuccess
+                              : AppColors.kTextSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _tendered <= 0
+                            ? 'Enter cash given to compute change'
+                            : _tendered < _amountDue
+                                ? 'Short by ${_money(_amountDue - _tendered)}'
+                                : 'Change to give: ${_money(_changeDue)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _tendered > 0 && _tendered < _amountDue
+                              ? AppColors.kError
+                              : _changeDue > 0
+                                  ? AppColors.kSuccess
+                                  : AppColors.kTextSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (_method == 'credit_bill') ...[
               const SizedBox(height: 12),
               if (_staffLoading)
@@ -593,6 +664,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
             'credit_number': _text(createdCreditData, ['credit_number']),
         };
       }
+      final isCash = _method == 'cash';
       final paymentResponse =
           await ref.read(cashierRepositoryProvider).processPayment(
                 bookingId: _lookupController.text.trim(),
@@ -602,7 +674,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     ? _referenceController.text.trim()
                     : _text(_payload(createdCredit), ['credit_number', 'id']),
                 creditBill: paymentCreditBill,
+                tendered: isCash && _tendered > 0 ? _tendered : null,
+                change: isCash ? _changeDue : null,
               );
+      final changeGiven = isCash ? _changeDue : 0;
       if (_method == 'credit_bill' && creditBill != null) {
         final staff = _selectedStaff;
         await PrintService().printCreditBillReceipt(
@@ -626,13 +701,18 @@ class _StationTabState extends ConsumerState<_StationTab> {
           fallbackReference: createdCredit == null
               ? _referenceController.text.trim()
               : _text(_payload(createdCredit), ['credit_number', 'id']),
+          changeGiven: changeGiven,
         );
-        _snack('Payment recorded');
+        _snack(changeGiven > 0
+            ? 'Payment recorded · Give change ${_money(changeGiven)}'
+            : 'Payment recorded');
       }
+      _tenderedController.clear();
       ref.invalidate(cashierStatsProvider);
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierCreditBillsProvider);
       ref.invalidate(cashierShiftsProvider);
+      ref.invalidate(cashierCurrentShiftProvider);
       await _lookupBill();
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
@@ -765,6 +845,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
     required String method,
     required Map<String, dynamic> response,
     required String fallbackReference,
+    num changeGiven = 0,
   }) async {
     try {
       final payload = _payload(response);
@@ -787,7 +868,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
         ),
         receiptItems,
         nav.branchName,
-        receiptType: '$methodLabel RECEIPT',
+        receiptType: changeGiven > 0
+            ? '$methodLabel RECEIPT · CHANGE ${_money(changeGiven)}'
+            : '$methodLabel RECEIPT',
         customerName: _customerName(bill),
         publicCode: _lookupController.text.trim(),
       );
@@ -2760,7 +2843,7 @@ class _InsightsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(cashierStatsProvider);
+    final currentShift = ref.watch(cashierCurrentShiftProvider);
     final reconciliation = ref.watch(cashierReconciliationProvider);
     final insights = ref.watch(cashierInsightsProvider);
     return SingleChildScrollView(
@@ -2768,13 +2851,15 @@ class _InsightsTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _CurrentShiftBanner(value: currentShift),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: _AsyncStatCard(
-                  value: stats,
+                  value: currentShift,
                   label: 'Cash',
-                  keys: const ['total_cash', 'cash_total'],
+                  keys: const ['total_cash_sales', 'total_cash', 'cash_total'],
                   icon: Icons.money,
                   color: AppColors.kSuccess,
                 ),
@@ -2782,9 +2867,13 @@ class _InsightsTab extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _AsyncStatCard(
-                  value: stats,
+                  value: currentShift,
                   label: 'M-Pesa',
-                  keys: const ['total_mpesa', 'mpesa_total'],
+                  keys: const [
+                    'total_mpesa_sales',
+                    'total_mpesa',
+                    'mpesa_total'
+                  ],
                   icon: Icons.phone_android,
                   color: AppColors.kPrimary,
                 ),
@@ -2792,9 +2881,9 @@ class _InsightsTab extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _AsyncStatCard(
-                  value: stats,
+                  value: currentShift,
                   label: 'Card',
-                  keys: const ['total_card', 'card_total'],
+                  keys: const ['total_card_sales', 'total_card', 'card_total'],
                   icon: Icons.credit_card,
                   color: AppColors.kAccent,
                 ),
@@ -2802,9 +2891,13 @@ class _InsightsTab extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _AsyncStatCard(
-                  value: stats,
+                  value: currentShift,
                   label: 'Credit Bills',
-                  keys: const ['total_credit_bill', 'credit_bill_total'],
+                  keys: const [
+                    'credit_bills_taken',
+                    'total_credit_bill',
+                    'credit_bill_total'
+                  ],
                   icon: Icons.credit_score,
                   color: AppColors.kWarning,
                 ),
@@ -2842,10 +2935,13 @@ class _InsightsTab extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
                   insights.when(
-                    data: (data) => data.isEmpty
-                        ? const EmptyState(
-                            message: 'Insights service unavailable')
-                        : _JsonSummary(data: _payload(data)),
+                    data: (data) {
+                      final payload = _payload(data);
+                      return payload.isEmpty
+                          ? const EmptyState(
+                              message: 'Insights service unavailable')
+                          : _PosInsights(data: payload);
+                    },
                     loading: () =>
                         const LoadingSkeleton(type: SkeletonType.list),
                     error: (_, __) => const EmptyState(
@@ -2858,6 +2954,199 @@ class _InsightsTab extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+class _CurrentShiftBanner extends StatelessWidget {
+  const _CurrentShiftBanner({required this.value});
+
+  final AsyncValue<Map<String, dynamic>> value;
+
+  @override
+  Widget build(BuildContext context) {
+    return value.when(
+      loading: () => const LoadingSkeleton(type: SkeletonType.card),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (raw) {
+        final shift = _payload(raw);
+        if (shift.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.kWarning.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: AppColors.kWarning.withValues(alpha: 0.3)),
+            ),
+            child: const Row(children: [
+              Icon(Icons.info_outline, color: AppColors.kWarning, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'No open shift. Start a shift to see live insights for your current session.',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ]),
+          );
+        }
+        final shiftNo = _text(shift, ['shift_number', 'id']);
+        final status = _text(shift, ['status']);
+        final totalSales = _num(shift['total_sales']);
+        final txns = _num(shift['transaction_count']).toInt();
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.kPrimary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.kPrimary.withValues(alpha: 0.2)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.point_of_sale,
+                color: AppColors.kPrimary, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shiftNo.isEmpty ? 'Current Shift' : 'Shift $shiftNo',
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '$txns transactions this shift',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.kTextSecondary),
+                  ),
+                ],
+              ),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              if (status.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.kSuccess.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(status.toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.kSuccess)),
+                ),
+              const SizedBox(height: 4),
+              Text('Total ${_money(totalSales)}',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.bold)),
+            ]),
+          ]),
+        );
+      },
+    );
+  }
+}
+
+class _PosInsights extends StatelessWidget {
+  const _PosInsights({required this.data});
+
+  final Map<String, dynamic> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final topItems = _asList(data['top_items']);
+    final paymentMix = _asList(data['payment_mix']);
+    final heatmap = _asList(data['hourly_heatmap']);
+
+    if (topItems.isEmpty && paymentMix.isEmpty && heatmap.isEmpty) {
+      return const EmptyState(message: 'No POS activity in the last 7 days');
+    }
+
+    String peakHour() {
+      if (heatmap.isEmpty) return '—';
+      final peak = heatmap.reduce(
+          (a, b) => _num(a['count']) >= _num(b['count']) ? a : b);
+      final hour = _num(peak['hour']).toInt();
+      return '${hour.toString().padLeft(2, '0')}:00';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Last 7 days · your branch',
+            style: TextStyle(
+                fontSize: 11,
+                color: AppColors.kTextSecondary.withValues(alpha: 0.9))),
+        const SizedBox(height: 12),
+        if (paymentMix.isNotEmpty) ...[
+          const Text('Payment Mix',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 6),
+          ...paymentMix.map((m) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(children: [
+                  Expanded(
+                      child: Text(_methodLabel(_text(m, ['payment_method'])),
+                          style: const TextStyle(fontSize: 13))),
+                  Text(_money(m['total_amount']),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ]),
+              )),
+          const SizedBox(height: 16),
+        ],
+        if (topItems.isNotEmpty) ...[
+          const Text('Top Selling Items',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 6),
+          ...topItems.take(5).map((it) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(children: [
+                  Expanded(
+                      child: Text(
+                          _text(it, ['name']).isEmpty
+                              ? 'Item'
+                              : _text(it, ['name']),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13))),
+                  Text('${_num(it['qty']).toInt()} sold',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.kTextSecondary)),
+                  const SizedBox(width: 12),
+                  Text(_money(it['line_total']),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ]),
+              )),
+          const SizedBox(height: 16),
+        ],
+        if (heatmap.isNotEmpty)
+          Row(children: [
+            const Icon(Icons.schedule,
+                size: 16, color: AppColors.kTextSecondary),
+            const SizedBox(width: 6),
+            Text('Peak hour: ${peakHour()}',
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600)),
+          ]),
+      ],
+    );
+  }
+
+  String _methodLabel(String m) =>
+      m.isEmpty ? 'Other' : (m[0].toUpperCase() + m.substring(1));
+
+  List<Map<String, dynamic>> _asList(dynamic value) {
+    if (value is List) {
+      return value
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return const [];
   }
 }
 
