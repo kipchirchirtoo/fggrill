@@ -21,6 +21,7 @@ class AuthRepository {
   static const branchIdKey = 'fg_branch_id';
   static const branchNameKey = 'fg_branch_name';
   static const roleKey = 'fg_role';
+  static const rolesKey = 'fg_roles';
   static const licenseKey = 'fg_license';
   static const userIdKey = 'fg_user_id';
   static const userNameKey = 'fg_user_name';
@@ -203,6 +204,14 @@ class AuthRepository {
       userJson['active_outlet_prefix'] ??=
           await storage.read(key: outletPrefixKey);
       userJson['active_shift_id'] ??= await storage.read(key: activeShiftIdKey);
+      // Fall back to the persisted role list if the profile endpoint doesn't
+      // include all_roles (so multi-role staff keep access after a restart).
+      if (userJson['all_roles'] == null && userJson['roles'] == null) {
+        final storedRoles = await storage.read(key: rolesKey);
+        if (storedRoles != null && storedRoles.isNotEmpty) {
+          userJson['roles'] = storedRoles;
+        }
+      }
       final user = User.fromJson(userJson);
       await _storeUser(user);
       return user;
@@ -275,6 +284,7 @@ class AuthRepository {
     await storage.write(key: userIdKey, value: user.id);
     await storage.write(key: userNameKey, value: user.name);
     await storage.write(key: roleKey, value: user.role);
+    await storage.write(key: rolesKey, value: user.roles.join(','));
     await storage.write(key: branchIdKey, value: user.branchId);
     await storage.write(key: branchNameKey, value: user.branchName);
     await _writeOptional(storage, outletIdKey, user.outletId);

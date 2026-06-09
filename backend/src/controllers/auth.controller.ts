@@ -737,10 +737,27 @@ export const getMe = async (
       logger.warn('getMe: Failed to fetch staff_profile, continuing without it', staffErr);
     }
 
+    // Include all branch roles so multi-role staff (e.g. cashier + waiter)
+    // keep access to every dashboard they're assigned to after a refresh.
+    let allRoles: any[] = [];
+    try {
+      const { data: roleRows } = await supabase
+        .from('user_branch_roles')
+        .select('role, branch_id, is_primary, branches(id, name, code)')
+        .eq('user_id', req.user.id);
+      allRoles = roleRows || [];
+    } catch (roleErr) {
+      logger.warn('getMe: Could not fetch user_branch_roles, defaulting to primary role', roleErr);
+    }
+    if (!allRoles.length) {
+      allRoles = [{ role: profile.role, branch_id: profile.branch_id, is_primary: true }];
+    }
+
     // Build response
     const responseData = await enrichUserBranch({
       ...profile,
-      id_number: idNumber
+      id_number: idNumber,
+      all_roles: allRoles
     });
 
     res.status(200).json({

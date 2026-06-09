@@ -6,6 +6,7 @@ class User {
     required this.role,
     required this.branchId,
     required this.branchName,
+    this.roles = const [],
     this.avatar,
     this.outletId,
     this.outletType,
@@ -19,6 +20,12 @@ class User {
   final String role;
   final String branchId;
   final String branchName;
+
+  /// All roles this account holds (e.g. a staff member who is both a cashier
+  /// and a restaurant waiter). Always includes [role]. Used for routing so the
+  /// user can reach any dashboard they're entitled to.
+  final List<String> roles;
+
   final String? avatar;
   final String? outletId;
   final String? outletType;
@@ -44,11 +51,13 @@ class User {
         json['outlet_prefix'] ??
         outletMap['pin_prefix'];
     final rawActiveShiftId = json['active_shift_id'] ?? json['activeShiftId'];
+    final primaryRole = '${json['role'] ?? ''}';
     return User(
       id: '${json['id']}',
       name: '${json['name'] ?? json['full_name'] ?? fullName}',
       email: '${json['email'] ?? ''}',
-      role: '${json['role'] ?? ''}',
+      role: primaryRole,
+      roles: _parseRoles(json['all_roles'] ?? json['roles'], primaryRole),
       branchId:
           branchIdLower == 'null' || branchIdLower == 'nan' ? '' : branchId,
       branchName:
@@ -66,6 +75,32 @@ class User {
     if (text.isEmpty || text.toLowerCase() == 'null') return null;
     return text;
   }
+
+  /// Parse the backend `all_roles` array (list of {role, branch_id, ...}) or a
+  /// plain CSV/list of role strings, always including [primaryRole].
+  static List<String> _parseRoles(Object? raw, String primaryRole) {
+    final result = <String>{};
+    if (primaryRole.trim().isNotEmpty) result.add(primaryRole.trim());
+    if (raw is List) {
+      for (final entry in raw) {
+        if (entry is Map) {
+          final r = '${entry['role'] ?? ''}'.trim();
+          if (r.isNotEmpty && r.toLowerCase() != 'null') result.add(r);
+        } else {
+          final r = '$entry'.trim();
+          if (r.isNotEmpty && r.toLowerCase() != 'null') result.add(r);
+        }
+      }
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      for (final r in raw.split(',')) {
+        final t = r.trim();
+        if (t.isNotEmpty && t.toLowerCase() != 'null') result.add(t);
+      }
+    }
+    return result.toList();
+  }
+
+  bool hasRole(String role) => roles.contains(role) || this.role == role;
 }
 
 class AuthTokens {

@@ -82,9 +82,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         error: (_, __) => '/login',
         data: (user) {
           if (user == null) return '/login';
-          if (user.role == 'super_admin') return null;
+          if (user.role == 'super_admin' || user.roles.contains('super_admin')) {
+            return null;
+          }
           final allowedRoles = _rolesForLocation(location);
-          if (allowedRoles.isEmpty || allowedRoles.contains(user.role)) {
+          // Allow the route if ANY of the account's roles is permitted — a staff
+          // member with two roles (e.g. cashier + restaurant waiter) must be
+          // able to reach either dashboard without being bounced back.
+          if (allowedRoles.isEmpty ||
+              user.roles.any(allowedRoles.contains) ||
+              allowedRoles.contains(user.role)) {
             return null;
           }
           return _defaultRouteForUser(user);
