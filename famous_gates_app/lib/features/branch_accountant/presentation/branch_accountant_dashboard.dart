@@ -4476,6 +4476,64 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              Builder(builder: (context) {
+                final creditLines = lines.where((l) {
+                  final m = _map(l);
+                  final section = '${m['section'] ?? ''}'.toLowerCase();
+                  final method = '${m['payment_method'] ?? ''}'.toLowerCase();
+                  return section.contains('credit') || method.contains('credit');
+                }).map(_map).toList();
+                final creditTotal = creditLines.fold<num>(
+                    0, (s, l) => s + _num(l['amount']));
+                final breakdownTotal =
+                    _num(summary['total_credit_bills']);
+                final total =
+                    creditTotal > 0 ? creditTotal : breakdownTotal;
+                return _SectionCard(
+                  title: 'Credit Bills — Who For (${_money(total)})',
+                  child: creditLines.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text('No staff credit bills this shift',
+                              style:
+                                  TextStyle(color: AppColors.kTextSecondary)),
+                        )
+                      : Column(
+                          children: [
+                            for (final c in creditLines)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.badge_outlined,
+                                        size: 16,
+                                        color: AppColors.kTextSecondary),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(_text(c, [
+                                        'customer_name',
+                                        'staff_name',
+                                        'name'
+                                      ])),
+                                    ),
+                                    if (_text(c, ['reference']).isNotEmpty) ...[
+                                      Text(_text(c, ['reference']),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.kTextSecondary)),
+                                      const SizedBox(width: 12),
+                                    ],
+                                    Text(_money(_num(c['amount'])),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                );
+              }),
               _SectionCard(
                 title: 'Compliance Checks',
                 child: _ComplianceFlagList(flags: flags),

@@ -164,7 +164,18 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
             unpaid_bills_value: toNumber(shift.unpaid_bills_value),
             unpaid_bills_count: toNumber(shift.unpaid_bills_count),
             paid_bills_value: toNumber(shift.paid_bills_value),
-            paid_bills_count: toNumber(shift.paid_bills_count)
+            paid_bills_count: toNumber(shift.paid_bills_count),
+            // Staff credit bills issued this shift — total + who they're for, so
+            // the branch accountant sees the breakdown in the logbook.
+            total_credit_bills: toNumber(shift.credit_bills_taken)
+                || creditBills.reduce((s: number, b: any) => s + toNumber(b.amount), 0),
+            credit_bills_count: toNumber(shift.credit_bills_count) || creditBills.length,
+            credit_bills_details: creditBills.map((b: any) => ({
+                staff_id: b.staff_id || null,
+                name: b.name || b.staff_name || b.customer_name || 'Staff',
+                amount: toNumber(b.amount),
+                reference: b.reference || b.id || null,
+            })),
         },
         total_mpesa: totalMpesa,
         total_swipe: totalCard,

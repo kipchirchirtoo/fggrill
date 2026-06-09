@@ -1421,10 +1421,50 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                       row['total_mpesa']),
                                   'Card': _money(row['total_card_sales'] ??
                                       row['total_card']),
+                                  'Credit Bills': _money(
+                                      row['credit_bills_taken'] ??
+                                          row['total_credit'] ??
+                                          row['credit_bills_value']),
                                   'Expected cash': _money(
                                       row['expected_closing_float'] ??
                                           row['expected_cash']),
                                 }),
+                                if (_creditBillDetails(row).isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text('Credit bills — who for',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  for (final c in _creditBillDetails(row))
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.symmetric(vertical: 2),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.badge_outlined,
+                                              size: 14,
+                                              color: AppColors.kTextSecondary),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(_text(c, [
+                                              'name',
+                                              'staff_name',
+                                              'customer_name'
+                                            ])),
+                                          ),
+                                          Text(
+                                              _money(c['amount'] ??
+                                                  c['total_amount']),
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w700)),
+                                        ],
+                                      ),
+                                    ),
+                                ],
                                 const SizedBox(height: 8),
                                 Row(
                                   children: [
@@ -3810,6 +3850,19 @@ num _num(dynamic value) {
 String _money(dynamic value) {
   final amount = _num(value);
   return NumberFormat.currency(symbol: 'KES ', decimalDigits: 0).format(amount);
+}
+
+// Extract the staff credit-bill breakdown attached to a shift row.
+List<Map<String, dynamic>> _creditBillDetails(Map<String, dynamic> row) {
+  final raw = row['credit_bills_details'] ?? row['credit_details'];
+  if (raw is List) {
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((e) => _num(e['amount'] ?? e['total_amount']) > 0)
+        .toList();
+  }
+  return const [];
 }
 
 // Open-shift count from cashier stats: backend returns the cashier's own open
