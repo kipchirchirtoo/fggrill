@@ -69,7 +69,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         content: _RequiresOpenShift(child: _UnpaidBillsTab()),
       ),
       const DashboardTab(
-        label: 'Paid Bills',
+        label: 'Paid Credits',
         icon: Icons.payments,
         content: _RequiresOpenShift(child: _PaidBillsTab()),
       ),
@@ -1581,13 +1581,14 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Paid Bills',
+          Text('Paid Credits',
               style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 6),
           const Text(
-            'Record money a staff member pays toward their bill (cash, M-Pesa '
-            'or card). These flow to the branch accountant at shift close, who '
-            'records each against the staff member’s outstanding credit bill.',
+            'Record money a staff member pays toward their credit (cash, M-Pesa '
+            'or card). Each amount adds to that method’s sales and the Total Paid '
+            'Credits, and flows to the branch accountant at shift close to reduce '
+            'the staff member’s outstanding credit bill.',
             style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
           ),
           const SizedBox(height: 20),
@@ -1616,7 +1617,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Record a paid bill',
+            const Text('Record a paid credit',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
             const SizedBox(height: 16),
             if (_staffLoading)
@@ -1632,7 +1633,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
                 ]),
               )
             else if (_staffOptions.isEmpty)
-              const Text('No branch staff loaded — cannot record a paid bill.',
+              const Text('No branch staff loaded — cannot record a paid credit.',
                   style: TextStyle(color: AppColors.kTextSecondary))
             else
               _StaffSearchField(
@@ -1699,7 +1700,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.add, size: 18),
-                  label: const Text('Record Paid Bill'),
+                  label: const Text('Record Paid Credit'),
                 ),
               ],
             ),
@@ -1718,7 +1719,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
     if (!hasOpenShift) {
       return const EmptyState(
         icon: Icons.lock_clock,
-        message: 'Open a shift to start recording paid bills.',
+        message: 'Open a shift to start recording paid credits.',
       );
     }
     return Column(
@@ -1731,7 +1732,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
             _totalChip('Cash', _num(totals['cash'])),
             _totalChip('M-Pesa', _num(totals['mpesa'])),
             _totalChip('Card', _num(totals['card'])),
-            _totalChip('Total Paid Bills', _num(totals['total']),
+            _totalChip('Total Paid Credits', _num(totals['total']),
                 strong: true),
           ],
         ),
@@ -1742,7 +1743,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
         if (rows.isEmpty)
           const EmptyState(
             icon: Icons.receipt_long,
-            message: 'No paid bills recorded yet this shift.',
+            message: 'No paid credits recorded yet this shift.',
           )
         else
           for (final row in rows.reversed) _paidRow(row),
@@ -1827,9 +1828,9 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
       ref.invalidate(cashierCurrentShiftProvider);
       ref.invalidate(cashierShiftsProvider);
       ref.invalidate(cashierStatsProvider);
-      _snack('Paid bill of ${_money(amount)} recorded for ${staff.name}');
+      _snack('Paid credit of ${_money(amount)} recorded for ${staff.name}');
     } catch (error) {
-      _snack('Failed to record paid bill: ${apiErrorMessage(error)}');
+      _snack('Failed to record paid credit: ${apiErrorMessage(error)}');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -2142,18 +2143,24 @@ class _ShiftCreditEntry {
     required this.name,
     required this.amount,
     this.reference,
+    this.paymentMethod,
   });
 
   final String staffId;
   final String name;
   final num amount;
   final String? reference;
+  // For paid credits: how the staff paid (cash / mpesa / card). Preserved so
+  // the close-shift fold-by-method and the branch accountant see the method.
+  final String? paymentMethod;
 
   Map<String, dynamic> toJson() => {
         'staff_id': staffId.isEmpty ? null : staffId,
         'name': name,
         'amount': amount,
         if (reference != null && reference!.isNotEmpty) 'reference': reference,
+        if (paymentMethod != null && paymentMethod!.isNotEmpty)
+          'payment_method': paymentMethod,
         'time': DateTime.now().toIso8601String(),
       };
 }
@@ -2394,18 +2401,30 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) {
         final openingFloat = _num(shift['opening_float']);
-        final cashSales =
+        final baseCashSales =
             _num(shift['total_cash_sales'] ?? shift['total_cash']);
-        final mpesaSales =
+        final baseMpesaSales =
             _num(shift['total_mpesa_sales'] ?? shift['total_mpesa']);
-        final cardSales =
+        final baseCardSales =
             _num(shift['total_card_sales'] ?? shift['total_card']);
+        // Paid credits settled this shift, split by how the staff paid. Each
+        // amount folds into the matching sales tally (cash / M-Pesa / card).
+        num paidByMethod(String method) => paidEntries
+            .where((e) => (e.paymentMethod ?? 'cash').toLowerCase() == method)
+            .fold<num>(0, (sum, entry) => sum + entry.amount);
+        final cashPaidCredits = paidByMethod('cash');
+        final mpesaPaidCredits = paidByMethod('mpesa');
+        final cardPaidCredits = paidByMethod('card');
+        final cashSales = baseCashSales + cashPaidCredits;
+        final mpesaSales = baseMpesaSales + mpesaPaidCredits;
+        final cardSales = baseCardSales + cardPaidCredits;
         final paidBillsTotal =
             paidEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
         final creditBillsTotal =
             creditEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
         final actualCash = num.tryParse(closingCash.text.trim()) ?? 0;
-        final expectedCash = openingFloat + cashSales + paidBillsTotal;
+        // Only cash paid credits affect the drawer; cashSales already includes them.
+        final expectedCash = openingFloat + cashSales;
         final variance = actualCash - expectedCash;
 
         return Dialog(
@@ -2441,7 +2460,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           'Cash sales': _money(cashSales),
                           'M-Pesa sales': _money(mpesaSales),
                           'Card sales': _money(cardSales),
-                          'Credit sales': _money(creditBillsTotal),
+                          'Credit bills': _money(creditBillsTotal),
+                          'Paid credits': _money(paidBillsTotal),
                           'Expected cash': _money(expectedCash),
                           'Variance': _money(variance),
                         }),
@@ -2533,7 +2553,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                               .toList(),
                         ),
                         const SizedBox(height: 24),
-                        Text('Credit bills and paid bills',
+                        Text('Credit bills and paid credits',
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 12),
                         Wrap(
@@ -2566,7 +2586,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             ),
                             _creditEntryPanel(
                               context,
-                              title: 'Debt receipts',
+                              title: 'Paid credits (cash)',
                               staffMembers: staffOptions,
                               staffId: paidStaffId,
                               name: paidName,
@@ -2580,6 +2600,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                   staffId: paidStaffId.text.trim(),
                                   name: paidName.text.trim(),
                                   amount: amount,
+                                  paymentMethod: 'cash',
                                 ));
                                 paidStaffId.clear();
                                 paidName.clear();
@@ -2797,7 +2818,11 @@ List<_ShiftCreditEntry> _shiftCreditEntries(
       'transaction_ref',
       'payment_reference',
     ]);
-    final key = '$staffId|$amount|$reference';
+    final method = _text(row, ['payment_method', 'method']);
+    // Include a unique discriminator so two legitimate same-amount paid credits
+    // for the same staff are not collapsed into one.
+    final discriminator = _text(row, ['id', 'recorded_at', 'time']);
+    final key = '$staffId|$amount|$reference|$discriminator';
     if (!seen.add(key)) return;
     final staff = _shiftStaffById(staffMembers, staffId);
     entries.add(_ShiftCreditEntry(
@@ -2805,6 +2830,7 @@ List<_ShiftCreditEntry> _shiftCreditEntries(
       name: name.isEmpty ? staff?.name ?? '' : name,
       amount: amount,
       reference: reference.isEmpty ? null : reference,
+      paymentMethod: method.isEmpty ? null : method.toLowerCase(),
     ));
   }
 

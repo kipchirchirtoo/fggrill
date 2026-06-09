@@ -1253,13 +1253,28 @@ export const closeShift = async (
         const other_sales = hasTransactionEvidence ? transactionSummary.total_other : toNumber(other_revenue);
         const total_sales = hasTransactionEvidence ? transactionSummary.total_sales : toNumber(summary?.total_sales);
         const transaction_count = hasTransactionEvidence ? transactionSummary.transaction_count : toNumber(summary?.transaction_count);
-        const credit_paid_cash = toNumber(paid_bills_value);
         const cashDrops = toNumber(cash_deposited);
         const payouts = toNumber(req.body.payouts ?? req.body.paid_outs);
 
-        // Strict accounting formula: Expected = Opening Float + Cash Sales + Cash Received for Credit Payments - Cash Drops/Payouts
-        // NOTE: Only cash-affecting items count toward expected closing float
-        const expectedClosingFloat = toNumber(shift.opening_float) + cash_sales + credit_paid_cash - cashDrops - payouts;
+        // Paid credits settled this shift fold into the matching method tally:
+        // a staff settling via M-Pesa adds to M-Pesa sales, cash to cash, etc.
+        const paidBillsList: any[] = Array.isArray(paid_bills_details) ? paid_bills_details : [];
+        const paidCreditsByMethod = (method: string) => paidBillsList
+            .filter((b: any) => normalizePaymentMethod(b.payment_method) === method)
+            .reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
+        const cashPaidCredits = paidCreditsByMethod('cash');
+        const mpesaPaidCredits = paidCreditsByMethod('mpesa');
+        const cardPaidCredits = paidCreditsByMethod('card');
+        const paidCreditsTotal = cashPaidCredits + mpesaPaidCredits + cardPaidCredits;
+
+        const total_cash_sales_final = cash_sales + cashPaidCredits;
+        const total_mpesa_sales_final = mpesa_sales + mpesaPaidCredits;
+        const total_card_sales_final = card_sales + cardPaidCredits;
+        const total_sales_final = total_sales + paidCreditsTotal;
+
+        // Strict accounting formula: Expected = Opening Float + Cash Sales (incl.
+        // cash paid credits) - Cash Drops/Payouts. Only cash-affecting items count.
+        const expectedClosingFloat = toNumber(shift.opening_float) + total_cash_sales_final - cashDrops - payouts;
         const hasDeclaredClosingFloat = closing_float !== undefined
             && closing_float !== null
             && `${closing_float}`.trim() !== '';
@@ -1292,11 +1307,11 @@ export const closeShift = async (
                 closing_float: actualClosingFloat,
                 expected_closing_float: expectedClosingFloat,
                 variance,
-                // Payment method totals
-                total_cash_sales: cash_sales,
-                total_mpesa_sales: mpesa_sales,
-                total_card_sales: card_sales,
-                total_sales,
+                // Payment method totals (paid credits folded into each method)
+                total_cash_sales: total_cash_sales_final,
+                total_mpesa_sales: total_mpesa_sales_final,
+                total_card_sales: total_card_sales_final,
+                total_sales: total_sales_final,
                 transaction_count,
                 // Revenue by source
                 swimming_pool_revenue: swimming_pool_revenue || 0,
