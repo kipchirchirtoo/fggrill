@@ -93,6 +93,10 @@ class SuperAdminNavItem {
                 section: SuperAdminSection.reportTemplates,
                 label: 'Report Templates',
                 icon: PhosphorIcons.fileText()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.documentTemplates,
+                label: 'Document Templates',
+                icon: PhosphorIcons.notePencil()),
           ],
         ),
         SuperAdminNavGroup(
@@ -122,6 +126,10 @@ class SuperAdminNavItem {
                 section: SuperAdminSection.nonConsumablesCatalog,
                 label: 'Non-Consumables POS',
                 icon: PhosphorIcons.package()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.tillNumbers,
+                label: 'POS Till Numbers',
+                icon: PhosphorIcons.identificationCard()),
           ],
         ),
         SuperAdminNavGroup(

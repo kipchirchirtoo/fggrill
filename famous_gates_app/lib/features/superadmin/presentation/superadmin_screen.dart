@@ -24,6 +24,8 @@ import 'sections/non_consumables_catalog_section.dart';
 import 'sections/announcements_section.dart';
 import 'sections/emergency_controls_section.dart';
 import 'sections/data_override_section.dart';
+import 'sections/document_templates_section.dart';
+import 'sections/till_numbers_section.dart';
 
 // Admin sections reused in superadmin
 import '../../admin/presentation/sections/misc_admin_sections.dart';
@@ -106,9 +108,11 @@ class SuperAdminScreen extends ConsumerWidget {
       SuperAdminSection.paymentBillingSettings:
           const PaymentBillingSettingsSection(),
       SuperAdminSection.reportTemplates: const ReportTemplatesSection(),
+      SuperAdminSection.documentTemplates: const DocumentTemplatesSection(),
 
       // POS & Sales Setup
       SuperAdminSection.posConfiguration: const CashierStationSection(),
+      SuperAdminSection.tillNumbers: const TillNumbersSection(),
       SuperAdminSection.restaurantMenu: const RestaurantMenuAdminSection(),
       SuperAdminSection.barMenu: const BarMenuAdminSection(),
       SuperAdminSection.kyogongServices: const KyogongServicesAdminSection(),

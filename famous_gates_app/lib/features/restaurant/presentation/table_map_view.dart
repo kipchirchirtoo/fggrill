@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../services/print_service.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/domain/auth_notifier.dart';
@@ -13,6 +12,7 @@ import '../../kitchen/domain/models.dart';
 import '../../kitchen/domain/providers.dart';
 import '../../pos/domain/models.dart';
 import '../../pos/domain/pos_providers.dart';
+import '../../templates/data/document_printer.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
 import '../domain/providers.dart';
@@ -392,11 +392,16 @@ class _TableMapViewState extends ConsumerState<TableMapView>
         .toList();
 
     try {
-      await PrintService().printReceipt(
-        sale,
-        items,
-        branchName,
-        receiptType: 'PROFORMA BILL',
+      final user = ref.read(authNotifierProvider).valueOrNull;
+      await printCustomerDocument(
+        ref,
+        templateKey: 'customer_bill',
+        fallbackTitle: 'CUSTOMER BILL',
+        branchId: user?.branchId,
+        outletId: user?.outletId,
+        sale: sale,
+        items: items,
+        branchName: branchName,
         tableNumber:
             request.tableNumber.isNotEmpty ? request.tableNumber : null,
         roomNumber: request.roomNumber.isNotEmpty ? request.roomNumber : null,

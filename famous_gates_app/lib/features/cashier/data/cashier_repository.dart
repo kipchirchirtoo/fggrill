@@ -86,6 +86,19 @@ class CashierRepository {
     return rows;
   }
 
+  Future<List<Map<String, dynamic>>> getVoidedOrders({
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) {
+    return _getList('/cashier/unpaid-orders', query: {
+      'status': 'voided',
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      'page': page,
+      'limit': limit,
+    });
+  }
+
   Future<Map<String, dynamic>> createUnpaidBill(Map<String, dynamic> body) =>
       _postMap('/cashier/unpaid-bills', body);
 
@@ -287,11 +300,11 @@ class CashierRepository {
     int days = 7,
   }) async {
     try {
-      final res = await _pythonDio.get('/api/analytics/pos/insights',
-          queryParameters: {
-            if (branchId != null) 'branch_id': branchId,
-            'days': days,
-          });
+      final res =
+          await _pythonDio.get('/api/analytics/pos/insights', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
+        'days': days,
+      });
       return _asMap(res.data);
     } on DioException {
       return {};

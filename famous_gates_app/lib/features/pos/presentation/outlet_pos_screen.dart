@@ -6,8 +6,8 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/widgets/master_dashboard_shell.dart';
-import '../../../services/print_service.dart';
 import '../../auth/domain/auth_notifier.dart';
+import '../../templates/data/document_printer.dart';
 import '../data/outlet_pos_repository.dart';
 import '../domain/models.dart';
 
@@ -238,6 +238,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             icon: PhosphorIcons.receipt()),
       ],
       onSectionSelected: (section) => setState(() => _section = section),
+      initialSidebarCollapsed: true,
+      allowSidebarCollapse: true,
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (_) => _resetSessionTimeout(),
@@ -774,11 +776,16 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         .toList();
 
     try {
-      await PrintService().printReceipt(
-        sale,
-        receiptItems,
-        _outlet?.name ?? widget.title,
-        receiptType: 'ORDER PROFORMA BILL',
+      final user = ref.read(authNotifierProvider).valueOrNull;
+      await printCustomerDocument(
+        ref,
+        templateKey: 'customer_bill',
+        fallbackTitle: 'CUSTOMER BILL',
+        branchId: _outlet?.branchId?.toString() ?? user?.branchId,
+        outletId: _outlet?.id,
+        sale: sale,
+        items: receiptItems,
+        branchName: _outlet?.name ?? widget.title,
         tableNumber: _isRestaurant && _orderType == 'dine_in'
             ? _tableController.text.trim()
             : null,
@@ -1314,8 +1321,7 @@ class _CategoryTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background =
-        selected ? _PosPalette.accent : _PosPalette.surfaceAlt;
+    final background = selected ? _PosPalette.accent : _PosPalette.surfaceAlt;
     final foreground = selected ? _PosPalette.onAccent : _PosPalette.text;
     return Material(
       color: background,

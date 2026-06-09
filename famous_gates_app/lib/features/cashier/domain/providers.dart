@@ -67,6 +67,13 @@ final cashierUnpaidBillsProvider = FutureProvider.autoDispose
       );
 });
 
+final cashierVoidedOrdersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, CashierBillFilters>((ref, filters) {
+  return ref.watch(cashierRepositoryProvider).getVoidedOrders(
+        search: filters.search,
+      );
+});
+
 final cashierCreditBillsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, CashierBillFilters>((ref, filters) {
   return ref.watch(cashierRepositoryProvider).getCreditBills(
@@ -115,5 +122,7 @@ final cashierInsightsProvider =
   // reflects this cashier's branch rather than the whole estate.
   final shift = await ref.watch(cashierCurrentShiftProvider.future);
   final branchId = (shift['branch_id'] as num?)?.toInt();
-  return ref.watch(cashierRepositoryProvider).getPosInsights(branchId: branchId);
+  return ref
+      .watch(cashierRepositoryProvider)
+      .getPosInsights(branchId: branchId);
 });

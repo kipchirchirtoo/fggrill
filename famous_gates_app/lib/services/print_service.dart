@@ -15,13 +15,14 @@ class PrintService {
     SaleResult sale,
     List<CartItem> items,
     String branchName, {
-    String receiptType = 'CASH RECEIPT',
+    String receiptType = 'CUSTOMER RECEIPT',
     String? tableNumber,
     String? roomNumber,
     String? customerName,
     String? staffLabel,
     String? publicCode,
     String? barcodeValue,
+    String? tillNumber,
   }) async {
     final doc = pw.Document();
     final money = NumberFormat('#,##0.00', 'en_KE');
@@ -72,6 +73,10 @@ class PrintService {
               pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 8)),
               pw.Text('Tel: $companyPhone',
                   style: const pw.TextStyle(fontSize: 8)),
+              if (tillNumber != null && tillNumber.trim().isNotEmpty)
+                pw.Text('Till No: ${tillNumber.trim()}',
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 9)),
               pw.SizedBox(height: 4),
               pw.Text(receiptType.toUpperCase(),
                   style: pw.TextStyle(
@@ -229,8 +234,8 @@ class PrintService {
   }) async {
     final doc = pw.Document();
     final money = NumberFormat('#,##0.00', 'en_KE');
-    final dateStr =
-        DateFormat('MM/dd/yyyy, hh:mm:ss a').format(createdAt ?? DateTime.now());
+    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(createdAt ?? DateTime.now());
     final code = (creditNumber ?? '').trim();
 
     pw.MemoryImage? logoImage;
@@ -264,8 +269,8 @@ class PrintService {
                       height: 24 * PdfPageFormat.mm),
                 ),
               pw.Text(companyName,
-                  style:
-                      pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 14)),
               pw.SizedBox(height: 2),
               pw.Text(branchName.isEmpty ? companyAddress : branchName,
                   style: const pw.TextStyle(fontSize: 8)),
@@ -273,15 +278,16 @@ class PrintService {
                   style: const pw.TextStyle(fontSize: 8)),
               pw.SizedBox(height: 4),
               pw.Text('STAFF CREDIT BILL',
-                  style:
-                      pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 12)),
               pw.SizedBox(height: 4),
               if (code.isNotEmpty) ...[
                 pw.Container(
                   width: double.infinity,
                   padding:
                       const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                  decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
+                  decoration:
+                      pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
                   child: pw.Column(children: [
                     pw.Text('CREDIT BILL CODE',
                         style: pw.TextStyle(
@@ -350,17 +356,19 @@ class PrintService {
                 _dashedLine(context),
                 pw.SizedBox(height: 4),
               ],
-              pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                pw.Expanded(
-                  child: pw.Text('CREDIT AMOUNT:',
-                      style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                ),
-                pw.SizedBox(width: 6),
-                pw.Text('KES ${money.format(amount)}',
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 11)),
-              ]),
+              pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(
+                      child: pw.Text('CREDIT AMOUNT:',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    ),
+                    pw.SizedBox(width: 6),
+                    pw.Text('KES ${money.format(amount)}',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  ]),
               pw.SizedBox(height: 6),
               // Settlement notice — the credit-bill flow.
               pw.Container(
@@ -396,8 +404,172 @@ class PrintService {
                 ]),
               pw.SizedBox(height: 6),
               pw.Text('System managed and made by Hirall',
-                  style:
-                      pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                  style: pw.TextStyle(
+                      fontSize: 7, fontWeight: pw.FontWeight.bold)),
+              pw.Text('+254 710 944 249 | admin@hirall.com',
+                  style: const pw.TextStyle(fontSize: 6)),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save());
+  }
+
+  Future<void> printVoidOrderReceipt({
+    required String branchName,
+    required String orderNumber,
+    required List<CartItem> items,
+    required num total,
+    String? publicCode,
+    String? customerName,
+    String? stationName,
+    String? waiterName,
+    String? voidReason,
+    String? printedBy,
+    DateTime? voidedAt,
+  }) async {
+    final doc = pw.Document();
+    final money = NumberFormat('#,##0.00', 'en_KE');
+    final dateStr =
+        DateFormat('MM/dd/yyyy, hh:mm:ss a').format(voidedAt ?? DateTime.now());
+
+    pw.MemoryImage? logoImage;
+    try {
+      final logoBytes =
+          await rootBundle.load('assets/frontend_public/fglogo.png');
+      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+    } catch (_) {}
+
+    const receiptFormat = PdfPageFormat(
+      80 * PdfPageFormat.mm,
+      double.infinity,
+      marginLeft: 5 * PdfPageFormat.mm,
+      marginRight: 5 * PdfPageFormat.mm,
+      marginTop: 5 * PdfPageFormat.mm,
+      marginBottom: 5 * PdfPageFormat.mm,
+    );
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: receiptFormat,
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              if (logoImage != null)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 4),
+                  child: pw.Image(logoImage,
+                      width: 24 * PdfPageFormat.mm,
+                      height: 24 * PdfPageFormat.mm),
+                ),
+              pw.Text(companyName,
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.SizedBox(height: 2),
+              pw.Text(branchName.isEmpty ? companyAddress : branchName,
+                  style: const pw.TextStyle(fontSize: 8)),
+              pw.Text('Tel: $companyPhone',
+                  style: const pw.TextStyle(fontSize: 8)),
+              pw.SizedBox(height: 4),
+              pw.Text('VOIDED CAPTAIN ORDER',
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 12)),
+              pw.SizedBox(height: 4),
+              if ((publicCode ?? '').trim().isNotEmpty) ...[
+                pw.Container(
+                  width: double.infinity,
+                  padding:
+                      const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                  decoration:
+                      pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
+                  child: pw.Column(children: [
+                    pw.Text('ORDER CODE',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                    pw.SizedBox(height: 2),
+                    pw.Text(publicCode!.trim().toUpperCase(),
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 18)),
+                  ]),
+                ),
+                pw.SizedBox(height: 4),
+              ],
+              _dashedLine(context),
+              pw.SizedBox(height: 4),
+              _infoRow('Order #:', orderNumber),
+              _infoRow('Voided:', dateStr),
+              if ((stationName ?? '').trim().isNotEmpty)
+                _infoRow('Station:', stationName!.trim()),
+              if ((customerName ?? '').trim().isNotEmpty)
+                _infoRow('Customer:', customerName!.trim()),
+              if ((waiterName ?? '').trim().isNotEmpty)
+                _infoRow('Waiter:', waiterName!.trim()),
+              if ((printedBy ?? '').trim().isNotEmpty)
+                _infoRow('Printed by:', printedBy!.trim()),
+              pw.SizedBox(height: 4),
+              _dashedLine(context),
+              pw.SizedBox(height: 4),
+              ...items.map((item) => pw.Padding(
+                    padding: const pw.EdgeInsets.only(bottom: 1),
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Expanded(
+                          child: pw.Text('${item.qty}x ${item.name}',
+                              maxLines: 2,
+                              style: const pw.TextStyle(fontSize: 8)),
+                        ),
+                        pw.SizedBox(width: 6),
+                        pw.Text('KES ${money.format(item.lineTotal)}',
+                            style: const pw.TextStyle(fontSize: 8)),
+                      ],
+                    ),
+                  )),
+              pw.SizedBox(height: 4),
+              _dashedLine(context),
+              pw.SizedBox(height: 4),
+              _totalRow('VOIDED VALUE', 'KES ${money.format(total)}', 11),
+              pw.SizedBox(height: 6),
+              pw.Container(
+                width: double.infinity,
+                padding:
+                    const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
+                decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('NOT PAYABLE - NOT AN UNPAID BILL',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    if ((voidReason ?? '').trim().isNotEmpty) ...[
+                      pw.SizedBox(height: 2),
+                      pw.Text('Reason: ${voidReason!.trim()}',
+                          style: const pw.TextStyle(fontSize: 8)),
+                    ],
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              if ((publicCode ?? '').trim().isNotEmpty)
+                pw.Column(children: [
+                  pw.BarcodeWidget(
+                    data: publicCode!.trim().toUpperCase(),
+                    barcode: pw.Barcode.code128(),
+                    width: 60 * PdfPageFormat.mm,
+                    height: 28,
+                    drawText: false,
+                  ),
+                  pw.Text(publicCode.trim().toUpperCase(),
+                      style: const pw.TextStyle(fontSize: 7)),
+                ]),
+              pw.SizedBox(height: 6),
+              pw.Text('System managed and made by Hirall',
+                  style: pw.TextStyle(
+                      fontSize: 7, fontWeight: pw.FontWeight.bold)),
               pw.Text('+254 710 944 249 | admin@hirall.com',
                   style: const pw.TextStyle(fontSize: 6)),
             ],

@@ -24,9 +24,11 @@ enum SuperAdminSection {
   rates,
   paymentBillingSettings,
   reportTemplates,
+  documentTemplates,
 
   // POS & Sales Setup
   posConfiguration,
+  tillNumbers,
   restaurantMenu,
   barMenu,
   kyogongServices,

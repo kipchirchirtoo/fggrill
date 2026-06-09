@@ -44,7 +44,7 @@ class ShellPalette {
   final Color? mutedText;
 }
 
-class MasterDashboardShell<T> extends ConsumerWidget {
+class MasterDashboardShell<T> extends ConsumerStatefulWidget {
   const MasterDashboardShell({
     super.key,
     required this.title,
@@ -57,6 +57,8 @@ class MasterDashboardShell<T> extends ConsumerWidget {
     this.breadcrumbRoot,
     this.searchHint = 'Search...',
     this.palette,
+    this.initialSidebarCollapsed = false,
+    this.allowSidebarCollapse = false,
   });
 
   final String title;
@@ -69,38 +71,69 @@ class MasterDashboardShell<T> extends ConsumerWidget {
   final ValueChanged<T> onSectionSelected;
   final Widget child;
   final ShellPalette? palette;
+  final bool initialSidebarCollapsed;
+  final bool allowSidebarCollapse;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MasterDashboardShell<T>> createState() =>
+      _MasterDashboardShellState<T>();
+}
+
+class _MasterDashboardShellState<T>
+    extends ConsumerState<MasterDashboardShell<T>> {
+  late bool _sidebarCollapsed;
+
+  @override
+  void initState() {
+    super.initState();
+    _sidebarCollapsed = widget.initialSidebarCollapsed;
+  }
+
+  @override
+  void didUpdateWidget(covariant MasterDashboardShell<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSidebarCollapsed != widget.initialSidebarCollapsed &&
+        _sidebarCollapsed == oldWidget.initialSidebarCollapsed) {
+      _sidebarCollapsed = widget.initialSidebarCollapsed;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isMobile = width < 768;
     final isTablet = width >= 768 && width < 1024;
-    final navWidth = isMobile ? 0.0 : (isTablet ? 64.0 : 240.0);
+    final isCollapsed = isTablet || _sidebarCollapsed;
+    final navWidth = isMobile ? 0.0 : (isCollapsed ? 72.0 : 240.0);
 
     return Scaffold(
-      backgroundColor: palette?.background ?? AppColors.kSurface,
+      backgroundColor: widget.palette?.background ?? AppColors.kSurface,
       body: Row(
         children: [
           if (!isMobile)
             _MasterSideNav<T>(
               width: navWidth,
-              isCollapsed: isTablet,
-              title: title,
-              subtitle: subtitle,
-              initials: initials,
-              currentSection: currentSection,
-              items: items,
-              onSectionSelected: onSectionSelected,
-              palette: palette,
+              isCollapsed: isCollapsed,
+              canToggle: widget.allowSidebarCollapse && !isTablet,
+              onToggleCollapsed: widget.allowSidebarCollapse
+                  ? () => setState(() => _sidebarCollapsed = !_sidebarCollapsed)
+                  : null,
+              title: widget.title,
+              subtitle: widget.subtitle,
+              initials: widget.initials,
+              currentSection: widget.currentSection,
+              items: widget.items,
+              onSectionSelected: widget.onSectionSelected,
+              palette: widget.palette,
             ),
           Expanded(
             child: Column(
               children: [
                 _MasterTopBar(
-                  title: title,
-                  breadcrumbRoot: breadcrumbRoot ?? title,
-                  searchHint: searchHint,
-                  palette: palette,
+                  title: widget.title,
+                  breadcrumbRoot: widget.breadcrumbRoot ?? widget.title,
+                  searchHint: widget.searchHint,
+                  palette: widget.palette,
                   onMenuTap:
                       isMobile ? () => _showMobileNav(context, ref) : null,
                 ),
@@ -116,7 +149,7 @@ class MasterDashboardShell<T> extends ConsumerWidget {
                         ],
                       );
                     },
-                    child: child,
+                    child: widget.child,
                   ),
                 ),
               ],
@@ -126,9 +159,9 @@ class MasterDashboardShell<T> extends ConsumerWidget {
       ),
       bottomNavigationBar: isMobile
           ? _MasterBottomNav<T>(
-              currentSection: currentSection,
-              items: items.take(5).toList(),
-              onSectionSelected: onSectionSelected,
+              currentSection: widget.currentSection,
+              items: widget.items.take(5).toList(),
+              onSectionSelected: widget.onSectionSelected,
             )
           : null,
     );
@@ -139,10 +172,10 @@ class MasterDashboardShell<T> extends ConsumerWidget {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _MasterMobileNavSheet<T>(
-        title: title,
-        currentSection: currentSection,
-        items: items,
-        onSectionSelected: onSectionSelected,
+        title: widget.title,
+        currentSection: widget.currentSection,
+        items: widget.items,
+        onSectionSelected: widget.onSectionSelected,
       ),
     );
   }
@@ -152,6 +185,7 @@ class _MasterSideNav<T> extends ConsumerWidget {
   const _MasterSideNav({
     required this.width,
     required this.isCollapsed,
+    required this.canToggle,
     required this.title,
     required this.subtitle,
     required this.initials,
@@ -159,10 +193,12 @@ class _MasterSideNav<T> extends ConsumerWidget {
     required this.items,
     required this.onSectionSelected,
     this.palette,
+    this.onToggleCollapsed,
   });
 
   final double width;
   final bool isCollapsed;
+  final bool canToggle;
   final String title;
   final String subtitle;
   final String initials;
@@ -170,112 +206,149 @@ class _MasterSideNav<T> extends ConsumerWidget {
   final List<MasterNavItem<T>> items;
   final ValueChanged<T> onSectionSelected;
   final ShellPalette? palette;
+  final VoidCallback? onToggleCollapsed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
+    final borderColor = palette?.border ?? Colors.grey.shade200;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
       width: width,
-      color: palette?.surface ?? Colors.white,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: isCollapsed
-                ? _Logo(initials: initials)
-                : Row(
-                    children: [
-                      _Logo(initials: initials),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+      decoration: BoxDecoration(
+        color: palette?.surface ?? Colors.white,
+        border: Border(right: BorderSide(color: borderColor)),
+      ),
+      child: SafeArea(
+        right: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                isCollapsed ? 10 : 18,
+                18,
+                isCollapsed ? 10 : 12,
+                14,
+              ),
+              child: isCollapsed
+                  ? Column(
+                      children: [
+                        _Logo(initials: initials),
+                        if (canToggle) ...[
+                          const SizedBox(height: 12),
+                          IconButton.outlined(
+                            tooltip: 'Expand sidebar',
+                            onPressed: onToggleCollapsed,
+                            icon: const Icon(Icons.keyboard_double_arrow_right,
+                                size: 20),
+                          ),
+                        ],
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        _Logo(initials: initials),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            Text(
-                              subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
+                              Text(
+                                subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final previousGroup =
-                    index == 0 ? null : items[index - 1].group;
-                final showGroup = item.group != null &&
-                    item.group != previousGroup &&
-                    !isCollapsed;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (showGroup)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 14, 16, 6),
-                        child: Text(
-                          item.group!,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                            color: Colors.grey.shade500,
+                            ],
                           ),
                         ),
-                      ),
-                    _NavTile<T>(
-                      item: item,
-                      isActive: item.section == currentSection,
-                      isCollapsed: isCollapsed,
-                      onTap: () => onSectionSelected(item.section),
-                      palette: palette,
+                        if (canToggle)
+                          IconButton(
+                            tooltip: 'Collapse sidebar',
+                            onPressed: onToggleCollapsed,
+                            icon: const Icon(
+                              Icons.keyboard_double_arrow_left,
+                              size: 20,
+                            ),
+                          ),
+                      ],
                     ),
-                  ],
-                );
-              },
             ),
-          ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: isCollapsed
-                ? IconButton(
-                    tooltip: 'Logout',
-                    onPressed: () =>
-                        ref.read(authNotifierProvider.notifier).logout(),
-                    icon: Icon(PhosphorIcons.signOut(),
-                        color: Colors.grey.shade600),
-                  )
-                : OutlinedButton.icon(
-                    onPressed: () =>
-                        ref.read(authNotifierProvider.notifier).logout(),
-                    icon: Icon(PhosphorIcons.signOut(), size: 18),
-                    label: const Text('Logout'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 44),
+            Divider(height: 1, color: borderColor),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final item = items[index];
+                  final previousGroup =
+                      index == 0 ? null : items[index - 1].group;
+                  final showGroup = item.group != null &&
+                      item.group != previousGroup &&
+                      !isCollapsed;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showGroup)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 14, 16, 6),
+                          child: Text(
+                            item.group!,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ),
+                      _NavTile<T>(
+                        item: item,
+                        isActive: item.section == currentSection,
+                        isCollapsed: isCollapsed,
+                        onTap: () => onSectionSelected(item.section),
+                        palette: palette,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            Divider(height: 1, color: borderColor),
+            Padding(
+              padding: EdgeInsets.all(isCollapsed ? 10 : 16),
+              child: isCollapsed
+                  ? IconButton(
+                      tooltip: 'Logout',
+                      onPressed: () =>
+                          ref.read(authNotifierProvider.notifier).logout(),
+                      icon: Icon(PhosphorIcons.signOut(),
+                          color: palette?.mutedText ?? Colors.grey.shade600),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: () =>
+                          ref.read(authNotifierProvider.notifier).logout(),
+                      icon: Icon(PhosphorIcons.signOut(), size: 18),
+                      label: const Text('Logout'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 44),
+                      ),
                     ),
-                  ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -300,21 +373,19 @@ class _NavTile<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = palette?.accent ?? AppColors.kPrimary;
     final idle = palette?.mutedText ?? Colors.grey.shade600;
-    return Padding(
+    final tile = Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: isCollapsed ? 8 : 12,
-        vertical: 2,
+        horizontal: isCollapsed ? 10 : 12,
+        vertical: 3,
       ),
       child: Material(
-        color: isActive
-            ? accent.withValues(alpha: 0.12)
-            : Colors.transparent,
+        color: isActive ? accent.withValues(alpha: 0.12) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            height: 44,
+            height: 48,
             padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 0 : 12),
             child: Row(
               mainAxisAlignment: isCollapsed
@@ -323,7 +394,7 @@ class _NavTile<T> extends StatelessWidget {
               children: [
                 Icon(
                   item.icon,
-                  size: 20,
+                  size: 21,
                   color: isActive ? accent : idle,
                 ),
                 if (!isCollapsed) ...[
@@ -336,7 +407,7 @@ class _NavTile<T> extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight:
-                            isActive ? FontWeight.w600 : FontWeight.w500,
+                            isActive ? FontWeight.w700 : FontWeight.w500,
                         color: isActive
                             ? accent
                             : (palette?.text ?? Colors.grey.shade700),
@@ -350,6 +421,8 @@ class _NavTile<T> extends StatelessWidget {
         ),
       ),
     );
+    if (!isCollapsed) return tile;
+    return Tooltip(message: item.label, child: tile);
   }
 }
 

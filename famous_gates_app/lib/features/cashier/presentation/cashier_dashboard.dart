@@ -9,10 +9,20 @@ import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../services/print_service.dart';
 import '../../pos/domain/models.dart';
+import '../../templates/data/document_printer.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
 
-enum CashierTab { station, pos, bills, credit, shifts, barcode, insights }
+enum CashierTab {
+  station,
+  pos,
+  bills,
+  voided,
+  credit,
+  shifts,
+  barcode,
+  insights
+}
 
 class CashierDashboard extends ConsumerStatefulWidget {
   const CashierDashboard({
@@ -39,6 +49,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   static const _visibleTabs = [
     CashierTab.station,
     CashierTab.bills,
+    CashierTab.voided,
     CashierTab.credit,
     CashierTab.shifts,
     CashierTab.barcode,
@@ -67,6 +78,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         label: 'Unpaid Bills',
         icon: Icons.receipt_long,
         content: _RequiresOpenShift(child: _UnpaidBillsTab()),
+      ),
+      const DashboardTab(
+        label: 'Voided Orders',
+        icon: Icons.block,
+        content: _RequiresOpenShift(child: _VoidedOrdersTab()),
       ),
       const DashboardTab(
         label: 'Paid Credits',
@@ -175,7 +191,8 @@ class _RequiresOpenShift extends ConsumerWidget {
 }
 
 class _StationTab extends ConsumerStatefulWidget {
-  const _StationTab({this.initialBillRef, this.initialAmount, this.initialMethod});
+  const _StationTab(
+      {this.initialBillRef, this.initialAmount, this.initialMethod});
 
   final String? initialBillRef;
   final String? initialAmount;
@@ -196,8 +213,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   /// Cash handed over by the customer (for computing change).
   num get _tendered => num.tryParse(_tenderedController.text.trim()) ?? 0;
   num get _amountDue => num.tryParse(_amountController.text.trim()) ?? 0;
-  num get _changeDue =>
-      _tendered > _amountDue ? _tendered - _amountDue : 0;
+  num get _changeDue => _tendered > _amountDue ? _tendered - _amountDue : 0;
   bool _loading = false;
   Map<String, dynamic>? _bill;
   List<Map<String, dynamic>> _mpesaMatches = const [];
@@ -875,8 +891,16 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final receiptItems = _receiptItemsFromBill(bill, amount);
       final nav = ref.read(dashboardNavProvider);
       final methodLabel = _receiptMethodLabel(method);
-      await PrintService().printReceipt(
-        SaleResult(
+      final outletId = _text(bill, ['outlet_id', 'outletId']).isNotEmpty
+          ? _text(bill, ['outlet_id', 'outletId'])
+          : nav.user?.outletId;
+      await printCustomerDocument(
+        ref,
+        templateKey: 'customer_receipt',
+        fallbackTitle: 'CUSTOMER RECEIPT',
+        branchId: nav.user?.branchId,
+        outletId: outletId,
+        sale: SaleResult(
           transactionId:
               reference.isEmpty ? DateTime.now().toString() : reference,
           createdAt: DateTime.now(),
@@ -885,11 +909,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
           total: amount.toDouble(),
           paymentMethod: methodLabel,
         ),
-        receiptItems,
-        nav.branchName,
-        receiptType: changeGiven > 0
-            ? '$methodLabel RECEIPT · CHANGE ${_money(changeGiven)}'
-            : '$methodLabel RECEIPT',
+        items: receiptItems,
+        branchName: nav.branchName,
         customerName: _customerName(bill),
         publicCode: _lookupController.text.trim(),
       );
@@ -1299,8 +1320,26 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
         'short_code',
         'id',
       ]);
-      await PrintService().printReceipt(
-        SaleResult(
+      final receiptItems = items
+          .map(
+            (item) => CartItem(
+              productId: _text(item, ['product_id', 'id']),
+              name: _text(item, ['name', 'item_name']),
+              unitPrice: _num(item['unit_price']).toDouble(),
+              qty: (_num(item['qty'] ?? item['quantity'])).round(),
+            ),
+          )
+          .toList();
+      final outletId = _text(transaction, ['outlet_id', 'outletId']).isNotEmpty
+          ? _text(transaction, ['outlet_id', 'outletId'])
+          : nav.user?.outletId;
+      await printCustomerDocument(
+        ref,
+        templateKey: 'customer_receipt',
+        fallbackTitle: 'CUSTOMER RECEIPT',
+        branchId: nav.user?.branchId,
+        outletId: outletId,
+        sale: SaleResult(
           transactionId: _text(transaction, ['id', 'transaction_id']),
           createdAt: DateTime.now(),
           receiptNumber: reference.isEmpty ? null : reference,
@@ -1308,18 +1347,8 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
           total: total.toDouble(),
           paymentMethod: methodLabel,
         ),
-        items
-            .map(
-              (item) => CartItem(
-                productId: _text(item, ['product_id', 'id']),
-                name: _text(item, ['name', 'item_name']),
-                unitPrice: _num(item['unit_price']).toDouble(),
-                qty: (_num(item['qty'] ?? item['quantity'])).round(),
-              ),
-            )
-            .toList(),
-        nav.branchName,
-        receiptType: '$methodLabel RECEIPT',
+        items: receiptItems,
+        branchName: nav.branchName,
         customerName: _customerController.text.trim().isEmpty
             ? null
             : _customerController.text.trim(),
@@ -1374,7 +1403,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
     );
   }
 
-
   Future<void> _recordPayment(Map<String, dynamic> row) async {
     final staff = await ref
         .read(cashierRepositoryProvider)
@@ -1410,8 +1438,8 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
             // markWaiterOrderPaid creates the staff credit bill (for the
             // selected staff_id), marks the order credit_bill, and records the
             // shift sale in one call.
-            created = _payload(await repo.clearWaiterOrder(
-                source, _text(row, ['id']), {
+            created = _payload(
+                await repo.clearWaiterOrder(source, _text(row, ['id']), {
               'payment_method': 'credit_bill',
               'payment_amount': amt,
               'payment_reference': reference,
@@ -1484,8 +1512,8 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           await _printCashierBillReceipt(
             ref: ref,
             bill: row,
-            amount: nonCredit.fold<num>(
-                0, (s, p) => s + _num(p['payment_amount'])),
+            amount:
+                nonCredit.fold<num>(0, (s, p) => s + _num(p['payment_amount'])),
             method: nonCredit.length == 1
                 ? _text(nonCredit.first, ['payment_method'])
                 : 'split',
@@ -1502,8 +1530,8 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       ref.invalidate(cashierCreditBillsProvider);
       ref.invalidate(cashierShiftsProvider);
       ref.invalidate(cashierCurrentShiftProvider);
-      final hasCredit = payments
-          .any((p) => _text(p, ['payment_method']) == 'credit_bill');
+      final hasCredit =
+          payments.any((p) => _text(p, ['payment_method']) == 'credit_bill');
       _snack(changeGiven > 0
           ? 'Payment recorded · Give change ${_money(changeGiven)}'
           : hasCredit
@@ -1513,6 +1541,85 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
                   : 'Payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    AppNotifier.show(context, message);
+  }
+}
+
+class _VoidedOrdersTab extends ConsumerStatefulWidget {
+  const _VoidedOrdersTab();
+
+  @override
+  ConsumerState<_VoidedOrdersTab> createState() => _VoidedOrdersTabState();
+}
+
+class _VoidedOrdersTabState extends ConsumerState<_VoidedOrdersTab> {
+  String _search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filters = CashierBillFilters(status: 'voided', search: _search);
+    final orders = ref.watch(cashierVoidedOrdersProvider(filters));
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Voided Orders',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  onChanged: (value) => setState(() => _search = value),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    labelText: 'Search voided orders',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          orders.when(
+            data: (rows) => _BillList(
+              rows: rows,
+              emptyMessage: 'No voided captain orders',
+              onPrint: _printVoidedOrder,
+            ),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(message: apiErrorMessage(error)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _printVoidedOrder(Map<String, dynamic> row) async {
+    try {
+      final nav = ref.read(dashboardNavProvider);
+      await PrintService().printVoidOrderReceipt(
+        branchName: nav.branchName,
+        orderNumber: _text(row, ['order_number', 'bill_number', 'id']),
+        publicCode: _text(row, ['short_code']),
+        customerName: _customerName(row),
+        stationName: _text(row, ['station_name', 'outlet_name', 'location']),
+        waiterName: _text(row, ['waiter_name']),
+        voidReason: _text(row, ['void_reason']),
+        voidedAt: DateTime.tryParse('${row['voided_at'] ?? ''}'),
+        printedBy: nav.user?.name,
+        items: _receiptItemsFromBill(row, _num(row['total_amount'])),
+        total: _num(row['total_amount']),
+      );
+    } catch (error) {
+      _snack('Void order print failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -1580,8 +1687,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Paid Credits',
-              style: Theme.of(context).textTheme.titleLarge),
+          Text('Paid Credits', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 6),
           const Text(
             'Record money a staff member pays toward their credit (cash, M-Pesa '
@@ -1632,7 +1738,8 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
                 ]),
               )
             else if (_staffOptions.isEmpty)
-              const Text('No branch staff loaded — cannot record a paid credit.',
+              const Text(
+                  'No branch staff loaded — cannot record a paid credit.',
                   style: TextStyle(color: AppColors.kTextSecondary))
             else
               _StaffSearchField(
@@ -1678,8 +1785,8 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
             Row(
               children: [
                 const Text('Method:',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 13)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(width: 12),
                 for (final m in _methods)
                   Padding(
@@ -1755,11 +1862,10 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
       width: 200,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: strong
-            ? AppColors.kPrimary.withValues(alpha: 0.08)
-            : Colors.white,
-        border: Border.all(
-            color: strong ? AppColors.kPrimary : AppColors.kDivider),
+        color:
+            strong ? AppColors.kPrimary.withValues(alpha: 0.08) : Colors.white,
+        border:
+            Border.all(color: strong ? AppColors.kPrimary : AppColors.kDivider),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -1794,8 +1900,7 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
           if (reference.isNotEmpty) 'Ref: $reference',
         ].join('  ·  ')),
         trailing: Text(_money(row['amount']),
-            style: const TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 15)),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
       ),
     );
   }
@@ -1958,8 +2063,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                   const SizedBox(height: 4),
                                   for (final c in _creditBillDetails(row))
                                     Padding(
-                                      padding:
-                                          const EdgeInsets.symmetric(vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 2),
                                       child: Row(
                                         children: [
                                           const Icon(Icons.badge_outlined,
@@ -2203,7 +2308,8 @@ class _StaffSearchFieldState extends State<_StaffSearchField> {
       }
     }
     return Autocomplete<_ShiftStaffMember>(
-      initialValue: TextEditingValue(text: initial != null ? _label(initial) : ''),
+      initialValue:
+          TextEditingValue(text: initial != null ? _label(initial) : ''),
       displayStringForOption: _label,
       optionsBuilder: (value) {
         final q = value.text.trim().toLowerCase();
@@ -3348,7 +3454,8 @@ class _CurrentShiftBanner extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.kPrimary.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.kPrimary.withValues(alpha: 0.2)),
+            border:
+                Border.all(color: AppColors.kPrimary.withValues(alpha: 0.2)),
           ),
           child: Row(children: [
             const Icon(Icons.point_of_sale,
@@ -3415,8 +3522,8 @@ class _PosInsights extends StatelessWidget {
 
     String peakHour() {
       if (heatmap.isEmpty) return '—';
-      final peak = heatmap.reduce(
-          (a, b) => _num(a['count']) >= _num(b['count']) ? a : b);
+      final peak = heatmap
+          .reduce((a, b) => _num(a['count']) >= _num(b['count']) ? a : b);
       final hour = _num(peak['hour']).toInt();
       return '${hour.toString().padLeft(2, '0')}:00';
     }
@@ -3478,8 +3585,8 @@ class _PosInsights extends StatelessWidget {
                 size: 16, color: AppColors.kTextSecondary),
             const SizedBox(width: 6),
             Text('Peak hour: ${peakHour()}',
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600)),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           ]),
       ],
     );
@@ -3565,6 +3672,7 @@ class _BillList extends StatelessWidget {
     required this.rows,
     required this.emptyMessage,
     this.onPay,
+    this.onPrint,
   });
 
   final List<Map<String, dynamic>> rows;
@@ -3573,6 +3681,7 @@ class _BillList extends StatelessWidget {
   /// When null, no payment action is shown (e.g. credit bills are settled by
   /// the branch accountant, not the cashier).
   final ValueChanged<Map<String, dynamic>>? onPay;
+  final ValueChanged<Map<String, dynamic>>? onPrint;
 
   @override
   Widget build(BuildContext context) {
@@ -3601,8 +3710,7 @@ class _BillList extends StatelessWidget {
               'id'
             ])),
             subtitle: Builder(builder: (context) {
-              final customer =
-                  _text(row, ['customer_name', 'guest_name']);
+              final customer = _text(row, ['customer_name', 'guest_name']);
               final isWalkIn =
                   customer.isEmpty || customer.toLowerCase().contains('walk');
               final notPaid = _num(row['paid_amount']) <= 0 &&
@@ -3638,6 +3746,9 @@ class _BillList extends StatelessWidget {
                 'Total': _money(row['total_amount'] ?? row['amount']),
                 'Paid': _money(row['paid_amount'] ?? row['amount_paid']),
                 'Balance': _money(row['balance_amount'] ?? row['balance']),
+                'Station': _text(row, ['station_name', 'outlet_name']),
+                'Void reason': _text(row, ['void_reason']),
+                'Voided at': _date(row['voided_at']),
                 'Due': _date(row['due_date']),
               }),
               if (items.isNotEmpty) ...[
@@ -3663,16 +3774,23 @@ class _BillList extends StatelessWidget {
                   ),
               ],
               const SizedBox(height: 8),
-              if (onPay != null)
+              if (onPay != null || onPrint != null)
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: () => onPay!(row),
-                      icon: const Icon(Icons.payments, size: 16),
-                      label: const Text('Confirm Payment'),
-                    ),
+                    if (onPay != null)
+                      OutlinedButton.icon(
+                        onPressed: () => onPay!(row),
+                        icon: const Icon(Icons.payments, size: 16),
+                        label: const Text('Confirm Payment'),
+                      ),
+                    if (onPrint != null)
+                      OutlinedButton.icon(
+                        onPressed: () => onPrint!(row),
+                        icon: const Icon(Icons.print, size: 16),
+                        label: const Text('Print Void Order'),
+                      ),
                   ],
                 ),
             ],
@@ -3862,9 +3980,8 @@ class _AsyncStatCard extends StatelessWidget {
         num amount = base;
         if (paidMethod != null) {
           final status = _shiftStatus(s);
-          final isOpen = status == 'open' ||
-              status == 'pending_open' ||
-              status.isEmpty;
+          final isOpen =
+              status == 'open' || status == 'pending_open' || status.isEmpty;
           if (isOpen) {
             amount += _shiftPaidCredits(s)[paidMethod] ?? 0;
           }
@@ -3948,10 +4065,10 @@ Future<Map<String, dynamic>?> _paymentPayload(
         final cashTendered = lines
             .where((line) => line.method == 'cash')
             .fold<num>(0, (sum, line) => sum + line.amount);
-        final overpay = amount > 0 && allocated > amount ? allocated - amount : 0;
-        final changeDue = overpay > 0 && overpay <= cashTendered + 0.001
-            ? overpay
-            : 0;
+        final overpay =
+            amount > 0 && allocated > amount ? allocated - amount : 0;
+        final changeDue =
+            overpay > 0 && overpay <= cashTendered + 0.001 ? overpay : 0;
         final overpaidByNonCash = overpay > 0 && overpay > cashTendered + 0.001;
 
         void addLine() {
@@ -3970,8 +4087,8 @@ Future<Map<String, dynamic>?> _paymentPayload(
                 line.staffId.trim().isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                    content: Text(
-                        'Select the staff member for the credit bill')),
+                    content:
+                        Text('Select the staff member for the credit bill')),
               );
               return null;
             }
@@ -4034,8 +4151,8 @@ Future<Map<String, dynamic>?> _paymentPayload(
             if (amountTendered > 0) 'amount_tendered': amountTendered,
           };
           if (applied.length == 1) return {...applied.first, ...extras};
-          final appliedTotal = applied.fold<num>(
-              0, (sum, p) => sum + _num(p['payment_amount']));
+          final appliedTotal =
+              applied.fold<num>(0, (sum, p) => sum + _num(p['payment_amount']));
           return {
             'payment_amount': appliedTotal,
             'payment_method': 'split',
@@ -4619,9 +4736,8 @@ Map<String, String> _shiftSummaryValues(Map<String, dynamic> row) {
   final openingFloat = _num(row['opening_float']);
   final storedExpected =
       _num(row['expected_closing_float'] ?? row['expected_cash']);
-  final expected = (!isOpen && storedExpected > 0)
-      ? storedExpected
-      : openingFloat + cash;
+  final expected =
+      (!isOpen && storedExpected > 0) ? storedExpected : openingFloat + cash;
   return {
     'Opening float': _money(openingFloat),
     'Cash': _money(cash),
@@ -4730,7 +4846,6 @@ Future<void> _printCashierBillReceipt({
   required String method,
   required Map<String, dynamic> response,
   required String fallbackReference,
-  String? receiptType,
 }) async {
   final payload = _payload(response);
   final data = _payload(payload['data']);
@@ -4740,8 +4855,16 @@ Future<void> _printCashierBillReceipt({
           : fallbackReference;
   final nav = ref.read(dashboardNavProvider);
   final methodLabel = _receiptMethodLabel(method);
-  await PrintService().printReceipt(
-    SaleResult(
+  final outletId = _text(bill, ['outlet_id', 'outletId']).isNotEmpty
+      ? _text(bill, ['outlet_id', 'outletId'])
+      : nav.user?.outletId;
+  await printCustomerDocument(
+    ref,
+    templateKey: 'customer_receipt',
+    fallbackTitle: 'CUSTOMER RECEIPT',
+    branchId: nav.user?.branchId,
+    outletId: outletId,
+    sale: SaleResult(
       transactionId: reference.isEmpty ? DateTime.now().toString() : reference,
       createdAt: DateTime.now(),
       receiptNumber: reference.isEmpty ? null : reference,
@@ -4749,9 +4872,8 @@ Future<void> _printCashierBillReceipt({
       total: amount.toDouble(),
       paymentMethod: methodLabel,
     ),
-    _receiptItemsFromBill(bill, amount),
-    nav.branchName,
-    receiptType: receiptType ?? '$methodLabel RECEIPT',
+    items: _receiptItemsFromBill(bill, amount),
+    branchName: nav.branchName,
     customerName: _customerName(bill),
     publicCode: _text(bill, [
       'short_code',
