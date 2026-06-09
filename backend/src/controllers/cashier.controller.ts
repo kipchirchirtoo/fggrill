@@ -1591,6 +1591,10 @@ export const processCashierPayment = async (
     try {
         let { bookingId } = req.body;
         const { amount, method, reference } = req.body;
+        // Cash change handed back + cash tendered (recorded on the cleared
+        // payment row so reconciliation/audit can see it).
+        const changeGiven = Number(req.body.change_given) || 0;
+        const amountTendered = Number(req.body.amount_tendered) || 0;
 
         if (!bookingId || !amount || !method) {
             throw new AppError('ID, amount, and method are required', 400);
@@ -1720,7 +1724,7 @@ export const processCashierPayment = async (
                 }
 
                 // Record cashier transaction
-                const { error } = await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
                     transaction_number: `PAY-${Date.now()}`,
                     branch_id: req.user?.branch_id,
                     cashier_id: req.user?.id,
@@ -1815,7 +1819,7 @@ export const processCashierPayment = async (
                 if (updateError) throw new AppError(`Failed to update conference booking status: ${updateError.message}`, 500);
 
                 // Record cashier transaction
-                const { error } = await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
                     transaction_number: `CNF-${bookingId}`,
                     branch_id: booking.branch_id || req.user?.branch_id,
                     cashier_id: req.user?.id,
@@ -2083,7 +2087,7 @@ export const processCashierPayment = async (
                     .eq('id', transaction.id);
 
                 // Record legacy transaction for logbook
-                const { error } = await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
                     transaction_number: `POS-${transaction.transaction_ref}`,
                     branch_id: transaction.branch_id,
                     cashier_id: req.user?.id,
@@ -2219,7 +2223,7 @@ export const processCashierPayment = async (
             try {
                 const outlet = Array.isArray((shift as any).outlet) ? (shift as any).outlet[0] : (shift as any).outlet;
                 const { data: txNumber } = await supabase.rpc('generate_cashier_transaction_number');
-                await supabase.from('cashier_transactions').insert({
+                await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
                     transaction_number: txNumber || `CT${Date.now()}`,
                     branch_id: shift.branch_id,
                     cashier_id: req.user?.id,
@@ -2304,7 +2308,7 @@ export const processCashierPayment = async (
                         .eq('id', transaction.id);
 
                     // Record cashier transaction
-                    const { error } = await supabase.from('cashier_transactions').insert({
+                    const { error } = await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
                         transaction_number: `KYG-${transaction.transaction_number}`,
                         branch_id: transaction.branch_id,
                         cashier_id: req.user?.id,
@@ -2392,7 +2396,7 @@ export const processCashierPayment = async (
                     throw new AppError(`Restaurant bill payment recording failed: ${paymentError.message}`, 500);
                 }
 
-                const { error } = await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
                     transaction_number: `BILL-${restaurantBill.bill_number}`,
                     branch_id: restaurantBill.branch_id || req.user?.branch_id,
                     cashier_id: req.user?.id,
@@ -2466,7 +2470,7 @@ export const processCashierPayment = async (
                 if (updateError) throw new AppError(`Failed to update bill status: ${updateError.message}`, 500);
 
                 // Record cashier transaction
-                const { error } = await supabase.from('cashier_transactions').insert({
+                const { error } = await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
                     transaction_number: `BILL-${bill.bill_number}`,
                     branch_id: bill.branch_id,
                     cashier_id: req.user?.id,
