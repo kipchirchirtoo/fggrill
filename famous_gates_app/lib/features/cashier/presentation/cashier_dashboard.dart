@@ -1169,7 +1169,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       status: _status,
       onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
       onSearch: (value) => setState(() => _search = value),
-      onCreate: _createBill,
+      // No Create — unpaid bills originate from the POS.
       onExport: _exportPdf,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1186,18 +1186,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
         ],
       ),
     );
-  }
-
-  Future<void> _createBill() async {
-    final body = await _unpaidBillPayload(context);
-    if (body == null) return;
-    try {
-      await ref.read(cashierRepositoryProvider).createUnpaidBill(body);
-      ref.invalidate(cashierUnpaidBillsProvider);
-      _snack('Unpaid bill created');
-    } catch (error) {
-      _snack('Create failed: ${apiErrorMessage(error)}');
-    }
   }
 
   Future<void> _exportPdf() async {
@@ -2738,7 +2726,6 @@ class _BillsScaffold extends StatelessWidget {
     required this.status,
     required this.onStatusChanged,
     required this.onSearch,
-    required this.onCreate,
     required this.onExport,
     required this.child,
   });
@@ -2747,7 +2734,6 @@ class _BillsScaffold extends StatelessWidget {
   final String status;
   final ValueChanged<String?> onStatusChanged;
   final ValueChanged<String> onSearch;
-  final VoidCallback onCreate;
   final VoidCallback onExport;
   final Widget child;
 
@@ -2792,12 +2778,6 @@ class _BillsScaffold extends StatelessWidget {
                 onPressed: onExport,
                 icon: const Icon(Icons.download, size: 16),
                 label: const Text('Export'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Create'),
               ),
             ],
           ),
@@ -3444,116 +3424,6 @@ List<Map<String, dynamic>> _paymentLinesFromPayload(
   return [payload]
       .where((payment) => _num(payment['payment_amount']) > 0)
       .toList();
-}
-
-Future<Map<String, dynamic>?> _unpaidBillPayload(BuildContext context) {
-  final customerController = TextEditingController();
-  final roomController = TextEditingController();
-  final descriptionController = TextEditingController();
-  final amountController = TextEditingController();
-  final dueController = TextEditingController(
-      text: _dateOnly(DateTime.now().add(const Duration(days: 7))));
-  final remarksController = TextEditingController();
-  String billType = 'restaurant';
-  return showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Create Dynamic Bill'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                    controller: customerController,
-                    decoration:
-                        const InputDecoration(labelText: 'Customer name')),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: roomController,
-                    decoration:
-                        const InputDecoration(labelText: 'Room number')),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: billType,
-                  decoration: const InputDecoration(labelText: 'Bill type'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'restaurant', child: Text('Restaurant')),
-                    DropdownMenuItem(value: 'bar', child: Text('Bar')),
-                    DropdownMenuItem(value: 'hotel', child: Text('Hotel')),
-                    DropdownMenuItem(
-                        value: 'conference', child: Text('Conference')),
-                    DropdownMenuItem(value: 'other', child: Text('Other')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => billType = value ?? 'restaurant'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: descriptionController,
-                    decoration:
-                        const InputDecoration(labelText: 'Description')),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: amountController,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Total amount')),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: dueController,
-                    decoration: const InputDecoration(
-                        labelText: 'Due date YYYY-MM-DD')),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: remarksController,
-                    decoration: const InputDecoration(labelText: 'Remarks')),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final amount = num.tryParse(amountController.text.trim()) ?? 0;
-              Navigator.pop(context, {
-                'customer_name': customerController.text.trim(),
-                'room_number': roomController.text.trim(),
-                'bill_type': billType,
-                'customer_type': 'walk_in',
-                'total_amount': amount,
-                'due_date': dueController.text.trim(),
-                'remarks': remarksController.text.trim(),
-                'items': [
-                  {
-                    'description': descriptionController.text.trim().isEmpty
-                        ? billType
-                        : descriptionController.text.trim(),
-                    'quantity': 1,
-                    'unitPrice': amount,
-                  }
-                ],
-              });
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    ),
-  ).whenComplete(() {
-    customerController.dispose();
-    roomController.dispose();
-    descriptionController.dispose();
-    amountController.dispose();
-    dueController.dispose();
-    remarksController.dispose();
-  });
 }
 
 Future<Map<String, dynamic>?> _creditBillPayload(
