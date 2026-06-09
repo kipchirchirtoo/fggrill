@@ -1367,17 +1367,15 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           receiptRefs.add(reference);
           // Print a dedicated staff credit-bill receipt for this line.
           try {
+            // Prefer a short, human/scannable code (order short code) over the
+            // raw credit-bill UUID for the printed CREDIT BILL CODE.
+            final creditCode = _creditCodeForReceipt(row, created, reference);
             await PrintService().printCreditBillReceipt(
               branchName: ref.read(dashboardNavProvider).branchName,
               staffName: _text(payment, ['staff_name']),
               amount: amt,
               items: _receiptItemsFromBill(row, amt),
-              creditNumber:
-                  _text(created, ['credit_number', 'staff_credit_bill_id', 'id'])
-                          .isNotEmpty
-                      ? _text(created,
-                          ['credit_number', 'staff_credit_bill_id', 'id'])
-                      : reference,
+              creditNumber: creditCode,
               cashierName: ref.read(dashboardNavProvider).user?.name,
               sourceReference:
                   _text(row, ['bill_number', 'order_number', 'id']),
@@ -3874,6 +3872,22 @@ num _num(dynamic value) {
 String _money(dynamic value) {
   final amount = _num(value);
   return NumberFormat.currency(symbol: 'KES ', decimalDigits: 0).format(amount);
+}
+
+// Choose a short, human/scannable CREDIT BILL CODE for the receipt. Avoid raw
+// UUIDs (staff_credit_bill_id): prefer a real credit number, else the order's
+// short code, else the order number.
+String _creditCodeForReceipt(
+    Map<String, dynamic> row, Map<String, dynamic> created, String reference) {
+  bool looksLikeUuid(String s) =>
+      RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-').hasMatch(s);
+  final cn = _text(created, ['credit_number']);
+  if (cn.isNotEmpty && !looksLikeUuid(cn)) return cn;
+  final short = _text(row, ['short_code', 'scan_reference']);
+  if (short.isNotEmpty) return short;
+  final orderNo = _text(row, ['bill_number', 'order_number']);
+  if (orderNo.isNotEmpty) return orderNo;
+  return reference;
 }
 
 // Extract the staff credit-bill breakdown attached to a shift row.
