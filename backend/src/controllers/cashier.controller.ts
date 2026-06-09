@@ -4303,6 +4303,150 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
     }
 };
 
+// Normalize a free-form payment method to one of cash | mpesa | card | bank.
+function normalizePaymentMethod(raw: unknown): string {
+    const m = String(raw || 'cash').toLowerCase();
+    if (m.includes('mpesa') || m.includes('m-pesa')) return 'mpesa';
+    if (m.includes('card') || m.includes('swipe') || m.includes('visa')) return 'card';
+    if (m.includes('bank')) return 'bank';
+    return 'cash';
+}
+
+/**
+ * Record a "paid bill": a staff member settling money toward their credit
+ * during the cashier's shift. We do NOT pick a specific credit bill here — the
+ * cashier just records who paid, how much, and how (cash / M-Pesa / card).
+ *
+ * The payment is appended to the open shift's `paid_bills_details`, which:
+ *   1. shows on the cashier's "Paid Bills" tab (per-method totals + grand total),
+ *   2. flows to the branch accountant automatically at shift close, where the
+ *      existing FIFO settle logic reduces the staff's outstanding credit bills.
+ */
+export const recordStaffPaidBill = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { staff_id, staff_name, amount, payment_method, reference } = req.body;
+        const paidAmount = Number(amount || 0);
+
+        if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+            throw new AppError('Amount paid must be greater than zero', 400);
+        }
+        if (!staff_name && !staff_id) {
+            throw new AppError('Select the staff member who paid', 400);
+        }
+
+        const method = normalizePaymentMethod(payment_method);
+
+        // Find the cashier's open shift to attach the paid bill to.
+        const { data: shift, error: shiftError } = await supabase
+            .from('cashier_shift_logs')
+            .select('id, branch_id, paid_bills_details, paid_bills_value, paid_bills_count')
+            .eq('cashier_id', req.user?.id)
+            .eq('status', 'open')
+            .order('shift_start', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (shiftError) throw shiftError;
+        if (!shift) {
+            throw new AppError('No open shift. Open a shift before recording paid bills.', 400);
+        }
+
+        const existing = Array.isArray(shift.paid_bills_details)
+            ? shift.paid_bills_details
+            : [];
+
+        const entry = {
+            id: `PB${Date.now()}`,
+            staff_id: staff_id || null,
+            name: staff_name || 'Staff',
+            amount: paidAmount,
+            payment_method: method,
+            reference: reference || null,
+            recorded_at: new Date().toISOString(),
+            recorded_by: req.user?.id || null,
+        };
+
+        const updated = [...existing, entry];
+        const totalValue = updated.reduce(
+            (sum: number, bill: any) => sum + (Number(bill.amount) || 0),
+            0
+        );
+
+        const { error: updateError } = await supabase
+            .from('cashier_shift_logs')
+            .update({
+                paid_bills_details: updated,
+                paid_bills_value: totalValue,
+                paid_bills_count: updated.length,
+            })
+            .eq('id', shift.id);
+
+        if (updateError) throw updateError;
+
+        res.status(201).json({
+            success: true,
+            message: 'Paid bill recorded',
+            data: {
+                entry,
+                paid_bills_details: updated,
+                paid_bills_value: totalValue,
+                paid_bills_count: updated.length,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * List the paid bills recorded against the cashier's current open shift, with
+ * per-method subtotals so the "Paid Bills" tab can show Cash / M-Pesa / Card
+ * tallies plus the grand Total Paid Bills.
+ */
+export const getStaffPaidBills = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { data: shift, error } = await supabase
+            .from('cashier_shift_logs')
+            .select('id, paid_bills_details, paid_bills_value, paid_bills_count')
+            .eq('cashier_id', req.user?.id)
+            .eq('status', 'open')
+            .order('shift_start', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        const details: any[] = shift && Array.isArray(shift.paid_bills_details)
+            ? shift.paid_bills_details
+            : [];
+
+        const totals: Record<string, number> = { cash: 0, mpesa: 0, card: 0, bank: 0, total: 0 };
+        for (const bill of details) {
+            const key = normalizePaymentMethod(bill.payment_method);
+            const value = Number(bill.amount) || 0;
+            totals[key] = (totals[key] || 0) + value;
+            totals.total += value;
+        }
+
+        res.json({
+            success: true,
+            data: details,
+            totals: { ...totals, count: details.length },
+            has_open_shift: !!shift,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 /**
  * Mark a staff credit bill to be settled via payroll deduction.
  * Branch accountant action: instead of the staff paying cash, the outstanding

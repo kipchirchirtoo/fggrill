@@ -77,6 +77,11 @@ final cashierCreditBillsProvider = FutureProvider.autoDispose
       );
 });
 
+final cashierPaidBillsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
+  return ref.watch(cashierRepositoryProvider).getPaidBills();
+});
+
 final cashierShiftsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, CashierShiftFilters>((ref, filters) {
   return ref.watch(cashierRepositoryProvider).getShifts(

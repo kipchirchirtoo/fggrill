@@ -176,6 +176,16 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
                 amount: toNumber(b.amount),
                 reference: b.reference || b.id || null,
             })),
+            // Paid bills settled this shift — staff name, amount and the method
+            // they paid with (cash / M-Pesa / card), so the branch accountant can
+            // record each against the staff's outstanding credit bill.
+            paid_bills_details: paidBills.map((b: any) => ({
+                staff_id: b.staff_id || null,
+                name: b.name || b.staff_name || b.customer_name || 'Staff',
+                amount: toNumber(b.amount),
+                payment_method: b.payment_method || 'cash',
+                reference: b.reference || b.id || null,
+            })),
         },
         total_mpesa: totalMpesa,
         total_swipe: totalCard,
@@ -1374,11 +1384,13 @@ export const closeShift = async (
                     let amountPaid = parseFloat(bill.amount);
                     if (isNaN(amountPaid) || amountPaid <= 0) continue;
 
-                    // A. Record the payment itself for audit trail
+                    // A. Record the payment itself for audit trail (capture the
+                    // method the staff paid with so the branch accountant sees it).
+                    const paidMethod = String(bill.payment_method || 'cash').toLowerCase();
                     const { error } = await supabase.from('staff_credit_bills').insert({
                         staff_id: bill.staff_id,
                         amount: amountPaid,
-                        description: `Shift Payment - Shift #${shift.shift_number} - ${bill.name}`,
+                        description: `Shift Payment (${paidMethod}) - Shift #${shift.shift_number} - ${bill.name}`,
                         bill_date: new Date().toISOString().split('T')[0],
                         status: 'paid_cash',
                         branch_id: shift.branch_id,

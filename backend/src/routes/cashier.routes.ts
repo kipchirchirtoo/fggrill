@@ -13,6 +13,8 @@ import {
     createCreditBill,
     confirmCreditBill,
     recordCreditPayment,
+    recordStaffPaidBill,
+    getStaffPaidBills,
     deductCreditBillFromPayroll,
     downloadCustomerCreditInvoice,
     downloadCustomerCreditOutstandingReport,
@@ -177,6 +179,13 @@ router.route('/credit-bills/:id/confirm')
 
 router.route('/credit-bills/:id/payment')
     .post(recordCreditPayment);
+
+// Paid bills: cashier records staff settling money toward their credit during
+// the shift (search staff, amount, method). Flows to the branch accountant at
+// shift close to reduce outstanding staff credit bills.
+router.route('/paid-bills')
+    .get(getStaffPaidBills)
+    .post(recordStaffPaidBill);
 
 router.route('/credit-bills/:id/payroll-deduct')
     .post(

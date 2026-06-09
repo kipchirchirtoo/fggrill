@@ -157,6 +157,12 @@ class CashierRepository {
   Future<Map<String, dynamic>> confirmCreditBill(String id, String role) =>
       _patchMap('/cashier/credit-bills/$id/confirm', {'role': role});
 
+  // Paid bills: staff settling money toward their credit during the shift.
+  Future<Map<String, dynamic>> getPaidBills() => _getMap('/cashier/paid-bills');
+
+  Future<Map<String, dynamic>> recordPaidBill(Map<String, dynamic> body) =>
+      _postMap('/cashier/paid-bills', body);
+
   Future<List<Map<String, dynamic>>> getShifts({
     String? status,
     String? from,
