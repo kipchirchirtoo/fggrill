@@ -21,6 +21,29 @@ class MasterNavItem<T> {
   final String? group;
 }
 
+/// Optional color override so a feature (e.g. the POS) can theme the whole
+/// shell — sidebar, top bar, canvas and active highlight — without affecting
+/// other dashboards. When null the shell keeps its default light styling.
+class ShellPalette {
+  const ShellPalette({
+    required this.background,
+    required this.surface,
+    required this.accent,
+    this.onAccent = Colors.white,
+    this.border,
+    this.text,
+    this.mutedText,
+  });
+
+  final Color background; // scaffold canvas
+  final Color surface; // sidebar + top bar + cards
+  final Color accent; // active nav highlight
+  final Color onAccent;
+  final Color? border;
+  final Color? text;
+  final Color? mutedText;
+}
+
 class MasterDashboardShell<T> extends ConsumerWidget {
   const MasterDashboardShell({
     super.key,
@@ -33,6 +56,7 @@ class MasterDashboardShell<T> extends ConsumerWidget {
     required this.child,
     this.breadcrumbRoot,
     this.searchHint = 'Search...',
+    this.palette,
   });
 
   final String title;
@@ -44,6 +68,7 @@ class MasterDashboardShell<T> extends ConsumerWidget {
   final List<MasterNavItem<T>> items;
   final ValueChanged<T> onSectionSelected;
   final Widget child;
+  final ShellPalette? palette;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -53,7 +78,7 @@ class MasterDashboardShell<T> extends ConsumerWidget {
     final navWidth = isMobile ? 0.0 : (isTablet ? 64.0 : 240.0);
 
     return Scaffold(
-      backgroundColor: AppColors.kSurface,
+      backgroundColor: palette?.background ?? AppColors.kSurface,
       body: Row(
         children: [
           if (!isMobile)
@@ -66,6 +91,7 @@ class MasterDashboardShell<T> extends ConsumerWidget {
               currentSection: currentSection,
               items: items,
               onSectionSelected: onSectionSelected,
+              palette: palette,
             ),
           Expanded(
             child: Column(
@@ -74,6 +100,7 @@ class MasterDashboardShell<T> extends ConsumerWidget {
                   title: title,
                   breadcrumbRoot: breadcrumbRoot ?? title,
                   searchHint: searchHint,
+                  palette: palette,
                   onMenuTap:
                       isMobile ? () => _showMobileNav(context, ref) : null,
                 ),
@@ -131,6 +158,7 @@ class _MasterSideNav<T> extends ConsumerWidget {
     required this.currentSection,
     required this.items,
     required this.onSectionSelected,
+    this.palette,
   });
 
   final double width;
@@ -141,12 +169,13 @@ class _MasterSideNav<T> extends ConsumerWidget {
   final T currentSection;
   final List<MasterNavItem<T>> items;
   final ValueChanged<T> onSectionSelected;
+  final ShellPalette? palette;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       width: width,
-      color: Colors.white,
+      color: palette?.surface ?? Colors.white,
       child: Column(
         children: [
           Padding(
@@ -218,6 +247,7 @@ class _MasterSideNav<T> extends ConsumerWidget {
                       isActive: item.section == currentSection,
                       isCollapsed: isCollapsed,
                       onTap: () => onSectionSelected(item.section),
+                      palette: palette,
                     ),
                   ],
                 );
@@ -257,15 +287,19 @@ class _NavTile<T> extends StatelessWidget {
     required this.isActive,
     required this.isCollapsed,
     required this.onTap,
+    this.palette,
   });
 
   final MasterNavItem<T> item;
   final bool isActive;
   final bool isCollapsed;
   final VoidCallback onTap;
+  final ShellPalette? palette;
 
   @override
   Widget build(BuildContext context) {
+    final accent = palette?.accent ?? AppColors.kPrimary;
+    final idle = palette?.mutedText ?? Colors.grey.shade600;
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: isCollapsed ? 8 : 12,
@@ -273,7 +307,7 @@ class _NavTile<T> extends StatelessWidget {
       ),
       child: Material(
         color: isActive
-            ? AppColors.kPrimary.withValues(alpha: 0.08)
+            ? accent.withValues(alpha: 0.12)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
@@ -290,7 +324,7 @@ class _NavTile<T> extends StatelessWidget {
                 Icon(
                   item.icon,
                   size: 20,
-                  color: isActive ? AppColors.kPrimary : Colors.grey.shade600,
+                  color: isActive ? accent : idle,
                 ),
                 if (!isCollapsed) ...[
                   const SizedBox(width: 12),
@@ -304,8 +338,8 @@ class _NavTile<T> extends StatelessWidget {
                         fontWeight:
                             isActive ? FontWeight.w600 : FontWeight.w500,
                         color: isActive
-                            ? AppColors.kPrimary
-                            : Colors.grey.shade700,
+                            ? accent
+                            : (palette?.text ?? Colors.grey.shade700),
                       ),
                     ),
                   ),
@@ -325,12 +359,14 @@ class _MasterTopBar extends ConsumerWidget {
     required this.breadcrumbRoot,
     required this.searchHint,
     this.onMenuTap,
+    this.palette,
   });
 
   final String title;
   final String breadcrumbRoot;
   final String searchHint;
   final VoidCallback? onMenuTap;
+  final ShellPalette? palette;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -343,8 +379,9 @@ class _MasterTopBar extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        color: palette?.surface ?? Colors.white,
+        border: Border(
+            bottom: BorderSide(color: palette?.border ?? Colors.grey.shade200)),
       ),
       child: Row(
         children: [

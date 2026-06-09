@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/api_error_message.dart';
@@ -1353,7 +1352,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       onStatusChanged: (value) => setState(() => _status = value ?? 'all'),
       onSearch: (value) => setState(() => _search = value),
       // No Create — unpaid bills originate from the POS.
-      onExport: _exportPdf,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1371,26 +1369,6 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
     );
   }
 
-  Future<void> _exportPdf() async {
-    try {
-      final bytes =
-          await ref.read(cashierRepositoryProvider).downloadUnpaidBillsPdf(
-                date: _date,
-                status: _status,
-                search: _search,
-              );
-      if (bytes.isEmpty) {
-        _snack('Export failed: empty PDF response');
-        return;
-      }
-      await Printing.sharePdf(
-        bytes: bytes,
-        filename: 'FG_Unpaid_Bills_$_date.pdf',
-      );
-    } catch (error) {
-      _snack('Export failed: ${apiErrorMessage(error)}');
-    }
-  }
 
   Future<void> _recordPayment(Map<String, dynamic> row) async {
     final staff = await ref
@@ -3174,7 +3152,6 @@ class _BillsScaffold extends StatelessWidget {
     required this.status,
     required this.onStatusChanged,
     required this.onSearch,
-    required this.onExport,
     required this.child,
   });
 
@@ -3182,7 +3159,6 @@ class _BillsScaffold extends StatelessWidget {
   final String status;
   final ValueChanged<String?> onStatusChanged;
   final ValueChanged<String> onSearch;
-  final VoidCallback onExport;
   final Widget child;
 
   @override
@@ -3220,12 +3196,6 @@ class _BillsScaffold extends StatelessWidget {
                       value: 'cancelled', child: Text('Cancelled')),
                 ],
                 onChanged: onStatusChanged,
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: onExport,
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text('Export'),
               ),
             ],
           ),

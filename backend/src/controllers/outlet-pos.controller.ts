@@ -7,10 +7,20 @@ import { ensureShiftAutomationOpened, runShiftCloseAutomation } from '../service
 import {
   assignedOutletIds,
   canAccessPosOutlet,
+  isCashierStationRole,
   loadAssignedPosOutlets,
   shouldRestrictCashierStationAccess,
   stationTypesForCashierRole
 } from '../utils/posStationAccess';
+
+// Roles permitted to open/close a POS shift on behalf of a station.
+const SHIFT_MANAGER_ROLES = new Set([
+  'super_admin',
+  'general_manager',
+  'branch_manager',
+  'branch_accountant',
+  'accountant',
+]);
 
 type OutletType =
   | 'restaurant'
@@ -1208,7 +1218,7 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
     if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
     await ensureCashierOutletAccess(req, outlet);
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('pos_outlet_shifts')
       .select('*')
       .eq('outlet_id', outletId)
@@ -1217,6 +1227,37 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
       .limit(1)
       .maybeSingle();
     if (error) throw error;
+
+    // Bridge: the POS station is "open" only when the branch's cashier has an
+    // open shift (cashier_shift_logs). When they do, open this station's POS
+    // shift so waiters can place orders against it. No cashier shift → stays
+    // closed (waiters can't order, and they can't open a shift themselves).
+    if (!data) {
+      const { data: cashierShift } = await supabase
+        .from('cashier_shift_logs')
+        .select('id, cashier_id')
+        .eq('branch_id', outlet.branch_id)
+        .eq('status', 'open')
+        .order('shift_start', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cashierShift) {
+        const { data: created, error: createErr } = await supabase
+          .from('pos_outlet_shifts')
+          .insert({
+            outlet_id: outletId,
+            branch_id: outlet.branch_id,
+            cashier_id: cashierShift.cashier_id,
+            opening_float: 0,
+            status: 'open',
+          })
+          .select('*')
+          .single();
+        if (createErr) throw createErr;
+        data = created;
+      }
+    }
+
     const responseData = data && data.summary
       ? { ...data, summary: sanitizeSummary(data.summary, canViewProfit(req)) }
       : data;
@@ -1229,6 +1270,18 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
 export const openShift = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
+    // Only a cashier (or a manager opening on a cashier's behalf) may open a
+    // POS shift. Waiters can never open a shift — they place orders against
+    // the cashier's open shift.
+    const openerRole = roleFor(req);
+    if (!isCashierStationRole(openerRole) &&
+        !SHIFT_MANAGER_ROLES.has(openerRole) &&
+        !isGlobalUser(req)) {
+      throw new AppError(
+        'Only the station cashier can open a shift. Waiters place orders against the cashier\'s open shift.',
+        403,
+      );
+    }
     const { outletId } = req.params;
     const openingFloat = numberValue(req.body.opening_float);
     const requestedCashierId = nullableText(req.body.cashier_id ?? req.body.cashierId);

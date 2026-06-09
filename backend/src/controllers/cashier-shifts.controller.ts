@@ -1320,6 +1320,21 @@ export const closeShift = async (
 
         if (updateError) throw updateError;
 
+        // Close the branch's POS station shifts too — the POS is "open" only
+        // while the cashier's shift is open (see getActiveShift bridge).
+        try {
+            await supabase
+                .from('pos_outlet_shifts')
+                .update({ status: 'closed' })
+                .eq('branch_id', shift.branch_id)
+                .eq('status', 'open');
+        } catch (posCloseErr) {
+            logger.warn('Failed to close POS station shifts on cashier close', {
+                shiftId: id,
+                error: (posCloseErr as any)?.message
+            });
+        }
+
         // SYNC WITH BRANCH ACCOUNTANT: Create staff_credit_bills records
         try {
             // 1. Process Credit Bills (Unpaid)

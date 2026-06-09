@@ -170,17 +170,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     OutletPosRepository repo,
     PosOutlet outlet,
   ) async {
-    var shift = await repo.getActiveShift(outlet.id);
-    if (shift == null) {
-      try {
-        shift = await repo.openShift(outlet.id, 0);
-      } catch (_) {
-        shift = await repo.getActiveShift(outlet.id);
-        if (shift == null) rethrow;
-      }
-    }
+    // Do NOT auto-open a shift. Orders can only be placed when the station's
+    // cashier has explicitly opened a shift.
+    final shift = await repo.getActiveShift(outlet.id);
     final items = await repo.getItems(outlet.id, fallbackOutlet: outlet);
-    final orders = await repo.getOrders(shift.id);
+    final orders =
+        shift == null ? <OutletShiftOrder>[] : await repo.getOrders(shift.id);
     return _OutletStationSnapshot(shift: shift, items: items, orders: orders);
   }
 
@@ -222,6 +217,15 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       title: widget.title,
       subtitle: 'Outlet POS',
       initials: widget.initials,
+      palette: const ShellPalette(
+        background: _PosPalette.canvas,
+        surface: _PosPalette.surface,
+        accent: _PosPalette.accent,
+        onAccent: _PosPalette.onAccent,
+        border: _PosPalette.border,
+        text: _PosPalette.text,
+        mutedText: _PosPalette.textMuted,
+      ),
       currentSection: _section,
       items: [
         MasterNavItem(
@@ -368,6 +372,17 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                             : (_) => _selectOutlet(outlet),
                       ),
                   ],
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (_shift == null) ...[
+                _NoShiftBanner(
+                  stationLabel: activeOutlet != null
+                      ? _stationLabel(activeOutlet)
+                      : widget.title,
+                  busy: _busy,
+                  canOpenShift: _canOpenShift(),
+                  onOpenShift: _openShift,
                 ),
                 const SizedBox(height: 16),
               ],
@@ -637,7 +652,51 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     );
   }
 
+  // Only a cashier (or a manager) may open a shift — waiters never can.
+  bool _canOpenShift() {
+    final role =
+        (ref.read(authNotifierProvider).valueOrNull?.role ?? '').toLowerCase();
+    const managers = {
+      'super_admin',
+      'general_manager',
+      'branch_manager',
+      'branch_accountant',
+      'accountant',
+    };
+    return role.contains('cashier') || managers.contains(role);
+  }
+
+  Future<void> _openShift() async {
+    final outlet = _outlet;
+    if (outlet == null || _busy || !_canOpenShift()) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).openShift(outlet.id, 0);
+      await _load();
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Shift opened')));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Cannot open shift: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _addToCart(OutletPosItem item) {
+    if (_shift == null) {
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(
+            content: Text(
+                'No open shift for this station. The cashier must open a shift before taking orders.')),
+      );
+      return;
+    }
     final index = _cart.indexWhere((entry) => entry.item.id == item.id);
     setState(() {
       if (index == -1) {
@@ -940,6 +999,63 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   }
 }
 
+class _NoShiftBanner extends StatelessWidget {
+  const _NoShiftBanner({
+    required this.stationLabel,
+    required this.busy,
+    required this.canOpenShift,
+    required this.onOpenShift,
+  });
+
+  final String stationLabel;
+  final bool busy;
+  final bool canOpenShift;
+  final Future<void> Function() onOpenShift;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _PosPalette.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _PosPalette.accent.withValues(alpha: 0.5)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.lock_clock, color: _PosPalette.accent),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$stationLabel shift is closed',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: _PosPalette.text,
+                      fontSize: 15)),
+              const SizedBox(height: 2),
+              Text(
+                canOpenShift
+                    ? 'Open a shift to start taking orders for this station.'
+                    : 'Orders cannot be placed until the station cashier opens a shift.',
+                style: const TextStyle(color: _PosPalette.text, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Only the cashier sees the Open Shift action — waiters cannot open it.
+        if (canOpenShift)
+          FilledButton.icon(
+            onPressed: busy ? null : () => onOpenShift(),
+            icon: const Icon(Icons.lock_open, size: 16),
+            label: const Text('Open Shift'),
+          ),
+      ]),
+    );
+  }
+}
+
 class _OutletStationSnapshot {
   const _OutletStationSnapshot({
     required this.shift,
@@ -947,7 +1063,7 @@ class _OutletStationSnapshot {
     required this.orders,
   });
 
-  final OutletShift shift;
+  final OutletShift? shift;
   final List<OutletPosItem> items;
   final List<OutletShiftOrder> orders;
 }
@@ -1029,15 +1145,17 @@ class _OrderContextPanel extends StatelessWidget {
   }
 }
 
-/// Eye-friendly POS palette — muted/desaturated tones to reduce glare on
-/// long shifts (60% neutral canvas, 30% soft surfaces, 10% accent action).
+/// Eye-friendly WARM ORANGE POS palette — soft cream surfaces (no glaring
+/// white) with a warm orange accent. Low-glare for long shifts.
 class _PosPalette {
-  static const canvas = Color(0xFFECEAE3); // soft warm gray-cream (60%)
-  static const surface = Color(0xFFFBFAF6); // off-white card (30%)
-  static const surfaceAlt = Color(0xFFF1EFE8); // unselected chip
-  static const border = Color(0xFFE3E0D7); // soft warm border
-  static const accent = Color(0xFF3B7A75); // muted forest/teal — primary action (10%)
-  static const text = Color(0xFF2B2B28); // soft off-black
+  static const canvas = Color(0xFFEAD0AC); // warm sand/orange base (60%)
+  static const surface = Color(0xFFFBE6CB); // warm peach card (30%)
+  static const surfaceAlt = Color(0xFFF2D9B8); // deeper warm chip / input
+  static const border = Color(0xFFDDC09A); // warm tan border
+  static const accent = Color(0xFFD9701F); // rich warm orange action (10%)
+  static const onAccent = Color(0xFFFFFFFF); // white text on orange buttons
+  static const text = Color(0xFF3A2917); // warm dark brown (readable)
+  static const textMuted = Color(0xFF8A7252); // secondary labels
 }
 
 class _Surface extends StatelessWidget {
@@ -1047,28 +1165,67 @@ class _Surface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context);
-    // Scope the muted palette to the POS only (doesn't touch the rest of the app).
+    final scheme = base.colorScheme.copyWith(
+      brightness: Brightness.light,
+      primary: _PosPalette.accent,
+      onPrimary: _PosPalette.onAccent,
+      secondary: _PosPalette.accent,
+      surface: _PosPalette.surface,
+      onSurface: _PosPalette.text,
+      surfaceTint: Colors.transparent,
+      outline: _PosPalette.border,
+    );
+    // Scope the dark theme to the POS only (doesn't touch the rest of the app).
     return Theme(
       data: base.copyWith(
+        brightness: Brightness.light,
         scaffoldBackgroundColor: _PosPalette.canvas,
         canvasColor: _PosPalette.canvas,
         cardColor: _PosPalette.surface,
+        dividerColor: _PosPalette.border,
+        colorScheme: scheme,
         cardTheme: base.cardTheme.copyWith(
           color: _PosPalette.surface,
           elevation: 0.5,
           surfaceTintColor: Colors.transparent,
         ),
-        colorScheme: base.colorScheme.copyWith(
-          primary: _PosPalette.accent,
-          onPrimary: Colors.white,
-          surface: _PosPalette.surface,
-          surfaceTint: Colors.transparent,
+        textTheme: base.textTheme.apply(
+          bodyColor: _PosPalette.text,
+          displayColor: _PosPalette.text,
+        ),
+        iconTheme: base.iconTheme.copyWith(color: _PosPalette.text),
+        inputDecorationTheme: base.inputDecorationTheme.copyWith(
+          filled: true,
+          fillColor: _PosPalette.surfaceAlt,
+          hintStyle: const TextStyle(color: _PosPalette.textMuted),
+          labelStyle: const TextStyle(color: _PosPalette.textMuted),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _PosPalette.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _PosPalette.accent),
+          ),
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             backgroundColor: _PosPalette.accent,
-            foregroundColor: Colors.white,
+            foregroundColor: _PosPalette.onAccent,
           ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _PosPalette.text,
+            side: const BorderSide(color: _PosPalette.border),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: _PosPalette.accent),
+        ),
+        dialogTheme: base.dialogTheme.copyWith(
+          backgroundColor: _PosPalette.surface,
+          surfaceTintColor: Colors.transparent,
         ),
       ),
       child: ColoredBox(color: _PosPalette.canvas, child: child),
@@ -1159,7 +1316,7 @@ class _CategoryTabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final background =
         selected ? _PosPalette.accent : _PosPalette.surfaceAlt;
-    final foreground = selected ? Colors.white : _PosPalette.text;
+    final foreground = selected ? _PosPalette.onAccent : _PosPalette.text;
     return Material(
       color: background,
       borderRadius: BorderRadius.circular(10),
