@@ -6610,8 +6610,15 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             ...roleOutletTypes,
             ...assignedOutlets.map((outlet) => String(outlet.outlet_type || '').toLowerCase()).filter(Boolean)
         ]);
-        const canSeeLegacyRestaurant = !stationRestricted || allowedOutletTypes.has('restaurant');
-        const canSeeLegacyBar = !stationRestricted || Array.from(allowedOutletTypes).some(isBarStationType);
+        // The cashier desk must surface EVERY unsettled bill in the branch: the
+        // close-shift guard is branch-wide (it closes all of the branch's POS
+        // shifts), so a bill in any outlet blocks close and must be visible here
+        // to be settled. Station restriction only narrows ordering, not this
+        // settlement view. (Explicit outlet_id / outlet_type still filter below.)
+        const canSeeLegacyRestaurant = true;
+        const canSeeLegacyBar = true;
+        void stationRestricted;
+        void allowedOutletTypes;
 
         // Fetch pending restaurant orders
         let restaurantOrders: any[] = [];
@@ -6689,7 +6696,9 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
                 if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
                 if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
-                return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+                // Branch-wide settlement view: show every outlet's unsettled
+                // orders so they can be cleared before the branch shift closes.
+                return true;
             });
 
             shiftLookup = Object.fromEntries(visibleShifts.map((shift: any) => [shift.id, shift]));
