@@ -2934,17 +2934,28 @@ class _BillList extends StatelessWidget {
               'invoice_number',
               'id'
             ])),
-            subtitle: Text(
-              [
-                if (_text(row, ['short_code', 'scan_reference']).isNotEmpty)
-                  'Code ${_text(row, ['short_code', 'scan_reference'])}',
-                if (_text(row, ['waiter_name']).isNotEmpty)
-                  'Waiter ${_text(row, ['waiter_name'])}',
-                if (_text(row, ['customer_name', 'guest_name']).isNotEmpty)
-                  _text(row, ['customer_name', 'guest_name']),
-                status,
-              ].join(' - '),
-            ),
+            subtitle: Builder(builder: (context) {
+              final customer =
+                  _text(row, ['customer_name', 'guest_name']);
+              final isWalkIn =
+                  customer.isEmpty || customer.toLowerCase().contains('walk');
+              final notPaid = _num(row['paid_amount']) <= 0 &&
+                  status.toLowerCase() != 'paid';
+              // Show the waiter only for a walk-in order that hasn't been paid;
+              // the credit bill itself is assigned to a selected staff member.
+              final showWaiter =
+                  row['is_waiter_order'] == true && isWalkIn && notPaid;
+              return Text(
+                [
+                  if (_text(row, ['short_code', 'scan_reference']).isNotEmpty)
+                    'Code ${_text(row, ['short_code', 'scan_reference'])}',
+                  if (showWaiter && _text(row, ['waiter_name']).isNotEmpty)
+                    'Waiter ${_text(row, ['waiter_name'])}',
+                  if (customer.isNotEmpty) customer,
+                  status,
+                ].join(' - '),
+              );
+            }),
             trailing: Text(
               _money(row['balance_amount'] ??
                   row['balance'] ??

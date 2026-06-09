@@ -371,7 +371,7 @@ class PrintService {
                 child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('** UNPAID CREDIT — NOT A PAYMENT **',
+                      pw.Text('** UNPAID CREDIT - NOT A PAYMENT **',
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold, fontSize: 8)),
                       pw.SizedBox(height: 2),
