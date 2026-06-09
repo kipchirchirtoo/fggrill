@@ -387,16 +387,50 @@ export const getShiftLogs = async (
             const branchId = shift.branch_id;
 
             try {
-                // First try the RPC (works when cashier_shift_transactions are linked)
+                // Primary source of truth: the shift's own transaction rows.
+                // These include the payment method (incl. CREDIT_BILL), which the
+                // RPC summary doesn't break out — so we bucket them here.
+                const { data: shiftTxns } = await supabase
+                    .from('cashier_shift_transactions')
+                    .select('payment_method, amount')
+                    .eq('shift_id', shift.id);
+
+                if (shiftTxns && shiftTxns.length > 0) {
+                    let txnCash = 0, txnMpesa = 0, txnCard = 0, txnCredit = 0, txnTotal = 0;
+                    for (const t of shiftTxns) {
+                        const m = String(t.payment_method || '').toLowerCase();
+                        const amt = Number(t.amount || 0);
+                        txnTotal += amt;
+                        if (m.includes('credit')) txnCredit += amt;
+                        else if (m.includes('mpesa') || m.includes('m-pesa')) txnMpesa += amt;
+                        else if (m.includes('card') || m.includes('swipe')) txnCard += amt;
+                        else txnCash += amt;
+                    }
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + txnCash;
+                    const closingFloat = Number(shift.closing_float || 0);
+                    return {
+                        ...shift,
+                        cashier_name: cashierName,
+                        total_sales: txnTotal,
+                        total_cash_sales: txnCash,
+                        total_mpesa_sales: txnMpesa,
+                        total_card_sales: txnCard,
+                        credit_bills_taken: txnCredit,
+                        credit_bills_count: shiftTxns.filter((t: any) =>
+                            String(t.payment_method || '').toLowerCase().includes('credit')).length,
+                        transaction_count: shiftTxns.length,
+                        expected_closing_float: expectedClosingFloat,
+                        variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
+                    };
+                }
+
+                // Fallback: the RPC summary (cash/mpesa/card only).
                 const { data: summary } = await supabase
                     .rpc('calculate_shift_summary', { p_shift_id: shift.id });
 
                 if (summary && summary.total_sales > 0) {
                     const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0);
                     const closingFloat = Number(shift.closing_float || 0);
-                    const liveCredit = Number(
-                        summary.total_credit_bill ?? summary.total_credit ?? 0
-                    );
                     return {
                         ...shift,
                         cashier_name: cashierName,
@@ -404,7 +438,7 @@ export const getShiftLogs = async (
                         total_cash_sales: summary.total_cash || 0,
                         total_mpesa_sales: summary.total_mpesa || 0,
                         total_card_sales: summary.total_card || 0,
-                        credit_bills_taken: liveCredit || shift.credit_bills_taken || 0,
+                        credit_bills_taken: shift.credit_bills_taken || 0,
                         transaction_count: summary.transaction_count || 0,
                         expected_closing_float: expectedClosingFloat,
                         variance: closingFloat > 0 ? closingFloat - expectedClosingFloat : shift.variance,
