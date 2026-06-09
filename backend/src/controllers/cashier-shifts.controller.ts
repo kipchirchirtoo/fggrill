@@ -1185,21 +1185,25 @@ export const closeShift = async (
                 .lte('created_at', shiftEndTimestamp)
         ]);
 
-        // POS shift orders link to their branch via the outlet shift.
+        // POS shift orders: resolve the branch's POS outlet-shift ids first,
+        // then count unsettled orders on them (reliable — no embedded filter).
         let unpaidPosOrders = 0;
-        try {
-            const { data } = await supabase
+        const { data: branchPosShifts } = await supabase
+            .from('pos_outlet_shifts')
+            .select('id')
+            .eq('branch_id', shift.branch_id);
+        const branchPosShiftIds = (branchPosShifts || [])
+            .map((s: any) => s.id)
+            .filter(Boolean);
+        if (branchPosShiftIds.length) {
+            const { data: posOrders, error: posErr } = await supabase
                 .from('pos_shift_orders')
-                .select('id, shift:pos_outlet_shifts!inner(branch_id)')
-                .eq('shift.branch_id', shift.branch_id)
+                .select('id')
+                .in('shift_id', branchPosShiftIds)
                 .in('payment_status', ['unpaid', 'partial'])
-                .gte('created_at', shift.shift_start);
-            unpaidPosOrders = data?.length || 0;
-        } catch (posErr) {
-            logger.warn('Unpaid POS order check failed during shift close', {
-                shiftId: id,
-                error: (posErr as any)?.message
-            });
+                .neq('status', 'cancelled');
+            if (posErr) throw posErr;
+            unpaidPosOrders = posOrders?.length || 0;
         }
 
         const totalUnpaid = (unpaidRestOrders?.length || 0)
