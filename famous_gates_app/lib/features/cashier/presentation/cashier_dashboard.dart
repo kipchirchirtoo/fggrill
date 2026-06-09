@@ -632,6 +632,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       ref.invalidate(cashierStatsProvider);
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierCreditBillsProvider);
+      ref.invalidate(cashierShiftsProvider);
       await _lookupBill();
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
@@ -1419,8 +1420,15 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
       }
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierStatsProvider);
-      _snack(
-          payments.length > 1 ? 'Split payment recorded' : 'Payment recorded');
+      ref.invalidate(cashierCreditBillsProvider);
+      ref.invalidate(cashierShiftsProvider);
+      final hasCredit = payments
+          .any((p) => _text(p, ['payment_method']) == 'credit_bill');
+      _snack(hasCredit
+          ? 'Credit bill issued and order cleared'
+          : payments.length > 1
+              ? 'Split payment recorded'
+              : 'Payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
     }
