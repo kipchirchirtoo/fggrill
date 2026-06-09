@@ -51,6 +51,20 @@ class LinaRepository {
     return [];
   }
 
+  Future<List<Map<String, dynamic>>> getBranchBenchmark() async {
+    final r = await _get('/lina/branch-benchmark');
+    final cards = r.data['data']?['scorecards'];
+    if (cards is List) {
+      return cards.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> getForecast() async {
+    final r = await _get('/lina/forecast');
+    return Map<String, dynamic>.from(r.data['data'] ?? r.data);
+  }
+
   Future<List<Map<String, dynamic>>> getPendingRemediations() async {
     final r = await _get('/lina/remediations/pending');
     final data = r.data['data'];

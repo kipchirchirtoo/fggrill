@@ -16,9 +16,21 @@ import '../domain/providers.dart';
 enum CashierTab { station, pos, bills, credit, shifts, barcode, insights }
 
 class CashierDashboard extends ConsumerStatefulWidget {
-  const CashierDashboard({super.key, this.initialTab = CashierTab.station});
+  const CashierDashboard({
+    super.key,
+    this.initialTab = CashierTab.station,
+    this.initialBillRef,
+    this.initialAmount,
+    this.initialMethod,
+  });
 
   final CashierTab initialTab;
+
+  /// Optional pre-fill when navigated from another module (e.g. reception
+  /// checkout): bill reference to auto-load, amount, and payment method.
+  final String? initialBillRef;
+  final String? initialAmount;
+  final String? initialMethod;
 
   @override
   ConsumerState<CashierDashboard> createState() => _CashierDashboardState();
@@ -42,10 +54,15 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   @override
   Widget build(BuildContext context) {
     final tabs = [
-      const DashboardTab(
+      DashboardTab(
         label: 'Station',
         icon: Icons.point_of_sale,
-        content: _RequiresOpenShift(child: _StationTab()),
+        content: _RequiresOpenShift(
+            child: _StationTab(
+          initialBillRef: widget.initialBillRef,
+          initialAmount: widget.initialAmount,
+          initialMethod: widget.initialMethod,
+        )),
       ),
       const DashboardTab(
         label: 'Unpaid Bills',
@@ -157,7 +174,11 @@ class _RequiresOpenShift extends ConsumerWidget {
 }
 
 class _StationTab extends ConsumerStatefulWidget {
-  const _StationTab();
+  const _StationTab({this.initialBillRef, this.initialAmount, this.initialMethod});
+
+  final String? initialBillRef;
+  final String? initialAmount;
+  final String? initialMethod;
 
   @override
   ConsumerState<_StationTab> createState() => _StationTabState();
@@ -172,6 +193,30 @@ class _StationTabState extends ConsumerState<_StationTab> {
   bool _loading = false;
   Map<String, dynamic>? _bill;
   List<Map<String, dynamic>> _mpesaMatches = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    final method = widget.initialMethod;
+    if (method != null && method.isNotEmpty) {
+      // Normalise reception methods (mpesa/card) to station methods.
+      _method = method == 'mpesa'
+          ? 'mpesa_manual'
+          : method == 'card'
+              ? 'card_manual'
+              : method;
+    }
+    final amount = widget.initialAmount;
+    if (amount != null && amount.isNotEmpty) {
+      _amountController.text = amount;
+    }
+    final ref0 = widget.initialBillRef;
+    if (ref0 != null && ref0.isNotEmpty) {
+      _lookupController.text = ref0;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _lookupBill(keepAmount: true));
+    }
+  }
 
   @override
   void dispose() {
@@ -436,7 +481,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
     );
   }
 
-  Future<void> _lookupBill() async {
+  Future<void> _lookupBill({bool keepAmount = false}) async {
     final id = _lookupController.text.trim();
     if (id.isEmpty) return _snack('Enter a bill reference');
     setState(() => _loading = true);
@@ -445,7 +490,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final data = _payload(bill);
       setState(() {
         _bill = data;
-        _amountController.text = _balanceFromBill(data).toStringAsFixed(0);
+        // Keep an explicitly pre-entered amount (e.g. reception checkout);
+        // otherwise default to the bill balance.
+        if (!keepAmount || _amountController.text.trim().isEmpty) {
+          _amountController.text = _balanceFromBill(data).toStringAsFixed(0);
+        }
       });
     } catch (error) {
       _snack('Bill lookup failed: ${apiErrorMessage(error)}');

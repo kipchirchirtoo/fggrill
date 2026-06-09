@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/api_error_message.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_skeleton.dart';
@@ -1466,15 +1467,17 @@ class _ConferenceSection extends ConsumerWidget {
                               ? null
                               : () => _showAmountDialog(
                                       context, 'Conference payment',
-                                      (amount) async {
+                                      (amount, method) async {
                                     await ref
                                         .read(receptionRepositoryProvider)
                                         .addConferencePayment(id, {
-                                      'amount': amount,
-                                      'payment_method': 'cash'
+                                      'payment_amount': amount,
+                                      'payment_method': method,
+                                      'payment_reference':
+                                          '$method-${DateTime.now().millisecondsSinceEpoch}',
                                     });
                                     onRefresh();
-                                  })),
+                                  }, withMethod: true)),
                     ]);
                   },
                 ),
@@ -1531,7 +1534,7 @@ class _CateringSection extends ConsumerWidget {
                             ? null
                             : () =>
                                 _showAmountDialog(context, 'Catering payment',
-                                    (amount) async {
+                                    (amount, method) async {
                                   await ref
                                       .read(receptionRepositoryProvider)
                                       .recordCateringPayment(id, amount);
@@ -1613,15 +1616,13 @@ class _CashierSection extends ConsumerWidget {
               title: 'Unconfirmed Bills',
               child: _BillsList(
                   bills: data.unpaidBills,
-                  onPay: (bill) =>
-                      _showBillPaymentDialog(context, ref, bill, onRefresh)),
+                  onPay: (bill) => _openCashierForBill(context, bill)),
             ),
             right: _CardPanel(
               title: 'Recent Credit Bills',
               child: _BillsList(
                   bills: data.creditBills.take(10).toList(),
-                  onPay: (bill) =>
-                      _showBillPaymentDialog(context, ref, bill, onRefresh)),
+                  onPay: (bill) => _openCashierForBill(context, bill)),
             ),
           ),
         ],
@@ -1635,45 +1636,151 @@ class _LogbookSection extends ConsumerWidget {
   final _ReceptionSnapshot data;
   final VoidCallback onRefresh;
 
+  // Auto-reconcile the shift from today's collected payments — no manual entry.
+  Map<String, num> _reconcile() {
+    final openingFloat = _num(data.logbook, ['opening_float', 'openingFloat']);
+    num cash = 0, mpesa = 0, card = 0;
+    for (final p in data.payments) {
+      final method = (_text(p, ['payment_method', 'method']) ?? '').toLowerCase();
+      final amount = _num(p, ['amount', 'total_amount', 'payment_amount']);
+      if (method.contains('mpesa')) {
+        mpesa += amount;
+      } else if (method.contains('card')) {
+        card += amount;
+      } else {
+        cash += amount;
+      }
+    }
+    return {
+      'opening': openingFloat,
+      'cash': cash,
+      'mpesa': mpesa,
+      'card': card,
+      'expected': openingFloat + cash,
+      'total': cash + mpesa + card,
+    };
+  }
+
+  Future<void> _generateAndSend(BuildContext context, WidgetRef ref) async {
+    final r = _reconcile();
+    final repo = ref.read(receptionRepositoryProvider);
+    try {
+      // 1. Auto-generate + save the logbook (cashier model fields).
+      final saved = await repo.saveLogbook({
+        'type': 'cashier',
+        'opening_float': r['opening'],
+        'closing_float': r['expected'], // expected cash in drawer
+        'total_mpesa': r['mpesa'],
+        'total_swipe': r['card'],
+        'sales_breakdown': {
+          'total_cash': r['cash'],
+          'total_mpesa': r['mpesa'],
+          'total_card': r['card'],
+          'total_revenue': r['total'],
+          'transactions': data.payments.length,
+          'source': 'reception_auto',
+        },
+        'notes':
+            'Auto-generated reception shift logbook. Cash ${_money(r['cash']!)}, M-Pesa ${_money(r['mpesa']!)}, Card ${_money(r['card']!)}.',
+        'status': 'submitted',
+      });
+      // 2. Send it to the auditor for review (best-effort — the save already
+      // persisted, so a submit hiccup must not look like a failure).
+      final id = _text(saved, ['id']);
+      var sent = false;
+      if (id != null) {
+        try {
+          await repo.submitLogbook(id);
+          sent = true;
+        } catch (_) {}
+      }
+      onRefresh();
+      if (context.mounted) {
+        _snack(
+            context,
+            sent
+                ? 'Shift logbook generated and sent to the auditor'
+                : 'Shift logbook saved');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _snack(context, apiErrorMessage(e, fallback: 'Could not submit logbook'),
+            error: true);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final r = _reconcile();
     return _PageScaffold(
       title: 'Shift Logbook',
-      subtitle: 'Reception cashier shift notes and cash-control handover.',
+      subtitle:
+          'Auto-generated cash-control reconciliation — submitted to the auditor.',
       actions: [
         OutlinedButton.icon(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('Refresh')),
         ElevatedButton.icon(
-          onPressed: () =>
-              _showLogbookDialog(context, ref, data.logbook, onRefresh),
-          icon: const Icon(Icons.save_outlined, size: 16),
-          label: const Text('Save Logbook'),
+          onPressed: () => _generateAndSend(context, ref),
+          icon: const Icon(Icons.send_outlined, size: 16),
+          label: const Text('Generate & Send to Auditor'),
         ),
       ],
-      child: _CardPanel(
-        title: 'Today Logbook',
-        child: _KeyValueList(rows: [
-          {
-            'label': 'Opening float',
-            'value':
-                _money(_num(data.logbook, ['opening_float', 'openingFloat']))
-          },
-          {
-            'label': 'Closing cash',
-            'value': _money(_num(data.logbook, ['closing_cash', 'closingCash']))
-          },
-          {
-            'label': 'Notes',
-            'value': _text(data.logbook, ['notes']) ?? '-'
-          },
-          {
-            'label': 'Status',
-            'value': _text(data.logbook, ['status']) ?? 'draft'
-          },
-        ]),
-      ),
+      child: _buildLogbookBody(r),
+    );
+  }
+
+  Widget _buildLogbookBody(Map<String, num> r) {
+    final openingFloat = r['opening']!;
+    final cashCollected = r['cash']!;
+    final mpesaCollected = r['mpesa']!;
+    final cardCollected = r['card']!;
+    final expectedCash = r['expected']!;
+    final closingCash = _num(data.logbook, ['closing_float', 'closing_cash']);
+    final variance = closingCash > 0 ? closingCash - expectedCash : 0;
+    final status = _text(data.logbook, ['status']) ?? 'draft';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _CardPanel(
+          title: 'Cash Control',
+          child: _KeyValueList(rows: [
+            {'label': 'Opening float', 'value': _money(openingFloat)},
+            {'label': 'Cash collected today', 'value': _money(cashCollected)},
+            {'label': 'Expected cash in drawer', 'value': _money(expectedCash)},
+            {'label': 'Closing cash counted', 'value': _money(closingCash)},
+            {
+              'label': 'Variance',
+              'value':
+                  '${variance == 0 ? '' : variance > 0 ? '+' : ''}${_money(variance)}'
+            },
+            {'label': 'Status', 'value': status.toUpperCase()},
+          ]),
+        ),
+        const SizedBox(height: 12),
+        _CardPanel(
+          title: 'Other Collections (today)',
+          child: _KeyValueList(rows: [
+            {'label': 'M-Pesa', 'value': _money(mpesaCollected)},
+            {'label': 'Card', 'value': _money(cardCollected)},
+            {
+              'label': 'Total collected',
+              'value': _money(cashCollected + mpesaCollected + cardCollected)
+            },
+          ]),
+        ),
+        const SizedBox(height: 12),
+        _CardPanel(
+          title: 'Shift Notes',
+          child: Text(
+            _text(data.logbook, ['notes']) ?? 'No notes recorded for this shift.',
+            style: const TextStyle(height: 1.5),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1700,7 +1807,30 @@ class _HistorySection extends StatelessWidget {
         left: _CardPanel(
           title: 'Recent Bookings History',
           child: _SimpleRows(
-            rows: data.bookingRows.take(50).toList(),
+            rows: data.bookingRows.take(50).map((b) => {
+                  ...b,
+                  'booking_number': _text(b, [
+                        'booking_number',
+                        'confirmation_number',
+                        'reference',
+                        'ref'
+                      ]) ??
+                      '-',
+                  'guest_name': _text(b, [
+                        'guest_name',
+                        'guest.name',
+                        'guest.first_name',
+                        'customer_name'
+                      ]) ??
+                      'Walk-in',
+                  'room_number': _text(b, [
+                        'room_number',
+                        'room.room_number',
+                        'room.number',
+                        'room_no'
+                      ]) ??
+                      '-',
+                }).toList(),
             fields: const [
               'booking_number',
               'guest_name',
@@ -1713,7 +1843,19 @@ class _HistorySection extends StatelessWidget {
         right: _CardPanel(
           title: 'Recent Payments',
           child: _SimpleRows(
-            rows: data.payments.take(50).toList(),
+            rows: data.payments.take(50).map((p) => {
+                  ...p,
+                  'customer_name': _text(p, [
+                        'customer_name',
+                        'guest_name',
+                        'customer.name',
+                        'guest.name',
+                        'booking.guest_name',
+                        'bill.customer_name',
+                        'payer_name'
+                      ]) ??
+                      'Walk-in',
+                }).toList(),
             fields: const [
               'customer_name',
               'payment_method',
@@ -2427,6 +2569,9 @@ class _HorizontalTable extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: DataTable(
         headingRowColor: WidgetStatePropertyAll(Colors.grey.shade50),
+        // Allow rows to grow so wrapped action buttons are never clipped.
+        dataRowMinHeight: 52,
+        dataRowMaxHeight: 96,
         columns: columns
             .map((c) => DataColumn(
                 label: Text(c,
@@ -2941,13 +3086,18 @@ class _RecordField {
       {this.numeric = false,
       this.multiline = false,
       this.initial,
-      this.options});
+      this.options,
+      this.optionLabels});
   final String key;
   final String label;
   final bool numeric;
   final bool multiline;
   final String? initial;
   final List<String>? options;
+
+  /// Optional value→display-label map. When present, the dropdown shows the
+  /// label but still submits the underlying option value (e.g. an id).
+  final Map<String, String>? optionLabels;
 }
 
 class _RecordDialog extends StatefulWidget {
@@ -3006,7 +3156,9 @@ class _RecordDialogState extends State<_RecordDialog> {
                     decoration: InputDecoration(labelText: field.label),
                     items: field.options!
                         .map((item) => DropdownMenuItem(
-                            value: item, child: Text(_label(item))))
+                            value: item,
+                            child: Text(
+                                field.optionLabels?[item] ?? _label(item))))
                         .toList(),
                     onChanged: (value) => setState(() =>
                         _selectValues[field.key] =
@@ -3650,7 +3802,7 @@ Future<void> _showCheckoutDialog(BuildContext context, WidgetRef ref,
             final balance = booking.balance + (num.tryParse(charges.text) ?? 0);
             if (balance > 0) {
               Navigator.pop(context);
-              await _showPaymentMethodSheet(context, booking);
+              await _showPaymentMethodSheet(context, booking, amount: balance);
               return;
             }
             await _manualCheckout(context, ref, booking, onSuccess);
@@ -3663,31 +3815,43 @@ Future<void> _showCheckoutDialog(BuildContext context, WidgetRef ref,
   );
 }
 
-Future<void> _showPaymentMethodSheet(BuildContext context, Booking booking) {
+Future<void> _showPaymentMethodSheet(BuildContext context, Booking booking,
+    {num? amount}) {
+  final billRef = booking.confirmationNumber ?? booking.id;
+  final due = (amount ?? booking.balance);
   return showModalBottomSheet<void>(
     context: context,
     builder: (_) => Padding(
       padding: const EdgeInsets.all(20),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (final method in const ['mpesa', 'cash', 'card'])
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                context.go(
-                    '/cashier?billId=${booking.confirmationNumber ?? booking.id}&method=$method');
-              },
-              icon: Icon(method == 'mpesa'
-                  ? Icons.phone_android
-                  : method == 'cash'
-                      ? Icons.payments
-                      : Icons.credit_card),
-              label: Text('Pay by ${_label(method)}'),
-            ),
-        ],
-      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('Settle balance ${_money(due)}',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        const SizedBox(height: 4),
+        Text('Redirecting to cashier station with amount pre-filled',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          alignment: WrapAlignment.center,
+          children: [
+            for (final method in const ['mpesa', 'cash', 'card'])
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.go(
+                      '/cashier?billId=$billRef&method=$method&amount=${due.toStringAsFixed(0)}');
+                },
+                icon: Icon(method == 'mpesa'
+                    ? Icons.phone_android
+                    : method == 'cash'
+                        ? Icons.payments
+                        : Icons.credit_card),
+                label: Text('Pay by ${_label(method)}'),
+              ),
+          ],
+        ),
+      ]),
     ),
   );
 }
@@ -3765,14 +3929,23 @@ Future<void> _checkoutRoom(BuildContext context, WidgetRef ref, Room room,
 Future<void> _downloadCheckoutBill(
     BuildContext context, WidgetRef ref, Booking booking) async {
   try {
+    final total = (booking.totalAmount ?? 0) > 0
+        ? booking.totalAmount!
+        : booking.balance + (booking.amountPaid ?? 0);
+    final nights = booking.checkOut.difference(booking.checkIn).inDays;
     final file =
         await ref.read(receptionRepositoryProvider).downloadCheckoutBill({
-      'booking_id': booking.id,
+      // Short, human-readable reference (matches POS proforma codes), not the UUID.
+      'booking_id': booking.confirmationNumber ?? booking.id,
       'guest_name': booking.guestName,
+      'guest_phone': booking.guestPhone,
       'room_number': booking.roomNumber,
+      'nights': nights > 0 ? nights : 1,
       'check_in': booking.checkIn.toIso8601String(),
       'check_out': booking.checkOut.toIso8601String(),
-      'total_amount': booking.totalAmount ?? 0,
+      'room_charges': total,
+      'additional_charges': 0,
+      'total_amount': total,
       'amount_paid': booking.amountPaid ?? 0,
       'balance': booking.balance,
     });
@@ -3827,17 +4000,27 @@ Future<void> _showFolioDialog(BuildContext context, Booking booking) async {
 
 Future<void> _showConferenceBookingDialog(BuildContext context, WidgetRef ref,
     List<Map<String, dynamic>> halls, VoidCallback onSuccess) async {
+  final hallIds = halls
+      .map((h) => _text(h, ['id']) ?? '')
+      .where((id) => id.isNotEmpty)
+      .toList();
+  final hallLabels = <String, String>{
+    for (final h in halls)
+      if ((_text(h, ['id']) ?? '').isNotEmpty)
+        _text(h, ['id'])!: () {
+          final name = _text(h, ['name', 'hall_name', 'title']) ?? 'Hall';
+          final price = _num(
+              h, ['base_price_per_day', 'price_per_day', 'rate', 'price', 'amount']);
+          return price > 0 ? '$name • ${_money(price)}/day' : name;
+        }(),
+  };
   await showDialog<void>(
     context: context,
     builder: (_) => _RecordDialog(
       title: 'Book Conference Hall',
       fields: [
         _RecordField('hall_id', 'Hall',
-            options: halls
-                .map((h) => _text(h, ['id']) ?? '')
-                .where((id) => id.isNotEmpty)
-                .toList()
-                .ifEmpty([''])),
+            options: hallIds.ifEmpty(['']), optionLabels: hallLabels),
         const _RecordField('company_name', 'Company / Client'),
         const _RecordField('contact_person', 'Contact person'),
         const _RecordField('customer_phone', 'Phone'),
@@ -3917,41 +4100,76 @@ Future<void> _showDynamicBillDialog(
   );
 }
 
-Future<void> _showBillPaymentDialog(BuildContext context, WidgetRef ref,
-    Map<String, dynamic> bill, VoidCallback onSuccess) async {
-  final id = _text(bill, ['id']);
-  if (id == null) return;
-  await _showAmountDialog(context, 'Record Bill Payment', (amount) async {
-    await ref
-        .read(receptionRepositoryProvider)
-        .recordBillPayment(id, {'amount': amount, 'payment_method': 'cash'});
-    onSuccess();
-  });
+// Open the full cashier station for this bill, with the bill reference and the
+// outstanding amount pre-filled and ready for payment confirmation.
+void _openCashierForBill(BuildContext context, Map<String, dynamic> bill) {
+  final ref0 = _text(bill, ['bill_number', 'invoice_number', 'id']);
+  if (ref0 == null) return;
+  final outstanding = _num(
+      bill, ['balance', 'balance_amount', 'total_amount', 'amount']);
+  context.go(
+      '/cashier?billId=$ref0&amount=${outstanding.toStringAsFixed(0)}');
 }
 
 Future<void> _showAmountDialog(BuildContext context, String title,
-    Future<void> Function(num amount) onSubmit) async {
-  final amount = TextEditingController();
+    Future<void> Function(num amount, String method) onSubmit,
+    {num initial = 0, bool withMethod = false}) async {
+  final amount = TextEditingController(
+      text: initial > 0 ? initial.toStringAsFixed(0) : '');
+  String method = 'cash';
   await showDialog<void>(
     context: context,
-    builder: (_) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-          controller: amount,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Amount')),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () async {
-            await onSubmit(num.tryParse(amount.text) ?? 0);
-            if (context.mounted) Navigator.pop(context);
-          },
-          child: const Text('Save'),
-        ),
-      ],
+    builder: (_) => StatefulBuilder(
+      builder: (context, setLocal) => AlertDialog(
+        title: Text(title),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: amount,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  labelText: 'Amount', prefixText: 'KES ')),
+          if (withMethod) ...[
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: method,
+              decoration: const InputDecoration(labelText: 'Payment method'),
+              items: const [
+                DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                DropdownMenuItem(value: 'card', child: Text('Card')),
+              ],
+              onChanged: (v) => setLocal(() => method = v ?? 'cash'),
+            ),
+          ],
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final value = num.tryParse(amount.text.trim()) ?? 0;
+              if (value <= 0) {
+                _snack(context, 'Enter an amount greater than zero',
+                    error: true);
+                return;
+              }
+              try {
+                await onSubmit(value, method);
+                if (context.mounted) Navigator.pop(context);
+              } catch (e) {
+                if (context.mounted) {
+                  _snack(context, apiErrorMessage(e, fallback: 'Payment failed'),
+                      error: true);
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -3999,33 +4217,6 @@ Future<void> _showPettyCashDialog(BuildContext context, WidgetRef ref) async {
       onSubmit: (values) =>
           ref.read(receptionRepositoryProvider).requestPettyCash(values),
       submitLabel: 'Request',
-    ),
-  );
-}
-
-Future<void> _showLogbookDialog(BuildContext context, WidgetRef ref,
-    Map<String, dynamic> current, VoidCallback onSuccess) async {
-  await showDialog<void>(
-    context: context,
-    builder: (_) => _RecordDialog(
-      title: 'Save Shift Logbook',
-      fields: [
-        _RecordField('opening_float', 'Opening float',
-            numeric: true,
-            initial: '${_num(current, ['opening_float', 'openingFloat'])}'),
-        _RecordField('closing_cash', 'Closing cash',
-            numeric: true,
-            initial: '${_num(current, ['closing_cash', 'closingCash'])}'),
-        _RecordField('notes', 'Notes',
-            multiline: true, initial: _text(current, ['notes'])),
-        _RecordField('status', 'Status',
-            options: const ['draft', 'submitted'],
-            initial: _text(current, ['status']) ?? 'draft'),
-      ],
-      onSubmit: (values) async {
-        await ref.read(receptionRepositoryProvider).saveLogbook(values);
-        onSuccess();
-      },
     ),
   );
 }

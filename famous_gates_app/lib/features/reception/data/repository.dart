@@ -410,12 +410,20 @@ class ReceptionRepository {
   }
 
   Future<Map<String, dynamic>> getLogbookToday() async {
-    final response = await _dio.get('/cashier/logbook/today');
+    final response = await _dio.get('/cashier/logbook/today',
+        queryParameters: await _branchParams({'type': 'cashier'}));
     return _payload(response.data);
   }
 
-  Future<void> saveLogbook(Map<String, dynamic> data) async {
-    await _dio.post('/cashier/logbook', data: await _withBranch(data));
+  Future<Map<String, dynamic>> saveLogbook(Map<String, dynamic> data) async {
+    final response =
+        await _dio.post('/cashier/logbook', data: await _withBranch(data));
+    return _payload(response.data);
+  }
+
+  /// Submit a saved logbook to the auditor for review.
+  Future<void> submitLogbook(String id) async {
+    await _dio.post('/cashier/logbook/$id/submit');
   }
 
   Future<void> clockAttendance(String action) async {

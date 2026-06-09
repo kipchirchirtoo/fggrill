@@ -51,6 +51,16 @@ final linaPendingRemediationsProvider =
   return ref.read(linaRepositoryProvider).getPendingRemediations();
 });
 
+final linaBranchBenchmarkProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(linaRepositoryProvider).getBranchBenchmark();
+});
+
+final linaForecastProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  return ref.read(linaRepositoryProvider).getForecast();
+});
+
 // ── Chat state ─────────────────────────────────────────────────────────────
 
 class ChatMessage {

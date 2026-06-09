@@ -21,6 +21,8 @@ final _tabs = [
   ('Monitoring', PhosphorIcons.activity()),
   ('Audit', PhosphorIcons.shieldWarning()),
   ('Financial', PhosphorIcons.currencyDollar()),
+  ('Forecast', PhosphorIcons.trendUp()),
+  ('Benchmark', PhosphorIcons.trophy()),
   ('Employee', PhosphorIcons.users()),
   ('Recommendations', PhosphorIcons.brain()),
   ('Timeline', PhosphorIcons.clockCounterClockwise()),
@@ -75,6 +77,8 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
               _MonitoringTab(),
               _AuditTab(),
               _FinancialTab(),
+              _ForecastTab(),
+              _BranchBenchmarkTab(),
               _EmployeeTab(),
               _RecommendationsTab(),
               _TimelineTab(),
@@ -305,6 +309,91 @@ Widget _severityBadge(String severity) {
   );
 }
 
+// Dynamic source chip — shows the real model that produced the report.
+Widget _modelChip(Map<String, dynamic> data) {
+  final model = (data['model'] ?? '').toString();
+  final engine = data['engine'] == 'deterministic' || model == 'lina-engine';
+  final label = engine
+      ? 'Lina Engine'
+      : model.startsWith('groq/')
+          ? 'Groq · ${model.substring(5)}'
+          : model.isEmpty
+              ? 'Lina'
+              : model;
+  final color = engine ? _kLinaTeal : _kLinaAccent;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(engine ? PhosphorIcons.brain() : PhosphorIcons.sparkle(),
+          size: 11, color: color),
+      const SizedBox(width: 4),
+      Text(label,
+          style: TextStyle(
+              color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+    ]),
+  );
+}
+
+// Health-score gauge chip (0-100 + grade).
+Widget _scorePill(String label, num score, String grade) {
+  final s = score.toDouble();
+  final color = s >= 70
+      ? AppColors.kSuccess
+      : s >= 55
+          ? AppColors.kWarning
+          : AppColors.kError;
+  return Expanded(
+    child: _card(
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('${score.round()}',
+              style: TextStyle(
+                  fontSize: 26, fontWeight: FontWeight.w800, color: color)),
+          const SizedBox(width: 2),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('/100',
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.kTextSecondary)),
+          ),
+          const Spacer(),
+          Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8)),
+            child: Text(grade,
+                style: TextStyle(
+                    color: color, fontSize: 13, fontWeight: FontWeight.w800)),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (s / 100).clamp(0.0, 1.0),
+            minHeight: 5,
+            backgroundColor: color.withValues(alpha: 0.12),
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.kTextSecondary)),
+      ]),
+    ),
+  );
+}
+
 Widget _loadingCard() => _card(
         child: const SizedBox(
       height: 120,
@@ -388,9 +477,13 @@ class _ExecutiveTab extends ConsumerWidget {
               style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
             )),
 
-        // KPI row from context
+        // KPI row + health scores from context
         ctxAsync.when(
-          data: (ctx) => _buildKpiRow(ctx),
+          data: (ctx) => Column(children: [
+            _buildKpiRow(ctx),
+            const SizedBox(height: 12),
+            _buildHealthScores(ctx),
+          ]),
           loading: () => const SizedBox(
               height: 96,
               child: Center(
@@ -416,19 +509,7 @@ class _ExecutiveTab extends ConsumerWidget {
                         fontWeight: FontWeight.w700,
                         color: AppColors.kTextPrimary)),
                 const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _kLinaAccent.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text('Gemini 2.0 Flash',
-                      style: TextStyle(
-                          color: _kLinaAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600)),
-                ),
+                _modelChip(data),
               ]),
               const Divider(height: 24),
               _linaMarkdown(data['summary'] ?? 'No summary available'),
@@ -465,6 +546,23 @@ class _ExecutiveTab extends ConsumerWidget {
       _kpiCard('Staff Present', '${staff['present'] ?? 0}',
           PhosphorIcons.users(), AppColors.kSuccess),
     ]);
+  }
+
+  Widget _buildHealthScores(Map<String, dynamic> ctx) {
+    final hs = ctx['health_scores'] as Map<String, dynamic>? ?? {};
+    final pillars = (hs['pillars'] as List<dynamic>?) ?? [];
+    if (pillars.isEmpty) return const SizedBox.shrink();
+    final children = <Widget>[];
+    for (var i = 0; i < pillars.length; i++) {
+      final p = pillars[i] as Map<String, dynamic>;
+      children.add(_scorePill(
+        (p['label'] ?? '').toString(),
+        (p['score'] as num?) ?? 0,
+        (p['grade'] ?? '—').toString(),
+      ));
+      if (i != pillars.length - 1) children.add(const SizedBox(width: 12));
+    }
+    return Row(children: children);
   }
 }
 
@@ -966,18 +1064,7 @@ class _AuditTab extends ConsumerWidget {
                       style:
                           TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   const Spacer(),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                        color: _kLinaAccent.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6)),
-                    child: const Text('Gemini 2.0 Flash',
-                        style: TextStyle(
-                            color: _kLinaAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600)),
-                  ),
+                  _modelChip(data),
                 ]),
                 const Divider(height: 24),
                 _linaMarkdown(data['report'] ?? ''),
@@ -1058,18 +1145,7 @@ class _FinancialTab extends ConsumerWidget {
                       style:
                           TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   const Spacer(),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                        color: _kLinaAccent.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6)),
-                    child: const Text('Gemini 2.0 Flash',
-                        style: TextStyle(
-                            color: _kLinaAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600)),
-                  ),
+                  _modelChip(data),
                 ]),
                 const Divider(height: 24),
                 _linaMarkdown(data['analysis'] ?? ''),
@@ -1145,18 +1221,7 @@ class _EmployeeTab extends ConsumerWidget {
                       style:
                           TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   const Spacer(),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                        color: _kLinaAccent.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6)),
-                    child: const Text('Gemini 2.0 Flash',
-                        style: TextStyle(
-                            color: _kLinaAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600)),
-                  ),
+                  _modelChip(data),
                 ]),
                 const Divider(height: 24),
                 _linaMarkdown(data['analysis'] ?? ''),
@@ -1570,5 +1635,400 @@ class _FixCenterTab extends ConsumerWidget {
         ]),
       ]),
     );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Forecast Tab — revenue projection (deterministic engine, always available)
+// ═════════════════════════════════════════════════════════════════════════════
+class _ForecastTab extends ConsumerWidget {
+  const _ForecastTab();
+
+  String _kes(num v) {
+    if (v >= 1000000) return 'KES ${(v / 1000000).toStringAsFixed(2)}M';
+    if (v >= 1000) return 'KES ${(v / 1000).toStringAsFixed(1)}K';
+    return 'KES ${v.round()}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fcAsync = ref.watch(linaForecastProvider);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('Revenue Forecast',
+            subtitle: '7-day projection from 30-day trend (least-squares engine)',
+            action: OutlinedButton.icon(
+              onPressed: () => ref.invalidate(linaForecastProvider),
+              icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
+              label: const Text('Recompute'),
+              style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
+            )),
+        fcAsync.when(
+          data: (d) {
+            final history =
+                ((d['history'] as List<dynamic>?) ?? []).cast<dynamic>();
+            final forecast =
+                ((d['forecast'] as List<dynamic>?) ?? []).cast<dynamic>();
+            final trend = (d['trend'] ?? 'flat').toString();
+            final trendColor = trend == 'up'
+                ? AppColors.kSuccess
+                : trend == 'down'
+                    ? AppColors.kError
+                    : AppColors.kTextSecondary;
+            final hist = history
+                .map((e) => ((e as Map)['value'] as num?)?.toDouble() ?? 0)
+                .toList();
+            final fc = forecast
+                .map((e) => ((e as Map)['value'] as num?)?.toDouble() ?? 0)
+                .toList();
+            return Column(children: [
+              Row(children: [
+                _kpiCard(
+                    'Avg / Day (7d)',
+                    _kes((d['avg_daily_7d'] as num?) ?? 0),
+                    PhosphorIcons.chartBar(),
+                    _kLinaTeal),
+                const SizedBox(width: 12),
+                _kpiCard(
+                    'Next 7d Projection',
+                    _kes((d['next_7d_projection'] as num?) ?? 0),
+                    PhosphorIcons.trendUp(),
+                    AppColors.kPrimary),
+                const SizedBox(width: 12),
+                _kpiCard(
+                    'Next 30d Projection',
+                    _kes((d['next_30d_projection'] as num?) ?? 0),
+                    PhosphorIcons.calendar(),
+                    _kLinaAccent),
+                const SizedBox(width: 12),
+                _kpiCard(
+                    'Trend',
+                    trend.toUpperCase(),
+                    trend == 'down'
+                        ? PhosphorIcons.trendDown()
+                        : PhosphorIcons.trendUp(),
+                    trendColor),
+              ]),
+              const SizedBox(height: 20),
+              _card(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(PhosphorIcons.chartLine(),
+                            size: 18, color: _kLinaAccent),
+                        const SizedBox(width: 8),
+                        const Text('30-Day History → 7-Day Forecast',
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w700)),
+                        const Spacer(),
+                        _modelChip(d),
+                      ]),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 180,
+                        child: CustomPaint(
+                          size: Size.infinite,
+                          painter: _ForecastPainter(history: hist, forecast: fc),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        _legendDot(_kLinaAccent, 'Actual'),
+                        const SizedBox(width: 16),
+                        _legendDot(AppColors.kSuccess, 'Forecast'),
+                      ]),
+                    ]),
+              ),
+              const SizedBox(height: 16),
+              _card(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Daily Projection',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      ...forecast.map((e) {
+                        final m = e as Map;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(children: [
+                            Icon(PhosphorIcons.calendarBlank(),
+                                size: 14, color: AppColors.kTextSecondary),
+                            const SizedBox(width: 8),
+                            Text((m['date'] ?? '').toString(),
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.kTextSecondary)),
+                            const Spacer(),
+                            Text(_kes((m['value'] as num?) ?? 0),
+                                style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.kTextPrimary)),
+                          ]),
+                        );
+                      }),
+                    ]),
+              ),
+            ]);
+          },
+          loading: () => _loadingCard(),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaForecastProvider)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _legendDot(Color c, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label,
+            style:
+                const TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+      ]);
+}
+
+class _ForecastPainter extends CustomPainter {
+  final List<double> history;
+  final List<double> forecast;
+  _ForecastPainter({required this.history, required this.forecast});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final all = [...history, ...forecast];
+    if (all.isEmpty) return;
+    final maxV = all.reduce((a, b) => a > b ? a : b);
+    final minV = all.reduce((a, b) => a < b ? a : b);
+    final range = (maxV - minV).abs() < 1 ? 1 : (maxV - minV);
+    final n = all.length;
+    if (n < 2) return;
+    final dx = size.width / (n - 1);
+    Offset pt(int i, double v) =>
+        Offset(i * dx, size.height - ((v - minV) / range) * size.height);
+
+    // grid baseline
+    final grid = Paint()
+      ..color = const Color(0xFFEFEFF5)
+      ..strokeWidth = 1;
+    for (var g = 0; g <= 3; g++) {
+      final y = size.height * g / 3;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+
+    final histPaint = Paint()
+      ..color = _kLinaAccent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    final fcPaint = Paint()
+      ..color = AppColors.kSuccess
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+
+    final histPath = Path();
+    for (var i = 0; i < history.length; i++) {
+      final o = pt(i, history[i]);
+      if (i == 0) {
+        histPath.moveTo(o.dx, o.dy);
+      } else {
+        histPath.lineTo(o.dx, o.dy);
+      }
+    }
+    canvas.drawPath(histPath, histPaint);
+
+    if (forecast.isNotEmpty) {
+      final fcPath = Path();
+      // connect from last history point
+      final startIdx = history.isNotEmpty ? history.length - 1 : 0;
+      final startVal = history.isNotEmpty ? history.last : forecast.first;
+      var o = pt(startIdx, startVal);
+      fcPath.moveTo(o.dx, o.dy);
+      for (var i = 0; i < forecast.length; i++) {
+        o = pt(history.length + i, forecast[i]);
+        fcPath.lineTo(o.dx, o.dy);
+      }
+      canvas.drawPath(fcPath, fcPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ForecastPainter old) =>
+      old.history != history || old.forecast != forecast;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Branch Benchmark Tab — per-branch scorecards (deterministic, always available)
+// ═════════════════════════════════════════════════════════════════════════════
+class _BranchBenchmarkTab extends ConsumerWidget {
+  const _BranchBenchmarkTab();
+
+  String _kes(num v) {
+    if (v >= 1000000) return 'KES ${(v / 1000000).toStringAsFixed(2)}M';
+    if (v >= 1000) return 'KES ${(v / 1000).toStringAsFixed(1)}K';
+    return 'KES ${v.round()}';
+  }
+
+  Color _gradeColor(String g) {
+    switch (g) {
+      case 'A':
+        return AppColors.kSuccess;
+      case 'B':
+        return _kLinaTeal;
+      case 'C':
+        return AppColors.kWarning;
+      case 'D':
+        return const Color(0xFFEA580C);
+      default:
+        return AppColors.kError;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bmAsync = ref.watch(linaBranchBenchmarkProvider);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sectionHeader('Branch Benchmark',
+            subtitle:
+                'Ranked scorecards — revenue, compliance & occupancy (7-day)',
+            action: OutlinedButton.icon(
+              onPressed: () => ref.invalidate(linaBranchBenchmarkProvider),
+              icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
+              label: const Text('Recompute'),
+              style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
+            )),
+        bmAsync.when(
+          data: (cards) => cards.isEmpty
+              ? _card(
+                  child: const Center(
+                      child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Text('No branch data available.',
+                              style: TextStyle(
+                                  color: AppColors.kTextSecondary)))))
+              : Column(
+                  children:
+                      cards.map((c) => _buildCard(c)).toList()),
+          loading: () => _loadingCard(),
+          error: (e, _) => _errorCard(
+              e, () => ref.invalidate(linaBranchBenchmarkProvider)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildCard(Map<String, dynamic> c) {
+    final grade = (c['grade'] ?? '—').toString();
+    final gc = _gradeColor(grade);
+    final rank = c['rank'] ?? 0;
+    final score = (c['score'] as num?) ?? 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _card(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  color: _kLinaAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(9)),
+              child: Text('#$rank',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: _kLinaAccent)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text((c['name'] ?? '').toString(),
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.kTextPrimary)),
+                    Text('${(c['status'] ?? '').toString()} · ${c['shifts'] ?? 0} shifts',
+                        style: const TextStyle(
+                            fontSize: 11.5, color: AppColors.kTextSecondary)),
+                  ]),
+            ),
+            Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  color: gc.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12)),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(grade,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 18, color: gc)),
+                Text('${score.round()}',
+                    style: TextStyle(
+                        fontSize: 9, color: gc, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (score / 100).clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: gc.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation(gc),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(spacing: 18, runSpacing: 8, children: [
+            _metric('Revenue 7d', _kes((c['revenue_7d'] as num?) ?? 0),
+                PhosphorIcons.currencyDollar(), _kLinaTeal),
+            _metric('Occupancy', '${c['occupancy_pct'] ?? 0}%',
+                PhosphorIcons.bed(), AppColors.kPrimary),
+            _metric('Discrepancies', '${c['discrepancy_shifts'] ?? 0}',
+                PhosphorIcons.warning(),
+                ((c['discrepancy_shifts'] as num?) ?? 0) > 0
+                    ? AppColors.kWarning
+                    : AppColors.kSuccess),
+            _metric('Voids', '${c['voids'] ?? 0}', PhosphorIcons.prohibit(),
+                ((c['voids'] as num?) ?? 0) > 0
+                    ? AppColors.kError
+                    : AppColors.kSuccess),
+            _metric('Critical', '${c['critical'] ?? 0}',
+                PhosphorIcons.shieldWarning(),
+                ((c['critical'] as num?) ?? 0) > 0
+                    ? AppColors.kError
+                    : AppColors.kSuccess),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _metric(String label, String value, IconData icon, Color color) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 15, color: color),
+      const SizedBox(width: 6),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(value,
+            style: TextStyle(
+                fontSize: 13.5, fontWeight: FontWeight.w700, color: color)),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 10.5, color: AppColors.kTextSecondary)),
+      ]),
+    ]);
   }
 }

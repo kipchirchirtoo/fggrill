@@ -22,8 +22,15 @@ class StatCard extends StatelessWidget {
     final c = color ?? AppColors.kPrimary;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact =
-            constraints.maxHeight.isFinite && constraints.maxHeight < 150;
+        final h = constraints.maxHeight;
+        // Very short tiles can't fit a stacked layout — go horizontal.
+        final tight = h.isFinite && h < 96;
+        final compact = h.isFinite && h < 150;
+
+        if (tight) {
+          return _buildTight(c);
+        }
+
         final padding = compact ? 14.0 : 20.0;
         final iconPadding = compact ? 7.0 : 8.0;
         final iconSize = compact ? 18.0 : 20.0;
@@ -94,6 +101,62 @@ class StatCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  // Compact horizontal layout for very short tiles (icon left, text right).
+  Widget _buildTight(Color c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: c.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: c, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: c,
+                    ),
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.kTextSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

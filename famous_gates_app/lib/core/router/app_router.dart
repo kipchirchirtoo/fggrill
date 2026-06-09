@@ -208,7 +208,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
           path: '/cashier',
-          builder: (context, state) => const CashierDashboard()),
+          builder: (context, state) {
+            final q = state.uri.queryParameters;
+            return CashierDashboard(
+              initialBillRef: q['billId'] ?? q['billRef'] ?? q['invoice'],
+              initialAmount: q['amount'],
+              initialMethod: q['method'],
+            );
+          }),
       GoRoute(
           path: '/cashier/barcode-scan',
           builder: (context, state) =>
