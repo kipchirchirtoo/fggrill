@@ -4198,6 +4198,17 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
 
         if (updateError) throw updateError;
 
+        // Normalize how the staff paid (cash / mpesa / card / bank) so the
+        // branch accountant sees the real method when clearing the credit bill.
+        const methodRaw = String(payment_method || 'cash').toLowerCase();
+        const normalizedMethod = methodRaw.includes('mpesa') || methodRaw.includes('m-pesa')
+            ? 'mpesa'
+            : methodRaw.includes('card') || methodRaw.includes('swipe') || methodRaw.includes('visa')
+                ? 'card'
+                : methodRaw.includes('bank')
+                    ? 'bank'
+                    : 'cash';
+
         const { data: linkedPayrollBills, error: linkedPayrollError } = await supabase
             .from('staff_credit_bills')
             .select('id, amount, paid_amount, balance, status')
@@ -4233,11 +4244,7 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
                     .insert({
                         credit_bill_id: payrollBill.id,
                         amount: appliedPaymentAmount,
-                        payment_method: String(payment_method || 'cash').toLowerCase().includes('mpesa')
-                            ? 'mpesa'
-                            : String(payment_method || 'cash').toLowerCase().includes('bank')
-                                ? 'bank'
-                                : 'cash',
+                        payment_method: normalizedMethod,
                         reference: payment_reference || null,
                         notes: `Cashier payment for credit bill ${credit.credit_number || id}`,
                         recorded_by: req.user?.id || null
@@ -4265,7 +4272,7 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
                 revenue_type: 'staff_credit',
                 reference_type: 'credit_bill',
                 reference_id: credit.id,
-                payment_method,
+                payment_method: normalizedMethod,
                 amount: paymentAmount,
                 payment_reference,
                 customer_name: credit.staff_name
@@ -4282,7 +4289,7 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
             branchId: credit.branch_id,
             transactionId: cashierTransaction?.id || String(credit.id),
             transactionRef: cashierTransaction?.transaction_number || transaction_number,
-            paymentMethod: payment_method,
+            paymentMethod: normalizedMethod,
             amount: paymentAmount
         });
 

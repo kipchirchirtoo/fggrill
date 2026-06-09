@@ -39,6 +39,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   static const _visibleTabs = [
     CashierTab.station,
     CashierTab.bills,
+    CashierTab.credit,
     CashierTab.shifts,
     CashierTab.barcode,
     CashierTab.insights,
@@ -66,6 +67,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         label: 'Unpaid Bills',
         icon: Icons.receipt_long,
         content: _RequiresOpenShift(child: _UnpaidBillsTab()),
+      ),
+      const DashboardTab(
+        label: 'Credit Payments',
+        icon: Icons.payments,
+        content: _RequiresOpenShift(child: _CreditPaymentsTab()),
       ),
       const DashboardTab(
         label: 'Shifts',
@@ -1514,6 +1520,343 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
   void _snack(String message) {
     if (!mounted) return;
     AppNotifier.show(context, message);
+  }
+}
+
+class _CreditPaymentsTab extends ConsumerStatefulWidget {
+  const _CreditPaymentsTab();
+
+  @override
+  ConsumerState<_CreditPaymentsTab> createState() => _CreditPaymentsTabState();
+}
+
+class _CreditPaymentsTabState extends ConsumerState<_CreditPaymentsTab> {
+  final _searchController = TextEditingController();
+  String _search = '';
+  String? _recordingId;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  num _billBalance(Map<String, dynamic> bill) {
+    final explicit = _num(bill['balance_amount']);
+    if (explicit > 0) return explicit;
+    final remaining = _num(bill['total_amount']) - _num(bill['paid_amount']);
+    return remaining > 0 ? remaining : 0;
+  }
+
+  bool _matchesSearch(Map<String, dynamic> bill) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return _text(bill, ['staff_name']).toLowerCase().contains(q) ||
+        _text(bill, ['credit_number']).toLowerCase().contains(q) ||
+        _text(bill, ['employee_id']).toLowerCase().contains(q) ||
+        _text(bill, ['department']).toLowerCase().contains(q);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final billsAsync =
+        ref.watch(cashierCreditBillsProvider(const CashierBillFilters()));
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Staff Credit Payments',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              SizedBox(
+                width: 280,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    hintText: 'Search staff, credit no, dept…',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) => setState(() => _search = value),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Record a payment a staff member makes toward their credit bill '
+            '(cash, M-Pesa or card). Each payment posts to the branch '
+            'accountant, who uses it to clear the staff credit bill.',
+            style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          billsAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(48),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, _) => ErrorState(
+              message: apiErrorMessage(error),
+              onRetry: () => ref.invalidate(cashierCreditBillsProvider),
+            ),
+            data: (rows) {
+              final outstanding = rows
+                  .where((bill) => _billBalance(bill) > 0)
+                  .where(_matchesSearch)
+                  .toList()
+                ..sort((a, b) => _text(a, ['staff_name'])
+                    .toLowerCase()
+                    .compareTo(_text(b, ['staff_name']).toLowerCase()));
+              if (outstanding.isEmpty) {
+                return const EmptyState(
+                  icon: Icons.verified,
+                  message: 'No outstanding staff credit bills to settle.',
+                );
+              }
+              return Column(
+                children: [
+                  for (final bill in outstanding) _billCard(bill),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _billCard(Map<String, dynamic> bill) {
+    final id = _text(bill, ['id']);
+    final balance = _billBalance(bill);
+    final staffName = _text(bill, ['staff_name']);
+    final creditNo = _text(bill, ['credit_number']);
+    final dept = _text(bill, ['department']);
+    final subtitle = [
+      if (creditNo.isNotEmpty) creditNo,
+      if (dept.isNotEmpty) dept,
+    ].join(' · ');
+    final busy = _recordingId == id;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    staffName.isEmpty ? 'Staff member' : staffName,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            color: AppColors.kTextSecondary, fontSize: 12)),
+                  ],
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 20,
+                    runSpacing: 8,
+                    children: [
+                      _meta('Total', _money(bill['total_amount'])),
+                      _meta('Paid', _money(bill['paid_amount'])),
+                      _meta('Balance', _money(balance), strong: true),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: busy ? null : () => _recordPayment(bill),
+              icon: busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.payments, size: 18),
+              label: const Text('Record Payment'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _meta(String label, String value, {bool strong = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                color: AppColors.kTextSecondary, fontSize: 11)),
+        Text(value,
+            style: TextStyle(
+                fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
+                fontSize: strong ? 15 : 13,
+                color: strong ? AppColors.kPrimary : null)),
+      ],
+    );
+  }
+
+  Future<void> _recordPayment(Map<String, dynamic> bill) async {
+    final id = _text(bill, ['id']);
+    if (id.isEmpty) return;
+    final balance = _billBalance(bill);
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _CreditPaymentDialog(
+        staffName: _text(bill, ['staff_name']),
+        balance: balance,
+      ),
+    );
+    if (result == null) return;
+    setState(() => _recordingId = id);
+    try {
+      final reference = (result['reference'] as String).trim();
+      await ref.read(cashierRepositoryProvider).recordCreditPayment(id, {
+        'payment_amount': result['amount'],
+        'payment_method': result['method'],
+        if (reference.isNotEmpty) 'payment_reference': reference,
+      });
+      ref.invalidate(cashierCreditBillsProvider);
+      ref.invalidate(cashierStatsProvider);
+      ref.invalidate(cashierCurrentShiftProvider);
+      ref.invalidate(cashierShiftsProvider);
+      _snack(
+          'Payment of ${_money(result['amount'])} recorded for ${_text(bill, [
+            'staff_name'
+          ])}');
+    } catch (error) {
+      _snack('Payment failed: ${apiErrorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _recordingId = null);
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    AppNotifier.show(context, message);
+  }
+}
+
+class _CreditPaymentDialog extends StatefulWidget {
+  const _CreditPaymentDialog({required this.staffName, required this.balance});
+
+  final String staffName;
+  final num balance;
+
+  @override
+  State<_CreditPaymentDialog> createState() => _CreditPaymentDialogState();
+}
+
+class _CreditPaymentDialogState extends State<_CreditPaymentDialog> {
+  late final TextEditingController _amountController =
+      TextEditingController(text: widget.balance.toStringAsFixed(0));
+  final _referenceController = TextEditingController();
+  String _method = 'cash';
+
+  static const _methods = [
+    ('cash', 'Cash'),
+    ('mpesa', 'M-Pesa'),
+    ('card', 'Card'),
+  ];
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _referenceController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        'Record payment · ${widget.staffName.isEmpty ? 'Staff' : widget.staffName}',
+        style: const TextStyle(fontSize: 17),
+      ),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Outstanding balance: ${_money(widget.balance)}',
+                style: const TextStyle(color: AppColors.kTextSecondary)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _amountController,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Amount paid',
+                prefixText: 'KES ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Payment method',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final m in _methods)
+                  ChoiceChip(
+                    label: Text(m.$2),
+                    selected: _method == m.$1,
+                    onSelected: (_) => setState(() => _method = m.$1),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _referenceController,
+              decoration: const InputDecoration(
+                labelText: 'Reference (M-Pesa code / receipt no.)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final amount = num.tryParse(_amountController.text.trim()) ?? 0;
+            if (amount <= 0) {
+              AppNotifier.show(context, 'Enter a valid amount');
+              return;
+            }
+            if (amount > widget.balance) {
+              AppNotifier.show(context, 'Amount cannot exceed the balance');
+              return;
+            }
+            Navigator.of(context).pop({
+              'amount': amount,
+              'method': _method,
+              'reference': _referenceController.text,
+            });
+          },
+          child: const Text('Record'),
+        ),
+      ],
+    );
   }
 }
 
