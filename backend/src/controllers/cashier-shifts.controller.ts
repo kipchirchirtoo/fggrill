@@ -4,6 +4,15 @@ import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
+import {
+    loadAssignedPosOutlets,
+    canAccessPosOutlet,
+    stationTypesForCashierRole,
+    isBarStationType,
+    shouldRestrictCashierStationAccess,
+    assignedOutletIds,
+    type PosOutlet,
+} from '../utils/posStationAccess';
 
 // ==========================================
 // SHIFT LOGBOOK
@@ -1165,61 +1174,81 @@ export const closeShift = async (
         // ==========================================
         // VALIDATION: Check for unpaid bills
         // ==========================================
-        const shiftEndTimestamp = new Date().toISOString();
         const UNSETTLED = ['pending', 'unpaid', 'partial'];
 
-        const [
-            { data: unpaidRestOrders },
-            { data: unpaidBarOrders },
-            { data: unpaidShiftBills }
-        ] = await Promise.all([
-            supabase.from('restaurant_orders')
-                .select('id')
-                .eq('branch_id', shift.branch_id)
-                .gte('created_at', shift.shift_start)
-                .lte('created_at', shiftEndTimestamp)
-                .in('payment_status', UNSETTLED),
-            supabase.from('bar_orders')
-                .select('id')
-                .eq('branch_id', shift.branch_id)
-                .gte('created_at', shift.shift_start)
-                .lte('created_at', shiftEndTimestamp)
-                .in('payment_status', UNSETTLED),
-            // Kyogong / POS "bill" transactions still owed.
-            supabase.from('shift_transactions')
-                .select('id')
-                .eq('branch_id', shift.branch_id)
-                .eq('payment_method', 'BILL')
-                .eq('is_voided', false)
-                .gte('created_at', shift.shift_start)
-                .lte('created_at', shiftEndTimestamp)
+        // Each POS-outlet cashier is responsible for ONLY their own outlet's
+        // bills (a main-bar cashier clears main-bar orders, not exec-bar/
+        // restaurant). Resolve the shift OWNER's outlets so this guard counts
+        // exactly the bills that appear in their Unpaid Bills tab.
+        const { data: ownerUser } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', shift.cashier_id)
+            .maybeSingle();
+        const ownerRole = String(ownerUser?.role || '').toLowerCase();
+        const ownerAssignedOutlets = await loadAssignedPosOutlets(supabase, shift.cashier_id);
+        const ownerAssignedIds = assignedOutletIds(ownerAssignedOutlets);
+        const ownerStationRestricted = shouldRestrictCashierStationAccess(ownerRole, ownerAssignedIds);
+        const ownerOutletTypes = new Set([
+            ...stationTypesForCashierRole(ownerRole),
+            ...ownerAssignedOutlets
+                .map((o: PosOutlet) => String(o.outlet_type || '').toLowerCase())
+                .filter(Boolean),
         ]);
+        const canCloseRestaurant = !ownerStationRestricted || ownerOutletTypes.has('restaurant');
+        const canCloseBar = !ownerStationRestricted || Array.from(ownerOutletTypes).some(isBarStationType);
 
-        // POS shift orders: resolve the branch's POS outlet-shift ids first,
-        // then count unsettled orders on them (reliable — no embedded filter).
-        let unpaidPosOrders = 0;
-        const { data: branchPosShifts } = await supabase
-            .from('pos_outlet_shifts')
-            .select('id')
+        // POS shift orders: only the outlets this cashier runs.
+        const { data: branchPosOutlets } = await supabase
+            .from('pos_outlets')
+            .select('id, outlet_type, branch_id, name')
             .eq('branch_id', shift.branch_id);
-        const branchPosShiftIds = (branchPosShifts || [])
-            .map((s: any) => s.id)
+        const allowedOutletIds = ((branchPosOutlets || []) as PosOutlet[])
+            .filter((outlet) => canAccessPosOutlet(ownerRole, outlet, ownerAssignedOutlets))
+            .map((outlet) => String(outlet.id))
             .filter(Boolean);
-        if (branchPosShiftIds.length) {
-            const { data: posOrders, error: posErr } = await supabase
-                .from('pos_shift_orders')
+
+        let unpaidPosOrders = 0;
+        if (allowedOutletIds.length) {
+            const { data: ownerPosShifts } = await supabase
+                .from('pos_outlet_shifts')
                 .select('id')
-                .in('shift_id', branchPosShiftIds)
-                .in('payment_status', ['unpaid', 'partial'])
-                .neq('status', 'cancelled');
-            if (posErr) throw posErr;
-            unpaidPosOrders = posOrders?.length || 0;
+                .eq('branch_id', shift.branch_id)
+                .in('outlet_id', allowedOutletIds);
+            const ownerPosShiftIds = (ownerPosShifts || [])
+                .map((s: any) => s.id)
+                .filter(Boolean);
+            if (ownerPosShiftIds.length) {
+                const { data: posOrders, error: posErr } = await supabase
+                    .from('pos_shift_orders')
+                    .select('id')
+                    .in('shift_id', ownerPosShiftIds)
+                    .in('payment_status', ['unpaid', 'partial'])
+                    .neq('status', 'cancelled');
+                if (posErr) throw posErr;
+                unpaidPosOrders = posOrders?.length || 0;
+            }
         }
 
-        const totalUnpaid = (unpaidRestOrders?.length || 0)
-            + (unpaidBarOrders?.length || 0)
-            + (unpaidShiftBills?.length || 0)
-            + unpaidPosOrders;
+        // Legacy restaurant / bar orders only count for cashiers who serve them.
+        let unpaidRestCount = 0;
+        if (canCloseRestaurant) {
+            const { data: unpaidRestOrders } = await supabase.from('restaurant_orders')
+                .select('id')
+                .eq('branch_id', shift.branch_id)
+                .in('payment_status', UNSETTLED);
+            unpaidRestCount = unpaidRestOrders?.length || 0;
+        }
+        let unpaidBarCount = 0;
+        if (canCloseBar) {
+            const { data: unpaidBarOrders } = await supabase.from('bar_orders')
+                .select('id')
+                .eq('branch_id', shift.branch_id)
+                .in('payment_status', UNSETTLED);
+            unpaidBarCount = unpaidBarOrders?.length || 0;
+        }
+
+        const totalUnpaid = unpaidRestCount + unpaidBarCount + unpaidPosOrders;
 
         if (totalUnpaid > 0) {
             throw new AppError(`Cannot close shift: ${totalUnpaid} unsettled bill(s) remain. Settle every bill (cash, M-Pesa or card) or record it as a credit bill before closing the shift.`, 400);
@@ -1349,14 +1378,19 @@ export const closeShift = async (
 
         if (updateError) throw updateError;
 
-        // Close the branch's POS station shifts too — the POS is "open" only
-        // while the cashier's shift is open (see getActiveShift bridge).
+        // Close only THIS cashier's POS station shift(s) — the POS for their
+        // outlet is "open" while their cashier shift is open (getActiveShift
+        // bridge). Other outlets' cashiers keep their own shifts open.
         try {
-            await supabase
+            let posCloseQuery = supabase
                 .from('pos_outlet_shifts')
                 .update({ status: 'closed' })
                 .eq('branch_id', shift.branch_id)
                 .eq('status', 'open');
+            if (allowedOutletIds.length) {
+                posCloseQuery = posCloseQuery.in('outlet_id', allowedOutletIds);
+            }
+            await posCloseQuery;
         } catch (posCloseErr) {
             logger.warn('Failed to close POS station shifts on cashier close', {
                 shiftId: id,
