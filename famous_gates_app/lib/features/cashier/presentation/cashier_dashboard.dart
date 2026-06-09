@@ -3193,6 +3193,7 @@ class _InsightsTab extends ConsumerWidget {
                   keys: const ['total_cash_sales', 'total_cash', 'cash_total'],
                   icon: Icons.money,
                   color: AppColors.kSuccess,
+                  paidMethod: 'cash',
                 ),
               ),
               const SizedBox(width: 12),
@@ -3207,6 +3208,7 @@ class _InsightsTab extends ConsumerWidget {
                   ],
                   icon: Icons.phone_android,
                   color: AppColors.kPrimary,
+                  paidMethod: 'mpesa',
                 ),
               ),
               const SizedBox(width: 12),
@@ -3217,6 +3219,7 @@ class _InsightsTab extends ConsumerWidget {
                   keys: const ['total_card_sales', 'total_card', 'card_total'],
                   icon: Icons.credit_card,
                   color: AppColors.kAccent,
+                  paidMethod: 'card',
                 ),
               ),
               const SizedBox(width: 12),
@@ -3231,6 +3234,17 @@ class _InsightsTab extends ConsumerWidget {
                   ],
                   icon: Icons.credit_score,
                   color: AppColors.kWarning,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AsyncStatCard(
+                  value: currentShift,
+                  label: 'Paid Credits',
+                  keys: const [],
+                  icon: Icons.task_alt,
+                  color: AppColors.kPrimary,
+                  paidMethod: 'total',
                 ),
               ),
             ],
@@ -3323,7 +3337,12 @@ class _CurrentShiftBanner extends StatelessWidget {
         }
         final shiftNo = _text(shift, ['shift_number', 'id']);
         final status = _text(shift, ['status']);
-        final totalSales = _num(shift['total_sales']);
+        final isOpen = status.toLowerCase() == 'open' ||
+            status.toLowerCase() == 'pending_open' ||
+            status.isEmpty;
+        final paidCredits = _shiftPaidCredits(shift)['total'] ?? 0;
+        final totalSales =
+            _num(shift['total_sales']) + (isOpen ? paidCredits : 0);
         final txns = _num(shift['transaction_count']).toInt();
         return Container(
           padding: const EdgeInsets.all(16),
@@ -3820,6 +3839,7 @@ class _AsyncStatCard extends StatelessWidget {
     required this.keys,
     required this.icon,
     required this.color,
+    this.paidMethod,
   });
 
   final AsyncValue<Map<String, dynamic>> value;
@@ -3827,16 +3847,29 @@ class _AsyncStatCard extends StatelessWidget {
   final List<String> keys;
   final IconData icon;
   final Color color;
+  // When set ('cash' | 'mpesa' | 'card' | 'total'), the matching paid credits
+  // recorded on the (open) shift are folded into the displayed amount.
+  final String? paidMethod;
 
   @override
   Widget build(BuildContext context) {
     return value.when(
       data: (data) {
         final s = _payload(data);
-        final amount = keys.map((key) => s[key]).firstWhere(
+        final base = _num(keys.map((key) => s[key]).firstWhere(
               (item) => item != null,
               orElse: () => 0,
-            );
+            ));
+        num amount = base;
+        if (paidMethod != null) {
+          final status = _shiftStatus(s);
+          final isOpen = status == 'open' ||
+              status == 'pending_open' ||
+              status.isEmpty;
+          if (isOpen) {
+            amount += _shiftPaidCredits(s)[paidMethod] ?? 0;
+          }
+        }
         return StatCard(
             label: label, value: _money(amount), icon: icon, color: color);
       },
