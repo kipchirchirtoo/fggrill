@@ -13,6 +13,7 @@ import {
     createCreditBill,
     confirmCreditBill,
     recordCreditPayment,
+    deductCreditBillFromPayroll,
     downloadCustomerCreditInvoice,
     downloadCustomerCreditOutstandingReport,
     getCashierShifts,
@@ -176,6 +177,12 @@ router.route('/credit-bills/:id/confirm')
 
 router.route('/credit-bills/:id/payment')
     .post(recordCreditPayment);
+
+router.route('/credit-bills/:id/payroll-deduct')
+    .post(
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'branch_accountant'] as any),
+        deductCreditBillFromPayroll
+    );
 
 // ============================================
 // CASHIER SHIFTS ROUTES (New Shift Logbook System)

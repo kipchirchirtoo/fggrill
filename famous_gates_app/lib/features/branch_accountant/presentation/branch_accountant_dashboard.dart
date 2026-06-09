@@ -5126,17 +5126,17 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                               ),
                               const SizedBox(width: 6),
                               _CompactAction(
-                                label: 'Confirm',
-                                icon: Icons.check,
+                                label: 'Receipt',
+                                icon: Icons.payments_outlined,
                                 filled: true,
-                                onPressed: () => _confirmBill(e),
+                                onPressed: () => _recordPayment(e),
                               ),
                               const SizedBox(width: 6),
                               _CompactAction(
-                                label: 'Paid',
-                                icon: Icons.payments_outlined,
+                                label: 'Payroll',
+                                icon: Icons.account_balance_wallet_outlined,
                                 outlined: true,
-                                onPressed: () => _recordPayment(e),
+                                onPressed: () => _deductFromPayroll(e),
                               ),
                             ],
                           ),
@@ -5150,15 +5150,42 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     );
   }
 
-  Future<void> _confirmBill(Map<String, dynamic> bill) async {
-    final notes =
-        await _textDialog(context, 'Confirm Credit Bill', hint: 'Notes');
-    if (notes == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .confirmCreditBill('${bill['id']}', notes);
-    _toast('Credit bill confirmed');
-    _refresh();
+  Future<void> _deductFromPayroll(Map<String, dynamic> bill) async {
+    final staff = _text(bill, ['staff_name', 'employee_name']);
+    final balance = _num(bill['balance_amount'] ??
+        bill['balance'] ??
+        bill['amount'] ??
+        bill['total_amount']);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Deduct from Payroll'),
+        content: Text(
+            'Schedule ${_money(balance)} for $staff to be deducted from their next payroll? '
+            'The staff will not pay cash; the amount is taken from salary.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Schedule Deduction')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .deductCreditBillFromPayroll('${bill['id']}');
+      if (mounted) _notify(context, 'Scheduled for payroll deduction');
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        _notify(context,
+            'Could not schedule: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
+    }
   }
 
   Future<void> _recordPayment(Map<String, dynamic> bill) async {
@@ -5168,7 +5195,7 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         bill['total_amount']);
     final data = await _formDialog(
       context,
-      'Record Paid Bill',
+      'Record Cash Receipt',
       const ['amount', 'payment_method', 'reference', 'notes'],
       initial: {
         if (balance > 0) 'amount': '${balance.toStringAsFixed(0)}',

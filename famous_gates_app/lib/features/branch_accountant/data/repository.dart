@@ -399,6 +399,13 @@ class BranchAccountantRepository {
     await _dio.post('/cashier/credit-bills/$id/payment', data: data);
   }
 
+  /// Schedule a staff credit bill to be deducted from the employee's payroll.
+  Future<void> deductCreditBillFromPayroll(String id, {String? notes}) async {
+    await _dio.post('/cashier/credit-bills/$id/payroll-deduct', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
   // ── Customer credit bills (unpaid bills) ──────────────────────────────────
   Future<List<Map<String, dynamic>>> getCustomerUnpaidBills() async {
     final branchId = await getBranchId();

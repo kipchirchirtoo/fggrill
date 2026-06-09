@@ -4292,6 +4292,81 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
     }
 };
 
+/**
+ * Mark a staff credit bill to be settled via payroll deduction.
+ * Branch accountant action: instead of the staff paying cash, the outstanding
+ * amount is flagged so the next payroll run deducts it from their salary.
+ * The payroll engine picks up staff_credit_bills not in
+ * (paid, paid_cash, deducted, cancelled), so we set them to 'approved'.
+ */
+export const deductCreditBillFromPayroll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { notes } = req.body;
+
+        const { data: credit, error: fetchError } = await supabase
+            .from('credit_bills')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+        if (fetchError) throw fetchError;
+        if (!credit) {
+            throw new AppError('Credit bill not found', 404);
+        }
+
+        if (Number(credit.balance_amount || 0) <= 0) {
+            throw new AppError('Credit bill has no outstanding balance to deduct', 400);
+        }
+
+        // Flag the cashier-side credit bill as scheduled for payroll deduction.
+        const { data: updatedCredit, error: updateError } = await supabase
+            .from('credit_bills')
+            .update({
+                status: 'approved',
+                payroll_deduction_scheduled: true,
+                payroll_scheduled_by: req.user?.id || null,
+                payroll_scheduled_at: new Date().toISOString(),
+            })
+            .eq('id', id)
+            .select()
+            .maybeSingle();
+        // payroll_deduction_scheduled column may not exist on every deployment —
+        // fall back to a status-only update so the action never hard-fails.
+        if (updateError) {
+            const { error: fallbackError } = await supabase
+                .from('credit_bills')
+                .update({ status: 'approved' })
+                .eq('id', id);
+            if (fallbackError) throw fallbackError;
+        }
+
+        // Ensure the linked payroll-side bills are pickable by the payroll run.
+        const { data: linked } = await supabase
+            .from('staff_credit_bills')
+            .select('id, status')
+            .eq('source_cashier_credit_bill_id', id);
+
+        for (const bill of linked || []) {
+            if (['paid', 'paid_cash', 'deducted', 'cancelled'].includes(bill.status)) continue;
+            await supabase
+                .from('staff_credit_bills')
+                .update({
+                    status: 'approved',
+                    remarks: notes ? `Scheduled for payroll deduction: ${notes}` : 'Scheduled for payroll deduction',
+                })
+                .eq('id', bill.id);
+        }
+
+        res.json({
+            success: true,
+            message: 'Credit bill scheduled for payroll deduction',
+            data: updatedCredit || { id, status: 'approved' },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // ============================================
 // CASHIER SHIFTS
 // ============================================

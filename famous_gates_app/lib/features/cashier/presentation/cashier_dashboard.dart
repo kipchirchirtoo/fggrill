@@ -1412,7 +1412,11 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
             data: (rows) => _BillList(
               rows: rows,
               emptyMessage: 'No credit bills found for $_date',
-              onPay: (row) => _recordPayment(row),
+              // Cashiers cannot settle credit bills — the branch accountant
+              // records the receipt or deducts it from payroll.
+              onPay: null,
+              readOnlyNote:
+                  'Settled by the Branch Accountant (cash receipt or payroll deduction).',
             ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(message: apiErrorMessage(error)),
@@ -1441,51 +1445,6 @@ class _CreditBillsTabState extends ConsumerState<_CreditBillsTab> {
       _snack('Credit bill created');
     } catch (error) {
       _snack('Create failed: ${apiErrorMessage(error)}');
-    }
-  }
-
-  Future<void> _recordPayment(Map<String, dynamic> row) async {
-    final body = await _paymentPayload(
-        context, _num(row['balance_amount'] ?? row['balance']));
-    if (body == null) return;
-    final payments = _paymentLinesFromPayload(body);
-    try {
-      final responses = <Map<String, dynamic>>[];
-      final receiptRefs = <String>[];
-      final totalPaid = payments.fold<num>(
-        0,
-        (sum, payment) => sum + _num(payment['payment_amount']),
-      );
-      for (final payment in payments) {
-        final response = await ref
-            .read(cashierRepositoryProvider)
-            .recordCreditPayment(_text(row, ['id']), payment);
-        responses.add(response);
-        receiptRefs.add(_receiptReferenceForPayment(payment));
-      }
-      try {
-        await _printCashierBillReceipt(
-          ref: ref,
-          bill: row,
-          amount: totalPaid,
-          method: payments.length == 1
-              ? _text(payments.first, ['payment_method'])
-              : 'split',
-          response: responses.isEmpty ? const {} : responses.last,
-          fallbackReference: receiptRefs.join(' | '),
-          receiptType: 'CREDIT BILL RECEIPT',
-        );
-      } catch (error) {
-        _snack(
-            'Credit payment recorded, but receipt failed: ${apiErrorMessage(error)}');
-      }
-      ref.invalidate(cashierCreditBillsProvider);
-      ref.invalidate(cashierStatsProvider);
-      _snack(payments.length > 1
-          ? 'Split credit payment recorded'
-          : 'Credit payment recorded');
-    } catch (error) {
-      _snack('Payment failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -2860,12 +2819,17 @@ class _BillList extends StatelessWidget {
   const _BillList({
     required this.rows,
     required this.emptyMessage,
-    required this.onPay,
+    this.onPay,
+    this.readOnlyNote,
   });
 
   final List<Map<String, dynamic>> rows;
   final String emptyMessage;
-  final ValueChanged<Map<String, dynamic>> onPay;
+
+  /// When null, no payment action is shown (e.g. credit bills are settled by
+  /// the branch accountant, not the cashier).
+  final ValueChanged<Map<String, dynamic>>? onPay;
+  final String? readOnlyNote;
 
   @override
   Widget build(BuildContext context) {
@@ -2945,17 +2909,31 @@ class _BillList extends StatelessWidget {
                   ),
               ],
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => onPay(row),
-                    icon: const Icon(Icons.payments, size: 16),
-                    label: const Text('Confirm Payment'),
-                  ),
-                ],
-              ),
+              if (onPay != null)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => onPay!(row),
+                      icon: const Icon(Icons.payments, size: 16),
+                      label: const Text('Confirm Payment'),
+                    ),
+                  ],
+                )
+              else if (readOnlyNote != null)
+                Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 14, color: AppColors.kTextSecondary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(readOnlyNote!,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.kTextSecondary)),
+                    ),
+                  ],
+                ),
             ],
           );
         },
