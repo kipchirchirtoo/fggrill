@@ -1,10 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
-import axios from 'axios';
+import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
 import { supabase } from '../config/supabase';
-import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
 import * as BranchInventoryService from '../services/branch-inventory.service';
+
+const FG_PRIMARY = '#1a1a1a';
+const FG_SECONDARY = '#555555';
+const FG_GOLD = '#c8a84b';
+const FG_BORDER = '#e0e0e0';
+const FG_ROW_BG = '#f9f9f9';
+const FG_HEADER_BG = '#333333';
+const FG_ACCENT = '#0066cc';
+const FG_COMPANY_NAME = 'FamousGateHotels';
+const FG_COMPANY_ADDRESS = 'Bomet, Kenya';
+const FG_COMPANY_EMAIL = 'famousgateshotelsbmt@gmail.com';
+const FG_COMPANY_PHONE = '0706 782 828';
 
 const userDisplayName = (user: any): string | null => {
   if (!user) return null;
@@ -2025,6 +2038,240 @@ const movementTier = (quantity: number, maxQuantity: number, days: number) => {
   return 'steady';
 };
 
+const fgMoney = (value: any): string =>
+  `KES ${Number(value || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const fgDate = (value: any): string => {
+  if (!value) return '-';
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const fgLogoPath = (): string | null => {
+  const candidates = [
+    path.join(process.cwd(), '../frontend/public/fglogo.png'),
+    path.join(process.cwd(), 'frontend/public/fglogo.png'),
+    path.join(__dirname, '../../../frontend/public/fglogo.png')
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+};
+
+const drawSoldItemsHeader = (doc: PDFKit.PDFDocument, title: string, subtitle: string): number => {
+  const logoPath = fgLogoPath();
+  if (logoPath) {
+    doc.image(logoPath, 40, 30, { width: 55 });
+  } else {
+    doc.circle(67, 57, 27).fill(FG_PRIMARY);
+    doc.fillColor('white').fontSize(20).font('Helvetica-Bold').text('FG', 53, 47);
+  }
+
+  doc.fillColor(FG_PRIMARY).fontSize(15).font('Helvetica-Bold').text(FG_COMPANY_NAME, 110, 30, {
+    align: 'right'
+  });
+  doc.fontSize(9).font('Helvetica').fillColor(FG_SECONDARY)
+    .text(FG_COMPANY_ADDRESS, 110, 50, { align: 'right' })
+    .text(`Email: ${FG_COMPANY_EMAIL}`, { align: 'right' })
+    .text(`Tel: ${FG_COMPANY_PHONE}`, { align: 'right' });
+
+  doc.strokeColor(FG_BORDER).lineWidth(1).moveTo(40, 100).lineTo(doc.page.width - 40, 100).stroke();
+  doc.rect(40, 101, doc.page.width - 80, 3).fill(FG_GOLD);
+  doc.fillColor(FG_PRIMARY).fontSize(14).font('Helvetica-Bold').text(title, 40, 114, { align: 'center' });
+  doc.fontSize(9).font('Helvetica').fillColor(FG_SECONDARY).text(subtitle, 40, 132, { align: 'center' });
+  doc.strokeColor(FG_BORDER).lineWidth(0.5).moveTo(40, 146).lineTo(doc.page.width - 40, 146).stroke();
+  doc.fillColor(FG_PRIMARY);
+  return 158;
+};
+
+const drawSoldItemsFooter = (doc: PDFKit.PDFDocument): void => {
+  const y = doc.page.height - 52;
+  doc.strokeColor(FG_BORDER).lineWidth(0.5).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke();
+  doc.fillColor(FG_SECONDARY).fontSize(7.5).font('Helvetica')
+    .text(`Generated: ${new Date().toLocaleString('en-KE')} | ${FG_COMPANY_NAME} - Confidential`, 40, y + 7, {
+      width: doc.page.width - 80,
+      align: 'center',
+      lineBreak: false,
+      ellipsis: true
+    });
+};
+
+const soldItemsSpace = (doc: PDFKit.PDFDocument, y: number, needed = 60): number => {
+  if (y + needed < doc.page.height - 70) return y;
+  drawSoldItemsFooter(doc);
+  doc.addPage();
+  return drawSoldItemsHeader(doc, 'SOLD ITEMS ANALYTICS REPORT', 'Continued');
+};
+
+const soldItemsSectionTitle = (doc: PDFKit.PDFDocument, title: string, y: number): number => {
+  doc.fillColor(FG_PRIMARY).fontSize(11).font('Helvetica-Bold').text(title, 40, y);
+  doc.rect(40, y + 15, doc.page.width - 80, 2).fill(FG_GOLD);
+  return y + 26;
+};
+
+const soldItemsTable = (
+  doc: PDFKit.PDFDocument,
+  y: number,
+  headers: string[],
+  rows: string[][],
+  widths: number[],
+  aligns: Array<'left' | 'center' | 'right'> = []
+): number => {
+  const left = 40;
+  let currentY = y;
+  doc.rect(left, currentY, doc.page.width - 80, 20).fill(FG_HEADER_BG);
+  doc.fillColor('white').fontSize(7.2).font('Helvetica-Bold');
+  let x = left + 6;
+  headers.forEach((header, index) => {
+    doc.text(header, x, currentY + 6, {
+      width: widths[index] - 8,
+      align: aligns[index] || 'left',
+      ellipsis: true
+    });
+    x += widths[index];
+  });
+  currentY += 20;
+
+  rows.forEach((row, rowIndex) => {
+    currentY = soldItemsSpace(doc, currentY, 22);
+    if (rowIndex % 2 === 0) doc.rect(left, currentY, doc.page.width - 80, 18).fill(FG_ROW_BG);
+    doc.fillColor(FG_PRIMARY).fontSize(7.1).font('Helvetica');
+    x = left + 6;
+    row.forEach((value, index) => {
+      doc.text(value, x, currentY + 5, {
+        width: widths[index] - 8,
+        align: aligns[index] || 'left',
+        ellipsis: true
+      });
+      x += widths[index];
+    });
+    doc.strokeColor(FG_BORDER).lineWidth(0.3).moveTo(left, currentY + 18).lineTo(doc.page.width - 40, currentY + 18).stroke();
+    currentY += 18;
+  });
+  return currentY + 12;
+};
+
+const buildSoldItemsAnalysisPDF = async (payload: any): Promise<Buffer> => {
+  return await new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const chunks: Buffer[] = [];
+
+    doc.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const summary = payload.summary || {};
+    const period = summary.period || {};
+    const branchName = (summary.branch_summaries || [])[0]?.branch_name || 'Branch';
+    const subtitle = `${branchName} | ${fgDate(period.start_date)} to ${fgDate(period.end_date)}`;
+    let y = drawSoldItemsHeader(doc, 'SOLD ITEMS ANALYTICS REPORT', subtitle);
+
+    doc.fillColor(FG_SECONDARY).fontSize(8).font('Helvetica')
+      .text(`Branch: ${branchName}`, 40, y, { width: 170 })
+      .text(`Period: ${fgDate(period.start_date)} to ${fgDate(period.end_date)}`, 210, y, { width: 190 })
+      .text(`Generated: ${new Date().toLocaleString('en-KE')}`, 400, y, { width: 155 });
+    y += 30;
+
+    const cards = [
+      { label: 'TOTAL REVENUE', value: fgMoney(summary.total_revenue), color: FG_PRIMARY },
+      { label: 'UNITS SOLD', value: Number(summary.total_quantity_sold || 0).toLocaleString('en-KE'), color: FG_ACCENT },
+      { label: 'GROSS PROFIT', value: fgMoney(summary.gross_profit), color: FG_HEADER_BG },
+      { label: 'MARGIN', value: `${Number(summary.profit_margin || 0).toFixed(1)}%`, color: '#236b4e' }
+    ];
+    const cardWidth = (doc.page.width - 110) / 4;
+    cards.forEach((card, index) => {
+      const x = 40 + index * (cardWidth + 10);
+      doc.roundedRect(x, y, cardWidth, 48, 4).fill(card.color);
+      doc.fillColor(FG_GOLD).fontSize(7).font('Helvetica-Bold').text(card.label, x + 8, y + 11, {
+        width: cardWidth - 16,
+        align: 'center'
+      });
+      doc.fillColor('white').fontSize(11).font('Helvetica-Bold').text(card.value, x + 8, y + 27, {
+        width: cardWidth - 16,
+        align: 'center',
+        ellipsis: true
+      });
+    });
+    y += 68;
+
+    y = soldItemsSectionTitle(doc, 'OUTLET REVENUE BREAKDOWN', y);
+    y = soldItemsTable(
+      doc,
+      y,
+      ['Outlet', 'Items', 'Qty', 'Revenue', 'COGS', 'Gross Profit', 'Margin'],
+      (summary.outlet_breakdown || []).map((row: any) => [
+        String(row.label || row.key || '-'),
+        Number(row.item_count || 0).toLocaleString('en-KE'),
+        Number(row.quantity || 0).toLocaleString('en-KE'),
+        fgMoney(row.revenue),
+        fgMoney(row.cost_of_goods_sold),
+        fgMoney(row.gross_profit),
+        `${Number(row.profit_margin || 0).toFixed(1)}%`
+      ]),
+      [92, 50, 50, 90, 76, 98, 49],
+      ['left', 'center', 'center', 'right', 'right', 'right', 'right']
+    );
+
+    y = soldItemsSpace(doc, y, 120);
+    y = soldItemsSectionTitle(doc, 'FAST MOVING ITEMS', y);
+    y = soldItemsTable(
+      doc,
+      y,
+      ['Item', 'Outlet', 'Qty', 'Velocity/day', 'Revenue', 'Profit'],
+      (payload.fast_moving_items || []).slice(0, 12).map((item: any) => [
+        String(item.name || item.item_name || '-'),
+        String(item.outlet_label || item.category || '-'),
+        Number(item.quantity || 0).toLocaleString('en-KE'),
+        Number(item.velocity_per_day || 0).toFixed(2),
+        fgMoney(item.revenue),
+        fgMoney(item.gross_profit)
+      ]),
+      [165, 80, 50, 72, 78, 60],
+      ['left', 'left', 'center', 'center', 'right', 'right']
+    );
+
+    y = soldItemsSpace(doc, y, 120);
+    y = soldItemsSectionTitle(doc, 'SLOW MOVING ITEMS', y);
+    y = soldItemsTable(
+      doc,
+      y,
+      ['Item', 'Outlet', 'Qty', 'Velocity/day', 'Revenue', 'Profit'],
+      (payload.slow_moving_items || []).slice(0, 12).map((item: any) => [
+        String(item.name || item.item_name || '-'),
+        String(item.outlet_label || item.category || '-'),
+        Number(item.quantity || 0).toLocaleString('en-KE'),
+        Number(item.velocity_per_day || 0).toFixed(2),
+        fgMoney(item.revenue),
+        fgMoney(item.gross_profit)
+      ]),
+      [165, 80, 50, 72, 78, 60],
+      ['left', 'left', 'center', 'center', 'right', 'right']
+    );
+
+    y = soldItemsSpace(doc, y, 140);
+    y = soldItemsSectionTitle(doc, 'DETAILED SOLD ITEMS LEDGER', y);
+    soldItemsTable(
+      doc,
+      y,
+      ['Product', 'Outlet', 'Qty', 'Revenue', 'COGS', 'Profit', 'Margin', 'Movement'],
+      (payload.analysis || []).slice(0, 80).map((item: any) => [
+        String(item.name || item.item_name || '-'),
+        String(item.outlet_label || item.category || '-'),
+        Number(item.quantity || 0).toLocaleString('en-KE'),
+        fgMoney(item.revenue),
+        fgMoney(item.cost_of_goods_sold),
+        fgMoney(item.gross_profit),
+        `${Number(item.profit_margin || 0).toFixed(1)}%`,
+        String(item.movement_tier || '-').toUpperCase()
+      ]),
+      [130, 70, 42, 72, 62, 67, 45, 57],
+      ['left', 'left', 'center', 'right', 'right', 'right', 'right', 'center']
+    );
+
+    drawSoldItemsFooter(doc);
+    doc.end();
+  });
+};
+
 const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const { branch_id, start_date, end_date } = req.query;
     const requestedBranchId = branch_id ? String(branch_id) : '';
@@ -2542,25 +2789,11 @@ export const exportSoldItemsAnalysisPDF = async (req: Request, res: Response, ne
     const payload = await buildSoldItemsAnalysisPayload(req);
     const summary = payload.summary || {};
     const period = summary.period || {};
-    const branchName = (summary.branch_summaries || [])[0]?.branch_name || 'Branch';
-    const response = await axios.post(
-      `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
-      {
-        reportType: 'sold_items_analytics',
-        useRealData: false,
-        filters: {
-          start_date: period.start_date,
-          end_date: period.end_date,
-          branch_name: branchName,
-        },
-        data: payload
-      },
-      { responseType: 'arraybuffer', timeout: 60000 }
-    );
-    const filename = `FG_Sold_Items_${period.start_date || 'from'}_${period.end_date || 'to'}.pdf`;
+    const pdfBuffer = await buildSoldItemsAnalysisPDF(payload);
+    const filename = `FG_Sold_Items_${period.start_date || 'from'}_to_${period.end_date || 'to'}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(Buffer.from(response.data));
+    res.send(pdfBuffer);
   } catch (error) {
     next(error);
   }

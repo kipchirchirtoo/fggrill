@@ -2881,8 +2881,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
             _num(shift['total_mpesa_sales'] ?? shift['total_mpesa']);
         final baseCardSales =
             _num(shift['total_card_sales'] ?? shift['total_card']);
-        // Paid credits settled this shift, split by how the staff paid. Each
-        // amount folds into the matching sales tally (cash / M-Pesa / card).
+        // Paid credits recorded this shift, split by how the staff paid. Each
+        // amount folds into the matching cashier collection tally.
         num paidByMethod(String method) => paidEntries
             .where((e) => (e.paymentMethod ?? 'cash').toLowerCase() == method)
             .fold<num>(0, (sum, entry) => sum + entry.amount);
@@ -3161,9 +3161,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             'paid_bills_details': paidEntries
                                 .map((entry) => entry.toJson())
                                 .toList(),
-                            'unpaid_bills_value':
-                                (creditBillsTotal - paidBillsTotal)
-                                    .clamp(0, creditBillsTotal),
+                            'unpaid_bills_value': creditBillsTotal,
                             'unpaid_bills_count': creditEntries.length,
                             'cash_at_hand':
                                 num.tryParse(cashAtHand.text.trim()) ??

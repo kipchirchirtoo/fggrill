@@ -101,7 +101,9 @@ class BranchAccountantRepository {
     );
     return _saveBytes(
       res.data ?? const [],
-      'branch-sales-$startDate-$endDate.$format',
+      format.toLowerCase() == 'pdf'
+          ? 'FG_Branch_Sales_${startDate}_to_$endDate.pdf'
+          : 'branch-sales-$startDate-$endDate.$format',
     );
   }
 

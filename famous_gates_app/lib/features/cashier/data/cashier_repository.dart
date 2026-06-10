@@ -13,6 +13,20 @@ final cashierRepositoryProvider = Provider<CashierRepository>((ref) {
   );
 });
 
+Map<String, dynamic> _withoutEmptyOptionalUuids(Map<String, dynamic> body) {
+  final cleaned = Map<String, dynamic>.from(body);
+  for (final key in const [
+    'reference_id',
+    'customer_id',
+    'credit_bill_id',
+    'staff_credit_bill_id',
+  ]) {
+    final value = cleaned[key];
+    if (value is String && value.trim().isEmpty) cleaned.remove(key);
+  }
+  return cleaned;
+}
+
 class CashierRepository {
   CashierRepository(this._dio, this._pythonDio);
 
@@ -64,16 +78,12 @@ class CashierRepository {
       'limit': limit,
     };
 
-    final results = await Future.wait([
-      _getList('/cashier/unpaid-orders', query: query).catchError(
-        (_) => <Map<String, dynamic>>[],
-      ),
-      _getList('/cashier/unpaid-bills', query: query).catchError(
-        (_) => <Map<String, dynamic>>[],
-      ),
-    ]);
+    final unpaidOrders =
+        await _getList('/cashier/unpaid-pos-orders', query: query);
+    final unpaidBills = await _getList('/cashier/unpaid-bills', query: query)
+        .catchError((_) => <Map<String, dynamic>>[]);
 
-    final rows = [...results[0], ...results[1]];
+    final rows = [...unpaidOrders, ...unpaidBills];
     rows.sort((a, b) {
       final aDate = DateTime.tryParse(
               '${a['bill_date'] ?? a['created_at'] ?? a['created_at']}') ??
@@ -100,7 +110,7 @@ class CashierRepository {
   }
 
   Future<Map<String, dynamic>> createUnpaidBill(Map<String, dynamic> body) =>
-      _postMap('/cashier/unpaid-bills', body);
+      _postMap('/cashier/unpaid-bills', _withoutEmptyOptionalUuids(body));
 
   Future<Map<String, dynamic>> recordUnpaidBillPayment(
     String id,
@@ -159,7 +169,7 @@ class CashierRepository {
   }
 
   Future<Map<String, dynamic>> createCreditBill(Map<String, dynamic> body) =>
-      _postMap('/cashier/credit-bills', body);
+      _postMap('/cashier/credit-bills', _withoutEmptyOptionalUuids(body));
 
   Future<Map<String, dynamic>> recordCreditPayment(
     String id,

@@ -68,6 +68,11 @@ type CashierShortCodeResolution = {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function normalizeUuidOrNull(value: unknown): string | null {
+    const text = String(value || '').trim();
+    return UUID_PATTERN.test(text) ? text : null;
+}
+
 function parseBranchId(value: unknown): number | null {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -3138,6 +3143,9 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
         const waiterProfile = waiter_id
             ? await resolveCashierCreditStaffProfile(waiter_id, effectiveBranchId)
             : null;
+        const normalizedReferenceId = normalizeUuidOrNull(reference_id);
+        const normalizedCustomerId = normalizeUuidOrNull(customer_id);
+        const normalizedCreatedBy = normalizeUuidOrNull(req.user?.id);
 
         // Generate bill number
         const { data: billNumberData } = await supabase
@@ -3154,9 +3162,9 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
                 branch_id: effectiveBranchId,
                 bill_type,
                 reference_type,
-                reference_id,
+                reference_id: normalizedReferenceId,
                 customer_type,
-                customer_id,
+                customer_id: normalizedCustomerId,
                 customer_name: customer_name || waiterProfile?.name,
                 room_number,
                 waiter_id: waiterProfile?.id || waiter_id,
@@ -3168,7 +3176,7 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
                 items: items || [],
                 scan_reference,
                 status: 'unpaid',
-                created_by: req.user?.id
+                created_by: normalizedCreatedBy
             })
             .select()
             .single();
@@ -3563,7 +3571,6 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
                 id, order_number, short_code, status, payment_status,
                 table_number, room_number, guest_name,
                 total_amount, amount_paid, balance_amount, created_at, branch_id, created_by,
-                waiter:users!created_by(id, first_name, last_name),
                 items:restaurant_order_items(
                     id, quantity, unit_price, total_price,
                     menu_item:restaurant_menu_items(name)
@@ -3587,7 +3594,6 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
                 id, order_number, short_code, status, payment_status,
                 seat_number, room_number, guest_name,
                 total, amount_paid, balance_amount, created_at, branch_id, created_by,
-                waiter:users!created_by(id, first_name, last_name),
                 items:bar_order_items(id, drink_name, quantity, unit_price, total_price)
             `)
             .eq('branch_id', branchId)
@@ -3602,6 +3608,11 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
         const { data: barOrders, error: barError } = await barQuery;
         if (barError && barError.code !== '42703') throw barError;
 
+        const waiterMap = await fetchCashierUsersById([
+            ...((restaurantOrders || []) as any[]).map((order: any) => order.created_by),
+            ...((barOrders || []) as any[]).map((order: any) => order.created_by),
+        ]);
+
         const formatDate = (value?: string | null) => {
             if (!value) return null;
             const parsed = new Date(value);
@@ -3610,7 +3621,7 @@ export const downloadCustomerCreditOutstandingReport = async (req: Request, res:
         };
 
         const waiterName = (row: any) => {
-            const waiter = Array.isArray(row?.waiter) ? row.waiter[0] : row?.waiter;
+            const waiter = waiterMap.get(String(row?.created_by || ''));
             return waiter ? `${waiter.first_name || ''} ${waiter.last_name || ''}`.trim() : '';
         };
 
@@ -3848,7 +3859,7 @@ export const confirmUnpaidBill = async (req: Request, res: Response, next: NextF
                 throw new AppError('Bill already confirmed by accountant', 400);
             }
             updateData.accountant_confirmed_at = new Date().toISOString();
-            updateData.accountant_id = req.user?.id;
+            updateData.accountant_id = normalizeUuidOrNull(req.user?.id);
         } else if (role === 'auditor') {
             if (bill.auditor_confirmed_at) {
                 throw new AppError('Bill already confirmed by auditor', 400);
@@ -3857,7 +3868,7 @@ export const confirmUnpaidBill = async (req: Request, res: Response, next: NextF
             // if (!bill.accountant_confirmed_at) throw new AppError('Accountant confirmation required first', 400);
 
             updateData.auditor_confirmed_at = new Date().toISOString();
-            updateData.auditor_id = req.user?.id;
+            updateData.auditor_id = normalizeUuidOrNull(req.user?.id);
         } else {
             throw new AppError('Invalid role for confirmation. Use accountant or auditor', 400);
         }
@@ -3917,8 +3928,12 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             queryStr += ` AND branch_id = $${params.length}`;
         }
 
-        if (staff_id) {
-            params.push(staff_id as string);
+        const staffFilterId = normalizeUuidOrNull(staff_id);
+        if (String(staff_id || '').trim() && !staffFilterId) {
+            throw new AppError('Invalid staff_id filter', 400);
+        }
+        if (staffFilterId) {
+            params.push(staffFilterId);
             queryStr += ` AND staff_id = $${params.length}`;
         }
 
@@ -4088,6 +4103,8 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             throw new AppError('Credit bill amount must be greater than zero', 400);
         }
         const staffProfile = await resolveCashierCreditStaffProfile(staff_id, effectiveBranchId);
+        const normalizedReferenceId = normalizeUuidOrNull(reference_id);
+        const normalizedCreatedBy = normalizeUuidOrNull(req.user?.id);
 
         // Calculate monthly deduction
         const monthly_deduction = totalAmount / (deduction_months || 1);
@@ -4109,7 +4126,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 department: department || staffProfile.department,
                 bill_type,
                 reference_type,
-                reference_id,
+                reference_id: normalizedReferenceId,
                 total_amount: totalAmount,
                 balance_amount: totalAmount,
                 due_date,
@@ -4119,7 +4136,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 remarks,
                 status: 'active',
                 approval_status: 'pending',
-                created_by: req.user?.id
+                created_by: normalizedCreatedBy
             })
             .select()
             .single();
@@ -4134,7 +4151,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             status: 'pending',
             branch_id: effectiveBranchId,
             balance: totalAmount,
-            created_by: req.user?.id,
+            created_by: normalizedCreatedBy,
             source_cashier_credit_bill_id: data.id
         };
 
@@ -4175,6 +4192,7 @@ export const confirmCreditBill = async (req: Request, res: Response, next: NextF
             role = userRole === 'auditor' ? 'auditor' : 'accountant';
         }
         const confirmedAt = new Date().toISOString();
+        const confirmedBy = normalizeUuidOrNull(req.user?.id);
 
         // 1. Fetch current credit bill
         const { data: bill, error: fetchError } = await supabase
@@ -4194,17 +4212,17 @@ export const confirmCreditBill = async (req: Request, res: Response, next: NextF
                 throw new AppError('Credit bill already confirmed by accountant', 400);
             }
             updateData.accountant_confirmed_at = confirmedAt;
-            updateData.accountant_id = req.user?.id;
+            updateData.accountant_id = confirmedBy;
             payrollUpdate.accountant_confirmed_at = confirmedAt;
-            payrollUpdate.accountant_id = req.user?.id;
+            payrollUpdate.accountant_id = confirmedBy;
         } else if (role === 'auditor') {
             if (bill.auditor_confirmed_at) {
                 throw new AppError('Credit bill already confirmed by auditor', 400);
             }
             updateData.auditor_confirmed_at = confirmedAt;
-            updateData.auditor_id = req.user?.id;
+            updateData.auditor_id = confirmedBy;
             payrollUpdate.auditor_confirmed_at = confirmedAt;
-            payrollUpdate.auditor_id = req.user?.id;
+            payrollUpdate.auditor_id = confirmedBy;
 
             // If both are confirmed, mark the bill confirmed.
             if (bill.accountant_confirmed_at) {
@@ -4404,129 +4422,16 @@ function normalizePaymentMethod(raw: unknown): string {
     return 'cash';
 }
 
-async function applyStaffCreditPaymentFifo(params: {
-    staffId: string;
-    amount: number;
-    paymentMethod: string;
-    reference?: string | null;
-    recordedBy?: string | null;
-    shiftId?: string | null;
-}) {
-    let remainingPayment = Number(params.amount || 0);
-    const applications: Array<{ credit_bill_id: string; amount: number; balance: number }> = [];
-
-    if (!params.staffId || !Number.isFinite(remainingPayment) || remainingPayment <= 0) {
-        return applications;
-    }
-
-    const { data: credits, error: fetchError } = await supabase
-        .from('staff_credit_bills')
-        .select('id, amount, paid_amount, balance, status, source_cashier_credit_bill_id, bill_date, created_at')
-        .eq('staff_id', params.staffId)
-        .not('status', 'in', '("paid","paid_cash","deducted","cancelled")')
-        .order('bill_date', { ascending: true })
-        .order('created_at', { ascending: true });
-
-    if (fetchError) {
-        throw new AppError(`Unable to fetch staff credit bills for settlement: ${fetchError.message}`, 500);
-    }
-
-    for (const credit of credits || []) {
-        if (remainingPayment <= 0) break;
-
-        const creditAmount = Number(credit.amount || 0);
-        const currentPaid = Number(credit.paid_amount || 0);
-        const storedBalance = credit.balance === null || credit.balance === undefined
-            ? NaN
-            : Number(credit.balance);
-        const currentBalance = Number.isFinite(storedBalance)
-            ? Math.max(0, storedBalance)
-            : Math.max(0, creditAmount - currentPaid);
-
-        if (currentBalance <= 0) continue;
-
-        const appliedAmount = Math.min(remainingPayment, currentBalance);
-        const newPaidAmount = Math.min(creditAmount, currentPaid + appliedAmount);
-        const newBalance = Math.max(0, currentBalance - appliedAmount);
-
-        const updatePayload: any = {
-            paid_amount: newPaidAmount,
-            balance: newBalance,
-            status: newBalance <= 0 ? 'paid_cash' : 'partial'
-        };
-        if (params.shiftId) updatePayload.paid_in_shift_id = params.shiftId;
-
-        const { error: updateError } = await supabase
-            .from('staff_credit_bills')
-            .update(updatePayload)
-            .eq('id', credit.id);
-
-        if (updateError) {
-            throw new AppError(`Unable to update staff credit balance: ${updateError.message}`, 500);
-        }
-
-        try {
-            await supabase.from('staff_credit_bill_payments').insert({
-                credit_bill_id: credit.id,
-                amount: appliedAmount,
-                payment_method: params.paymentMethod,
-                reference: params.reference || null,
-                recorded_by: params.recordedBy || null,
-                shift_id: params.shiftId || null,
-                notes: 'Cashier paid-bill FIFO settlement'
-            });
-        } catch (paymentHistoryError: any) {
-            logger.warn('Unable to write staff credit payment history', {
-                credit_bill_id: credit.id,
-                error: paymentHistoryError?.message || paymentHistoryError
-            });
-        }
-
-        if (credit.source_cashier_credit_bill_id) {
-            const { data: linkedCredit } = await supabase
-                .from('credit_bills')
-                .select('id, total_amount, paid_amount')
-                .eq('id', credit.source_cashier_credit_bill_id)
-                .maybeSingle();
-
-            if (linkedCredit) {
-                const linkedTotal = Number(linkedCredit.total_amount || creditAmount);
-                const linkedPaid = Math.min(
-                    linkedTotal,
-                    Number(linkedCredit.paid_amount || 0) + appliedAmount
-                );
-                const linkedBalance = Math.max(0, linkedTotal - linkedPaid);
-                await supabase
-                    .from('credit_bills')
-                    .update({
-                        paid_amount: linkedPaid,
-                        balance_amount: linkedBalance,
-                        status: linkedBalance <= 0 ? 'paid' : 'active'
-                    })
-                    .eq('id', linkedCredit.id);
-            }
-        }
-
-        applications.push({
-            credit_bill_id: credit.id,
-            amount: appliedAmount,
-            balance: newBalance
-        });
-        remainingPayment -= appliedAmount;
-    }
-
-    return applications;
-}
-
 /**
- * Record a "paid bill": a staff member settling money toward their credit
- * during the cashier's shift. We do NOT pick a specific credit bill here — the
- * cashier just records who paid, how much, and how (cash / M-Pesa / card).
+ * Record a "paid bill": a staff member handing money to the cashier toward
+ * their credit during the cashier's shift. The cashier does not settle a
+ * specific staff_credit_bills row here; the branch accountant applies this
+ * evidence later as a partial or full payment against the correct staff credit.
  *
  * The payment is appended to the open shift's `paid_bills_details`, which:
  *   1. shows on the cashier's "Paid Bills" tab (per-method totals + grand total),
- *   2. flows to the branch accountant automatically at shift close, where the
- *      existing FIFO settle logic reduces the staff's outstanding credit bills.
+ *   2. flows to the branch accountant automatically at shift close as a review
+ *      entry without reducing existing staff credit balances.
  */
 export const recordStaffPaidBill = async (
     req: Request,
@@ -4565,17 +4470,6 @@ export const recordStaffPaidBill = async (
             ? shift.paid_bills_details
             : [];
 
-        const settlementApplications = staff_id
-            ? await applyStaffCreditPaymentFifo({
-                staffId: staff_id,
-                amount: paidAmount,
-                paymentMethod: method,
-                reference: reference || null,
-                recordedBy: req.user?.id || null,
-                shiftId: shift.id
-            })
-            : [];
-
         const entry = {
             id: `PB${Date.now()}`,
             staff_id: staff_id || null,
@@ -4585,8 +4479,7 @@ export const recordStaffPaidBill = async (
             reference: reference || null,
             recorded_at: new Date().toISOString(),
             recorded_by: req.user?.id || null,
-            settled_at: settlementApplications.length ? new Date().toISOString() : null,
-            settlement_applications: settlementApplications,
+            review_status: 'pending_branch_accountant_review',
         };
 
         const updated = [...existing, entry];
@@ -6623,6 +6516,7 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 const { data: creditNumberData } = await supabase.rpc('generate_credit_number');
                 const creditNumber = creditNumberData || `CR${Date.now()}`;
                 const totalAmount = Number(transaction.total_amount || 0);
+                const normalizedCreatedBy = normalizeUuidOrNull(req.user?.id);
 
                 const { data: creditBill, error: creditError } = await supabase
                     .from('credit_bills')
@@ -6644,7 +6538,7 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                         monthly_deduction: (credit_bill.total_amount || totalAmount) / (credit_bill.deduction_months || 1),
                         status: 'active',
                         approval_status: 'pending',
-                        created_by: req.user?.id
+                        created_by: normalizedCreatedBy
                     })
                     .select('id, credit_number')
                     .single();
@@ -6892,8 +6786,9 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         ]);
         // Each POS-outlet cashier sees and clears ONLY their own outlet's bills
         // (a main-bar cashier sees main-bar orders, not executive-bar/restaurant).
-        const canSeeLegacyRestaurant = !stationRestricted || allowedOutletTypes.has('restaurant');
-        const canSeeLegacyBar = !stationRestricted || Array.from(allowedOutletTypes).some(isBarStationType);
+        const includeLegacyWaiterOrders = !stationRestricted || req.query.include_legacy === 'true';
+        const canSeeLegacyRestaurant = includeLegacyWaiterOrders && (!stationRestricted || allowedOutletTypes.has('restaurant'));
+        const canSeeLegacyBar = includeLegacyWaiterOrders && (!stationRestricted || Array.from(allowedOutletTypes).some(isBarStationType));
 
         // Fetch pending restaurant orders
         let restaurantOrders: any[] = [];
@@ -6904,7 +6799,6 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     id, order_number, short_code, status, payment_status,
                     table_number, room_number, guest_name,
                     total_amount, amount_paid, balance_amount, created_at, branch_id, created_by,
-                    waiter:users!created_by(id, first_name, last_name),
                     items:restaurant_order_items(
                         id, quantity, unit_price, total_price,
                         menu_item:restaurant_menu_items(name)
@@ -6936,7 +6830,6 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     id, order_number, short_code, status, payment_status,
                     seat_number, room_number, guest_name,
                     total, amount_paid, balance_amount, created_at, branch_id, created_by,
-                    waiter:users!created_by(id, first_name, last_name),
                     items:bar_order_items(id, drink_name, quantity, unit_price, total_price)
                 `)
                 .neq('payment_status', 'paid')
@@ -6964,6 +6857,11 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 .from('pos_outlet_shifts')
                 .select('id, branch_id, outlet_id, cashier_id, outlet:pos_outlets(id, name, outlet_type, branch_id)');
             if (effectiveBranchId) posShiftQuery = posShiftQuery.eq('branch_id', effectiveBranchId);
+            if (!isGlobal && shouldRestrictCashierStationAccess(userRole, assignedIds)) {
+                posShiftQuery = posShiftQuery
+                    .eq('cashier_id', (req.user as any)?.id)
+                    .eq('status', 'open');
+            }
             const { data: posShifts, error: posShiftErr } = await posShiftQuery;
             if (posShiftErr) throw posShiftErr;
 
@@ -7011,6 +6909,11 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             }
         }
 
+        const waiterMap = await fetchCashierUsersById([
+            ...(restaurantOrders || []).map((order: any) => order.created_by),
+            ...(barOrders || []).map((order: any) => order.created_by),
+        ]);
+
         // Normalise into a common shape
         const mapped = [
             ...(restaurantOrders || []).map((o: any) => ({
@@ -7032,10 +6935,10 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 created_at: o.created_at,
                 bill_date: o.created_at,
                 branch_id: o.branch_id,
-                waiter: Array.isArray(o.waiter) ? o.waiter[0] : o.waiter,
+                waiter: waiterMap.get(String(o.created_by || '')) || null,
                 waiter_id: o.created_by,
                 waiter_name: (() => {
-                    const waiter = Array.isArray(o.waiter) ? o.waiter[0] : o.waiter;
+                    const waiter = waiterMap.get(String(o.created_by || ''));
                     return waiter ? `${waiter.first_name || ''} ${waiter.last_name || ''}`.trim() : '';
                 })(),
                 items: (o.items || []).map((item: any) => ({
@@ -7066,10 +6969,10 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 created_at: o.created_at,
                 bill_date: o.created_at,
                 branch_id: o.branch_id,
-                waiter: Array.isArray(o.waiter) ? o.waiter[0] : o.waiter,
+                waiter: waiterMap.get(String(o.created_by || '')) || null,
                 waiter_id: o.created_by,
                 waiter_name: (() => {
-                    const waiter = Array.isArray(o.waiter) ? o.waiter[0] : o.waiter;
+                    const waiter = waiterMap.get(String(o.created_by || ''));
                     return waiter ? `${waiter.first_name || ''} ${waiter.last_name || ''}`.trim() : '';
                 })(),
                 items: o.items || [],
@@ -7135,6 +7038,142 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 row.location
             ].join(' ').toLowerCase().includes(search);
         }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        res.json({ success: true, data: mapped });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * GET /api/cashier/unpaid-pos-orders
+ *
+ * Safe station-scoped unpaid list used by cashier close workflows. It reads
+ * only POS shift orders and intentionally avoids legacy restaurant/bar waiter
+ * tables, whose Supabase relationship metadata can be stale in production.
+ */
+export const getUnpaidPosOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const userRole = (req.user as any)?.role?.toLowerCase() || '';
+        const isGlobal = isGlobalRole(userRole);
+        const queryBranchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
+        const effectiveBranchId = isGlobal ? queryBranchId : ((req.user as any)?.branch_id || null);
+        const status = String(req.query.status || 'all').toLowerCase();
+        const wantsVoidedOrders = ['voided', 'void'].includes(status);
+        const search = String(req.query.search || '').trim().toLowerCase();
+        const requestedOutletId = String(req.query.outlet_id || '').trim();
+        const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
+
+        const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+        const assignedIds = assignedOutletIds(assignedOutlets);
+        const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+
+        let posShiftQuery = supabase
+            .from('pos_outlet_shifts')
+            .select('id, branch_id, outlet_id, cashier_id, status, outlet:pos_outlets(id, name, outlet_type, branch_id)');
+        if (effectiveBranchId) posShiftQuery = posShiftQuery.eq('branch_id', effectiveBranchId);
+        if (!isGlobal && stationRestricted) {
+            posShiftQuery = posShiftQuery
+                .eq('cashier_id', (req.user as any)?.id)
+                .eq('status', 'open');
+        }
+
+        const { data: posShifts, error: posShiftErr } = await posShiftQuery;
+        if (posShiftErr) throw posShiftErr;
+
+        const visibleShifts = ((posShifts || []) as any[]).filter((shift: any) => {
+            const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+            if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
+            if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
+            return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+        });
+
+        const shiftLookup: Record<string, any> = Object.fromEntries(visibleShifts.map((shift: any) => [shift.id, shift]));
+        const posShiftIds = Object.keys(shiftLookup);
+        if (!posShiftIds.length) {
+            res.json({ success: true, data: [] });
+            return;
+        }
+
+        const allowedStatuses = status === 'all' ? ['unpaid', 'partial'] : [status];
+        let posOrdersQuery = supabase
+            .from('pos_shift_orders')
+            .select('*')
+            .in('shift_id', posShiftIds)
+            .order('created_at', { ascending: false });
+
+        if (wantsVoidedOrders) {
+            posOrdersQuery = posOrdersQuery
+                .or('status.eq.voided,payment_status.eq.voided,void_request_status.eq.approved');
+        } else {
+            posOrdersQuery = posOrdersQuery
+                .in('payment_status', allowedStatuses)
+                .neq('status', 'cancelled')
+                .or('void_request_status.is.null,void_request_status.eq.rejected');
+        }
+
+        const { data: posOrders, error: posErr } = await posOrdersQuery;
+        if (posErr) throw posErr;
+
+        const mapped = (posOrders || []).map((o: any) => {
+            const items = Array.isArray(o.items) ? o.items : [];
+            const shift = shiftLookup[o.shift_id];
+            const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
+            const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
+            const location = posOrderLocation(o, stationName);
+            const isVoided = o.status === 'voided' || o.payment_status === 'voided' || o.void_request_status === 'approved';
+            return {
+                id: o.id,
+                source: 'pos',
+                source_type: 'CAPTAIN_ORDER',
+                bill_type: 'pos_shift_order',
+                bill_label: 'Captain Order',
+                order_number: o.order_number,
+                bill_number: o.order_number,
+                short_code: o.short_code,
+                location,
+                guest_name: o.customer_name || 'Walk-in',
+                customer_name: o.customer_name || 'Walk-in',
+                total_amount: Number(o.total_amount || 0),
+                paid_amount: Number(o.amount_paid || 0),
+                balance_amount: isVoided ? 0 : Number(o.balance_amount || o.total_amount || 0),
+                payment_status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
+                status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
+                created_at: o.created_at,
+                bill_date: o.created_at,
+                branch_id: shift?.branch_id || effectiveBranchId,
+                outlet_id: o.outlet_id || shift?.outlet_id,
+                outlet_type: outlet?.outlet_type || null,
+                outlet_name: outlet?.name || null,
+                station_name: stationName,
+                void_request_status: o.void_request_status || null,
+                void_reason: o.void_reason || null,
+                voided_at: o.voided_at || null,
+                voided_by: o.voided_by || null,
+                waiter: null,
+                waiter_id: o.waiter_id || o.created_by,
+                waiter_name: o.waiter_name || '',
+                items: items.map((item: any, index: number) => ({
+                    id: item.outlet_item_id || `${o.id}-${index}`,
+                    item_name: item.name || item.item_name || 'POS item',
+                    quantity: Number(item.quantity || item.qty || 1),
+                    unit_price: Number(item.unit_price || item.price || 0),
+                    total_price: Number(item.line_total || 0)
+                })),
+                is_waiter_order: true,
+                is_captain_order: true,
+                is_voided: isVoided
+            };
+        }).filter((row: any) => {
+            if (!search) return true;
+            return [
+                row.order_number,
+                row.short_code,
+                row.customer_name,
+                row.waiter_name,
+                row.location
+            ].join(' ').toLowerCase().includes(search);
+        });
 
         res.json({ success: true, data: mapped });
     } catch (error) {

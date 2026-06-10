@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
@@ -36,11 +37,37 @@ class RetryInterceptor extends Interceptor {
   }
 
   bool _shouldRetry(DioException err) {
+    if (_isDeterministicServerError(err)) return false;
+    if (err.response?.statusCode == 429) return false;
     return err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.receiveTimeout ||
         err.type == DioExceptionType.sendTimeout ||
         _isWorkingDirectoryError(err.error) ||
         (err.response?.statusCode != null && err.response!.statusCode! >= 500);
+  }
+
+  bool _isDeterministicServerError(DioException err) {
+    if (err.response?.statusCode != 500) return false;
+    final message = _responseMessage(err.response?.data);
+    return message.contains('Could not find a relationship') ||
+        message.contains('schema cache') ||
+        message.contains('Request failed with status code 429');
+  }
+
+  String _responseMessage(Object? data) {
+    if (data is Map) return '${data['message'] ?? data['error'] ?? ''}';
+    if (data is List<int>) {
+      try {
+        final decoded = jsonDecode(utf8.decode(data));
+        if (decoded is Map) {
+          return '${decoded['message'] ?? decoded['error'] ?? decoded}';
+        }
+        return '$decoded';
+      } catch (_) {
+        return '$data';
+      }
+    }
+    return '$data';
   }
 
   bool _isWorkingDirectoryError(Object? error) {

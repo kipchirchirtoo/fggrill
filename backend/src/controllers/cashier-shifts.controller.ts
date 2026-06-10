@@ -185,9 +185,9 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
                 amount: toNumber(b.amount),
                 reference: b.reference || b.id || null,
             })),
-            // Paid bills settled this shift — staff name, amount and the method
-            // they paid with (cash / M-Pesa / card), so the branch accountant can
-            // record each against the staff's outstanding credit bill.
+            // Paid credits recorded this shift — staff name, amount and the
+            // method they paid with (cash / M-Pesa / card). The branch
+            // accountant applies each entry against the correct credit bill.
             paid_bills_details: paidBills.map((b: any) => ({
                 staff_id: b.staff_id || null,
                 name: b.name || b.staff_name || b.customer_name || 'Staff',
@@ -1214,6 +1214,8 @@ export const closeShift = async (
                 .from('pos_outlet_shifts')
                 .select('id')
                 .eq('branch_id', shift.branch_id)
+                .eq('cashier_id', shift.cashier_id)
+                .eq('status', 'open')
                 .in('outlet_id', allowedOutletIds);
             const ownerPosShiftIds = (ownerPosShifts || [])
                 .map((s: any) => s.id)
@@ -1285,8 +1287,8 @@ export const closeShift = async (
         const cashDrops = toNumber(cash_deposited);
         const payouts = toNumber(req.body.payouts ?? req.body.paid_outs);
 
-        // Paid credits settled this shift fold into the matching method tally:
-        // a staff settling via M-Pesa adds to M-Pesa sales, cash to cash, etc.
+        // Paid credits recorded this shift fold into the matching cashier
+        // collection method tally: M-Pesa to M-Pesa, cash to cash, etc.
         const paidBillsList: any[] = Array.isArray(paid_bills_details) ? paid_bills_details : [];
         const paidCreditsByMethod = (method: string) => paidBillsList
             .filter((b: any) => normalizePaymentMethod(b.payment_method) === method)
@@ -1317,10 +1319,12 @@ export const closeShift = async (
                 : expectedClosingFloat;
         const variance = actualClosingFloat - expectedClosingFloat;
 
-        // Compute unpaid_bills server-side (credit issued minus credit paid)
+        // Compute unpaid_bills server-side from credit issued only. Paid
+        // credits are separate cashier-collected evidence for the branch
+        // accountant to apply later; they must not reduce staff credit balances
+        // or same-shift credit issued automatically.
         const creditTaken = (credit_bills_details || []).reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
-        const creditPaid  = (paid_bills_details  || []).reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
-        const computedUnpaidBills = Math.max(0, creditTaken - creditPaid);
+        const computedUnpaidBills = Math.max(0, creditTaken);
 
         // Reconciliation warning: payment method sum should equal total_sales
         const methodSum = cash_sales + mpesa_sales + card_sales + credit_bill_sales + other_sales;
@@ -1427,120 +1431,11 @@ export const closeShift = async (
                 }
             }
 
-            // 2. Process Paid Bills (Settle existing credits)
+            // 2. Paid credits stay as shift entries for branch-accountant
+            // review. Do not auto-create payment rows or reduce any existing
+            // staff_credit_bills balances here.
             if (paid_bills_details && Array.isArray(paid_bills_details)) {
-                for (const bill of paid_bills_details) {
-                    if (!bill.staff_id) continue;
-                    if (bill.settled_at || Array.isArray(bill.settlement_applications)) continue;
-
-                    let amountPaid = parseFloat(bill.amount);
-                    if (isNaN(amountPaid) || amountPaid <= 0) continue;
-
-                    // A. Record the payment itself for audit trail (capture the
-                    // method the staff paid with so the branch accountant sees it).
-                    const paidMethod = String(bill.payment_method || 'cash').toLowerCase();
-                    const { error } = await supabase.from('staff_credit_bills').insert({
-                        staff_id: bill.staff_id,
-                        amount: amountPaid,
-                        description: `Shift Payment (${paidMethod}) - Shift #${shift.shift_number} - ${bill.name}`,
-                        bill_date: new Date().toISOString().split('T')[0],
-                        status: 'paid_cash',
-                        paid_amount: amountPaid,
-                        balance: 0,
-                        branch_id: shift.branch_id,
-                        paid_in_shift_id: shift.id
-                    });
-
-                    if (error) {
-
-                      console.error('Database error:', error);
-
-                      throw error;
-
-                    }
-
-                    // B. SETTLE FIFO: Find pending credits ordered by oldest first
-                    const { data: credits, error: fetchError } = await supabase
-                        .from('staff_credit_bills')
-                        .select('id, amount, paid_amount, balance, status, source_cashier_credit_bill_id')
-                        .eq('staff_id', bill.staff_id)
-                        .not('status', 'in', '("paid","paid_cash","deducted","cancelled")')
-                        .order('bill_date', { ascending: true })
-                        .order('created_at', { ascending: true });
-
-                    if (fetchError) {
-                        logger.error(`Error fetching credits for settlement: ${bill.staff_id}`, fetchError);
-                        continue;
-                    }
-
-                    if (credits && credits.length > 0) {
-                        let remainingPayment = amountPaid;
-                        for (const credit of credits) {
-                            if (remainingPayment <= 0) break;
-
-                            const creditAmount = parseFloat(credit.amount);
-                            const currentPaid = parseFloat(credit.paid_amount || 0) || 0;
-                            const storedBalance = credit.balance === null || credit.balance === undefined
-                                ? NaN
-                                : parseFloat(credit.balance);
-                            const currentBalance = Number.isFinite(storedBalance)
-                                ? Math.max(0, storedBalance)
-                                : Math.max(0, creditAmount - currentPaid);
-
-                            if (currentBalance <= 0) continue;
-
-                            const appliedAmount = Math.min(remainingPayment, currentBalance);
-                            const newPaidAmount = Math.min(creditAmount, currentPaid + appliedAmount);
-                            const newBalance = Math.max(0, currentBalance - appliedAmount);
-
-                            await supabase
-                                .from('staff_credit_bills')
-                                .update({
-                                    paid_amount: newPaidAmount,
-                                    balance: newBalance,
-                                    status: newBalance <= 0 ? 'paid_cash' : 'partial',
-                                    paid_in_shift_id: shift.id
-                                })
-                                .eq('id', credit.id);
-
-                            await supabase.from('staff_credit_bill_payments').insert({
-                                credit_bill_id: credit.id,
-                                amount: appliedAmount,
-                                payment_method: paidMethod,
-                                reference: bill.reference || null,
-                                recorded_by: userId || null,
-                                shift_id: shift.id,
-                                notes: `Shift close paid-bill settlement - Shift #${shift.shift_number}`
-                            });
-
-                            if (credit.source_cashier_credit_bill_id) {
-                                const { data: linkedCredit } = await supabase
-                                    .from('credit_bills')
-                                    .select('id, total_amount, paid_amount')
-                                    .eq('id', credit.source_cashier_credit_bill_id)
-                                    .maybeSingle();
-                                if (linkedCredit) {
-                                    const linkedTotal = parseFloat(linkedCredit.total_amount || creditAmount) || creditAmount;
-                                    const linkedPaid = Math.min(
-                                        linkedTotal,
-                                        (parseFloat(linkedCredit.paid_amount || 0) || 0) + appliedAmount
-                                    );
-                                    const linkedBalance = Math.max(0, linkedTotal - linkedPaid);
-                                    await supabase
-                                        .from('credit_bills')
-                                        .update({
-                                            paid_amount: linkedPaid,
-                                            balance_amount: linkedBalance,
-                                            status: linkedBalance <= 0 ? 'paid' : 'active'
-                                        })
-                                        .eq('id', linkedCredit.id);
-                                }
-                            }
-
-                            remainingPayment -= appliedAmount;
-                        }
-                    }
-                }
+                logger.info(`Shift ${id} has ${paid_bills_details.length} paid-credit entr${paid_bills_details.length === 1 ? 'y' : 'ies'} pending branch-accountant application.`);
             }
         } catch (syncError) {
             // Log but don't fail the request since shift is already closed

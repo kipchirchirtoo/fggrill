@@ -3,6 +3,267 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
+type SupplierRow = {
+    id: string;
+    name?: string | null;
+    supplier_code?: string | null;
+    payment_terms_days?: number | string | null;
+};
+
+type AgingAccumulator = {
+    supplier_id: string;
+    supplier?: SupplierRow;
+    supplier_name: string;
+    supplier_code: string;
+    current: number;
+    days_1_30: number;
+    days_31_60: number;
+    days_61_90: number;
+    days_90_plus: number;
+    total_balance: number;
+    total_invoices: number;
+    total_payments: number;
+    open_purchase_orders: number;
+    last_invoice_date: string | null;
+    last_payment_date: string | null;
+    source: string;
+};
+
+const toNumber = (value: any): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeDate = (value: any): Date | null => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const addDays = (date: Date, days: number): Date => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+};
+
+const daysBetween = (start: Date, end: Date): number => {
+    const startDay = new Date(start);
+    const endDay = new Date(end);
+    startDay.setHours(0, 0, 0, 0);
+    endDay.setHours(0, 0, 0, 0);
+    return Math.floor((endDay.getTime() - startDay.getTime()) / 86400000);
+};
+
+const parsePaymentTermsDays = (terms: any, supplier?: SupplierRow): number => {
+    if (typeof terms === 'number') return terms;
+    const text = `${terms || ''}`.toLowerCase();
+    if (text.includes('cash') || text.includes('cod')) return 0;
+    const match = text.match(/(\d+)/);
+    if (match) return Number(match[1]);
+    return toNumber(supplier?.payment_terms_days) || 30;
+};
+
+const createAgingAccumulator = (supplierId: string, supplier?: SupplierRow): AgingAccumulator => ({
+    supplier_id: supplierId,
+    supplier,
+    supplier_name: supplier?.name || '',
+    supplier_code: supplier?.supplier_code || '',
+    current: 0,
+    days_1_30: 0,
+    days_31_60: 0,
+    days_61_90: 0,
+    days_90_plus: 0,
+    total_balance: 0,
+    total_invoices: 0,
+    total_payments: 0,
+    open_purchase_orders: 0,
+    last_invoice_date: null,
+    last_payment_date: null,
+    source: 'ledger',
+});
+
+const applyAgingBucket = (
+    row: AgingAccumulator,
+    amount: number,
+    dueDate: Date | null,
+    today = new Date()
+): void => {
+    if (amount <= 0) return;
+    const overdueDays = dueDate ? daysBetween(dueDate, today) : 0;
+    if (overdueDays <= 0) row.current += amount;
+    else if (overdueDays <= 30) row.days_1_30 += amount;
+    else if (overdueDays <= 60) row.days_31_60 += amount;
+    else if (overdueDays <= 90) row.days_61_90 += amount;
+    else row.days_90_plus += amount;
+    row.total_balance += amount;
+};
+
+const finalizeAgingRow = (row: AgingAccumulator): AgingAccumulator & Record<string, any> => ({
+    ...row,
+    current_balance: row.total_balance,
+    current_amount: row.current,
+    days_30_amount: row.days_1_30,
+    days_60_amount: row.days_31_60,
+    days_90_amount: row.days_61_90,
+    days_90_plus_amount: row.days_90_plus,
+    outstanding_amount: row.total_balance,
+    balance: row.total_balance,
+});
+
+const normalizeBalanceRow = (row: any): Record<string, any> => {
+    const current = toNumber(row.current_amount);
+    const days30 = toNumber(row.days_30_amount);
+    const days60 = toNumber(row.days_60_amount);
+    const days90Plus = toNumber(row.days_90_plus_amount);
+    const total = toNumber(row.current_balance || current + days30 + days60 + days90Plus);
+
+    return {
+        ...row,
+        current,
+        days_1_30: days30,
+        days_31_60: days60,
+        days_61_90: 0,
+        days_90_plus: days90Plus,
+        total_balance: total,
+        outstanding_amount: total,
+        balance: total,
+        source: row.source || 'supplier_balances',
+    };
+};
+
+const getRequestedBranchId = (req: Request): number | string | null => {
+    const user = (req as any).user || {};
+    return (req.query.branch_id as string | undefined) ||
+        user.branch_id ||
+        user.branchId ||
+        null;
+};
+
+const getScopedSupplierIds = async (
+    req: Request,
+    supplierId?: string
+): Promise<string[] | null> => {
+    const branchId = getRequestedBranchId(req);
+    if (!branchId) return supplierId ? [supplierId] : null;
+
+    let query = supabase
+        .from('store_suppliers')
+        .select('id')
+        .eq('branch_id', branchId);
+
+    if (supplierId) query = query.eq('id', supplierId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map((supplier: any) => supplier.id);
+};
+
+const fetchSuppliersById = async (supplierIds: string[]): Promise<Map<string, SupplierRow>> => {
+    const ids = [...new Set(supplierIds.filter(Boolean))];
+    if (ids.length === 0) return new Map();
+
+    const { data, error } = await supabase
+        .from('store_suppliers')
+        .select('id, name, supplier_code, payment_terms_days')
+        .in('id', ids);
+
+    if (error) throw error;
+    return new Map((data || []).map((supplier: any) => [supplier.id, supplier as SupplierRow]));
+};
+
+const buildAgingFromInvoices = async (
+    req: Request,
+    scopedSupplierIds: string[] | null,
+    supplierId?: string
+): Promise<Array<AgingAccumulator & Record<string, any>>> => {
+    if (scopedSupplierIds && scopedSupplierIds.length === 0) return [];
+
+    let query = supabase
+        .from('store_supplier_invoices')
+        .select('id, supplier_id, invoice_number, invoice_date, due_date, total_amount, amount_paid, balance_due, status')
+        .order('due_date', { ascending: true });
+
+    if (supplierId) query = query.eq('supplier_id', supplierId);
+    if (scopedSupplierIds) query = query.in('supplier_id', scopedSupplierIds);
+
+    const { data: invoices, error } = await query;
+    if (error) throw error;
+
+    const openInvoices = (invoices || []).filter((invoice: any) => {
+        const status = `${invoice.status || ''}`.toLowerCase();
+        if (['paid', 'void', 'voided', 'cancelled', 'rejected'].includes(status)) return false;
+        return toNumber(invoice.balance_due ?? invoice.total_amount) > 0;
+    });
+
+    const supplierMap = await fetchSuppliersById(openInvoices.map((invoice: any) => invoice.supplier_id));
+    const rows = new Map<string, AgingAccumulator>();
+
+    for (const invoice of openInvoices) {
+        const supplier = supplierMap.get(invoice.supplier_id);
+        const row = rows.get(invoice.supplier_id) || createAgingAccumulator(invoice.supplier_id, supplier);
+        row.source = 'supplier_invoices';
+        const balance = toNumber(invoice.balance_due ?? invoice.total_amount);
+        applyAgingBucket(row, balance, normalizeDate(invoice.due_date || invoice.invoice_date));
+        row.total_invoices += toNumber(invoice.total_amount || balance);
+        const paid = toNumber(invoice.amount_paid);
+        row.total_payments += paid;
+        const invoiceDate = invoice.invoice_date || null;
+        if (invoiceDate && (!row.last_invoice_date || invoiceDate > row.last_invoice_date)) {
+            row.last_invoice_date = invoiceDate;
+        }
+        rows.set(invoice.supplier_id, row);
+    }
+
+    return Array.from(rows.values()).map(finalizeAgingRow);
+};
+
+const buildAgingFromPurchaseOrders = async (
+    req: Request,
+    scopedSupplierIds: string[] | null,
+    supplierId?: string
+): Promise<Array<AgingAccumulator & Record<string, any>>> => {
+    if (scopedSupplierIds && scopedSupplierIds.length === 0) return [];
+
+    let query = supabase
+        .from('store_purchase_orders')
+        .select('id, po_number, supplier_id, po_date, expected_delivery_date, total_amount, status, payment_terms, created_at, branch_id, source_module')
+        .order('created_at', { ascending: false });
+
+    if (supplierId) query = query.eq('supplier_id', supplierId);
+    if (scopedSupplierIds) query = query.in('supplier_id', scopedSupplierIds);
+
+    const { data: purchaseOrders, error } = await query;
+    if (error) throw error;
+
+    const openOrders = (purchaseOrders || []).filter((po: any) => {
+        const status = `${po.status || ''}`.toLowerCase();
+        if (['cancelled', 'rejected', 'void', 'voided'].includes(status)) return false;
+        return toNumber(po.total_amount) > 0 && po.supplier_id;
+    });
+
+    const supplierMap = await fetchSuppliersById(openOrders.map((po: any) => po.supplier_id));
+    const rows = new Map<string, AgingAccumulator>();
+
+    for (const po of openOrders) {
+        const supplier = supplierMap.get(po.supplier_id);
+        const row = rows.get(po.supplier_id) || createAgingAccumulator(po.supplier_id, supplier);
+        row.source = 'purchase_orders';
+        const amount = toNumber(po.total_amount);
+        const baseDate = normalizeDate(po.expected_delivery_date || po.po_date || po.created_at);
+        const dueDate = baseDate ? addDays(baseDate, parsePaymentTermsDays(po.payment_terms, supplier)) : null;
+        applyAgingBucket(row, amount, dueDate);
+        row.total_invoices += amount;
+        row.open_purchase_orders += 1;
+        const activityDate = po.po_date || po.created_at || null;
+        if (activityDate && (!row.last_invoice_date || activityDate > row.last_invoice_date)) {
+            row.last_invoice_date = activityDate;
+        }
+        rows.set(po.supplier_id, row);
+    }
+
+    return Array.from(rows.values()).map(finalizeAgingRow);
+};
+
 // @desc    Get supplier aging analysis
 // @route   GET /api/procurement/reports/aging
 // @access  Private (Auditor/Finance)
@@ -12,7 +273,8 @@ export const getAgingAnalysis = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { supplier_id } = req.query;
+        const supplierId = req.query.supplier_id as string | undefined;
+        const scopedSupplierIds = await getScopedSupplierIds(req, supplierId);
 
         let query = supabase
             .from('store_supplier_balances')
@@ -22,16 +284,44 @@ export const getAgingAnalysis = async (
             `)
             .order('current_balance', { ascending: false });
 
-        if (supplier_id) query = query.eq('supplier_id', supplier_id);
+        if (supplierId) query = query.eq('supplier_id', supplierId);
+        if (scopedSupplierIds) {
+            if (scopedSupplierIds.length === 0) {
+                res.status(200).json({ success: true, count: 0, data: [] });
+                return;
+            }
+            query = query.in('supplier_id', scopedSupplierIds);
+        }
 
         const { data: aging, error } = await query;
 
         if (error) throw error;
 
+        if (aging && aging.length > 0) {
+            const normalizedAging = aging.map(normalizeBalanceRow);
+            res.status(200).json({
+                success: true,
+                count: normalizedAging.length,
+                data: normalizedAging
+            });
+            return;
+        }
+
+        const invoiceAging = await buildAgingFromInvoices(req, scopedSupplierIds, supplierId);
+        if (invoiceAging.length > 0) {
+            res.status(200).json({
+                success: true,
+                count: invoiceAging.length,
+                data: invoiceAging
+            });
+            return;
+        }
+
+        const purchaseOrderAging = await buildAgingFromPurchaseOrders(req, scopedSupplierIds, supplierId);
         res.status(200).json({
             success: true,
-            count: aging?.length || 0,
-            data: aging || []
+            count: purchaseOrderAging.length,
+            data: purchaseOrderAging
         });
     } catch (error) {
         logger.error('Error fetching aging analysis:', error);
@@ -211,6 +501,7 @@ export const getSupplierPerformance = async (
 ): Promise<void> => {
     try {
         const { supplierId } = req.params;
+        const scopedSupplierIds = await getScopedSupplierIds(req, supplierId);
 
         const { data: performance, error } = await supabase
             .from('store_supplier_balances')
@@ -220,12 +511,22 @@ export const getSupplierPerformance = async (
 
         if (error) throw error;
 
-        // In a real scenario, we might calculate more metrics here
-        // like average lead time deviation, dispute rate, etc.
+        if (performance) {
+            res.status(200).json({
+                success: true,
+                data: normalizeBalanceRow(performance)
+            });
+            return;
+        }
+
+        const invoiceAging = await buildAgingFromInvoices(req, scopedSupplierIds, supplierId);
+        const poAging = invoiceAging.length > 0
+            ? invoiceAging
+            : await buildAgingFromPurchaseOrders(req, scopedSupplierIds, supplierId);
 
         res.status(200).json({
             success: true,
-            data: performance || {
+            data: poAging[0] || {
                 supplier_id: supplierId,
                 current_balance: 0,
                 total_invoices: 0,

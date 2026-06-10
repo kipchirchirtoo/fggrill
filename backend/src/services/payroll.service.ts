@@ -211,9 +211,9 @@ export class PayrollService {
       });
     }
 
-    // 4. Logbook payments are now applied directly to staff_credit_bills.balance
-    // by the cashier paid-bill workflow. Payroll therefore reads the remaining
-    // bill balance above instead of applying a second negative offset here.
+    // 4. Cashier paid-credit entries are branch-accountant evidence only.
+    // They are applied through the branch accountant partial/full payment flow,
+    // so payroll reads the remaining staff_credit_bills balance above.
 
     // 5. POS unpaid bills (explicitly tagged as unpaid_bills)
     for (const pos of batchData.posBillsRaw) {

@@ -192,12 +192,7 @@ export const getBankingTransactions = async (
 
         let query = supabase
             .from('banking_transactions')
-            .select(`
-                *,
-                recorded_by_user:users!recorded_by(id, first_name, last_name),
-                approved_by_user:users!approved_by(id, first_name, last_name),
-                reconciled_by_user:users!reconciled_by(id, first_name, last_name)
-            `)
+            .select('*')
             .order('transaction_date', { ascending: false });
 
         if (branch_id) {
@@ -228,25 +223,40 @@ export const getBankingTransactions = async (
 
         if (error) throw error;
 
-        // Transform data for frontend compatibility (full_name, firstName, lastName)
-        const transformedTransactions = (transactions || []).map((txn: any) => {
-            const transformUser = (user: any) => {
-                if (!user) return null;
+        const userIds = [...new Set(
+            (transactions || [])
+                .flatMap((txn: any) => [txn.recorded_by, txn.approved_by, txn.reconciled_by])
+                .filter(Boolean)
+                .map((id: any) => `${id}`)
+        )];
+
+        const usersMap = new Map();
+        if (userIds.length > 0) {
+            const { data: users, error: usersError } = await supabase
+                .from('users')
+                .select('id, first_name, last_name')
+                .in('id', userIds);
+            if (usersError) {
+                logger.warn('Unable to enrich banking transaction users:', usersError);
+            }
+            users?.forEach((user: any) => {
                 const firstName = user.first_name || '';
                 const lastName = user.last_name || '';
-                return {
+                usersMap.set(`${user.id}`, {
                     ...user,
                     firstName,
                     lastName,
                     full_name: `${firstName} ${lastName}`.trim()
-                };
-            };
+                });
+            });
+        }
 
+        const transformedTransactions = (transactions || []).map((txn: any) => {
             return {
                 ...txn,
-                recorded_by_user: transformUser(txn.recorded_by_user),
-                approved_by_user: transformUser(txn.approved_by_user),
-                reconciled_by_user: transformUser(txn.reconciled_by_user)
+                recorded_by_user: txn.recorded_by ? usersMap.get(`${txn.recorded_by}`) || null : null,
+                approved_by_user: txn.approved_by ? usersMap.get(`${txn.approved_by}`) || null : null,
+                reconciled_by_user: txn.reconciled_by ? usersMap.get(`${txn.reconciled_by}`) || null : null
             };
         });
 

@@ -4309,7 +4309,7 @@ class _ShiftReconciliationPanel extends StatelessWidget {
               ),
             ),
             right: _SectionCard(
-              title: 'Paid Credit Bills / Payroll Settlements',
+              title: 'Paid Credits Pending Application',
               child: _ShiftPaidBillsSummary(
                 paidBills: paidBills,
                 total: paidBillsTotal,
@@ -4739,7 +4739,7 @@ class _ShiftPaidBillsSummary extends StatelessWidget {
         _KeyValueList({
           'paid_credit_bills': total,
           'paid_bill_count': count,
-          'payroll_effect': 'Reduces staff credit bill balance before payroll',
+          'accounting_status': 'Pending branch accountant application',
         }),
         const SizedBox(height: 12),
         _SimpleTable(
@@ -4747,11 +4747,10 @@ class _ShiftPaidBillsSummary extends StatelessWidget {
             'Staff',
             'Method',
             'Reference',
-            'Payroll Applied',
+            'Application Status',
             'Amount'
           ],
           rows: paidBills.map<List<Object>>((bill) {
-            final applications = _list(bill['settlement_applications']);
             return [
               _text(bill, ['name', 'staff_name', 'customer_name']).isEmpty
                   ? 'Staff'
@@ -4760,11 +4759,9 @@ class _ShiftPaidBillsSummary extends StatelessWidget {
               _text(bill, ['reference']).isEmpty
                   ? '-'
                   : _text(bill, ['reference']),
-              applications.isEmpty
-                  ? (_text(bill, ['settled_at']).isEmpty
-                      ? 'Pending'
-                      : 'Applied')
-                  : '${applications.length} bill${applications.length == 1 ? '' : 's'}',
+              _text(bill, ['review_status']).isEmpty
+                  ? 'Pending application'
+                  : _title(_text(bill, ['review_status'])),
               _money(_num(bill['amount'])),
             ];
           }).toList(),
@@ -5109,9 +5106,7 @@ num _outstandingCredit(Map<String, dynamic> shift) {
       _firstNumFrom(shift, ['outstanding_credit', 'outstanding_credit_value']);
   if (stored != 0) return stored;
   final unpaid = _firstNumFrom(shift, ['unpaid_bills_value']);
-  return unpaid > 0
-      ? unpaid
-      : (_creditBillsCreated(shift) - _creditBillsPaid(shift));
+  return unpaid > 0 ? unpaid : _creditBillsCreated(shift);
 }
 
 class _CashierLogbooksSection extends ConsumerStatefulWidget {
@@ -11588,7 +11583,8 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
               ),
             if (_linaLocked) _linaBanner(),
             const SizedBox(height: 8),
-            Expanded(child: SingleChildScrollView(child: _tabBody(fieldsReadOnly))),
+            Expanded(
+                child: SingleChildScrollView(child: _tabBody(fieldsReadOnly))),
             const Divider(),
             _KeyValueList({
               'Total Revenue': _money(_total(_revenueFields)),
@@ -11939,7 +11935,8 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
         color: hasAnomalies ? Colors.orange.shade50 : Colors.green.shade50,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-            color: hasAnomalies ? Colors.orange.shade200 : Colors.green.shade200),
+            color:
+                hasAnomalies ? Colors.orange.shade200 : Colors.green.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -11947,8 +11944,9 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
           Row(children: [
             Icon(Icons.auto_awesome,
                 size: 16,
-                color:
-                    hasAnomalies ? Colors.orange.shade800 : Colors.green.shade700),
+                color: hasAnomalies
+                    ? Colors.orange.shade800
+                    : Colors.green.shade700),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -13840,7 +13838,8 @@ void _showRecord(BuildContext context, Map<String, dynamic> record,
 
 /// Full-screen record detail (replaces the old "Record Details" dialog).
 class _RecordDetailScreen extends StatelessWidget {
-  const _RecordDetailScreen({required this.record, this.title = 'Record Details'});
+  const _RecordDetailScreen(
+      {required this.record, this.title = 'Record Details'});
 
   final Map<String, dynamic> record;
   final String title;
@@ -14282,6 +14281,23 @@ Color _categoryColor(String value) {
   return colors[value.toLowerCase()] ?? Colors.blueGrey;
 }
 
+String _pdfSafe(Object? value) {
+  if (value == null) return '';
+  return '$value'
+      .replaceAll('\u2013', '-')
+      .replaceAll('\u2014', '-')
+      .replaceAll('\u2212', '-')
+      .replaceAll('\u2026', '...')
+      .replaceAll('\u2022', '-')
+      .replaceAll('\u00a0', ' ')
+      .replaceAll('\u00a9', '(c)')
+      .replaceAll('\u2018', "'")
+      .replaceAll('\u2019', "'")
+      .replaceAll('\u201c', '"')
+      .replaceAll('\u201d', '"')
+      .replaceAll(RegExp(r'[^\x09\x0A\x0D\x20-\x7E]'), '?');
+}
+
 Future<File> _exportPdf({
   required String filename,
   required String title,
@@ -14293,6 +14309,21 @@ Future<File> _exportPdf({
 }) async {
   final doc = pw.Document();
   final generated = DateFormat('MMM d, yyyy HH:mm').format(DateTime.now());
+  final safeTitle = _pdfSafe(title);
+  final safeSubtitle = _pdfSafe(subtitle);
+  final safeMetrics = metrics.map(
+    (key, value) => MapEntry(_pdfSafe(key), _pdfSafe(value)),
+  );
+  final safeSections = sections.map(
+    (section, values) => MapEntry(
+      _pdfSafe(section),
+      values.map((key, value) => MapEntry(_pdfSafe(key), value)),
+    ),
+  );
+  final safeTableHeaders = tableHeaders.map(_pdfSafe).toList();
+  final safeTableRows = tableRows
+      .map((row) => row.map(_pdfSafe).toList(growable: false))
+      .toList(growable: false);
   final logo = await _loadPdfLogo();
   const primary = PdfColor.fromInt(0xFF1A1A1A);
   const secondary = PdfColor.fromInt(0xFF555555);
@@ -14358,7 +14389,7 @@ Future<File> _exportPdf({
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Text(
-                    title,
+                    safeTitle,
                     textAlign: pw.TextAlign.right,
                     style: pw.TextStyle(
                       color: primary,
@@ -14367,7 +14398,7 @@ Future<File> _exportPdf({
                     ),
                   ),
                   pw.SizedBox(height: 5),
-                  pw.Text(subtitle,
+                  pw.Text(safeSubtitle,
                       textAlign: pw.TextAlign.right,
                       style: const pw.TextStyle(color: secondary, fontSize: 9)),
                   pw.Text('Generated: $generated',
@@ -14380,12 +14411,12 @@ Future<File> _exportPdf({
         pw.SizedBox(height: 12),
         pw.Container(height: 1, color: border),
         pw.Container(height: 3, color: gold),
-        if (metrics.isNotEmpty) ...[
+        if (safeMetrics.isNotEmpty) ...[
           pw.SizedBox(height: 12),
           pw.Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: metrics.entries
+            children: safeMetrics.entries
                 .map(
                   (entry) => pw.Container(
                     width: 170,
@@ -14415,7 +14446,7 @@ Future<File> _exportPdf({
                 .toList(),
           ),
         ],
-        for (final section in sections.entries) ...[
+        for (final section in safeSections.entries) ...[
           pw.SizedBox(height: 16),
           pw.Text(section.key,
               style: pw.TextStyle(
@@ -14430,7 +14461,7 @@ Future<File> _exportPdf({
                       _title(entry.key),
                       entry.value is num
                           ? _money(_num(entry.value))
-                          : '${entry.value}'
+                          : _pdfSafe(entry.value)
                     ])
                 .toList(),
             headerStyle: pw.TextStyle(
@@ -14446,11 +14477,11 @@ Future<File> _exportPdf({
             ),
           ),
         ],
-        if (tableHeaders.isNotEmpty) ...[
+        if (safeTableHeaders.isNotEmpty) ...[
           pw.SizedBox(height: 16),
           pw.TableHelper.fromTextArray(
-            headers: tableHeaders,
-            data: tableRows,
+            headers: safeTableHeaders,
+            data: safeTableRows,
             headerStyle: pw.TextStyle(
                 color: PdfColors.white,
                 fontSize: 7.5,

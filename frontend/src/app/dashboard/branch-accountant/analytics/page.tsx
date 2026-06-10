@@ -212,7 +212,7 @@ export default function BranchAnalyticsPage() {
     if (!user?.branch_id) return;
 
     try {
-      toast.info('Generating PDF report...');
+      toast.info('Generating branded PDF report...');
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/analytics/branch-sales/export/pdf`, {
         method: 'POST',
@@ -237,13 +237,13 @@ export default function BranchAnalyticsPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `branch-sales-${dateRange.start}-${dateRange.end}.pdf`);
+      link.setAttribute('download', `FG_Branch_Sales_${dateRange.start}_to_${dateRange.end}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success('PDF report downloaded successfully');
+      toast.success('Branded PDF report downloaded successfully');
     } catch (error: any) {
       console.error('Error exporting PDF:', error);
       toast.error(error.message || 'Failed to generate PDF report');

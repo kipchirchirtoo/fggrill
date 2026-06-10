@@ -6,6 +6,8 @@ import axios from 'axios';
 import { z } from 'zod';
 import PDFDocument from 'pdfkit';
 import { Parser } from 'json2csv';
+import fs from 'fs';
+import path from 'path';
 import {
   BranchSalesRequest,
   BranchSalesResponse,
@@ -46,6 +48,18 @@ const ExportRequestSchema = z.object({
 // Get Python analytics service URL from environment
 const ANALYTICS_SERVICE_URL = process.env.ANALYTICS_SERVICE_URL || 'http://localhost:5001';
 
+const PDF_PRIMARY = '#1a1a1a';
+const PDF_SECONDARY = '#555555';
+const PDF_GOLD = '#c8a84b';
+const PDF_BORDER = '#e0e0e0';
+const PDF_HEADER_BG = '#333333';
+const PDF_ROW_BG = '#f9f9f9';
+const PDF_ACCENT = '#0066cc';
+const COMPANY_NAME = 'FamousGateHotels';
+const COMPANY_ADDRESS = 'Bomet, Kenya';
+const COMPANY_EMAIL = 'famousgateshotelsbmt@gmail.com';
+const COMPANY_PHONE = '0706 782 828';
+
 const normalizePaymentMethod = (value: any): PaymentMethod | string => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'cash') return PaymentMethod.CASH;
@@ -58,6 +72,7 @@ const normalizePaymentMethod = (value: any): PaymentMethod | string => {
 const normalizeCategory = (value: any, source: TransactionRecord['source']): ServiceCategory | string => {
   if (source === 'booking') return ServiceCategory.ROOMS;
   if (source === 'restaurant') return ServiceCategory.RESTAURANT;
+  if (source === 'bar') return ServiceCategory.BAR;
 
   const normalized = String(value || '').trim().toUpperCase();
   if (normalized === 'ROOM') return ServiceCategory.ROOMS;
@@ -106,6 +121,7 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
   const [
     bookingsResult,
     restaurantResult,
+    barResult,
     shiftResult,
     branchResult
   ] = await Promise.all([
@@ -118,7 +134,14 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
       .not('status', 'eq', 'cancelled'),
     supabase
       .from('restaurant_orders')
-      .select('id, branch_id, total_amount, payment_method, order_type, created_at, status, order_number, bill_number, department')
+      .select('id, branch_id, total_amount, grand_total, payment_method, order_type, created_at, status, order_number, bill_number, department')
+      .eq('branch_id', requestData.branch_id)
+      .gte('created_at', startTimestamp)
+      .lte('created_at', endTimestamp)
+      .not('status', 'eq', 'cancelled'),
+    supabase
+      .from('bar_orders')
+      .select('id, branch_id, total, subtotal, payment_method, created_at, status, order_number, room_number')
       .eq('branch_id', requestData.branch_id)
       .gte('created_at', startTimestamp)
       .lte('created_at', endTimestamp)
@@ -138,6 +161,7 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
 
   if (bookingsResult.error) throw bookingsResult.error;
   if (restaurantResult.error) throw restaurantResult.error;
+  if (barResult.error) throw barResult.error;
   if (shiftResult.error) throw shiftResult.error;
   if (branchResult.error) throw branchResult.error;
 
@@ -159,12 +183,26 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
     category: ServiceCategory.RESTAURANT,
     payment_method: normalizePaymentMethod(order.payment_method) as PaymentMethod,
     order_type: String(order.order_type || '').toLowerCase() as OrderType,
-    total_amount: Number(order.total_amount || 0),
+    total_amount: Number(order.grand_total || order.total_amount || 0),
     status: String(order.status || 'completed'),
     source: 'restaurant',
     code: order.order_number || order.bill_number || null,
     short_code: order.bill_number || (order.order_number ? String(order.order_number).slice(-6) : null),
     outlet: order.department || 'Restaurant'
+  }));
+
+  const barTransactions: TransactionRecord[] = (barResult.data || []).map((order: any) => ({
+    id: String(order.id),
+    branch_id: Number(order.branch_id || requestData.branch_id),
+    transaction_date: order.created_at,
+    category: ServiceCategory.BAR,
+    payment_method: normalizePaymentMethod(order.payment_method) as PaymentMethod,
+    total_amount: Number(order.total || order.subtotal || 0),
+    status: String(order.status || 'completed'),
+    source: 'bar',
+    code: order.order_number || null,
+    short_code: order.order_number ? String(order.order_number).slice(-6) : null,
+    outlet: 'Bar'
   }));
 
   const shiftTransactions: TransactionRecord[] = (shiftResult.data || [])
@@ -183,7 +221,7 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
       outlet: transaction.service_category || 'POS'
     }));
 
-  const transactions = [...bookingTransactions, ...restaurantTransactions, ...shiftTransactions]
+  const transactions = [...bookingTransactions, ...restaurantTransactions, ...barTransactions, ...shiftTransactions]
     .filter((transaction) => passesBranchSalesFilters(transaction, requestData.filters))
     .sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
 
@@ -262,6 +300,112 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
   };
 };
 
+const formatKes = (value: number | null | undefined): string =>
+  `KES ${(value ?? 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatPdfDate = (value: string | null | undefined): string => {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const getPdfLogoPath = (): string | null => {
+  const candidates = [
+    path.join(process.cwd(), '../frontend/public/fglogo.png'),
+    path.join(process.cwd(), 'frontend/public/fglogo.png'),
+    path.join(__dirname, '../../../frontend/public/fglogo.png')
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+};
+
+const drawFallbackHeader = (
+  doc: PDFKit.PDFDocument,
+  title: string,
+  subtitle: string
+): number => {
+  const logoPath = getPdfLogoPath();
+  if (logoPath) {
+    doc.image(logoPath, 40, 30, { width: 55 });
+  } else {
+    doc.circle(67, 57, 27).fill(PDF_PRIMARY);
+    doc.fillColor('white').fontSize(20).font('Helvetica-Bold').text('FG', 53, 47);
+  }
+
+  doc.fillColor(PDF_PRIMARY).fontSize(15).font('Helvetica-Bold').text(COMPANY_NAME, 110, 30, {
+    align: 'right'
+  });
+  doc.fontSize(9).font('Helvetica').fillColor(PDF_SECONDARY)
+    .text(COMPANY_ADDRESS, 110, 50, { align: 'right' })
+    .text(`Email: ${COMPANY_EMAIL}`, { align: 'right' })
+    .text(`Tel: ${COMPANY_PHONE}`, { align: 'right' });
+
+  doc.strokeColor(PDF_BORDER).lineWidth(1).moveTo(40, 100).lineTo(doc.page.width - 40, 100).stroke();
+  doc.rect(40, 101, doc.page.width - 80, 3).fill(PDF_GOLD);
+  doc.fillColor(PDF_PRIMARY).fontSize(14).font('Helvetica-Bold').text(title, 40, 114, { align: 'center' });
+  doc.fontSize(9).font('Helvetica').fillColor(PDF_SECONDARY).text(subtitle, 40, 132, { align: 'center' });
+  doc.strokeColor(PDF_BORDER).lineWidth(0.5).moveTo(40, 146).lineTo(doc.page.width - 40, 146).stroke();
+  doc.fillColor(PDF_PRIMARY);
+  return 158;
+};
+
+const drawFallbackFooter = (doc: PDFKit.PDFDocument): void => {
+  const y = doc.page.height - 52;
+  doc.strokeColor(PDF_BORDER).lineWidth(0.5).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke();
+  doc.fillColor(PDF_SECONDARY).fontSize(7.5).font('Helvetica')
+    .text(`Generated: ${new Date().toLocaleString('en-KE')} | ${COMPANY_NAME} - Confidential`, 40, y + 7, {
+      width: doc.page.width - 80,
+      align: 'center',
+      lineBreak: false,
+      ellipsis: true
+    });
+};
+
+const ensurePdfSpace = (doc: PDFKit.PDFDocument, y: number, needed = 60): number => {
+  if (y + needed < doc.page.height - 70) return y;
+  drawFallbackFooter(doc);
+  doc.addPage();
+  return drawFallbackHeader(doc, 'BRANCH SALES ANALYTICS REPORT', 'Continued');
+};
+
+const drawFallbackSectionTitle = (doc: PDFKit.PDFDocument, title: string, y: number): number => {
+  doc.fillColor(PDF_PRIMARY).fontSize(11).font('Helvetica-Bold').text(title, 40, y);
+  doc.rect(40, y + 15, doc.page.width - 80, 2).fill(PDF_GOLD);
+  return y + 26;
+};
+
+const drawFallbackTable = (
+  doc: PDFKit.PDFDocument,
+  y: number,
+  headers: string[],
+  rows: string[][],
+  widths: number[],
+  aligns: Array<'left' | 'center' | 'right'> = []
+): number => {
+  const left = 40;
+  let currentY = y;
+  doc.rect(left, currentY, doc.page.width - 80, 20).fill(PDF_HEADER_BG);
+  doc.fillColor('white').fontSize(7.5).font('Helvetica-Bold');
+  let x = left + 6;
+  headers.forEach((header, index) => {
+    doc.text(header, x, currentY + 6, { width: widths[index] - 8, align: aligns[index] || 'left', ellipsis: true });
+    x += widths[index];
+  });
+  currentY += 20;
+
+  rows.forEach((row, rowIndex) => {
+    currentY = ensurePdfSpace(doc, currentY, 22);
+    if (rowIndex % 2 === 0) doc.rect(left, currentY, doc.page.width - 80, 18).fill(PDF_ROW_BG);
+    doc.fillColor(PDF_PRIMARY).fontSize(7.5).font('Helvetica');
+    x = left + 6;
+    row.forEach((value, index) => {
+      doc.text(value, x, currentY + 5, { width: widths[index] - 8, align: aligns[index] || 'left', ellipsis: true });
+      x += widths[index];
+    });
+    doc.strokeColor(PDF_BORDER).lineWidth(0.3).moveTo(left, currentY + 18).lineTo(doc.page.width - 40, currentY + 18).stroke();
+    currentY += 18;
+  });
+  return currentY + 12;
+};
+
 const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promise<Buffer> => {
   return await new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -271,33 +415,102 @@ const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promi
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(18).text('Branch Sales Report', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(10).text(`Branch: ${response.metadata.branch_name}`);
-    doc.text(`Period: ${response.metadata.date_range.start} to ${response.metadata.date_range.end}`);
-    doc.text(`Generated: ${new Date(response.metadata.generated_at).toLocaleString()}`);
-    doc.moveDown();
+    const period = `${formatPdfDate(response.metadata.date_range.start)} to ${formatPdfDate(response.metadata.date_range.end)}`;
+    let y = drawFallbackHeader(doc, 'BRANCH SALES ANALYTICS REPORT', `${response.metadata.branch_name} | ${period}`);
 
-    doc.fontSize(12).text('Summary', { underline: true });
-    doc.fontSize(10).text(`Total Sales: KES ${response.data.summary.total_sales.toLocaleString()}`);
-    doc.text(`Transactions: ${response.data.summary.transaction_count.toLocaleString()}`);
-    doc.text(`Average Value: KES ${response.data.summary.avg_transaction_value.toLocaleString()}`);
-    doc.moveDown();
+    doc.fillColor(PDF_SECONDARY).fontSize(8).font('Helvetica')
+      .text(`Branch: ${response.metadata.branch_name}`, 40, y, { width: 180 })
+      .text(`Report Period: ${period}`, 220, y, { width: 180 })
+      .text(`Generated: ${new Date(response.metadata.generated_at).toLocaleString('en-KE')}`, 400, y, { width: 155 });
+    y += 30;
 
-    doc.fontSize(12).text('Recent Transactions', { underline: true });
-    doc.moveDown(0.5);
-
-    response.data.transactions?.slice(0, 40).forEach((transaction) => {
-      if (doc.y > 740) {
-        doc.addPage();
-      }
-
-      doc
-        .fontSize(9)
-        .text(
-          `${buildDateKey(transaction.transaction_date)} | ${transaction.source} | ${String(transaction.category)} | ${String(transaction.payment_method)} | KES ${Number(transaction.total_amount || 0).toLocaleString()}`
-        );
+    const summary = response.data.summary;
+    const cards = [
+      { label: 'TOTAL SALES', value: formatKes(summary.total_sales), color: PDF_PRIMARY },
+      { label: 'TRANSACTIONS', value: summary.transaction_count.toLocaleString('en-KE'), color: PDF_ACCENT },
+      { label: 'AVERAGE TICKET', value: formatKes(summary.avg_transaction_value), color: PDF_HEADER_BG }
+    ];
+    const cardWidth = (doc.page.width - 100) / 3;
+    cards.forEach((card, index) => {
+      const x = 40 + index * (cardWidth + 10);
+      doc.roundedRect(x, y, cardWidth, 48, 4).fill(card.color);
+      doc.fillColor(PDF_GOLD).fontSize(7.5).font('Helvetica-Bold').text(card.label, x + 10, y + 11, {
+        width: cardWidth - 20,
+        align: 'center'
+      });
+      doc.fillColor('white').fontSize(13).font('Helvetica-Bold').text(card.value, x + 10, y + 27, {
+        width: cardWidth - 20,
+        align: 'center',
+        ellipsis: true
+      });
     });
+    y += 68;
+
+    y = drawFallbackSectionTitle(doc, 'REVENUE BY PAYMENT METHOD', y);
+    y = drawFallbackTable(
+      doc,
+      y,
+      ['Payment Method', 'Transactions', 'Total Amount', '% of Sales'],
+      response.data.payment_method_breakdown.map((item) => [
+        String(item.payment_method || 'Unknown').toUpperCase(),
+        Number(item.transaction_count || 0).toLocaleString('en-KE'),
+        formatKes(item.total_sales),
+        `${Number(item.percentage || 0).toFixed(1)}%`
+      ]),
+      [160, 95, 155, 95],
+      ['left', 'center', 'right', 'center']
+    );
+
+    y = ensurePdfSpace(doc, y, 120);
+    y = drawFallbackSectionTitle(doc, 'REVENUE BY CATEGORY', y);
+    y = drawFallbackTable(
+      doc,
+      y,
+      ['Category', 'Transactions', 'Total Amount', '% of Sales'],
+      response.data.category_breakdown.map((item) => [
+        String(item.category || 'Unknown').toUpperCase(),
+        Number(item.transaction_count || 0).toLocaleString('en-KE'),
+        formatKes(item.total_sales),
+        `${Number(item.percentage || 0).toFixed(1)}%`
+      ]),
+      [160, 95, 155, 95],
+      ['left', 'center', 'right', 'center']
+    );
+
+    y = ensurePdfSpace(doc, y, 120);
+    y = drawFallbackSectionTitle(doc, 'DAILY SALES BREAKDOWN', y);
+    y = drawFallbackTable(
+      doc,
+      y,
+      ['Date', 'Transactions', 'Total Sales', 'Average Ticket'],
+      response.data.daily_breakdown.slice(0, 31).map((item) => [
+        formatPdfDate(item.date),
+        Number(item.transaction_count || 0).toLocaleString('en-KE'),
+        formatKes(item.total_sales),
+        formatKes(item.avg_transaction_value)
+      ]),
+      [135, 105, 145, 120],
+      ['left', 'center', 'right', 'right']
+    );
+
+    y = ensurePdfSpace(doc, y, 140);
+    y = drawFallbackSectionTitle(doc, 'RECENT TRANSACTIONS', y);
+    drawFallbackTable(
+      doc,
+      y,
+      ['Date', 'Source', 'Category', 'Payment', 'Amount'],
+      (response.data.transactions || []).slice(0, 40).map((transaction) => [
+        formatPdfDate(buildDateKey(transaction.transaction_date)),
+        String(transaction.source || '-'),
+        String(transaction.category || '-'),
+        String(transaction.payment_method || '-'),
+        formatKes(Number(transaction.total_amount || 0))
+      ]),
+      [80, 95, 110, 95, 125],
+      ['left', 'left', 'left', 'left', 'right']
+    );
+
+    drawFallbackFooter(doc);
 
     doc.end();
   });
