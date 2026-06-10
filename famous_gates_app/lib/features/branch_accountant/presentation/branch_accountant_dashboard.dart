@@ -6587,17 +6587,29 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     if (_customerMode) {
       return {'customer_bills': await repo.getCustomerUnpaidBills()};
     }
-    final results = await Future.wait([
-      repo.getPayrollCreditBills(
-          status: _status == 'all' ? 'outstanding' : _status),
-      repo.getPayrollCreditBills(status: 'pending'),
-      repo.getCashierPaidCreditEntries(status: 'pending'),
-      repo.getPayrollAdvances(status: _status),
-      repo.getPayrollLoans(status: _status),
-      repo.getBranchStaff(),
+    Future<List<Map<String, dynamic>>> safe(
+      Future<List<Map<String, dynamic>>> request,
+    ) async {
+      try {
+        return await request;
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }
+
+    final results = await Future.wait<List<Map<String, dynamic>>>([
+      safe(repo.getPayrollCreditBills(status: _status)),
+      safe(repo.getPayrollCreditBills(status: 'pending')),
+      safe(repo.getCashierPaidCreditEntries(status: 'pending')),
+      safe(repo.getPayrollAdvances(status: _status)),
+      safe(repo.getPayrollLoans(status: _status)),
+      safe(repo.getBranchStaff()),
     ]);
+    final creditBills = _status == 'all'
+        ? results[0].where(_isOutstandingCreditBill).toList()
+        : results[0];
     return {
-      'credit_bills': results[0],
+      'credit_bills': creditBills,
       'pending_credit_bills': results[1],
       'paid_credit_entries': results[2],
       'advances': results[3],
@@ -7008,6 +7020,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         .clamp(0, double.infinity);
   }
 
+  bool _isOutstandingCreditBill(Map<String, dynamic> row) {
+    final status = _text(row, ['status']).toLowerCase();
+    return ['accountant_confirmed', 'auditor_confirmed'].contains(status) &&
+        _staffCreditBalance(row) > 0;
+  }
+
   num _staffAdvanceBalance(Map<String, dynamic> row) {
     final status = _text(row, ['status']).toLowerCase();
     if (['deducted', 'paid', 'paid_cash', 'cancelled', 'rejected']
@@ -7290,10 +7308,14 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     final staffId = _text(entry, ['staff_id']);
     final repo = ref.read(branchAccountantRepositoryProvider);
     final bills = staffId.isNotEmpty
-        ? await repo.getPayrollCreditBills(
-            status: 'outstanding',
-            staffId: staffId,
-          )
+        ? await repo
+            .getPayrollCreditBills(
+              status: 'all',
+              staffId: staffId,
+            )
+            .then(
+              (rows) => rows.where(_isOutstandingCreditBill).toList(),
+            )
         : seedOutstandingBills;
     if (!mounted) return;
     if (bills.isEmpty) {

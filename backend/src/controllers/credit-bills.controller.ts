@@ -91,9 +91,7 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         if (staff_id) query = query.eq('staff_id', staff_id);
         if (status && status !== 'all') {
             if (status === 'outstanding') {
-                query = query
-                    .in('status', ['accountant_confirmed', 'auditor_confirmed'])
-                    .gt('balance', 0);
+                query = query.in('status', ['accountant_confirmed', 'auditor_confirmed']);
             } else {
                 query = query.eq('status', status);
             }
@@ -134,6 +132,12 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
                     last_name: user?.last_name || sp.last_name || ''
                 } : null
             };
+        }).filter((bill: any) => {
+            if (status !== 'outstanding') return true;
+            const balance = bill.balance !== null && bill.balance !== undefined
+                ? toNumber(bill.balance)
+                : Math.max(0, toNumber(bill.amount) - toNumber(bill.paid_amount));
+            return balance > 0;
         });
 
         res.status(200).json({ success: true, data: transformed });
