@@ -13,10 +13,13 @@ import {
 import {
   createCreditBill,
   getCreditBills,
+  approveCreditBill,
   updateCreditBillStatus,
   triggerPendingBillsMigration,
   partialPayCreditBill,
-  getCreditBillPayments
+  getCreditBillPayments,
+  getCashierPaidCreditEntries,
+  applyCashierPaidCreditEntry
 } from '../controllers/credit-bills.controller';
 import { getLoans, createLoan, approveLoan, rejectLoan, recordLoanPayment } from '../controllers/loans.controller';
 import { getAdvances, createAdvance, approveAdvance, rejectAdvance } from '../controllers/advances.controller';
@@ -103,6 +106,18 @@ router.post(
   triggerPendingBillsMigration
 );
 
+router.get(
+  '/credit-bills/cashier-paid-credits',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getCashierPaidCreditEntries
+);
+
+router.post(
+  '/credit-bills/cashier-paid-credits/:entryId/apply',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  applyCashierPaidCreditEntry
+);
+
 router.post(
   '/credit-bills',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.CASHIER, UserRole.AUDITOR]),
@@ -113,6 +128,12 @@ router.get(
   '/credit-bills',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   getCreditBills
+);
+
+router.patch(
+  '/credit-bills/:id/approve',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  approveCreditBill
 );
 
 router.patch(
