@@ -1122,7 +1122,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
               OutlinedButton.icon(
                 onPressed: () => _export('pdf'),
                 icon: const Icon(Icons.picture_as_pdf),
-                label: const Text('PDF'),
+                label: const Text('Branded PDF'),
               ),
               OutlinedButton.icon(
                 onPressed: () => _export('csv'),
@@ -1299,7 +1299,15 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
               format: format,
               filters: _filtersPayload,
             );
-    _toast('Export saved to ${file.path}');
+    if (format.toLowerCase() == 'pdf') {
+      await Printing.sharePdf(
+        bytes: await file.readAsBytes(),
+        filename: 'FG_Branch_Sales_${_start}_to_$_end.pdf',
+      );
+      if (mounted) _notify(context, 'Branded PDF prepared: ${file.path}');
+      return;
+    }
+    if (mounted) _notify(context, 'CSV export saved to ${file.path}');
   }
 
   Map<String, dynamic> get _filtersPayload => {
@@ -2683,7 +2691,11 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
       final file = await ref
           .read(branchAccountantRepositoryProvider)
           .downloadSoldItemsReport(startDate: _from, endDate: _to);
-      if (mounted) _notify(context, 'Sold items PDF downloaded: ${file.path}');
+      await Printing.sharePdf(
+        bytes: await file.readAsBytes(),
+        filename: 'FG_Sold_Items_${_from}_to_$_to.pdf',
+      );
+      if (mounted) _notify(context, 'Sold items PDF prepared: ${file.path}');
     } catch (e) {
       if (mounted) _notify(context, 'Failed to export sold items PDF: $e');
     } finally {
@@ -11615,7 +11627,9 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.auto_awesome, size: 16),
-                label: Text(_autofilling ? 'Lina is collecting…' : 'Autofill with Lina AI'),
+                label: Text(_autofilling
+                    ? 'Lina is collecting…'
+                    : 'Autofill with Lina AI'),
               ),
               TextButton(
                   onPressed: () => Navigator.pop(context, false),
@@ -11896,12 +11910,14 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
         set(f, expense[f]);
       }
       final notes = _text(data, ['notes']);
-      if (notes.isNotEmpty && (_controllers['notes']?.text.trim().isEmpty ?? false)) {
+      if (notes.isNotEmpty &&
+          (_controllers['notes']?.text.trim().isEmpty ?? false)) {
         _controllers['notes']?.text = notes;
       }
       if (mounted) {
         setState(() {});
-        _toast('Lina AI filled the entry from system data — review, then submit to Director');
+        _toast(
+            'Lina AI filled the entry from system data — review, then submit to Director');
       }
     } catch (e) {
       if (mounted) _toast('Lina autofill failed: $e');
@@ -13738,24 +13754,50 @@ Future<bool> _confirm(BuildContext context, String message) async {
       false;
 }
 
-void _showRecord(BuildContext context, Map<String, dynamic> record) {
-  showDialog(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('Record Details'),
-      content: SizedBox(
-        width: 680,
-        child:
-            SingleChildScrollView(child: ReadableRecordDetails(record: record)),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
+void _showRecord(BuildContext context, Map<String, dynamic> record,
+    {String title = 'Record Details'}) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => _RecordDetailScreen(record: record, title: title),
     ),
   );
+}
+
+/// Full-screen record detail (replaces the old "Record Details" dialog).
+class _RecordDetailScreen extends StatelessWidget {
+  const _RecordDetailScreen({required this.record, this.title = 'Record Details'});
+
+  final Map<String, dynamic> record;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.kSurface,
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 920),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: ReadableRecordDetails(record: record),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 dynamic _firstRaw(Map<String, dynamic> row, List<String> keys) {
