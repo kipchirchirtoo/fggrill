@@ -33,13 +33,18 @@ class TemplatePrintData {
 }
 
 class TemplateLineItem {
-  TemplateLineItem({required this.name, required this.qty, required this.lineTotal});
+  TemplateLineItem(
+      {required this.name, required this.qty, required this.lineTotal});
   final String name;
   final int qty;
   final num lineTotal;
 }
 
 class TemplatePrintRenderer {
+  static const double _paperWidthMm = 76;
+  static const double _safeMarginMm = 3;
+  static const double _barcodeWidthMm = 56;
+
   final _money = NumberFormat('#,##0.00', 'en_KE');
 
   String _subst(String? text, Map<String, String> values) {
@@ -75,19 +80,19 @@ class TemplatePrintRenderer {
     } catch (_) {}
 
     const fmt = PdfPageFormat(
-      80 * PdfPageFormat.mm,
+      _paperWidthMm * PdfPageFormat.mm,
       double.infinity,
-      marginLeft: 5 * PdfPageFormat.mm,
-      marginRight: 5 * PdfPageFormat.mm,
-      marginTop: 5 * PdfPageFormat.mm,
-      marginBottom: 5 * PdfPageFormat.mm,
+      marginLeft: _safeMarginMm * PdfPageFormat.mm,
+      marginRight: _safeMarginMm * PdfPageFormat.mm,
+      marginTop: _safeMarginMm * PdfPageFormat.mm,
+      marginBottom: _safeMarginMm * PdfPageFormat.mm,
     );
 
     doc.addPage(pw.Page(
       pageFormat: fmt,
       build: (context) {
         final widgets = <pw.Widget>[];
-        for (final s in sections) {
+        for (final s in _thermalOrder(sections)) {
           if (s.visible == false) continue;
           final w = _renderSection(s, data, logo);
           if (w != null) widgets.add(w);
@@ -100,6 +105,58 @@ class TemplatePrintRenderer {
     ));
 
     await Printing.layoutPdf(onLayout: (f) async => doc.save());
+  }
+
+  List<TemplateSection> _thermalOrder(List<TemplateSection> sections) {
+    TemplateSection? till;
+    final ordered = <TemplateSection>[];
+
+    for (final section in sections) {
+      if (_isTillSection(section)) {
+        if (section.visible && till == null) till = section;
+        continue;
+      }
+      ordered.add(section);
+    }
+
+    if (till == null) return ordered;
+
+    final result = <TemplateSection>[];
+    var inserted = false;
+    for (final section in ordered) {
+      result.add(section);
+      if (!inserted && _isThankYouSection(section)) {
+        result.add(_tillComplianceSection(till));
+        inserted = true;
+      }
+    }
+
+    if (!inserted) result.add(_tillComplianceSection(till));
+    return result;
+  }
+
+  bool _isTillSection(TemplateSection s) {
+    final content = (s.content ?? '').toLowerCase();
+    return s.id == 'till' ||
+        s.id == 'till_compliance' ||
+        content.contains('{{till_number}}');
+  }
+
+  bool _isThankYouSection(TemplateSection s) {
+    final content = (s.content ?? '').toLowerCase();
+    return content.contains('thank you');
+  }
+
+  TemplateSection _tillComplianceSection(TemplateSection source) {
+    return TemplateSection(
+      id: 'till_compliance',
+      type: 'text',
+      content: source.content,
+      visible: source.visible,
+      align: 'center',
+      bold: true,
+      size: source.size == null || source.size! < 12 ? 13.0 : source.size!,
+    );
   }
 
   pw.Widget? _renderSection(
@@ -126,6 +183,9 @@ class TemplatePrintRenderer {
       case 'title':
       case 'text':
       case 'footer':
+        if (s.id == 'till_compliance') {
+          return _renderTillCompliance(data);
+        }
         final text = _subst(s.content, v);
         if (text.isEmpty) return null;
         return pad(pw.Container(
@@ -153,7 +213,8 @@ class TemplatePrintRenderer {
           decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
           child: pw.Column(children: [
             pw.Text(s.label ?? 'CODE',
-                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                style:
+                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
             pw.SizedBox(height: 2),
             pw.Text(code.toUpperCase(),
                 style:
@@ -173,7 +234,12 @@ class TemplatePrintRenderer {
                           child: pw.Text(e.key,
                               style: const pw.TextStyle(fontSize: 8))),
                       pw.SizedBox(width: 6),
-                      pw.Text(e.value, style: const pw.TextStyle(fontSize: 8)),
+                      pw.Flexible(
+                        child: pw.Text(e.value,
+                            textAlign: pw.TextAlign.right,
+                            maxLines: 2,
+                            style: const pw.TextStyle(fontSize: 8)),
+                      ),
                     ]),
                   ))
               .toList(),
@@ -187,10 +253,11 @@ class TemplatePrintRenderer {
             pw.Row(children: [
               pw.Expanded(
                   child: pw.Text('Description',
-                      style:
-                          pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                      style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold, fontSize: 8))),
               pw.Text('Price',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 8)),
             ]),
             pw.SizedBox(height: 2),
             ...data.items.map((it) => pw.Padding(
@@ -203,8 +270,11 @@ class TemplatePrintRenderer {
                                 maxLines: 2,
                                 style: const pw.TextStyle(fontSize: 8))),
                         pw.SizedBox(width: 6),
-                        pw.Text('KES ${_money.format(it.lineTotal)}',
-                            style: const pw.TextStyle(fontSize: 8)),
+                        pw.Flexible(
+                          child: pw.Text('KES ${_money.format(it.lineTotal)}',
+                              textAlign: pw.TextAlign.right,
+                              style: const pw.TextStyle(fontSize: 8)),
+                        ),
                       ]),
                 )),
           ],
@@ -223,9 +293,12 @@ class TemplatePrintRenderer {
                       style: pw.TextStyle(
                           fontWeight: pw.FontWeight.bold, fontSize: 11))),
               pw.SizedBox(width: 6),
-              pw.Text('KES ${_money.format(data.total)}',
-                  style:
-                      pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+              pw.Flexible(
+                child: pw.Text('KES ${_money.format(data.total)}',
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 11)),
+              ),
             ]),
           ],
         ));
@@ -237,18 +310,22 @@ class TemplatePrintRenderer {
           width: double.infinity,
           padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
           decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.6)),
-          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('STAFF',
-                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
-            pw.Text(name,
-                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
-            if ((data.staff['employee_id'] ?? '').isNotEmpty)
-              pw.Text('Employee ID: ${data.staff['employee_id']}',
-                  style: const pw.TextStyle(fontSize: 8)),
-            if ((data.staff['department'] ?? '').isNotEmpty)
-              pw.Text('Department: ${data.staff['department']}',
-                  style: const pw.TextStyle(fontSize: 8)),
-          ]),
+          child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('STAFF',
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                pw.Text(name,
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                if ((data.staff['employee_id'] ?? '').isNotEmpty)
+                  pw.Text('Employee ID: ${data.staff['employee_id']}',
+                      style: const pw.TextStyle(fontSize: 8)),
+                if ((data.staff['department'] ?? '').isNotEmpty)
+                  pw.Text('Department: ${data.staff['department']}',
+                      style: const pw.TextStyle(fontSize: 8)),
+              ]),
         ));
 
       case 'notice':
@@ -268,7 +345,7 @@ class TemplatePrintRenderer {
           pw.BarcodeWidget(
             data: bc.toUpperCase(),
             barcode: pw.Barcode.code128(),
-            width: 60 * PdfPageFormat.mm,
+            width: _barcodeWidthMm * PdfPageFormat.mm,
             height: 28,
             drawText: false,
           ),
@@ -287,8 +364,40 @@ class TemplatePrintRenderer {
         pw.Expanded(
             child: pw.Text(label, style: pw.TextStyle(fontSize: fontSize))),
         pw.SizedBox(width: 6),
-        pw.Text(value, style: pw.TextStyle(fontSize: fontSize)),
+        pw.Flexible(
+          child: pw.Text(value,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(fontSize: fontSize)),
+        ),
       ]),
+    );
+  }
+
+  pw.Widget? _renderTillCompliance(TemplatePrintData data) {
+    final till = (data.values['till_number'] ?? '').trim();
+    if (till.isEmpty) return null;
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 2, bottom: 4),
+      child: pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(vertical: 4),
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(
+            top: pw.BorderSide(width: 0.7),
+            bottom: pw.BorderSide(width: 0.7),
+          ),
+        ),
+        child: pw.Column(children: [
+          pw.Text('TILL NUMBER',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 1),
+          pw.Text(till.toUpperCase(),
+              textAlign: pw.TextAlign.center,
+              style:
+                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+        ]),
+      ),
     );
   }
 }

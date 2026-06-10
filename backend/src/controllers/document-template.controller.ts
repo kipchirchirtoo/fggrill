@@ -73,9 +73,18 @@ const headerSections = (titleText: string): TemplateSection[] => [
   { id: sid('company'), type: 'header', content: '{{company_name}}', bold: true, size: 14, align: 'center', visible: true },
   { id: sid('branch'), type: 'text', content: '{{branch_name}}', size: 8, align: 'center', visible: true },
   { id: sid('phone'), type: 'text', content: 'Tel: {{company_phone}}', size: 8, align: 'center', visible: true },
-  { id: sid('till'), type: 'text', content: 'Till No: {{till_number}}', size: 9, bold: true, align: 'center', visible: true },
   { id: sid('title'), type: 'title', content: titleText, bold: true, size: 12, align: 'center', visible: true },
 ];
+
+const tillComplianceSection = (): TemplateSection => ({
+  id: sid('till_compliance'),
+  type: 'text',
+  content: 'TILL NUMBER\n{{till_number}}',
+  size: 13,
+  bold: true,
+  align: 'center',
+  visible: true,
+});
 
 const catalogSections = (titleText: string, body: string): TemplateSection[] => [
   { id: sid('logo'), type: 'logo', visible: true, align: 'center' },
@@ -133,6 +142,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('pay'), type: 'text', content: 'Payment: {{payment_method}}', size: 8, visible: true },
       { id: sid('div4'), type: 'divider', visible: true },
       { id: sid('thanks'), type: 'footer', content: 'THANK YOU!', bold: true, size: 10, align: 'center', visible: true },
+      tillComplianceSection(),
       { id: sid('come'), type: 'text', content: 'Please come again', size: 7, align: 'center', visible: true },
       { id: sid('barcode'), type: 'barcode', visible: true },
       { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
@@ -155,6 +165,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('paid'), type: 'text', content: 'Paid: {{paid}}', size: 8, bold: true, visible: true },
       { id: sid('div4'), type: 'divider', visible: true },
       { id: sid('thanks'), type: 'footer', content: 'THANK YOU!', bold: true, size: 10, align: 'center', visible: true },
+      tillComplianceSection(),
       { id: sid('barcode'), type: 'barcode', visible: true },
       { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
     ],
@@ -174,6 +185,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('div3'), type: 'divider', visible: true },
       { id: sid('totals'), type: 'totals', visible: true },
       { id: sid('notice'), type: 'notice', content: '** UNPAID CREDIT - NOT A PAYMENT **\nSettle with the Branch Accountant (cash/M-Pesa) OR have it deducted from your payroll.', visible: true },
+      tillComplianceSection(),
       { id: sid('barcode'), type: 'barcode', visible: true },
       { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
     ],
@@ -192,6 +204,7 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('div3'), type: 'divider', visible: true },
       { id: sid('void_total'), type: 'text', content: 'VOIDED VALUE: {{total}}', size: 11, bold: true, visible: true },
       { id: sid('notice'), type: 'notice', content: 'NOT PAYABLE - NOT AN UNPAID BILL\nReason: {{void_reason}}', visible: true },
+      tillComplianceSection(),
       { id: sid('barcode'), type: 'barcode', visible: true },
       { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
     ],

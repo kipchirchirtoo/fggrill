@@ -6,6 +6,10 @@ import 'package:intl/intl.dart';
 import '../features/pos/domain/models.dart';
 
 class PrintService {
+  static const double _paperWidthMm = 76;
+  static const double _safeMarginMm = 3;
+  static const double _barcodeWidthMm = 56;
+
   final String companyName = 'FamousGate Hotels';
   final String companyAddress = 'Bomet, Kenya';
   final String companyPhone = '+254 706 782 828';
@@ -46,16 +50,15 @@ class PrintService {
       logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
     } catch (_) {}
 
-    // 80mm thermal roll. Use generous side margins so content always sits
-    // within the printer's guaranteed printable area (~72mm) — prevents the
-    // right-edge character clipping seen on physical thermal printers.
+    // 76mm thermal roll with balanced safe margins. The printable content
+    // stays near 70mm wide so physical printers do not clip the right edge.
     const receiptFormat = PdfPageFormat(
-      80 * PdfPageFormat.mm,
+      _paperWidthMm * PdfPageFormat.mm,
       double.infinity,
-      marginLeft: 5 * PdfPageFormat.mm,
-      marginRight: 5 * PdfPageFormat.mm,
-      marginTop: 5 * PdfPageFormat.mm,
-      marginBottom: 5 * PdfPageFormat.mm,
+      marginLeft: _safeMarginMm * PdfPageFormat.mm,
+      marginRight: _safeMarginMm * PdfPageFormat.mm,
+      marginTop: _safeMarginMm * PdfPageFormat.mm,
+      marginBottom: _safeMarginMm * PdfPageFormat.mm,
     );
     doc.addPage(
       pw.Page(
@@ -78,10 +81,6 @@ class PrintService {
               pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 8)),
               pw.Text('Tel: $companyPhone',
                   style: const pw.TextStyle(fontSize: 8)),
-              if (tillNumber != null && tillNumber.trim().isNotEmpty)
-                pw.Text('Till No: ${tillNumber.trim()}',
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 9)),
               pw.SizedBox(height: 4),
               pw.Text(receiptType.toUpperCase(),
                   style: pw.TextStyle(
@@ -146,8 +145,11 @@ class PrintService {
                             style: const pw.TextStyle(fontSize: 8)),
                       ),
                       pw.SizedBox(width: 6),
-                      pw.Text('KES ${money.format(item.lineTotal)}',
-                          style: const pw.TextStyle(fontSize: 8)),
+                      pw.Flexible(
+                        child: pw.Text('KES ${money.format(item.lineTotal)}',
+                            textAlign: pw.TextAlign.right,
+                            style: const pw.TextStyle(fontSize: 8)),
+                      ),
                     ],
                   ),
                 );
@@ -167,9 +169,12 @@ class PrintService {
                               fontWeight: pw.FontWeight.bold, fontSize: 11)),
                     ),
                     pw.SizedBox(width: 6),
-                    pw.Text('KES ${money.format(totalAmount)}',
-                        style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    pw.Flexible(
+                      child: pw.Text('KES ${money.format(totalAmount)}',
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    ),
                   ]),
               pw.SizedBox(height: 6),
               _infoRow('Payment:', sale.paymentMethod.toUpperCase()),
@@ -189,6 +194,8 @@ class PrintService {
               pw.Text('THANK YOU!',
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 10)),
+              if (tillNumber != null && tillNumber.trim().isNotEmpty)
+                _tillComplianceBlock(tillNumber.trim()),
               pw.Text('Please come again',
                   style: const pw.TextStyle(fontSize: 7)),
               pw.Text(companyEmail, style: const pw.TextStyle(fontSize: 7)),
@@ -203,8 +210,7 @@ class PrintService {
                             ? barcodeValue.trim().toUpperCase()
                             : sale.receiptNumber!,
                     barcode: pw.Barcode.code128(),
-                    // Keep within the ~70mm usable width of an 80mm roll
-                    width: 60 * PdfPageFormat.mm,
+                    width: _barcodeWidthMm * PdfPageFormat.mm,
                     height: 28,
                     drawText: false,
                   ),
@@ -259,12 +265,12 @@ class PrintService {
     } catch (_) {}
 
     const receiptFormat = PdfPageFormat(
-      80 * PdfPageFormat.mm,
+      _paperWidthMm * PdfPageFormat.mm,
       double.infinity,
-      marginLeft: 5 * PdfPageFormat.mm,
-      marginRight: 5 * PdfPageFormat.mm,
-      marginTop: 5 * PdfPageFormat.mm,
-      marginBottom: 5 * PdfPageFormat.mm,
+      marginLeft: _safeMarginMm * PdfPageFormat.mm,
+      marginRight: _safeMarginMm * PdfPageFormat.mm,
+      marginTop: _safeMarginMm * PdfPageFormat.mm,
+      marginBottom: _safeMarginMm * PdfPageFormat.mm,
     );
 
     doc.addPage(
@@ -361,8 +367,12 @@ class PrintService {
                                   style: const pw.TextStyle(fontSize: 8)),
                             ),
                             pw.SizedBox(width: 6),
-                            pw.Text('KES ${money.format(item.lineTotal)}',
-                                style: const pw.TextStyle(fontSize: 8)),
+                            pw.Flexible(
+                              child: pw.Text(
+                                  'KES ${money.format(item.lineTotal)}',
+                                  textAlign: pw.TextAlign.right,
+                                  style: const pw.TextStyle(fontSize: 8)),
+                            ),
                           ]),
                     )),
                 pw.SizedBox(height: 4),
@@ -408,7 +418,7 @@ class PrintService {
                   pw.BarcodeWidget(
                     data: code.toUpperCase(),
                     barcode: pw.Barcode.code128(),
-                    width: 60 * PdfPageFormat.mm,
+                    width: _barcodeWidthMm * PdfPageFormat.mm,
                     height: 28,
                     drawText: false,
                   ),
@@ -457,12 +467,12 @@ class PrintService {
     } catch (_) {}
 
     const receiptFormat = PdfPageFormat(
-      80 * PdfPageFormat.mm,
+      _paperWidthMm * PdfPageFormat.mm,
       double.infinity,
-      marginLeft: 5 * PdfPageFormat.mm,
-      marginRight: 5 * PdfPageFormat.mm,
-      marginTop: 5 * PdfPageFormat.mm,
-      marginBottom: 5 * PdfPageFormat.mm,
+      marginLeft: _safeMarginMm * PdfPageFormat.mm,
+      marginRight: _safeMarginMm * PdfPageFormat.mm,
+      marginTop: _safeMarginMm * PdfPageFormat.mm,
+      marginBottom: _safeMarginMm * PdfPageFormat.mm,
     );
 
     doc.addPage(
@@ -537,8 +547,11 @@ class PrintService {
                               style: const pw.TextStyle(fontSize: 8)),
                         ),
                         pw.SizedBox(width: 6),
-                        pw.Text('KES ${money.format(item.lineTotal)}',
-                            style: const pw.TextStyle(fontSize: 8)),
+                        pw.Flexible(
+                          child: pw.Text('KES ${money.format(item.lineTotal)}',
+                              textAlign: pw.TextAlign.right,
+                              style: const pw.TextStyle(fontSize: 8)),
+                        ),
                       ],
                     ),
                   )),
@@ -572,7 +585,7 @@ class PrintService {
                   pw.BarcodeWidget(
                     data: publicCode!.trim().toUpperCase(),
                     barcode: pw.Barcode.code128(),
-                    width: 60 * PdfPageFormat.mm,
+                    width: _barcodeWidthMm * PdfPageFormat.mm,
                     height: 28,
                     drawText: false,
                   ),
@@ -611,7 +624,12 @@ class PrintService {
           pw.Expanded(
               child: pw.Text(label, style: const pw.TextStyle(fontSize: 8))),
           pw.SizedBox(width: 6),
-          pw.Text(value, style: const pw.TextStyle(fontSize: 8)),
+          pw.Flexible(
+            child: pw.Text(value,
+                textAlign: pw.TextAlign.right,
+                maxLines: 2,
+                style: const pw.TextStyle(fontSize: 8)),
+          ),
         ],
       ),
     );
@@ -626,8 +644,38 @@ class PrintService {
           pw.Expanded(
               child: pw.Text(label, style: pw.TextStyle(fontSize: fontSize))),
           pw.SizedBox(width: 6),
-          pw.Text(value, style: pw.TextStyle(fontSize: fontSize)),
+          pw.Flexible(
+            child: pw.Text(value,
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(fontSize: fontSize)),
+          ),
         ],
+      ),
+    );
+  }
+
+  pw.Widget _tillComplianceBlock(String tillNumber) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 3, bottom: 4),
+      child: pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(vertical: 4),
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(
+            top: pw.BorderSide(width: 0.7),
+            bottom: pw.BorderSide(width: 0.7),
+          ),
+        ),
+        child: pw.Column(children: [
+          pw.Text('TILL NUMBER',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 1),
+          pw.Text(tillNumber.toUpperCase(),
+              textAlign: pw.TextAlign.center,
+              style:
+                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+        ]),
       ),
     );
   }

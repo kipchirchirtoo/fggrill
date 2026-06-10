@@ -593,7 +593,7 @@ class _ThermalPreview extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final s in sections)
+                  for (final s in _thermalOrder(sections))
                     if (s.visible) ..._previewSection(s),
                 ],
               ),
@@ -603,6 +603,59 @@ class _ThermalPreview extends StatelessWidget {
       ]),
     );
   }
+
+  List<TemplateSection> _thermalOrder(List<TemplateSection> sections) {
+    TemplateSection? till;
+    final ordered = <TemplateSection>[];
+    for (final section in sections) {
+      if (_isTillSection(section)) {
+        if (section.visible && till == null) till = section;
+        continue;
+      }
+      ordered.add(section);
+    }
+    if (till == null) return ordered;
+
+    final result = <TemplateSection>[];
+    var inserted = false;
+    for (final section in ordered) {
+      result.add(section);
+      if (!inserted && _isThankYouSection(section)) {
+        result.add(TemplateSection(
+          id: 'till_compliance',
+          type: 'text',
+          content: till.content,
+          visible: till.visible,
+          align: 'center',
+          bold: true,
+          size: till.size == null || till.size! < 12 ? 13.0 : till.size!,
+        ));
+        inserted = true;
+      }
+    }
+    if (!inserted) {
+      result.add(TemplateSection(
+        id: 'till_compliance',
+        type: 'text',
+        content: till.content,
+        visible: till.visible,
+        align: 'center',
+        bold: true,
+        size: till.size == null || till.size! < 12 ? 13.0 : till.size!,
+      ));
+    }
+    return result;
+  }
+
+  bool _isTillSection(TemplateSection s) {
+    final content = (s.content ?? '').toLowerCase();
+    return s.id == 'till' ||
+        s.id == 'till_compliance' ||
+        content.contains('{{till_number}}');
+  }
+
+  bool _isThankYouSection(TemplateSection s) =>
+      (s.content ?? '').toLowerCase().contains('thank you');
 
   List<Widget> _previewSection(TemplateSection s) {
     Widget txt(String t,
@@ -627,6 +680,32 @@ class _ThermalPreview extends StatelessWidget {
       case 'title':
       case 'text':
       case 'footer':
+        if (s.id == 'till_compliance') {
+          final till = _sample['till_number'] ?? '';
+          if (till.isEmpty) return [];
+          return [
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              decoration: const BoxDecoration(
+                border: Border.symmetric(
+                  horizontal: BorderSide(width: 1),
+                ),
+              ),
+              child: Column(children: [
+                const Text('TILL NUMBER',
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                Text(till.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+              ]),
+            ),
+          ];
+        }
         final t = _subst(s.content);
         return t.isEmpty
             ? []
