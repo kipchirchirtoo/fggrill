@@ -354,11 +354,11 @@ Widget _scorePill(String label, num score, String grade) {
               style: TextStyle(
                   fontSize: 26, fontWeight: FontWeight.w800, color: color)),
           const SizedBox(width: 2),
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
             child: Text('/100',
-                style: TextStyle(
-                    fontSize: 11, color: AppColors.kTextSecondary)),
+                style:
+                    TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
           ),
           const Spacer(),
           Container(
@@ -408,8 +408,8 @@ Widget _errorCard(Object error, VoidCallback retry) {
       child: Column(children: [
     Icon(PhosphorIcons.warning(), color: AppColors.kError, size: 28),
     const SizedBox(height: 8),
-    Text('Failed to load',
-        style: const TextStyle(
+    const Text('Failed to load',
+        style: TextStyle(
             fontWeight: FontWeight.w600, color: AppColors.kTextPrimary)),
     const SizedBox(height: 4),
     Text(msg,
@@ -857,7 +857,9 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   void dispose() {
-    for (final c in _controllers) c.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -1271,7 +1273,7 @@ class _RecommendationsTab extends ConsumerWidget {
                 : recs
                     .map((r) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildRecCard(r, context),
+                          child: _buildRecCard(r, context, ref),
                         ))
                     .toList(),
           ),
@@ -1283,7 +1285,8 @@ class _RecommendationsTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildRecCard(Map<String, dynamic> r, BuildContext context) {
+  Widget _buildRecCard(
+      Map<String, dynamic> r, BuildContext context, WidgetRef ref) {
     final level = (r['remediation_level'] ?? '').toString();
     final levelColors = {
       'SAFE_AUTO': AppColors.kSuccess,
@@ -1346,10 +1349,42 @@ class _RecommendationsTab extends ConsumerWidget {
         Align(
           alignment: Alignment.centerRight,
           child: OutlinedButton(
-            onPressed: () => AppNotifier.showSnackBar(context,
-                SnackBar(content: Text('Remediation logged: ${r['title']}'))),
+            onPressed: () async {
+              try {
+                await ref.read(linaRepositoryProvider).createRemediation({
+                  'title': r['title'],
+                  'action': r['title'],
+                  'description': r['suggested_action'] ?? r['impact'],
+                  'severity': r['severity'] ?? 'LOW',
+                  'level': r['remediation_level'] ?? 'APPROVAL_REQUIRED',
+                  'module': r['module'],
+                  'kpi_impact': r['kpi_impact'],
+                  'evidence': {
+                    'impact': r['impact'],
+                    'suggested_action': r['suggested_action'],
+                    'source': 'lina_recommendations',
+                  },
+                  'blast_radius': {
+                    'module': r['module'],
+                    'estimated_effort': r['estimated_effort'],
+                  },
+                  'rollback_plan':
+                      'Lina safe jobs are non-destructive; retry or mark failed if verification does not pass.',
+                });
+                ref.invalidate(linaPendingRemediationsProvider);
+                if (!context.mounted) return;
+                AppNotifier.showSnackBar(
+                    context,
+                    SnackBar(
+                        content: Text('Remediation created: ${r['title']}')));
+              } catch (e) {
+                if (!context.mounted) return;
+                AppNotifier.showSnackBar(
+                    context, SnackBar(content: Text(e.toString())));
+              }
+            },
             style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
-            child: const Text('Take Action'),
+            child: const Text('Create Proposal'),
           ),
         ),
       ],
@@ -1382,7 +1417,7 @@ class _TimelineTab extends ConsumerWidget {
         tlAsync.when(
           data: (data) {
             final events = (data['events'] as List<dynamic>?) ?? [];
-            if (events.isEmpty)
+            if (events.isEmpty) {
               return _card(
                   child: const Center(
                       child: Padding(
@@ -1390,6 +1425,7 @@ class _TimelineTab extends ConsumerWidget {
                           child: Text('No events in the last 24h',
                               style: TextStyle(
                                   color: AppColors.kTextSecondary)))));
+            }
             return _card(
                 child: Column(
               children: events
@@ -1411,7 +1447,7 @@ class _TimelineTab extends ConsumerWidget {
     final configs = {
       'audit': (AppColors.kPrimary, PhosphorIcons.clipboardText()),
       'anomaly': (AppColors.kError, PhosphorIcons.warning()),
-      'superadmin': (Color(0xFFEA580C), PhosphorIcons.sparkle()),
+      'superadmin': (const Color(0xFFEA580C), PhosphorIcons.sparkle()),
       'auth': (AppColors.kWarning, PhosphorIcons.key()),
     };
     final (color, icon) = configs[type] ?? (Colors.grey, PhosphorIcons.info());
@@ -1503,12 +1539,12 @@ class _FixCenterTab extends ConsumerWidget {
               ? _card(
                   child: Center(
                       child: Padding(
-                          padding: EdgeInsets.all(40),
+                          padding: const EdgeInsets.all(40),
                           child: Column(children: [
                             Icon(PhosphorIcons.checkCircle(),
                                 size: 40, color: AppColors.kSuccess),
-                            SizedBox(height: 12),
-                            Text('No pending remediations',
+                            const SizedBox(height: 12),
+                            const Text('No pending remediations',
                                 style: TextStyle(
                                     color: AppColors.kTextSecondary,
                                     fontSize: 15)),
@@ -1532,6 +1568,9 @@ class _FixCenterTab extends ConsumerWidget {
       Map<String, dynamic> r, BuildContext context, WidgetRef ref) {
     final level = r['level'] ?? '';
     final isManual = level == 'MANUAL_ONLY';
+    final approval = (r['approval_status'] ?? '').toString();
+    final execution = (r['execution_status'] ?? '').toString();
+    final verification = (r['verification_status'] ?? '').toString();
     final levelColors = {
       'SAFE_AUTO': AppColors.kSuccess,
       'APPROVAL_REQUIRED': AppColors.kWarning,
@@ -1569,6 +1608,24 @@ class _FixCenterTab extends ConsumerWidget {
               style: const TextStyle(
                   fontSize: 13, color: AppColors.kTextSecondary, height: 1.5)),
         ],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _stateChip('Approval', approval.isEmpty ? 'pending' : approval),
+            _stateChip(
+                'Execution', execution.isEmpty ? 'not queued' : execution),
+            _stateChip('Verification',
+                verification.isEmpty ? 'not verified' : verification),
+          ],
+        ),
+        if ((r['rollback_plan'] ?? '').toString().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text('Rollback: ${r['rollback_plan']}',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary)),
+        ],
         const SizedBox(height: 14),
         Row(children: [
           Expanded(
@@ -1594,9 +1651,11 @@ class _FixCenterTab extends ConsumerWidget {
                       .read(linaRepositoryProvider)
                       .rejectRemediation(r['id']);
                   ref.invalidate(linaPendingRemediationsProvider);
+                  if (!context.mounted) return;
                   AppNotifier.showSnackBar(context,
                       const SnackBar(content: Text('Remediation rejected')));
                 } catch (e) {
+                  if (!context.mounted) return;
                   AppNotifier.showSnackBar(
                       context, SnackBar(content: Text(e.toString())));
                 }
@@ -1608,7 +1667,7 @@ class _FixCenterTab extends ConsumerWidget {
           const SizedBox(width: 12),
           Expanded(
               child: FilledButton(
-            onPressed: isManual
+            onPressed: isManual || approval == 'approved'
                 ? null
                 : () async {
                     try {
@@ -1616,12 +1675,14 @@ class _FixCenterTab extends ConsumerWidget {
                           .read(linaRepositoryProvider)
                           .approveRemediation(r['id']);
                       ref.invalidate(linaPendingRemediationsProvider);
+                      if (!context.mounted) return;
                       AppNotifier.showSnackBar(
                           context,
                           const SnackBar(
                               content:
                                   Text('✅ Remediation approved and queued')));
                     } catch (e) {
+                      if (!context.mounted) return;
                       AppNotifier.showSnackBar(
                           context, SnackBar(content: Text(e.toString())));
                     }
@@ -1629,11 +1690,106 @@ class _FixCenterTab extends ConsumerWidget {
             style: FilledButton.styleFrom(
                 backgroundColor:
                     isManual ? Colors.grey.shade300 : AppColors.kSuccess),
-            child: Text(isManual ? 'Manual Only' : 'Approve',
+            child: Text(
+                isManual
+                    ? 'Manual Only'
+                    : approval == 'approved'
+                        ? 'Approved'
+                        : 'Approve',
                 style: const TextStyle(color: Colors.white)),
           )),
         ]),
+        if (!isManual && approval == 'approved') ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: execution == 'queued' ||
+                        execution == 'running' ||
+                        execution == 'succeeded'
+                    ? null
+                    : () async {
+                        try {
+                          await ref
+                              .read(linaRepositoryProvider)
+                              .executeRemediation(r['id']);
+                          ref.invalidate(linaPendingRemediationsProvider);
+                          if (!context.mounted) return;
+                          AppNotifier.showSnackBar(
+                              context,
+                              const SnackBar(
+                                  content:
+                                      Text('Execution job queued for Lina')));
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          AppNotifier.showSnackBar(
+                              context, SnackBar(content: Text(e.toString())));
+                        }
+                      },
+                icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
+                label: Text(execution == 'queued' || execution == 'running'
+                    ? 'Queued'
+                    : execution == 'succeeded'
+                        ? 'Executed'
+                        : 'Execute'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: execution == 'succeeded' &&
+                        verification != 'verified'
+                    ? () async {
+                        try {
+                          await ref
+                              .read(linaRepositoryProvider)
+                              .verifyRemediation(r['id']);
+                          ref.invalidate(linaPendingRemediationsProvider);
+                          if (!context.mounted) return;
+                          AppNotifier.showSnackBar(
+                              context,
+                              const SnackBar(
+                                  content:
+                                      Text('Lina verification completed')));
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          AppNotifier.showSnackBar(
+                              context, SnackBar(content: Text(e.toString())));
+                        }
+                      }
+                    : null,
+                icon: Icon(PhosphorIcons.checkCircle(), size: 15),
+                label: Text(verification == 'verified' ? 'Verified' : 'Verify'),
+              ),
+            ),
+          ]),
+        ],
       ]),
+    );
+  }
+
+  Widget _stateChip(String label, String value) {
+    final normalized = value.toLowerCase();
+    final color = normalized.contains('approved') ||
+            normalized.contains('succeeded') ||
+            normalized.contains('verified')
+        ? AppColors.kSuccess
+        : normalized.contains('failed') ||
+                normalized.contains('rejected') ||
+                normalized.contains('blocked')
+            ? AppColors.kError
+            : normalized.contains('running') || normalized.contains('queued')
+                ? _kLinaAccent
+                : AppColors.kWarning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text('$label: ${value.replaceAll('_', ' ')}',
+          style: TextStyle(
+              color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -1657,7 +1813,8 @@ class _ForecastTab extends ConsumerWidget {
       padding: const EdgeInsets.all(24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sectionHeader('Revenue Forecast',
-            subtitle: '7-day projection from 30-day trend (least-squares engine)',
+            subtitle:
+                '7-day projection from 30-day trend (least-squares engine)',
             action: OutlinedButton.icon(
               onPressed: () => ref.invalidate(linaForecastProvider),
               icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
@@ -1730,7 +1887,8 @@ class _ForecastTab extends ConsumerWidget {
                         height: 180,
                         child: CustomPaint(
                           size: Size.infinite,
-                          painter: _ForecastPainter(history: hist, forecast: fc),
+                          painter:
+                              _ForecastPainter(history: hist, forecast: fc),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -1783,7 +1941,8 @@ class _ForecastTab extends ConsumerWidget {
     );
   }
 
-  Widget _legendDot(Color c, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
+  Widget _legendDot(Color c, String label) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
             width: 10,
             height: 10,
@@ -1913,14 +2072,12 @@ class _BranchBenchmarkTab extends ConsumerWidget {
                       child: Padding(
                           padding: EdgeInsets.all(32),
                           child: Text('No branch data available.',
-                              style: TextStyle(
-                                  color: AppColors.kTextSecondary)))))
-              : Column(
-                  children:
-                      cards.map((c) => _buildCard(c)).toList()),
+                              style:
+                                  TextStyle(color: AppColors.kTextSecondary)))))
+              : Column(children: cards.map((c) => _buildCard(c)).toList()),
           loading: () => _loadingCard(),
-          error: (e, _) => _errorCard(
-              e, () => ref.invalidate(linaBranchBenchmarkProvider)),
+          error: (e, _) =>
+              _errorCard(e, () => ref.invalidate(linaBranchBenchmarkProvider)),
         ),
       ]),
     );
@@ -1959,7 +2116,8 @@ class _BranchBenchmarkTab extends ConsumerWidget {
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             color: AppColors.kTextPrimary)),
-                    Text('${(c['status'] ?? '').toString()} · ${c['shifts'] ?? 0} shifts',
+                    Text(
+                        '${(c['status'] ?? '').toString()} · ${c['shifts'] ?? 0} shifts',
                         style: const TextStyle(
                             fontSize: 11.5, color: AppColors.kTextSecondary)),
                   ]),
@@ -1997,16 +2155,23 @@ class _BranchBenchmarkTab extends ConsumerWidget {
                 PhosphorIcons.currencyDollar(), _kLinaTeal),
             _metric('Occupancy', '${c['occupancy_pct'] ?? 0}%',
                 PhosphorIcons.bed(), AppColors.kPrimary),
-            _metric('Discrepancies', '${c['discrepancy_shifts'] ?? 0}',
+            _metric(
+                'Discrepancies',
+                '${c['discrepancy_shifts'] ?? 0}',
                 PhosphorIcons.warning(),
                 ((c['discrepancy_shifts'] as num?) ?? 0) > 0
                     ? AppColors.kWarning
                     : AppColors.kSuccess),
-            _metric('Voids', '${c['voids'] ?? 0}', PhosphorIcons.prohibit(),
+            _metric(
+                'Voids',
+                '${c['voids'] ?? 0}',
+                PhosphorIcons.prohibit(),
                 ((c['voids'] as num?) ?? 0) > 0
                     ? AppColors.kError
                     : AppColors.kSuccess),
-            _metric('Critical', '${c['critical'] ?? 0}',
+            _metric(
+                'Critical',
+                '${c['critical'] ?? 0}',
                 PhosphorIcons.shieldWarning(),
                 ((c['critical'] as num?) ?? 0) > 0
                     ? AppColors.kError

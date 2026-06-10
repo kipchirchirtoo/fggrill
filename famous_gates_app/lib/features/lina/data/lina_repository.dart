@@ -82,6 +82,22 @@ class LinaRepository {
     await _post('/lina/remediations/$id/reject');
   }
 
+  Future<Map<String, dynamic>> createRemediation(
+      Map<String, dynamic> body) async {
+    final r = await _post('/lina/remediate', data: body);
+    return Map<String, dynamic>.from(r.data['data'] ?? r.data);
+  }
+
+  Future<Map<String, dynamic>> executeRemediation(String id) async {
+    final r = await _post('/lina/remediations/$id/execute');
+    return Map<String, dynamic>.from(r.data['data'] ?? r.data);
+  }
+
+  Future<Map<String, dynamic>> verifyRemediation(String id) async {
+    final r = await _post('/lina/remediations/$id/verify');
+    return Map<String, dynamic>.from(r.data['data'] ?? r.data);
+  }
+
   Stream<String> chatStream(
       String message, List<Map<String, String>> history) async* {
     late final Response<ResponseBody> response;
