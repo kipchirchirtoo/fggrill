@@ -32,7 +32,7 @@ export interface TemplateSection {
 interface TemplateDef {
   name: string;
   description: string;
-  document_type: 'thermal_receipt' | 'pdf';
+  document_type: 'thermal_receipt' | 'pdf' | 'email' | 'xlsx' | 'barcode';
   sections: TemplateSection[];
 }
 
@@ -55,6 +55,11 @@ export const TEMPLATE_PLACEHOLDERS = [
   { token: '{{payment_method}}', label: 'Payment method' },
   { token: '{{total}}', label: 'Total amount' },
   { token: '{{paid}}', label: 'Amount paid' },
+  { token: '{{station_name}}', label: 'Station / outlet name' },
+  { token: '{{waiter_name}}', label: 'Waiter name' },
+  { token: '{{void_reason}}', label: 'Void reason' },
+  { token: '{{voided_at}}', label: 'Voided date/time' },
+  { token: '{{printed_by}}', label: 'Printed by' },
 ];
 
 const sid = (n: string) => n; // stable section ids
@@ -68,6 +73,45 @@ const headerSections = (titleText: string): TemplateSection[] => [
   { id: sid('till'), type: 'text', content: 'Till No: {{till_number}}', size: 9, bold: true, align: 'center', visible: true },
   { id: sid('title'), type: 'title', content: titleText, bold: true, size: 12, align: 'center', visible: true },
 ];
+
+const catalogSections = (titleText: string, body: string): TemplateSection[] => [
+  { id: sid('logo'), type: 'logo', visible: true, align: 'center' },
+  { id: sid('company'), type: 'header', content: '{{company_name}}', bold: true, size: 14, align: 'center', visible: true },
+  { id: sid('branch'), type: 'text', content: '{{branch_name}}', size: 8, align: 'center', visible: true },
+  { id: sid('title'), type: 'title', content: titleText, bold: true, size: 12, align: 'center', visible: true },
+  { id: sid('div1'), type: 'divider', visible: true },
+  { id: sid('body'), type: 'notice', content: body, visible: true },
+  { id: sid('meta'), type: 'kv', visible: true },
+  { id: sid('footer'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
+];
+
+const pythonPdf = (name: string, titleText: string, source: string): TemplateDef => ({
+  name,
+  description: `${source}. Catalogued from python-services; current generator is still hardcoded and must be routed through the template resolver before edits affect printed/generated PDFs.`,
+  document_type: 'pdf',
+  sections: catalogSections(titleText, 'PDF/report template catalog entry. Wiring status: pending Python/backend renderer integration.'),
+});
+
+const backendPdf = (name: string, titleText: string, source: string): TemplateDef => ({
+  name,
+  description: `${source}. Catalogued from backend PDFKit exports; current generator is still hardcoded and must be routed through the template resolver before edits affect generated PDFs.`,
+  document_type: 'pdf',
+  sections: catalogSections(titleText, 'Backend PDF export template catalog entry. Wiring status: pending renderer integration.'),
+});
+
+const emailTemplate = (name: string, titleText: string, source: string): TemplateDef => ({
+  name,
+  description: `${source}. Catalogued from Python/email templates; current email sender is still hardcoded/Jinja-based and must be routed through the template resolver before edits affect sent emails.`,
+  document_type: 'email',
+  sections: catalogSections(titleText, 'Email template catalog entry. Wiring status: pending email renderer integration.'),
+});
+
+const xlsxTemplate = (name: string, titleText: string, source: string): TemplateDef => ({
+  name,
+  description: `${source}. Catalogued from spreadsheet exports; workbook layout is still code-generated and must be routed through a workbook template adapter before edits affect XLSX exports.`,
+  document_type: 'xlsx',
+  sections: catalogSections(titleText, 'Spreadsheet template catalog entry. Wiring status: pending XLSX adapter integration.'),
+});
 
 const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
   customer_bill: {
@@ -131,6 +175,115 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
       { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
     ],
   },
+  void_order: {
+    name: 'Voided Captain Order',
+    description: 'Void slip printed for a POS captain order after approval.',
+    document_type: 'thermal_receipt',
+    sections: [
+      ...headerSections('VOIDED CAPTAIN ORDER'),
+      { id: sid('code'), type: 'code_box', label: 'ORDER CODE', content: '{{public_code}}', visible: true },
+      { id: sid('div1'), type: 'divider', visible: true },
+      { id: sid('meta'), type: 'kv', visible: true },
+      { id: sid('div2'), type: 'divider', visible: true },
+      { id: sid('items'), type: 'items', visible: true },
+      { id: sid('div3'), type: 'divider', visible: true },
+      { id: sid('void_total'), type: 'text', content: 'VOIDED VALUE: {{total}}', size: 11, bold: true, visible: true },
+      { id: sid('notice'), type: 'notice', content: 'NOT PAYABLE - NOT AN UNPAID BILL\nReason: {{void_reason}}', visible: true },
+      { id: sid('barcode'), type: 'barcode', visible: true },
+      { id: sid('hirall'), type: 'footer', content: 'System managed and made by Hirall', size: 7, align: 'center', visible: true },
+    ],
+  },
+  booking_invoice: pythonPdf('Booking Invoice', 'HOTEL BOOKING INVOICE', 'python-services/pdf_generator/invoice.py'),
+  guest_checkout_bill: pythonPdf('Guest Checkout Bill', 'GUEST BILL / INVOICE', 'python-services/reports/branded_pdf_generator.py generate_checkout_bill'),
+  conference_invoice: pythonPdf('Conference Invoice', 'CONFERENCE INVOICE', 'python-services/reports/branded_pdf_generator.py reportType=conference_invoice'),
+  dispatch_note: pythonPdf('Dispatch Note', 'DISPATCH NOTE', 'python-services/reports/branded_pdf_generator.py reportType=dispatch_note'),
+  sale_receipt_pdf: pythonPdf('PDF Sale Receipt', 'CASH RECEIPT', 'python-services/receipts/receipt_generator.py ReceiptGenerator'),
+  invoice_pdf: pythonPdf('PDF Invoice', 'INVOICE', 'python-services/receipts/receipt_generator.py InvoiceGenerator'),
+  inventory_receipt_pdf: pythonPdf('Inventory Receipt PDF', 'INVENTORY RECEIPT', 'python-services/receipts/receipt_generator.py InventoryReceiptGenerator'),
+  staff_id_card: {
+    ...pythonPdf('Staff ID Card', 'STAFF ID CARD', 'python-services/id_cards/generator.py'),
+    document_type: 'barcode',
+  },
+  booking_card: {
+    ...pythonPdf('Booking Barcode Card', 'BOOKING CARD', 'python-services/barcode_generator/app.py'),
+    document_type: 'barcode',
+  },
+  daily_sales_report: pythonPdf('Daily Sales Report', 'DAILY SALES REPORT', 'python-services/reports/branded_pdf_generator.py reportType=daily_sales'),
+  occupancy_report: pythonPdf('Occupancy Report', 'OCCUPANCY REPORT', 'python-services/reports/branded_pdf_generator.py reportType=occupancy'),
+  financial_summary_report: pythonPdf('Financial Summary Report', 'FINANCIAL SUMMARY REPORT', 'python-services/reports/branded_pdf_generator.py reportType=financial_summary'),
+  revenue_analysis_report: pythonPdf('Revenue Analysis Report', 'REVENUE ANALYSIS REPORT', 'python-services/reports/branded_pdf_generator.py reportType=revenue_analysis'),
+  inventory_status_report: pythonPdf('Inventory Status Report', 'INVENTORY STATUS REPORT', 'python-services/reports/branded_pdf_generator.py reportType=inventory_status'),
+  housekeeping_report: pythonPdf('Housekeeping Report', 'HOUSEKEEPING REPORT', 'python-services/reports/branded_pdf_generator.py reportType=housekeeping'),
+  maintenance_report: pythonPdf('Maintenance Report', 'MAINTENANCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=maintenance'),
+  payroll_summary_report: pythonPdf('Payroll Summary Report', 'PAYROLL SUMMARY REPORT', 'python-services/reports/branded_pdf_generator.py reportType=payroll_summary'),
+  restaurant_sales_report: pythonPdf('Restaurant Sales Report', 'RESTAURANT SALES REPORT', 'python-services/reports/branded_pdf_generator.py reportType=restaurant_sales'),
+  bar_sales_report: pythonPdf('Bar Sales Report', 'BAR SALES REPORT', 'python-services/reports/branded_pdf_generator.py reportType=bar_sales'),
+  room_supplies_report: pythonPdf('Room Supplies Report', 'ROOM SUPPLIES REPORT', 'python-services/reports/branded_pdf_generator.py reportType=room_supplies'),
+  payslip_pdf: pythonPdf('Payslip PDF', 'PAYSLIP', 'python-services/reports/branded_pdf_generator.py reportType=payslip and backend/src/utils/pdfGenerator.ts'),
+  manager_duty_report: pythonPdf('Manager On Duty Report', 'MANAGER ON DUTY REPORT', 'python-services/reports/branded_pdf_generator.py reportType=manager_duty'),
+  reservation_report: pythonPdf('Reservation Report', 'RESERVATION REPORT', 'python-services/reports/branded_pdf_generator.py reportType=reservation'),
+  arrivals_departures_report: pythonPdf('Arrivals & Departures Report', 'ARRIVALS & DEPARTURES REPORT', 'python-services/reports/branded_pdf_generator.py reportType=arrivals_departures'),
+  expense_report: pythonPdf('Expense Report', 'EXPENSE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=expense'),
+  stock_movement_report: pythonPdf('Stock Movement Report', 'STOCK MOVEMENT REPORT', 'python-services/reports/branded_pdf_generator.py reportType=stock_movement'),
+  branch_performance_report: pythonPdf('Branch Performance Report', 'BRANCH PERFORMANCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=branch_performance'),
+  sales_performance_report: pythonPdf('Sales Performance Report', 'SALES PERFORMANCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=sales_performance'),
+  staff_overview_report: pythonPdf('Staff Overview Report', 'STAFF OVERVIEW REPORT', 'python-services/reports/branded_pdf_generator.py reportType=staff_overview'),
+  staff_performance_report: pythonPdf('Staff Performance Report', 'STAFF PERFORMANCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=staff_performance'),
+  compliance_report: pythonPdf('Compliance Report', 'COMPLIANCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=compliance'),
+  branch_comparison_report: pythonPdf('Branch Comparison Report', 'BRANCH COMPARISON REPORT', 'python-services/reports/branded_pdf_generator.py reportType=branch_comparison'),
+  kpi_dashboard_report: pythonPdf('KPI Dashboard Report', 'KPI DASHBOARD REPORT', 'python-services/reports/branded_pdf_generator.py reportType=kpi_dashboard'),
+  employee_attendance_report: pythonPdf('Employee Attendance Report', 'EMPLOYEE ATTENDANCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=employee_attendance'),
+  financial_variance_report: pythonPdf('Financial Variance Report', 'FINANCIAL VARIANCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=financial_variance'),
+  inventory_discrepancy_report: pythonPdf('Inventory Discrepancy Report', 'INVENTORY DISCREPANCY REPORT', 'python-services/reports/branded_pdf_generator.py reportType=inventory_discrepancy'),
+  procurement_analysis_report: pythonPdf('Procurement Analysis Report', 'PROCUREMENT ANALYSIS REPORT', 'python-services/reports/branded_pdf_generator.py reportType=procurement_analysis'),
+  exception_logs_report: pythonPdf('Exception Logs Report', 'EXCEPTION LOGS REPORT', 'python-services/reports/branded_pdf_generator.py reportType=exception_logs'),
+  reconciliation_audit_report: pythonPdf('Reconciliation Audit Report', 'RECONCILIATION AUDIT REPORT', 'python-services/reports/branded_pdf_generator.py reportType=reconciliation_audit'),
+  stock_usage_report: pythonPdf('Stock Usage Report', 'STOCK USAGE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=stock_usage'),
+  employee_credit_report: pythonPdf('Employee Credit Report', 'EMPLOYEE CREDIT REPORT', 'python-services/reports/branded_pdf_generator.py reportType=employee_credit'),
+  conference_summary_report: pythonPdf('Conference Summary Report', 'CONFERENCE SUMMARY REPORT', 'python-services/reports/branded_pdf_generator.py reportType=conference_summary'),
+  kitchen_ledger_report: pythonPdf('Kitchen Ledger Report', 'KITCHEN LEDGER REPORT', 'python-services/reports/branded_pdf_generator.py reportType=kitchen_ledger'),
+  kitchen_item_ledger_report: pythonPdf('Kitchen Item Ledger Report', 'KITCHEN ITEM LEDGER REPORT', 'python-services/reports/branded_pdf_generator.py reportType=kitchen_item_ledger'),
+  vat_report: pythonPdf('VAT Report', 'VAT REPORT', 'python-services/reports/branded_pdf_generator.py reportType=vat_report'),
+  procurement_intelligence_report: pythonPdf('Procurement Intelligence Report', 'PROCUREMENT INTELLIGENCE REPORT', 'python-services/reports/branded_pdf_generator.py reportType=procurement_intelligence'),
+  supplier_statement_report: pythonPdf('Supplier Statement Report', 'SUPPLIER STATEMENT', 'python-services/reports/branded_pdf_generator.py reportType=supplier_statement'),
+  revenue_reconciliation_report: pythonPdf('Revenue Reconciliation Report', 'REVENUE RECONCILIATION REPORT', 'python-services/reports/branded_pdf_generator.py reportType=revenue_reconciliation'),
+  ai_analysis_report: pythonPdf('AI Analysis Report', 'AI ANALYSIS REPORT', 'python-services/reports/branded_pdf_generator.py reportType=ai_analysis'),
+  customer_credit_outstanding_report: pythonPdf('Customer Credit Outstanding Report', 'CUSTOMER CREDIT OUTSTANDING', 'python-services/reports/branded_pdf_generator.py reportType=customer_credit_outstanding'),
+  cashier_unpaid_bills_report: pythonPdf('Cashier Unpaid Bills Report', 'CASHIER UNPAID BILLS', 'python-services/reports/branded_pdf_generator.py reportType=cashier_unpaid_bills'),
+  stock_requests_report: pythonPdf('Stock Requests Report', 'STOCK REQUESTS REPORT', 'python-services/reports/stock_requests_pdf.py'),
+  stock_requests_history_report: pythonPdf('Stock Requests History Report', 'STOCK REQUESTS HISTORY REPORT', 'python-services/reports/stock_requests_pdf.py'),
+  sales_audit_report: pythonPdf('Sales Audit Report', 'SALES AUDIT REPORT', 'python-services/reports/audit_report_templates.py'),
+  financial_verification_audit_report: pythonPdf('Financial Verification Audit Report', 'FINANCIAL VERIFICATION AUDIT REPORT', 'python-services/reports/audit_report_templates.py'),
+  stock_audit_report: pythonPdf('Stock Audit Report', 'STOCK AUDIT REPORT', 'python-services/reports/audit_report_templates.py'),
+  branch_orders_audit_report: pythonPdf('Branch Orders Audit Report', 'BRANCH ORDERS REPORT', 'python-services/reports/audit_report_templates.py'),
+  security_report: pythonPdf('Security Report', 'SECURITY REPORT', 'python-services/reports/security_report_generator.py'),
+  trial_balance_pdf: pythonPdf('Trial Balance PDF', 'TRIAL BALANCE', 'python-services/accounting/document_generator.py'),
+  profit_loss_pdf: pythonPdf('Profit & Loss PDF', 'PROFIT & LOSS STATEMENT', 'python-services/accounting/document_generator.py'),
+  balance_sheet_pdf: pythonPdf('Balance Sheet PDF', 'BALANCE SHEET', 'python-services/accounting/document_generator.py'),
+  supplier_statement_pdf: pythonPdf('Supplier Statement PDF', 'SUPPLIER STATEMENT', 'python-services/accounting/document_generator.py'),
+  purchase_order_pdf: pythonPdf('Purchase Order PDF', 'PURCHASE ORDER', 'python-services/accounting/document_generator.py'),
+  payroll_xlsx: xlsxTemplate('Payroll XLSX', 'PAYROLL SUMMARY', 'python-services/payroll/payroll_generator.py'),
+  payroll_pdf: pythonPdf('Payroll PDF', 'PAYROLL SUMMARY', 'python-services/payroll/payroll_generator.py'),
+  native_supplier_statement_pdf: backendPdf('Native Supplier Statement PDF', 'SUPPLIER STATEMENT', 'backend/src/services/native-pdf-reports.service.ts'),
+  native_vat_report_pdf: backendPdf('Native VAT Report PDF', 'VAT REPORT', 'backend/src/services/native-pdf-reports.service.ts'),
+  native_procurement_intelligence_pdf: backendPdf('Native Procurement Intelligence PDF', 'PROCUREMENT INTELLIGENCE REPORT', 'backend/src/services/native-pdf-reports.service.ts'),
+  native_hr_performance_pdf: backendPdf('Native HR Performance PDF', 'HR PERFORMANCE REPORT', 'backend/src/services/native-pdf-reports.service.ts'),
+  native_payroll_pdf: backendPdf('Native Payroll PDF', 'PAYROLL REPORT', 'backend/src/services/native-pdf-reports.service.ts'),
+  native_documentation_pdf: backendPdf('System Documentation PDF', 'SYSTEM DOCUMENTATION', 'backend/src/services/native-pdf-reports.service.ts'),
+  stock_take_worksheet_pdf: backendPdf('Stock Take Worksheet PDF', 'STOCK TAKE WORKSHEET', 'backend/src/services/native-pdf-reports.service.ts'),
+  central_stock_take_pdf: backendPdf('Central Stock Take PDF', 'CENTRAL STOCK TAKE', 'backend/src/services/native-pdf-reports.service.ts'),
+  branch_stock_take_worksheet_pdf: backendPdf('Branch Stock Take Worksheet PDF', 'BRANCH STOCK TAKE WORKSHEET', 'backend/src/services/native-pdf-reports.service.ts'),
+  branded_payroll_summary_v2_pdf: backendPdf('Branded Payroll Summary V2 PDF', 'PAYROLL SUMMARY', 'backend/src/services/native-pdf-reports.service.ts'),
+  leave_management_pdf: backendPdf('Leave Management PDF', 'LEAVE MANAGEMENT REPORT', 'backend/src/services/native-pdf-reports.service.ts'),
+  discrepancy_flags_pdf: backendPdf('Discrepancy Flags PDF', 'DISCREPANCY FLAGS AUDIT REPORT', 'backend/src/controllers/discrepancies.controller.ts'),
+  financial_workspace_pdf: backendPdf('Financial Workspace PDF', 'FINANCIAL WORKSPACE REPORT', 'backend/src/controllers/financial-workspace.controller.ts'),
+  branch_analytics_pdf: backendPdf('Branch Analytics PDF', 'BRANCH ANALYTICS REPORT', 'backend/src/controllers/branch-analytics.controller.ts'),
+  director_enhanced_pdf: backendPdf('Director Dashboard PDF', 'DIRECTOR DASHBOARD REPORT', 'backend/src/controllers/director-enhanced.controller.ts'),
+  booking_confirmation_email: emailTemplate('Booking Confirmation Email', 'BOOKING CONFIRMATION', 'python-services/communication_hub/templates.py'),
+  check_in_reminder_email: emailTemplate('Check-In Reminder Email', 'CHECK-IN REMINDER', 'python-services/communication_hub/templates.py'),
+  invoice_email: emailTemplate('Invoice Email', 'INVOICE EMAIL', 'python-services/communication_hub/templates.py'),
+  booking_modification_email: emailTemplate('Booking Modification Email', 'BOOKING MODIFICATION', 'python-services/email_automation/templates/booking_modification.html'),
+  booking_cancellation_email: emailTemplate('Booking Cancellation Email', 'BOOKING CANCELLATION', 'python-services/email_automation/templates/booking_cancellation.html'),
 };
 
 const defaultTemplate = (key: string): TemplateDef | null => DEFAULT_TEMPLATES[key] || null;

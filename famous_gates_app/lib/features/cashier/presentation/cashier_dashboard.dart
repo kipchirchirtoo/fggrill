@@ -7,7 +7,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/api_error_message.dart';
 import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../services/print_service.dart';
 import '../../pos/domain/models.dart';
 import '../../templates/data/document_printer.dart';
 import '../data/cashier_repository.dart';
@@ -710,15 +709,18 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final changeGiven = isCash ? _changeDue : 0;
       if (_method == 'credit_bill' && creditBill != null) {
         final staff = _selectedStaff;
-        await PrintService().printCreditBillReceipt(
-          branchName: ref.read(dashboardNavProvider).branchName,
+        final nav = ref.read(dashboardNavProvider);
+        await printCreditBillDocument(
+          ref,
+          branchName: nav.branchName,
+          branchId: nav.user?.branchId,
           staffName: staff?.name ?? _text(creditBill, ['staff_name']),
           employeeId: staff?.employeeId,
           department: staff?.department,
           amount: amount,
           items: _receiptItemsFromBill(bill, amount),
           creditNumber: _text(_payload(createdCredit), ['credit_number', 'id']),
-          cashierName: ref.read(dashboardNavProvider).user?.name,
+          cashierName: nav.user?.name,
           sourceReference: _text(bill, ['bill_number', 'order_number', 'id']),
         );
         _snack('Credit bill issued for ${staff?.name ?? 'staff'}');
@@ -1479,13 +1481,16 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
             // Prefer a short, human/scannable code (order short code) over the
             // raw credit-bill UUID for the printed CREDIT BILL CODE.
             final creditCode = _creditCodeForReceipt(row, created, reference);
-            await PrintService().printCreditBillReceipt(
-              branchName: ref.read(dashboardNavProvider).branchName,
+            final nav = ref.read(dashboardNavProvider);
+            await printCreditBillDocument(
+              ref,
+              branchName: nav.branchName,
+              branchId: nav.user?.branchId,
               staffName: _text(payment, ['staff_name']),
               amount: amt,
               items: _receiptItemsFromBill(row, amt),
               creditNumber: creditCode,
-              cashierName: ref.read(dashboardNavProvider).user?.name,
+              cashierName: nav.user?.name,
               sourceReference:
                   _text(row, ['bill_number', 'order_number', 'id']),
             );
@@ -1605,8 +1610,10 @@ class _VoidedOrdersTabState extends ConsumerState<_VoidedOrdersTab> {
   Future<void> _printVoidedOrder(Map<String, dynamic> row) async {
     try {
       final nav = ref.read(dashboardNavProvider);
-      await PrintService().printVoidOrderReceipt(
+      await printVoidOrderDocument(
+        ref,
         branchName: nav.branchName,
+        branchId: nav.user?.branchId,
         orderNumber: _text(row, ['order_number', 'bill_number', 'id']),
         publicCode: _text(row, ['short_code']),
         customerName: _customerName(row),

@@ -61,6 +61,154 @@ Future<void> printCustomerDocument(
   );
 }
 
+Future<void> printCreditBillDocument(
+  WidgetRef ref, {
+  String? branchId,
+  String? outletId,
+  required String branchName,
+  required String staffName,
+  required num amount,
+  required List<CartItem> items,
+  String? creditNumber,
+  String? employeeId,
+  String? department,
+  String? cashierName,
+  String? sourceReference,
+  DateTime? createdAt,
+}) async {
+  final doc = await resolveDocumentCached(
+    ref,
+    'credit_bill',
+    branchId: _clean(branchId),
+    outletId: _clean(outletId),
+  );
+  final sections = doc?.sections ?? const [];
+  if (sections.isNotEmpty) {
+    final sale = SaleResult(
+      transactionId: _clean(creditNumber) ?? DateTime.now().toString(),
+      createdAt: createdAt ?? DateTime.now(),
+      receiptNumber: _clean(sourceReference) ?? _clean(creditNumber),
+      cashierName: cashierName,
+      total: amount.toDouble(),
+      paymentMethod: 'credit_bill',
+    );
+    final data = _templateData(
+      sale: sale,
+      items: items,
+      branchName: branchName,
+      tillNumber: doc?.tillNumber,
+      customerName: staffName,
+      staffLabel: 'Issued by',
+      publicCode: creditNumber,
+      barcodeValue: creditNumber,
+      extraValues: {
+        'staff_name': staffName,
+        'customer_name': staffName,
+        'payment_method': 'CREDIT BILL',
+      },
+      extraKvRows: [
+        MapEntry('Bill Ref:', _clean(sourceReference) ?? _clean(creditNumber) ?? ''),
+        if (_clean(cashierName) != null) MapEntry('Issued by:', cashierName!.trim()),
+      ],
+      staff: {
+        'name': staffName,
+        if (_clean(employeeId) != null) 'employee_id': employeeId!.trim(),
+        if (_clean(department) != null) 'department': department!.trim(),
+      },
+    );
+    await TemplatePrintRenderer().printThermal(sections, data);
+    return;
+  }
+
+  await PrintService().printCreditBillReceipt(
+    branchName: branchName,
+    staffName: staffName,
+    amount: amount,
+    items: items,
+    creditNumber: creditNumber,
+    employeeId: employeeId,
+    department: department,
+    cashierName: cashierName,
+    sourceReference: sourceReference,
+    createdAt: createdAt,
+  );
+}
+
+Future<void> printVoidOrderDocument(
+  WidgetRef ref, {
+  String? branchId,
+  String? outletId,
+  required String branchName,
+  required String orderNumber,
+  required List<CartItem> items,
+  required num total,
+  String? publicCode,
+  String? customerName,
+  String? stationName,
+  String? waiterName,
+  String? voidReason,
+  String? printedBy,
+  DateTime? voidedAt,
+}) async {
+  final doc = await resolveDocumentCached(
+    ref,
+    'void_order',
+    branchId: _clean(branchId),
+    outletId: _clean(outletId),
+  );
+  final sections = doc?.sections ?? const [];
+  if (sections.isNotEmpty) {
+    final sale = SaleResult(
+      transactionId: orderNumber,
+      createdAt: voidedAt ?? DateTime.now(),
+      receiptNumber: orderNumber,
+      cashierName: waiterName,
+      total: total.toDouble(),
+      paymentMethod: 'voided',
+    );
+    final data = _templateData(
+      sale: sale,
+      items: items,
+      branchName: branchName,
+      tillNumber: doc?.tillNumber,
+      customerName: customerName,
+      staffLabel: 'Waiter',
+      publicCode: publicCode,
+      barcodeValue: publicCode,
+      extraValues: {
+        'station_name': _clean(stationName) ?? '',
+        'waiter_name': _clean(waiterName) ?? '',
+        'void_reason': _clean(voidReason) ?? '',
+        'voided_at': _dateString(voidedAt ?? DateTime.now()),
+        'printed_by': _clean(printedBy) ?? '',
+        'payment_method': 'VOIDED',
+      },
+      extraKvRows: [
+        MapEntry('Voided:', _dateString(voidedAt ?? DateTime.now())),
+        if (_clean(stationName) != null) MapEntry('Station:', stationName!.trim()),
+        if (_clean(waiterName) != null) MapEntry('Waiter:', waiterName!.trim()),
+        if (_clean(printedBy) != null) MapEntry('Printed by:', printedBy!.trim()),
+      ],
+    );
+    await TemplatePrintRenderer().printThermal(sections, data);
+    return;
+  }
+
+  await PrintService().printVoidOrderReceipt(
+    branchName: branchName,
+    orderNumber: orderNumber,
+    items: items,
+    total: total,
+    publicCode: publicCode,
+    customerName: customerName,
+    stationName: stationName,
+    waiterName: waiterName,
+    voidReason: voidReason,
+    printedBy: printedBy,
+    voidedAt: voidedAt,
+  );
+}
+
 TemplatePrintData _templateData({
   required SaleResult sale,
   required List<CartItem> items,
@@ -72,9 +220,12 @@ TemplatePrintData _templateData({
   String? staffLabel,
   String? publicCode,
   String? barcodeValue,
+  Map<String, String> extraValues = const {},
+  List<MapEntry<String, String>> extraKvRows = const [],
+  Map<String, String> staff = const {},
 }) {
   final money = NumberFormat('#,##0.00', 'en_KE');
-  final date = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt);
+  final date = _dateString(sale.createdAt);
   final total = sale.total;
   final subtotal = total > 0 ? total / 1.16 : 0;
   final tax = total - subtotal;
@@ -110,6 +261,7 @@ TemplatePrintData _templateData({
       'tax': 'KES ${money.format(tax)}',
       'total': 'KES ${money.format(total)}',
       'paid': 'KES ${money.format(paid)}',
+      ...extraValues,
     },
     items: items
         .map((item) => TemplateLineItem(
@@ -129,11 +281,16 @@ TemplatePrintData _templateData({
       if (resolvedCustomer != null) MapEntry('Customer:', resolvedCustomer),
       if (resolvedStaffName != null)
         MapEntry('$resolvedStaffLabel:', resolvedStaffName),
+      ...extraKvRows.where((row) => row.value.trim().isNotEmpty),
     ],
+    staff: staff,
     barcodeValue: _clean(barcodeValue) ?? code ?? receiptNumber,
     code: code,
   );
 }
+
+String _dateString(DateTime value) =>
+    DateFormat('MM/dd/yyyy, hh:mm:ss a').format(value);
 
 String? _clean(String? value) {
   final text = value?.trim() ?? '';
