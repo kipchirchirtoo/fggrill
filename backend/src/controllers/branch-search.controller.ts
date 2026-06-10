@@ -320,30 +320,36 @@ const branchRequisitionIds = async (branchId: number): Promise<string[]> => {
   return ((data || []) as Array<Record<string, any>>).map((r) => String(r.id));
 };
 
-const applyBranchScope = async (query: any, cfg: EntityConfig, branchId: number) => {
-  if (cfg.branchMode === 'eq') return query.eq(cfg.branchColumn, branchId);
-  if (cfg.branchMode === 'nullable') return query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
-  if (cfg.branchMode === 'requisition') {
-    const ids = await branchRequisitionIds(branchId);
-    if (ids.length === 0) return query.in('requisition_id', ['00000000-0000-0000-0000-000000000000']);
-    return query.in('requisition_id', ids);
-  }
-  return query;
-};
-
 const searchEntity = async (
   cfg: EntityConfig,
   branchId: number,
   q: string,
   limit: number
 ): Promise<Array<ReturnType<typeof toResult>>> => {
+  // NOTE: keep all PostgREST builder chaining synchronous here. A PostgREST
+  // builder is "thenable", so returning one from an async helper and awaiting
+  // it would EXECUTE the query early (yielding {data,error}, which has no
+  // .or()/.limit()) — hence the previous "query.or is not a function".
   let query = supabase.from(cfg.table).select('*');
-  query = await applyBranchScope(query, cfg, branchId);
+
+  if (cfg.branchMode === 'eq') {
+    query = query.eq(cfg.branchColumn, branchId);
+  } else if (cfg.branchMode === 'nullable') {
+    query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+  } else if (cfg.branchMode === 'requisition') {
+    const ids = await branchRequisitionIds(branchId);
+    query = query.in(
+      'requisition_id',
+      ids.length ? ids : ['00000000-0000-0000-0000-000000000000']
+    );
+  }
+
   if (q) {
     const orExpr = cfg.searchColumns.map((c) => `${c}.ilike.%${q}%`).join(',');
     query = query.or(orExpr);
   }
   query = query.limit(limit);
+
   const { data, error } = await query;
   if (error) {
     logger.warn(`branch-search ${cfg.type} failed: ${error.message}`);
