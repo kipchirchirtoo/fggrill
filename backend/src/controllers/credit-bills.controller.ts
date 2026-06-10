@@ -414,61 +414,89 @@ export const partialPayCreditBill = async (req: Request, res: Response, next: Ne
 export const getCashierPaidCreditEntries = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const status = String(req.query.status || 'pending').toLowerCase();
-        let query = supabase
+
+        const collect = (shift: any, sourceTable: string) => {
+            const entries = Array.isArray(shift.paid_bills_details)
+                ? shift.paid_bills_details
+                : [];
+            return entries.map((entry: any, index: number) => {
+                const applications = Array.isArray(entry.applications)
+                    ? entry.applications
+                    : [];
+                const amount = toNumber(entry.amount);
+                const appliedAmount = applications
+                    .reduce((sum: number, app: any) => sum + toNumber(app.amount), 0);
+                const remainingAmount = Math.max(0, amount - appliedAmount);
+                const reviewStatus = String(
+                    entry.review_status ||
+                    (remainingAmount <= 0
+                        ? 'fully_applied'
+                        : appliedAmount > 0
+                            ? 'partially_applied'
+                            : 'pending_branch_accountant_review')
+                );
+                const entryId = entry.id || `${sourceTable}:${shift.id}:${index}`;
+                return {
+                    ...entry,
+                    id: entryId,
+                    entry_id: entryId,
+                    source_table: sourceTable,
+                    shift_id: shift.id,
+                    shift_number: shift.shift_number,
+                    branch_id: shift.branch_id,
+                    cashier_id: shift.cashier_id,
+                    cashier_name: shift.cashier_name,
+                    shift_start: shift.shift_start,
+                    shift_end: shift.shift_end,
+                    shift_status: shift.status,
+                    staff_id: entry.staff_id || null,
+                    staff_name: entry.staff_name || entry.employee_name || entry.name || '',
+                    employee_id: entry.employee_id || null,
+                    department: entry.department || null,
+                    amount,
+                    applied_amount: appliedAmount,
+                    remaining_amount: remainingAmount,
+                    review_status: reviewStatus,
+                    applications,
+                    recorded_at: entry.recorded_at || shift.shift_end || shift.shift_start
+                };
+            });
+        };
+
+        let logQuery = supabase
+            .from('cashier_shift_logs')
+            .select('id, shift_number, branch_id, cashier_id, cashier_name, shift_start, shift_end, status, paid_bills_details')
+            .order('shift_start', { ascending: false });
+        logQuery = applyBranchFilter(logQuery, req);
+        const { data: logShifts, error: logError } = await logQuery;
+        if (logError) throw logError;
+
+        let legacyQuery = supabase
             .from('cashier_shifts')
             .select('id, shift_number, branch_id, cashier_id, cashier_name, shift_start, shift_end, status, paid_bills_details')
             .order('shift_start', { ascending: false });
+        legacyQuery = applyBranchFilter(legacyQuery, req);
+        const { data: legacyShifts, error: legacyError } = await legacyQuery;
+        if (legacyError && !['42P01', '42703', 'PGRST205', 'PGRST204'].includes(legacyError.code)) {
+            throw legacyError;
+        }
 
-        query = applyBranchFilter(query, req);
-
-        const { data: shifts, error } = await query;
-        if (error) throw error;
-
-        const rows = (shifts || [])
-            .flatMap((shift: any) => {
-                const entries = Array.isArray(shift.paid_bills_details)
-                    ? shift.paid_bills_details
-                    : [];
-                return entries.map((entry: any, index: number) => {
-                    const applications = Array.isArray(entry.applications)
-                        ? entry.applications
-                        : [];
-                    const amount = toNumber(entry.amount);
-                    const appliedAmount = applications
-                        .reduce((sum: number, app: any) => sum + toNumber(app.amount), 0);
-                    const remainingAmount = Math.max(0, amount - appliedAmount);
-                    const reviewStatus = String(
-                        entry.review_status ||
-                        (remainingAmount <= 0
-                            ? 'fully_applied'
-                            : appliedAmount > 0
-                                ? 'partially_applied'
-                                : 'pending_branch_accountant_review')
-                    );
-                    return {
-                        ...entry,
-                        id: entry.id || `${shift.id}:${index}`,
-                        entry_id: entry.id || `${shift.id}:${index}`,
-                        shift_id: shift.id,
-                        shift_number: shift.shift_number,
-                        branch_id: shift.branch_id,
-                        cashier_id: shift.cashier_id,
-                        cashier_name: shift.cashier_name,
-                        shift_start: shift.shift_start,
-                        shift_end: shift.shift_end,
-                        shift_status: shift.status,
-                        staff_id: entry.staff_id || null,
-                        staff_name: entry.staff_name || entry.employee_name || '',
-                        employee_id: entry.employee_id || null,
-                        department: entry.department || null,
-                        amount,
-                        applied_amount: appliedAmount,
-                        remaining_amount: remainingAmount,
-                        review_status: reviewStatus,
-                        applications,
-                        recorded_at: entry.recorded_at || shift.shift_end || shift.shift_start
-                    };
-                });
+        const seen = new Set<string>();
+        const rows = [
+            ...((logShifts || []) as any[]).flatMap((shift) => collect(shift, 'cashier_shift_logs')),
+            ...((legacyShifts || []) as any[]).flatMap((shift) => collect(shift, 'cashier_shifts')),
+        ]
+            .filter((entry: any) => {
+                const key = [
+                    entry.id,
+                    entry.staff_id,
+                    entry.staff_name,
+                    entry.amount,
+                    entry.recorded_at,
+                ].join('|');
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
             })
             .filter((entry: any) => {
                 if (status === 'all') return true;
@@ -492,29 +520,42 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
         if (!staff_credit_bill_id) throw new AppError('Select the staff credit bill to clear', 400);
         if (!paymentAmount || paymentAmount <= 0) throw new AppError('Payment amount must be greater than zero', 400);
 
-        let shiftQuery = supabase
-            .from('cashier_shifts')
-            .select('id, shift_number, branch_id, cashier_id, cashier_name, paid_bills_details');
-        shiftQuery = applyBranchFilter(shiftQuery, req);
-        const { data: shifts, error: shiftError } = await shiftQuery;
-        if (shiftError) throw shiftError;
+        const sourceHint = String(req.body.source_table || '').trim();
+        const sourceTables = sourceHint === 'cashier_shifts'
+            ? ['cashier_shifts', 'cashier_shift_logs']
+            : ['cashier_shift_logs', 'cashier_shifts'];
 
         let selectedShift: any = null;
         let selectedEntry: any = null;
         let selectedIndex = -1;
+        let selectedTable = 'cashier_shift_logs';
 
-        for (const shift of shifts || []) {
-            const entries = Array.isArray(shift.paid_bills_details)
-                ? shift.paid_bills_details
-                : [];
-            const index = entries.findIndex((entry: any, i: number) =>
-                String(entry.id || `${shift.id}:${i}`) === String(entryId));
-            if (index >= 0) {
-                selectedShift = shift;
-                selectedEntry = entries[index];
-                selectedIndex = index;
-                break;
+        for (const table of sourceTables) {
+            let shiftQuery = supabase
+                .from(table)
+                .select('id, shift_number, branch_id, cashier_id, cashier_name, paid_bills_details');
+            shiftQuery = applyBranchFilter(shiftQuery, req);
+            const { data: shifts, error: shiftError } = await shiftQuery;
+            if (shiftError) {
+                if (['42P01', '42703', 'PGRST205', 'PGRST204'].includes(shiftError.code)) continue;
+                throw shiftError;
             }
+
+            for (const shift of shifts || []) {
+                const entries = Array.isArray(shift.paid_bills_details)
+                    ? shift.paid_bills_details
+                    : [];
+                const index = entries.findIndex((entry: any, i: number) =>
+                    String(entry.id || `${table}:${shift.id}:${i}`) === String(entryId));
+                if (index >= 0) {
+                    selectedShift = shift;
+                    selectedEntry = entries[index];
+                    selectedIndex = index;
+                    selectedTable = table;
+                    break;
+                }
+            }
+            if (selectedShift) break;
         }
 
         if (!selectedShift || !selectedEntry || selectedIndex < 0) {
@@ -603,7 +644,7 @@ export const applyCashierPaidCreditEntry = async (req: Request, res: Response, n
             });
 
         const { error: shiftUpdateError } = await supabase
-            .from('cashier_shifts')
+            .from(selectedTable)
             .update({ paid_bills_details: nextEntries })
             .eq('id', selectedShift.id);
         if (shiftUpdateError) throw shiftUpdateError;

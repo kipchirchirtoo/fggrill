@@ -7398,6 +7398,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         .applyCashierPaidCreditEntry('${entry['entry_id'] ?? entry['id']}', {
       'staff_credit_bill_id': selected['bill']['id'],
       'amount': selected['amount'],
+      if (_text(entry, ['source_table']).isNotEmpty)
+        'source_table': _text(entry, ['source_table']),
       if ('${selected['notes'] ?? ''}'.trim().isNotEmpty)
         'notes': '${selected['notes']}'.trim(),
     });
