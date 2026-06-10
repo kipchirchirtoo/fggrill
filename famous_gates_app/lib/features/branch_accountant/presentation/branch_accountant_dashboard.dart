@@ -6937,11 +6937,28 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                 _StatusPill(_text(e, ['status'])),
                 _text(e, ['reason', 'description']),
                 _text(e, ['advance_date', 'created_at']),
-                _CompactAction(
-                  label: 'View',
-                  icon: Icons.visibility_outlined,
-                  onPressed: () => _showRecord(context, e),
-                ),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  _CompactAction(
+                    label: 'View',
+                    icon: Icons.visibility_outlined,
+                    onPressed: () => _showRecord(context, e),
+                  ),
+                  if (_isPendingApproval(e)) ...[
+                    const SizedBox(width: 6),
+                    _CompactAction(
+                      label: 'Approve',
+                      icon: Icons.check_circle_outline,
+                      filled: true,
+                      onPressed: () => _approveAdvance(e),
+                    ),
+                    const SizedBox(width: 6),
+                    _CompactAction(
+                      label: 'Reject',
+                      icon: Icons.cancel_outlined,
+                      onPressed: () => _rejectAdvance(e),
+                    ),
+                  ],
+                ]),
               ])
           .toList(),
     );
@@ -6976,8 +6993,23 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                     icon: Icons.visibility_outlined,
                     onPressed: () => _showRecord(context, e),
                   ),
+                  if (_isPendingApproval(e)) ...[
+                    const SizedBox(width: 6),
+                    _CompactAction(
+                      label: 'Approve',
+                      icon: Icons.check_circle_outline,
+                      filled: true,
+                      onPressed: () => _approveLoan(e),
+                    ),
+                    const SizedBox(width: 6),
+                    _CompactAction(
+                      label: 'Reject',
+                      icon: Icons.cancel_outlined,
+                      onPressed: () => _rejectLoan(e),
+                    ),
+                  ],
                   const SizedBox(width: 6),
-                  if (_staffLoanBalance(e) > 0)
+                  if (_staffLoanBalance(e) > 0 && !_isPendingApproval(e))
                     _CompactAction(
                       label: 'Pay',
                       icon: Icons.payments_outlined,
@@ -7024,6 +7056,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     final status = _text(row, ['status']).toLowerCase();
     return ['accountant_confirmed', 'auditor_confirmed'].contains(status) &&
         _staffCreditBalance(row) > 0;
+  }
+
+  bool _isPendingApproval(Map<String, dynamic> row) {
+    final status = _text(row, ['status']).toLowerCase();
+    return status.isEmpty ||
+        ['pending', 'pending_approval', 'requested'].contains(status);
   }
 
   num _staffAdvanceBalance(Map<String, dynamic> row) {
@@ -7212,6 +7250,22 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     _refresh();
   }
 
+  Future<void> _approveAdvance(Map<String, dynamic> advance) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .approvePayrollAdvance('${advance['id']}');
+    if (mounted) _notify(context, 'Salary advance approved');
+    _refresh();
+  }
+
+  Future<void> _rejectAdvance(Map<String, dynamic> advance) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .rejectPayrollAdvance('${advance['id']}');
+    if (mounted) _notify(context, 'Salary advance rejected');
+    _refresh();
+  }
+
   Future<void> _createLoan(Map<String, dynamic> staff) async {
     final now = DateTime.now();
     final data = await _formDialog(
@@ -7251,6 +7305,22 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           int.tryParse('${data['start_deduction_year']}') ?? now.year,
     });
     if (mounted) _notify(context, 'Staff loan recorded');
+    _refresh();
+  }
+
+  Future<void> _approveLoan(Map<String, dynamic> loan) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .approvePayrollLoan('${loan['id']}');
+    if (mounted) _notify(context, 'Staff loan approved');
+    _refresh();
+  }
+
+  Future<void> _rejectLoan(Map<String, dynamic> loan) async {
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .rejectPayrollLoan('${loan['id']}');
+    if (mounted) _notify(context, 'Staff loan rejected');
     _refresh();
   }
 

@@ -606,6 +606,14 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
+  Future<void> approvePayrollAdvance(String id) async {
+    await _dio.post('/payroll/advances/$id/approve');
+  }
+
+  Future<void> rejectPayrollAdvance(String id) async {
+    await _dio.post('/payroll/advances/$id/reject');
+  }
+
   Future<List<Map<String, dynamic>>> getPayrollLoans({
     String status = 'all',
     String? staffId,
@@ -626,6 +634,14 @@ class BranchAccountantRepository {
       ...data,
     });
     return _asMap(res.data);
+  }
+
+  Future<void> approvePayrollLoan(String id) async {
+    await _dio.post('/payroll/loans/$id/approve');
+  }
+
+  Future<void> rejectPayrollLoan(String id) async {
+    await _dio.post('/payroll/loans/$id/reject');
   }
 
   Future<void> recordPayrollLoanPayment(
