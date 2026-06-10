@@ -122,17 +122,32 @@ class BranchAccountantRepository {
     required String endDate,
   }) async {
     final branchId = await getBranchId();
-    return _getList('/finance/workspace/daily', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-      'start_date': startDate,
-      'end_date': endDate,
-    });
+    try {
+      return await _getList('/finance/workspace/daily', query: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        'start_date': startDate,
+        'end_date': endDate,
+      });
+    } on DioException catch (e) {
+      if (_isRecoverableBranchEndpointError(e)) return [];
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getDailyRecordByDate(String date) async {
     final branchId = await getBranchId();
     return _getMap('/finance/workspace/daily/$date', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  /// Lina AI: collect every available system figure for [date] and shape it
+  /// into the daily financial entry form (revenue/payments/banking/cogs/expenses).
+  Future<Map<String, dynamic>> getDailyAutofill(String date) async {
+    final branchId = await getBranchId();
+    return _getMap('/finance/workspace/daily/autofill', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      'date': date,
     });
   }
 
@@ -642,6 +657,32 @@ class BranchAccountantRepository {
       }
       rethrow;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getBranchPayments({
+    String status = 'all',
+    String? startDate,
+    String? endDate,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/payments-verification', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+      if (startDate != null && startDate.isNotEmpty) 'start_date': startDate,
+      if (endDate != null && endDate.isNotEmpty) 'end_date': endDate,
+    });
+  }
+
+  Future<Map<String, dynamic>> getBranchPaymentStats({
+    String? startDate,
+    String? endDate,
+  }) async {
+    final branchId = await getBranchId();
+    return _getMap('/payments-verification/stats', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (startDate != null && startDate.isNotEmpty) 'start_date': startDate,
+      if (endDate != null && endDate.isNotEmpty) 'end_date': endDate,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getFinanceTransactions() async {

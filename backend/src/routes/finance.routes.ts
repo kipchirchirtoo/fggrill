@@ -28,6 +28,7 @@ import {
   getDailyRecords,
   getDailyRecordByDate,
   saveDailyRecord,
+  getDailyAutofill,
   getMonthlyAdjustments,
   saveMonthlyAdjustment,
   exportMonthlyStatement
@@ -135,6 +136,13 @@ router.put('/daily-logs/:id/status',
 router.get('/workspace/daily',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   getDailyRecords
+);
+
+// Lina AI auto-fill — must be registered BEFORE '/workspace/daily/:date'
+// so it isn't captured as a date param.
+router.get('/workspace/daily/autofill',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_MANAGER]),
+  getDailyAutofill
 );
 
 router.get('/workspace/daily/:date',

@@ -532,45 +532,71 @@ class _OverviewSection extends ConsumerWidget {
             discrepancies.where(_isOpenDiscrepancy).toList();
         final budget = _map(payload['budget_summary']);
 
-        final hasDailyRecords = dailyRecords.isNotEmpty;
         final dailyRevenue = dailyRecords.fold<num>(
             0, (sum, e) => sum + _num(e['total_revenue']));
         final dailyExpenses = dailyRecords.fold<num>(
             0, (sum, e) => sum + _num(e['total_expenses']));
         final dailyNetProfit =
             dailyRecords.fold<num>(0, (sum, e) => sum + _num(e['net_profit']));
+        final hasDailyFinancialTotals = dailyRecords.any((record) =>
+            _num(record['total_revenue']).abs() > 0 ||
+            _num(record['total_expenses']).abs() > 0 ||
+            _num(record['net_profit']).abs() > 0);
 
-        num totalRevenue = hasDailyRecords
-            ? dailyRevenue
-            : _firstNonZeroNum([
-                salesSummary['total_sales'],
-                sales['total_sales'],
-                finSummary['revenue'],
-                financials['total_revenue'],
-                financials['revenue'],
-              ]);
+        final analyticsRevenue = _firstNonZeroNum([
+          salesSummary['total_sales'],
+          salesSummary['total_revenue'],
+          salesSummary['totalSales'],
+          sales['total_sales'],
+          sales['total_revenue'],
+          sales['totalSales'],
+        ]);
+        final profileRevenue = _firstNonZeroNum([
+          finSummary['revenue'],
+          finSummary['total_revenue'],
+          finSummary['totalRevenue'],
+          financials['total_revenue'],
+          financials['totalRevenue'],
+          financials['revenue'],
+        ]);
+        final profileExpenses = _firstNonZeroNum([
+          finSummary['expenses'],
+          finSummary['total_expenses'],
+          finSummary['totalExpenses'],
+          financials['total_expenses'],
+          financials['totalExpenses'],
+          financials['expenses'],
+        ]);
+
+        final totalRevenue = _firstNonZeroNum([
+          analyticsRevenue,
+          if (hasDailyFinancialTotals) dailyRevenue,
+          profileRevenue,
+        ]);
         num netProfit = _num(finSummary['netProfit'] ??
             finSummary['net_profit'] ??
+            finSummary['net_income'] ??
             financials['net_profit'] ??
-            financials['netProfit']);
-        if (hasDailyRecords) netProfit = dailyNetProfit;
-        num finRevenue = hasDailyRecords
-            ? dailyRevenue
-            : _firstNonZeroNum([
-                finSummary['revenue'],
-                financials['total_revenue'],
-                financials['revenue'],
-                salesSummary['total_sales'],
-              ]);
-        num finExpenses = hasDailyRecords
-            ? dailyExpenses
-            : _firstNonZeroNum([
-                finSummary['expenses'],
-                financials['total_expenses'],
-                financials['expenses'],
-              ]);
-        num receivables = _num(financials['receivables']);
-        num payables = _num(financials['payables']);
+            financials['netProfit'] ??
+            financials['net_income']);
+        if (netProfit == 0 && hasDailyFinancialTotals) {
+          netProfit = dailyNetProfit;
+        }
+        if (netProfit == 0 && totalRevenue != 0) {
+          netProfit = totalRevenue - profileExpenses;
+        }
+        final finRevenue = _firstNonZeroNum([
+          totalRevenue,
+          if (hasDailyFinancialTotals) dailyRevenue,
+          profileRevenue,
+        ]);
+        final finExpenses = _firstNonZeroNum([
+          profileExpenses,
+          if (hasDailyFinancialTotals) dailyExpenses,
+        ]);
+        num receivables =
+            _num(financials['receivables'] ?? finSummary['receivables']);
+        num payables = _num(financials['payables'] ?? finSummary['payables']);
         num budgetUtil = _num(budget['utilization_percentage'] ??
             budget['usage_percentage'] ??
             budget['utilization'] ??
@@ -6055,17 +6081,24 @@ class _BankingSectionState extends ConsumerState<_BankingSection> {
         onRefresh: _refresh,
         builder: (data) {
           final summary = _map(data['summary']);
+          final summaryTotals = _map(summary['summary']);
           final txns = _list(data['transactions']);
           final accounts = _list(data['accounts']);
           final reconciliations = _list(data['reconciliations']);
           return _Page(
-            title: 'Banking',
+            title: 'Banking Transactions',
             subtitle:
-                'Record deposits, approve banking transactions, and review bank reconciliations.',
+                'Record bank deposits and withdrawals. New records are saved as pending for auditor review.',
             actions: [
               _Dropdown(
                 value: _status,
                 values: const ['all', 'PENDING', 'APPROVED', 'REJECTED'],
+                labels: const {
+                  'all': 'All',
+                  'PENDING': 'Pending Auditor',
+                  'APPROVED': 'Approved',
+                  'REJECTED': 'Rejected',
+                },
                 onChanged: (v) => setState(() {
                   _status = v;
                   _future = _load();
@@ -6080,19 +6113,29 @@ class _BankingSectionState extends ConsumerState<_BankingSection> {
             ],
             children: [
               _ResponsiveGrid(children: [
-                _MetricCard('Transactions', '${txns.length}', Icons.receipt,
-                    Colors.blue),
                 _MetricCard(
-                    'Total Amount',
-                    _money(summary.containsKey('total_amount')
-                        ? _num(summary['total_amount'])
-                        : _sum(txns, 'amount')),
-                    Icons.payments,
-                    Colors.green),
-                _MetricCard('Accounts', '${accounts.length}',
-                    Icons.account_balance, Colors.indigo),
+                    'Total Balance',
+                    _money(_num(summaryTotals['total_balance'])),
+                    Icons.account_balance,
+                    Colors.blue),
+                _MetricCard('Deposits', _money(_num(summaryTotals['deposits'])),
+                    Icons.trending_up, Colors.green),
+                _MetricCard(
+                    'Withdrawals',
+                    _money(_num(summaryTotals['withdrawals'])),
+                    Icons.trending_down,
+                    Colors.red),
+                _MetricCard(
+                    'Pending Auditor',
+                    '${_num(summaryTotals['pending_transactions']).toInt()}',
+                    Icons.hourglass_top,
+                    Colors.orange),
+                _MetricCard('Accounts', '${accounts.length}', Icons.savings,
+                    Colors.indigo),
+                _MetricCard('Transactions', '${txns.length}', Icons.receipt,
+                    Colors.purple),
                 _MetricCard('Reconciliations', '${reconciliations.length}',
-                    Icons.fact_check, Colors.purple),
+                    Icons.fact_check, Colors.deepPurple),
               ]),
               _SectionCard(
                 title: 'Banking Transactions',
@@ -6102,32 +6145,37 @@ class _BankingSectionState extends ConsumerState<_BankingSection> {
                     'Type',
                     'Bank',
                     'Reference',
+                    'Purpose',
                     'Amount',
                     'Status',
-                    'Actions'
+                    'Recorded By',
+                    'Actions',
                   ],
                   rows: txns
                       .map((e) => [
-                            _text(e, ['transaction_date', 'created_at']),
-                            _text(e, ['transaction_type']),
+                            _shortDate(
+                                _text(e, ['transaction_date', 'created_at'])),
+                            _bankingTypeLabel(_text(e, ['transaction_type'])),
                             _text(e, ['bank_name']),
-                            _text(e, ['reference_number']),
+                            _text(e, ['reference_number']).isEmpty
+                                ? '-'
+                                : _text(e, ['reference_number']),
+                            _text(e, ['purpose_description']).isEmpty
+                                ? '-'
+                                : _text(e, ['purpose_description']),
                             _money(_num(e['amount'])),
                             _StatusPill(_text(e, ['status'])),
+                            _text(_map(e['recorded_by_user']),
+                                    ['full_name', 'name']).isEmpty
+                                ? '-'
+                                : _text(_map(e['recorded_by_user']), [
+                                    'full_name',
+                                    'name',
+                                  ]),
                             Wrap(spacing: 8, children: [
                               TextButton(
                                   onPressed: () => _showRecord(context, e),
                                   child: const Text('View')),
-                              if (_text(e, ['status']).toUpperCase() ==
-                                  'PENDING')
-                                FilledButton.tonal(
-                                    onPressed: () => _approveTxn(e, true),
-                                    child: const Text('Approve')),
-                              if (_text(e, ['status']).toUpperCase() ==
-                                  'PENDING')
-                                OutlinedButton(
-                                    onPressed: () => _approveTxn(e, false),
-                                    child: const Text('Reject')),
                             ]),
                           ])
                       .toList(),
@@ -6141,41 +6189,243 @@ class _BankingSectionState extends ConsumerState<_BankingSection> {
   }
 
   Future<void> _recordTransaction() async {
-    final data =
-        await _formDialog(context, 'Record Banking Transaction', const [
-      'transaction_date',
-      'transaction_type',
-      'bank_name',
-      'account_number',
-      'amount',
-      'purpose_description',
-      'reference_number',
-      'notes',
-    ]);
+    final data = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _BankingTransactionDialog(),
+    );
     if (data == null) return;
     await ref
         .read(branchAccountantRepositoryProvider)
         .recordBankingTransaction(data);
-    _toast('Banking transaction recorded');
+    _toast('Banking transaction recorded and sent for auditor review');
     _refresh();
   }
+}
 
-  Future<void> _approveTxn(Map<String, dynamic> txn, bool approve) async {
-    final notes = await _textDialog(
-      context,
-      approve ? 'Approve Transaction' : 'Reject Transaction',
-      hint: 'Notes',
+String _bankingTypeLabel(String type) {
+  switch (type.toUpperCase()) {
+    case 'DEPOSIT':
+      return 'Deposit';
+    case 'WITHDRAWAL':
+      return 'Withdrawal';
+    case 'TRANSFER':
+      return 'Transfer';
+    default:
+      return type.isEmpty ? '-' : _title(type);
+  }
+}
+
+class _BankingTransactionDialog extends StatefulWidget {
+  const _BankingTransactionDialog();
+
+  @override
+  State<_BankingTransactionDialog> createState() =>
+      _BankingTransactionDialogState();
+}
+
+class _BankingTransactionDialogState extends State<_BankingTransactionDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _amountController = TextEditingController();
+  final _bankController = TextEditingController();
+  final _accountController = TextEditingController();
+  final _referenceController = TextEditingController();
+  final _purposeController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  String _transactionType = 'DEPOSIT';
+  String _paymentMethod = 'cash';
+  late DateTime _transactionDate = DateTime.now();
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _bankController.dispose();
+    _accountController.dispose();
+    _referenceController.dispose();
+    _purposeController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Record Banking Transaction'),
+      content: SizedBox(
+        width: 560,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'DEPOSIT',
+                      label: Text('Deposit'),
+                      icon: Icon(Icons.trending_up),
+                    ),
+                    ButtonSegment(
+                      value: 'WITHDRAWAL',
+                      label: Text('Withdrawal'),
+                      icon: Icon(Icons.trending_down),
+                    ),
+                  ],
+                  selected: {_transactionType},
+                  onSelectionChanged: (value) =>
+                      setState(() => _transactionType = value.first),
+                ),
+                const SizedBox(height: 14),
+                InkWell(
+                  onTap: _pickDate,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Transaction Date',
+                      prefixIcon: Icon(Icons.calendar_today),
+                    ),
+                    child: Text(_date(_transactionDate)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Amount',
+                    prefixText: 'KES ',
+                    prefixIcon: Icon(Icons.payments),
+                  ),
+                  validator: (value) {
+                    final amount = num.tryParse((value ?? '').trim());
+                    if (amount == null || amount <= 0) {
+                      return 'Enter a valid amount';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _bankController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Bank Name',
+                    prefixIcon: Icon(Icons.account_balance),
+                  ),
+                  validator: (value) =>
+                      (value ?? '').trim().isEmpty ? 'Bank is required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _accountController,
+                  decoration: const InputDecoration(
+                    labelText: 'Account Number',
+                    prefixIcon: Icon(Icons.numbers),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _paymentMethod,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Method',
+                    prefixIcon: Icon(Icons.credit_card),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                    DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                    DropdownMenuItem(value: 'card', child: Text('Card')),
+                    DropdownMenuItem(
+                      value: 'bank_transfer',
+                      child: Text('Bank Transfer'),
+                    ),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _paymentMethod = value ?? 'cash'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _referenceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Reference Number',
+                    prefixIcon: Icon(Icons.tag),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _purposeController,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Purpose / Description',
+                    prefixIcon: Icon(Icons.description),
+                  ),
+                  validator: (value) => (value ?? '').trim().isEmpty
+                      ? 'Purpose is required'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _notesController,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send),
+          label: const Text('Send to Auditor'),
+        ),
+      ],
     );
-    if (notes == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .approveBankingTransaction(
-          '${txn['id']}',
-          approve: approve,
-          notes: notes,
-        );
-    _toast(approve ? 'Transaction approved' : 'Transaction rejected');
-    _refresh();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _transactionDate,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked != null) {
+      setState(() => _transactionDate = picked);
+    }
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(context, {
+      'transaction_date': _date(_transactionDate),
+      'transaction_type': _transactionType,
+      'amount': num.parse(_amountController.text.trim()),
+      'bank_name': _bankController.text.trim(),
+      if (_accountController.text.trim().isNotEmpty)
+        'account_number': _accountController.text.trim(),
+      if (_referenceController.text.trim().isNotEmpty)
+        'reference_number': _referenceController.text.trim(),
+      'purpose_description': _purposeController.text.trim(),
+      'payment_method': _paymentMethod,
+      'purpose_category':
+          _transactionType == 'DEPOSIT' ? 'deposit' : 'withdrawal',
+      if (_notesController.text.trim().isNotEmpty)
+        'notes': _notesController.text.trim(),
+    });
   }
 }
 
@@ -6189,15 +6439,19 @@ class _PaymentsInvoicesSection extends ConsumerStatefulWidget {
 
 class _PaymentsInvoicesSectionState
     extends ConsumerState<_PaymentsInvoicesSection> {
+  String _status = 'all';
+  late String _from =
+      _date(DateTime(DateTime.now().year, DateTime.now().month, 1));
+  late String _to = _today();
   late Future<Map<String, dynamic>> _future = _load();
 
   Future<Map<String, dynamic>> _load() async {
     final repo = ref.read(branchAccountantRepositoryProvider);
     final results = await Future.wait([
-      repo.getFinanceInvoices(),
-      repo.getFinanceTransactions(),
+      repo.getBranchPayments(status: _status, startDate: _from, endDate: _to),
+      repo.getBranchPaymentStats(startDate: _from, endDate: _to),
     ]);
-    return {'invoices': results[0], 'transactions': results[1]};
+    return {'payments': results[0], 'stats': results[1]};
   }
 
   void _refresh() => setState(() {
@@ -6212,48 +6466,99 @@ class _PaymentsInvoicesSectionState
         snapshot: snap,
         onRefresh: _refresh,
         builder: (data) {
-          final invoices = _list(data['invoices']);
-          final transactions = _list(data['transactions']);
+          final payments = _list(data['payments']);
+          final stats = _map(data['stats']);
           return _Page(
-            title: 'Payments & Invoices',
+            title: 'Payments Dashboard',
             subtitle:
-                'Accounts receivable invoices, balances, and finance transactions.',
-            actions: [_RefreshButton(onPressed: _refresh)],
+                'All branch payments from banking, cashier payments, POS, and manual verification records.',
+            actions: [
+              _DateField(
+                  value: _from, onChanged: (v) => setState(() => _from = v)),
+              _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
+              _Dropdown(
+                value: _status,
+                values: const [
+                  'all',
+                  'pending',
+                  'accountant_verified',
+                  'auditor_verified',
+                  'flagged',
+                ],
+                labels: const {
+                  'all': 'All',
+                  'pending': 'Pending',
+                  'accountant_verified': 'Awaiting Auditor',
+                  'auditor_verified': 'Approved',
+                  'flagged': 'Flagged',
+                },
+                onChanged: (v) => setState(() {
+                  _status = v;
+                  _future = _load();
+                }),
+              ),
+              _RefreshButton(onPressed: _refresh),
+            ],
             children: [
               _ResponsiveGrid(children: [
-                _MetricCard('Invoices', '${invoices.length}', Icons.receipt,
-                    Colors.blue),
                 _MetricCard(
-                    'Invoice Total',
-                    _money(_sum(invoices, 'total_amount')),
-                    Icons.payments,
+                    'Total Payments',
+                    '${_num(stats['total_payments']).toInt()}',
+                    Icons.receipt,
+                    Colors.blue),
+                _MetricCard('Total Amount', _money(_num(stats['total_amount'])),
+                    Icons.payments, Colors.green),
+                _MetricCard('Pending', '${_num(stats['pending']).toInt()}',
+                    Icons.hourglass_top, Colors.orange),
+                _MetricCard(
+                    'Approved',
+                    '${_num(stats['auditor_verified']).toInt()}',
+                    Icons.check_circle,
                     Colors.green),
-                _MetricCard('Outstanding', _money(_sum(invoices, 'balance')),
-                    Icons.warning, Colors.orange),
-                _MetricCard('Transactions', '${transactions.length}',
-                    Icons.sync_alt, Colors.purple),
+                _MetricCard('Banking', _money(_num(stats['banking_total'])),
+                    Icons.account_balance, Colors.teal),
+                _MetricCard(
+                    'POS / Cashier',
+                    _money(_num(stats['pos_total']) +
+                        _num(stats['payments_total'])),
+                    Icons.point_of_sale,
+                    Colors.purple),
               ]),
               _SectionCard(
-                title: 'Invoices',
+                title: 'Branch Payments',
                 child: _SimpleTable(
                   columns: const [
-                    'Invoice',
-                    'Customer',
-                    'Short Code',
-                    'Total',
-                    'Paid',
-                    'Balance',
-                    'Status'
+                    'Date',
+                    'Source',
+                    'Description',
+                    'Method',
+                    'Reference',
+                    'Amount',
+                    'Recorded By',
+                    'Status',
                   ],
-                  rows: invoices
-                      .map((e) => [
-                            _text(e, ['invoice_number', 'id']),
-                            _text(e, ['customer_name', 'customer']),
-                            _text(e, ['short_code']),
-                            _money(_num(e['total_amount'])),
-                            _money(_num(e['paid_amount'])),
-                            _money(_num(e['balance'])),
-                            _StatusPill(_text(e, ['status'])),
+                  rows: payments
+                      .map((payment) => [
+                            _shortDate(_text(payment, [
+                              '_transaction_date',
+                              'recorded_at',
+                              'created_at',
+                              'transaction_date',
+                            ])),
+                            _paymentSourceLabel(payment),
+                            _paymentDescription(payment),
+                            _title(_text(payment, ['payment_method'])),
+                            _text(payment, ['reference_number', 'reference'])
+                                    .isEmpty
+                                ? '-'
+                                : _text(payment, [
+                                    'reference_number',
+                                    'reference',
+                                  ]),
+                            _money(_num(payment['amount'])),
+                            _paymentRecordedBy(payment),
+                            _StatusPill(_paymentStatusLabel(
+                                _text(payment, ['status']))),
                           ])
                       .toList(),
                 ),
@@ -11133,6 +11438,7 @@ class _DailyEntryDialog extends ConsumerStatefulWidget {
 
 class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
   int _tab = 0;
+  bool _autofilling = false;
   late final String _recordDate =
       _text(widget.existing, ['record_date']).isEmpty
           ? _today()
@@ -11301,6 +11607,16 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
                   child: const Text('Close')),
             ]
           : [
+              OutlinedButton.icon(
+                onPressed: _autofilling ? null : _autofillWithLina,
+                icon: _autofilling
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.auto_awesome, size: 16),
+                label: Text(_autofilling ? 'Lina is collecting…' : 'Autofill with Lina AI'),
+              ),
               TextButton(
                   onPressed: () => Navigator.pop(context, false),
                   child: const Text('Cancel')),
@@ -11532,6 +11848,66 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
         _expenseEntries[entriesKey] ?? const <Map<String, dynamic>>[];
     if (entries.isEmpty) return 0;
     return _lineItemsTotal(entries) - _numText(totalField);
+  }
+
+  /// Ask Lina AI to collect every system figure for the day and fill the form.
+  Future<void> _autofillWithLina() async {
+    setState(() => _autofilling = true);
+    try {
+      final data = await ref
+          .read(branchAccountantRepositoryProvider)
+          .getDailyAutofill(_recordDate);
+      final revenue = _map(data['revenue_data']);
+      final payments = _map(data['payment_data']);
+      final banking = _map(data['banking_data']);
+      final cogs = _map(data['cogs_data']);
+      final expense = _map(data['expense_data']);
+
+      void set(String field, dynamic value) {
+        final c = _controllers[field];
+        if (c == null) return;
+        final num v = _num(value);
+        if (v != 0) c.text = v.toStringAsFixed(0);
+      }
+
+      for (final f in _revenueFields) {
+        set(f, revenue[f]);
+      }
+      for (final f in const ['cash', 'mpesa', 'swipe', 'credit_bills']) {
+        set(f, payments[f]);
+      }
+      set('banked', banking['banked']);
+      for (final f in const [
+        'opening_balance',
+        'central_store_receipts',
+        'weekly_supplier_receipts',
+        'closing_balance'
+      ]) {
+        set(f, cogs[f]);
+      }
+      for (final f in const [
+        'petty_cash_total',
+        'transaction_costs_total',
+        'direct_suppliers_total',
+        'wastage_total',
+        'shorts_total',
+        'other_expenses_total'
+      ]) {
+        set(f, expense[f]);
+      }
+      final notes = _text(data, ['notes']);
+      if (notes.isNotEmpty && (_controllers['notes']?.text.trim().isEmpty ?? false)) {
+        _controllers['notes']?.text = notes;
+      }
+      if (mounted) {
+        setState(() {});
+        _toast('Lina AI filled the entry from system data — review, then submit to Director');
+      }
+    } catch (e) {
+      if (mounted) _toast('Lina autofill failed: $e');
+    } finally {
+      if (mounted) setState(() => _autofilling = false);
+    }
   }
 
   Future<void> _save(String status) async {
@@ -12824,27 +13200,34 @@ class _ResponsiveGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final count = width > 1400
-        ? 6
-        : width > 1000
-            ? 3
-            : width > 650
-                ? 2
-                : 1;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: count,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        // Fixed pixel height avoids the bottom overflow that a ratio causes
-        // when cells get narrow (icon 42 + vertical padding 28 = 70, plus slack).
-        mainAxisExtent: 74,
-      ),
-      itemCount: children.length,
-      itemBuilder: (context, index) => children[index],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fallbackWidth = MediaQuery.sizeOf(context).width;
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : fallbackWidth;
+        final count = width >= 1320
+            ? 6
+            : width >= 1040
+                ? 4
+                : width >= 900
+                    ? 3
+                    : width >= 620
+                        ? 2
+                        : 1;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: count,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            mainAxisExtent: 82,
+          ),
+          itemCount: children.length,
+          itemBuilder: (context, index) => children[index],
+        );
+      },
     );
   }
 }
@@ -12886,7 +13269,7 @@ class _MetricCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(label,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           color: AppColors.kTextSecondary, fontSize: 12)),
@@ -12986,14 +13369,31 @@ class _KeyValueList extends StatelessWidget {
           .map((entry) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 7),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: Text(_title(entry.key))),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        _title(entry.key),
+                        softWrap: true,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Text(
-                      entry.value is num
-                          ? _money(_num(entry.value))
-                          : readableRecordValue(values, entry.key, entry.value),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    Flexible(
+                      flex: 4,
+                      child: Text(
+                        entry.value is num
+                            ? _money(_num(entry.value))
+                            : readableRecordValue(
+                                values,
+                                entry.key,
+                                entry.value,
+                              ),
+                        textAlign: TextAlign.right,
+                        softWrap: true,
+                        overflow: TextOverflow.visible,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ],
                 ),
@@ -13425,6 +13825,69 @@ bool _isOpenDiscrepancy(Map<String, dynamic> row) {
     'voided',
   };
   return !closedStatuses.contains(status);
+}
+
+String _paymentSourceLabel(Map<String, dynamic> payment) {
+  switch (_text(payment, ['_source', 'source']).toLowerCase()) {
+    case 'banking':
+      return 'Banking';
+    case 'pos':
+      return 'POS';
+    case 'payment':
+      return 'Cashier';
+    case 'payment_verification':
+      return 'Verified';
+    default:
+      return 'Manual';
+  }
+}
+
+String _paymentStatusLabel(String status) {
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return 'Pending';
+    case 'accountant_verified':
+      return 'Awaiting Auditor';
+    case 'auditor_verified':
+      return 'Approved';
+    case 'flagged':
+      return 'Flagged';
+    default:
+      return status.isEmpty ? 'Pending' : _title(status);
+  }
+}
+
+String _paymentDescription(Map<String, dynamic> payment) {
+  if (_text(payment, ['_source']) == 'banking') {
+    final type = _text(payment, ['_banking_type', 'transaction_type']);
+    final bank = _text(payment, ['_bank_name', 'bank_name']);
+    final text = [type, bank].where((part) => part.isNotEmpty).join(' - ');
+    if (text.isNotEmpty) return text;
+  }
+  return _text(payment, [
+    'customer_name',
+    'description',
+    'notes',
+    'recorder_notes',
+    'bill_reference',
+  ]).isEmpty
+      ? 'N/A'
+      : _text(payment, [
+          'customer_name',
+          'description',
+          'notes',
+          'recorder_notes',
+          'bill_reference',
+        ]);
+}
+
+String _paymentRecordedBy(Map<String, dynamic> payment) {
+  final user = _map(payment['recorded_by_user']);
+  final name = _text(user, ['full_name', 'name']);
+  if (name.isNotEmpty) return name;
+  return _text(payment, ['recorded_by']).isEmpty
+      ? '-'
+      : _text(payment, ['recorded_by']);
 }
 
 IconData _icon(BranchAccountantSection section) =>

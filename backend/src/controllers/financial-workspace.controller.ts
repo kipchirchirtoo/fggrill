@@ -176,6 +176,45 @@ const csvEscape = (value: any) => {
     return `"${str.replace(/"/g, '""')}"`;
 };
 
+const enrichDailyRecordUsers = async (records: any[]) => {
+    const userIds = [...new Set(
+        records
+            .flatMap((record) => [record.created_by, record.reviewed_by])
+            .filter(Boolean)
+            .map((id) => `${id}`)
+    )];
+
+    if (userIds.length === 0) {
+        return records.map((record) => ({
+            ...record,
+            created_by_user: null,
+            reviewed_by_user: null
+        }));
+    }
+
+    const { data: users, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+
+    if (error) {
+        logger.warn('Unable to enrich daily financial record users:', error);
+        return records.map((record) => ({
+            ...record,
+            created_by_user: null,
+            reviewed_by_user: null
+        }));
+    }
+
+    const userMap = Object.fromEntries((users || []).map((user: any) => [`${user.id}`, user]));
+
+    return records.map((record) => ({
+        ...record,
+        created_by_user: record.created_by ? userMap[`${record.created_by}`] || null : null,
+        reviewed_by_user: record.reviewed_by ? userMap[`${record.reviewed_by}`] || null : null
+    }));
+};
+
 /**
  * @desc    Get daily financial records for a period
  * @route   GET /api/finance/workspace/daily
@@ -196,11 +235,7 @@ export const getDailyRecords = async (
 
         let query = supabase
             .from('daily_financial_records')
-            .select(`
-                *,
-                created_by_user:users!created_by(id, first_name, last_name),
-                reviewed_by_user:users!reviewed_by(id, first_name, last_name)
-            `)
+            .select('*')
             .eq('branch_id', branch_id)
             .order('record_date', { ascending: true });
 
@@ -210,10 +245,11 @@ export const getDailyRecords = async (
         const { data, error } = await query;
 
         if (error) throw error;
+        const enriched = await enrichDailyRecordUsers(data || []);
 
         res.status(200).json({
             success: true,
-            data: data || []
+            data: enriched
         });
     } catch (error) {
         logger.error('Error fetching daily financial records:', error);
@@ -908,6 +944,189 @@ export const exportMonthlyStatement = async (
         doc.end();
     } catch (error) {
         logger.error('Error exporting monthly statement:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Lina AI auto-fill: collect every available system figure for a day
+ *          and shape it into the daily financial entry form (revenue per outlet,
+ *          payments by method, banking, COGS, expenses). The Branch Accountant
+ *          presses "Autofill with Lina AI", reviews, then submits to the Director.
+ * @route   GET /api/finance/workspace/daily/autofill?branch_id=&date=
+ * @access  Branch Accountant, Accountant, Branch Manager, Director, GM, SuperAdmin
+ */
+export const getDailyAutofill = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const role = String((req as any).user?.role || '');
+        const userBranchId = (req as any).user?.branch_id;
+        let branchId: any = req.query.branch_id;
+        if (['branch_manager', 'branch_accountant', 'accountant'].includes(role)) branchId = userBranchId;
+        if (!branchId || branchId === '0') {
+            res.status(400).json({ success: false, error: 'Branch ID is required' });
+            return;
+        }
+        const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+        const startTs = `${date}T00:00:00`;
+        const endTs = `${date}T23:59:59`;
+        const n = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+        // Map a service category / outlet type string to a revenue form field.
+        const mapCategory = (raw: any): string => {
+            const s = String(raw || '').toLowerCase().replace(/[\s-]/g, '_');
+            if (s.includes('executive') && s.includes('bar')) return 'executive_bar';
+            if (s.includes('sports') && s.includes('bar')) return 'sports_bar';
+            if (s.includes('bar')) return 'bar';
+            if (s.includes('restaurant') || s.includes('kitchen') || s.includes('food')) return 'restaurant';
+            if (s.includes('pool_table') || s === 'pool' || s.includes('billiard')) return 'pool_table';
+            if (s.includes('swim')) return 'swimming_pool';
+            if (s.includes('spa') || s.includes('sauna') || s.includes('massage')) return 'spa_sauna';
+            if (s.includes('carwash') || s.includes('car_wash')) return 'carwash';
+            if (s.includes('conference') || s.includes('meeting') || s.includes('event')) return 'conferences';
+            if (s.includes('cater')) return 'outside_catering';
+            if (s.includes('room') || s.includes('accommodation') || s.includes('lodg') || s === 'booking') return 'rooms';
+            if (s.includes('non_consumable') || s.includes('shop') || s.includes('retail')) return 'non_consumables';
+            return 'other';
+        };
+
+        const revenue: Record<string, number> = {
+            restaurant: 0, bar: 0, executive_bar: 0, sports_bar: 0, pool_table: 0,
+            spa_sauna: 0, carwash: 0, conferences: 0, outside_catering: 0, rooms: 0,
+            non_consumables: 0, swimming_pool: 0, other: 0,
+        };
+        const payments: Record<string, number> = { cash: 0, mpesa: 0, swipe: 0, credit_bills: 0 };
+
+        // ── Cashier-recorded sales (shift_transactions) → revenue by category +
+        //    payments by method ────────────────────────────────────────────────
+        const { data: shiftTxns } = await supabase
+            .from('shift_transactions')
+            .select('service_category, total_amount, payment_method, is_voided')
+            .eq('branch_id', branchId)
+            .gte('created_at', startTs)
+            .lte('created_at', endTs);
+        for (const t of (shiftTxns || []) as Array<Record<string, any>>) {
+            if (t.is_voided === true) continue;
+            const amt = n(t.total_amount);
+            revenue[mapCategory(t.service_category)] += amt;
+            const pm = String(t.payment_method || '').toLowerCase();
+            if (pm.includes('mpesa') || pm.includes('m-pesa')) payments.mpesa += amt;
+            else if (pm.includes('card') || pm.includes('swipe') || pm.includes('visa')) payments.swipe += amt;
+            else if (pm.includes('credit')) payments.credit_bills += amt;
+            else payments.cash += amt;
+        }
+
+        // ── POS outlet orders (granular bar/pool/etc. + payments) ──────────────
+        const { data: posOutlets } = await supabase
+            .from('pos_outlets').select('id, outlet_type').eq('branch_id', branchId);
+        const outletType = new Map<string, string>();
+        (posOutlets || []).forEach((o: any) => outletType.set(String(o.id), String(o.outlet_type || '')));
+        if ((posOutlets || []).length) {
+            const { data: posOrders } = await supabase
+                .from('pos_shift_orders')
+                .select('outlet_id, total_amount, payment_method, payment_status, created_at')
+                .in('outlet_id', (posOutlets || []).map((o: any) => o.id))
+                .gte('created_at', startTs)
+                .lte('created_at', endTs);
+            for (const o of (posOrders || []) as Array<Record<string, any>>) {
+                const amt = n(o.total_amount);
+                if (amt <= 0) continue;
+                revenue[mapCategory(outletType.get(String(o.outlet_id)))] += amt;
+                const pm = String(o.payment_method || '').toLowerCase();
+                if (pm.includes('mpesa')) payments.mpesa += amt;
+                else if (pm.includes('card') || pm.includes('swipe')) payments.swipe += amt;
+                else if (pm.includes('credit')) payments.credit_bills += amt;
+                else payments.cash += amt;
+            }
+        }
+
+        // ── Supplement empty categories from source tables (no double-count) ───
+        if (revenue.restaurant === 0) {
+            const { data: ro } = await supabase
+                .from('restaurant_orders').select('grand_total, total_amount')
+                .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs)
+                .not('status', 'eq', 'cancelled');
+            revenue.restaurant = (ro || []).reduce((s: number, r: any) => s + (n(r.grand_total) || n(r.total_amount)), 0);
+        }
+        if (revenue.bar === 0) {
+            const { data: bo } = await supabase
+                .from('bar_orders').select('total, subtotal')
+                .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs)
+                .not('status', 'eq', 'cancelled');
+            revenue.bar = (bo || []).reduce((s: number, r: any) => s + (n(r.total) || n(r.subtotal)), 0);
+        }
+        if (revenue.rooms === 0) {
+            const { data: bk } = await supabase
+                .from('bookings').select('total_amount, status, created_at')
+                .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs);
+            revenue.rooms = (bk || [])
+                .filter((b: any) => String(b.status || '').toLowerCase() !== 'cancelled')
+                .reduce((s: number, b: any) => s + n(b.total_amount), 0);
+        }
+
+        // ── Banking deposits for the day ───────────────────────────────────────
+        let banked = 0;
+        const { data: bankTxns } = await supabase
+            .from('banking_transactions').select('amount, transaction_type, transaction_date')
+            .eq('branch_id', branchId).gte('transaction_date', startTs).lte('transaction_date', endTs);
+        for (const b of (bankTxns || []) as Array<Record<string, any>>) {
+            const tt = String(b.transaction_type || '').toLowerCase();
+            if (tt.includes('withdraw')) continue;
+            banked += n(b.amount);
+        }
+
+        // ── Expenses for the day ───────────────────────────────────────────────
+        const { data: expenses } = await supabase
+            .from('expenses').select('amount, status, approval_status, expense_date')
+            .eq('branch_id', branchId).gte('expense_date', date).lte('expense_date', date);
+        let otherExpensesTotal = 0;
+        for (const e of (expenses || []) as Array<Record<string, any>>) {
+            const ok = String(e.status || e.approval_status || '').toLowerCase();
+            if (ok && !['approved', 'completed', 'paid'].includes(ok)) continue;
+            otherExpensesTotal += n(e.amount);
+        }
+        const { data: pettyCash } = await supabase
+            .from('petty_cash_transactions').select('amount, date')
+            .eq('branch_id', branchId).gte('date', date).lte('date', date);
+        const pettyCashTotal = (pettyCash || []).reduce((s: number, p: any) => s + n(p.amount), 0);
+
+        const round = (v: number) => Math.round(v * 100) / 100;
+        Object.keys(revenue).forEach((k) => (revenue[k] = round(revenue[k])));
+        Object.keys(payments).forEach((k) => (payments[k] = round(payments[k])));
+
+        const totalRevenue = Object.values(revenue).reduce((s, v) => s + v, 0);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                record_date: date,
+                generated_by: 'lina_ai',
+                revenue_data: revenue,
+                payment_data: payments,
+                banking_data: { banked: round(banked) },
+                cogs_data: {
+                    opening_balance: 0,
+                    central_store_receipts: 0,
+                    weekly_supplier_receipts: 0,
+                    closing_balance: 0,
+                },
+                expense_data: {
+                    petty_cash_total: round(pettyCashTotal),
+                    transaction_costs_total: 0,
+                    direct_suppliers_total: 0,
+                    wastage_total: 0,
+                    shorts_total: 0,
+                    other_expenses_total: round(otherExpensesTotal),
+                },
+                total_revenue: round(totalRevenue),
+                notes: `Auto-filled by Lina AI from system data for ${date}. Please review before submitting to the Director.`,
+            },
+        });
+    } catch (error) {
+        logger.error('getDailyAutofill failed:', error);
         next(error);
     }
 };
