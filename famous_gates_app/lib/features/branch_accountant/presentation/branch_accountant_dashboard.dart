@@ -2398,8 +2398,11 @@ class _SoldItemsSection extends ConsumerStatefulWidget {
 class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   late String _from = _date(DateTime.now().subtract(const Duration(days: 30)));
   late String _to = _today();
+  String _period = 'last_30_days';
   String _search = '';
   String _outletGroup = 'all';
+  String _movementMetric = 'quantity';
+  int _topLimit = 10;
   bool _downloading = false;
   late Future<Map<String, dynamic>> _future = _load();
   Future<Map<String, dynamic>> _load() => ref
@@ -2423,9 +2426,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
           final outletBreakdown = _list(summary['outlet_breakdown']);
           final dailyRevenue = _list(summary['daily_revenue']);
           final kds = _map(summary['kds_intelligence']);
-          final fastMoving = _list(payload['fast_moving_items']);
-          final slowMoving = _list(payload['slow_moving_items']);
-          final items = _list(payload['analysis']).where((item) {
+          final allItems = _list(payload['analysis']);
+          final items = allItems.where((item) {
             final q = _search.toLowerCase();
             final matchesSearch = q.isEmpty ||
                 _text(item, ['name', 'item_name']).toLowerCase().contains(q) ||
@@ -2434,14 +2436,111 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
             final matchesGroup = _outletGroup == 'all' || group == _outletGroup;
             return matchesSearch && matchesGroup;
           }).toList();
+          final filteredOutletBreakdown =
+              _outletBreakdownFromItems(items, outletBreakdown);
+          final filteredDailyRevenue = _dailyRevenueFromItems(items);
+          final chartDailyRevenue = filteredDailyRevenue.isNotEmpty ||
+                  _search.isNotEmpty ||
+                  _outletGroup != 'all'
+              ? filteredDailyRevenue
+              : dailyRevenue;
+          final categoryBreakdown = _categoryBreakdown(items);
+          final fastMoving = _rankedItems(items, metric: _movementMetric)
+              .take(_topLimit)
+              .toList();
+          final slowMoving = _slowMovingItems(items).take(_topLimit).toList();
+          final mostProfitable = [...items]..sort((a, b) =>
+              _num(b['gross_profit']).compareTo(_num(a['gross_profit'])));
+          final leastProfitable = [...items]..sort((a, b) =>
+              _num(a['gross_profit']).compareTo(_num(b['gross_profit'])));
+          final highestMargin = [...items]..sort((a, b) =>
+              _num(b['profit_margin']).compareTo(_num(a['profit_margin'])));
+          final lowestMargin = [...items]..sort((a, b) =>
+              _num(a['profit_margin']).compareTo(_num(b['profit_margin'])));
+          final filteredSummary = _soldItemsFilteredSummary(items);
+          final bestOutlet =
+              _bestOutlet(filteredOutletBreakdown, highest: true);
+          final lowestOutlet =
+              _bestOutlet(filteredOutletBreakdown, highest: false);
+          final outletLabels = _outletLabels(outletBreakdown);
+          final outletValues = outletLabels.keys.toList();
+          final selectedOutlet =
+              outletValues.contains(_outletGroup) ? _outletGroup : 'all';
           return _Page(
             title: 'Sold Items Analytics',
             subtitle:
                 'Restaurant, bar, rooms, and non-consumables revenue, COGS, gross profit, movement velocity, and KDS timing.',
             actions: [
-              _DateField(
-                  value: _from, onChanged: (v) => setState(() => _from = v)),
-              _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
+              _SoldItemsDropdown(
+                value: _period,
+                values: const [
+                  'today',
+                  'yesterday',
+                  'last_7_days',
+                  'this_week',
+                  'last_week',
+                  'this_month',
+                  'last_month',
+                  'this_quarter',
+                  'this_year',
+                  'last_30_days',
+                  'custom',
+                ],
+                labels: const {
+                  'today': 'Today',
+                  'yesterday': 'Yesterday',
+                  'last_7_days': 'Last 7 Days',
+                  'this_week': 'This Week',
+                  'last_week': 'Last Week',
+                  'this_month': 'This Month',
+                  'last_month': 'Last Month',
+                  'this_quarter': 'This Quarter',
+                  'this_year': 'This Year',
+                  'last_30_days': 'Last 30 Days',
+                  'custom': 'Custom Range',
+                },
+                onChanged: _applyPeriod,
+              ),
+              _SoldItemsDatePicker(
+                value: _from,
+                tooltip: 'Start date',
+                onChanged: (v) => setState(() {
+                  _period = 'custom';
+                  _from = v;
+                  _future = _load();
+                }),
+              ),
+              _SoldItemsDatePicker(
+                value: _to,
+                tooltip: 'End date',
+                onChanged: (v) => setState(() {
+                  _period = 'custom';
+                  _to = v;
+                  _future = _load();
+                }),
+              ),
+              _SoldItemsDropdown(
+                value: selectedOutlet,
+                values: outletValues,
+                labels: outletLabels,
+                onChanged: (v) => setState(() => _outletGroup = v),
+              ),
+              _SoldItemsDropdown(
+                value: _movementMetric,
+                values: const ['quantity', 'revenue', 'gross_profit'],
+                labels: const {
+                  'quantity': 'Rank by Qty',
+                  'revenue': 'Rank by Revenue',
+                  'gross_profit': 'Rank by Profit',
+                },
+                onChanged: (v) => setState(() => _movementMetric = v),
+              ),
+              _SoldItemsDropdown(
+                value: '$_topLimit',
+                values: const ['10', '20', '50'],
+                labels: const {'10': 'Top 10', '20': 'Top 20', '50': 'Top 50'},
+                onChanged: (v) => setState(() => _topLimit = int.parse(v)),
+              ),
               SizedBox(
                 width: 220,
                 child: TextField(
@@ -2456,37 +2555,68 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 icon: const Icon(Icons.download),
                 label: Text(_downloading ? 'Preparing PDF' : 'Export PDF'),
               ),
+              OutlinedButton.icon(
+                onPressed: items.isEmpty ? null : () => _downloadCsv(items),
+                icon: const Icon(Icons.table_view),
+                label: const Text('Export CSV'),
+              ),
             ],
             children: [
               _ResponsiveGrid(children: [
                 _MetricCard(
-                    'Total Revenue',
-                    _money(_num(summary['total_revenue'])),
+                    'Gross Revenue',
+                    _money(_num(filteredSummary['gross_revenue'])),
                     Icons.trending_up,
                     Colors.green),
                 _MetricCard(
+                    'Net Revenue',
+                    _money(_num(filteredSummary['net_revenue'])),
+                    Icons.payments,
+                    Colors.teal),
+                _MetricCard(
                     'Units Sold',
-                    '${summary['total_quantity_sold'] ?? 0}',
+                    '${filteredSummary['total_quantity_sold'] ?? 0}',
                     Icons.inventory,
                     Colors.blue),
                 _MetricCard(
-                    'Cost of Goods',
-                    _money(_num(summary['total_cogs'])),
+                    'Transactions',
+                    '${filteredSummary['total_transactions'] ?? 0}',
                     Icons.receipt_long,
-                    Colors.orange),
+                    Colors.indigo),
+                _MetricCard('COGS', _money(_num(filteredSummary['total_cogs'])),
+                    Icons.receipt_long, Colors.orange),
                 _MetricCard(
                     'Gross Profit',
-                    _money(_num(summary['gross_profit'])),
+                    _money(_num(filteredSummary['gross_profit'])),
                     Icons.account_balance_wallet,
                     Colors.teal),
                 _MetricCard(
                     'Profit Margin',
-                    '${_num(summary['profit_margin']).toStringAsFixed(1)}%',
+                    '${_num(filteredSummary['profit_margin']).toStringAsFixed(1)}%',
                     Icons.percent,
                     Colors.indigo),
                 _MetricCard(
+                    'Average Item Value',
+                    _money(_num(filteredSummary['average_order_value'])),
+                    Icons.analytics,
+                    Colors.blueGrey),
+                _MetricCard(
+                    'Best Outlet',
+                    _text(bestOutlet, ['label']).isEmpty
+                        ? 'N/A'
+                        : _text(bestOutlet, ['label']),
+                    Icons.emoji_events,
+                    Colors.green),
+                _MetricCard(
+                    'Lowest Outlet',
+                    _text(lowestOutlet, ['label']).isEmpty
+                        ? 'N/A'
+                        : _text(lowestOutlet, ['label']),
+                    Icons.trending_down,
+                    Colors.red),
+                _MetricCard(
                     'Fast / Slow',
-                    '${summary['fast_moving_count'] ?? 0} / ${summary['slow_moving_count'] ?? 0}',
+                    '${filteredSummary['fast_moving_count'] ?? 0} / ${filteredSummary['slow_moving_count'] ?? 0}',
                     Icons.speed,
                     Colors.purple),
               ]),
@@ -2495,10 +2625,10 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _outletFilters(outletBreakdown),
+                    _outletFilters(filteredOutletBreakdown),
                     const SizedBox(height: 16),
                     _ResponsiveGrid(
-                      children: outletBreakdown
+                      children: filteredOutletBreakdown
                           .map((row) => _OutletSummaryTile(row: row))
                           .toList(),
                     ),
@@ -2508,23 +2638,42 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
               _SectionCard(
                 title: 'Revenue, Profit & Mix Analysis',
                 child: _SoldItemsCharts(
-                  outletBreakdown: outletBreakdown,
-                  dailyRevenue: dailyRevenue,
+                  outletBreakdown: filteredOutletBreakdown,
+                  dailyRevenue: chartDailyRevenue,
+                ),
+              ),
+              _SectionCard(
+                title: 'Product Mix & Category Contribution',
+                child: _categoryMixTable(categoryBreakdown),
+              ),
+              _SectionCard(
+                title: 'Profitability Analysis',
+                child: _profitabilityTables(
+                  mostProfitable: mostProfitable.take(_topLimit).toList(),
+                  leastProfitable: leastProfitable.take(_topLimit).toList(),
+                  highestMargin: highestMargin.take(_topLimit).toList(),
+                  lowestMargin: lowestMargin.take(_topLimit).toList(),
                 ),
               ),
               _SectionCard(
                 title: 'Fast Moving Items',
-                child:
-                    _movementTable(fastMoving, empty: 'No fast movers found.'),
+                child: _movementTable(
+                  fastMoving,
+                  totalRevenue: _num(filteredSummary['net_revenue']),
+                  empty: 'No fast movers found.',
+                  includeRecommendation: false,
+                ),
               ),
               _SectionCard(
                 title: 'Slow Moving Items',
                 child: _movementTable(slowMoving,
-                    empty: 'No slow moving items found.'),
+                    totalRevenue: _num(filteredSummary['net_revenue']),
+                    empty: 'No slow moving items found.',
+                    includeRecommendation: true),
               ),
               _SectionCard(
                 title: 'KDS Order Intelligence',
-                child: _kdsTable(kds),
+                child: _kdsTable(_kdsFromItems(items, kds)),
               ),
               _SectionCard(
                 title: 'Detailed Sold Items Ledger',
@@ -2556,8 +2705,12 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
     );
   }
 
-  Widget _movementTable(List<Map<String, dynamic>> rows,
-      {required String empty}) {
+  Widget _movementTable(
+    List<Map<String, dynamic>> rows, {
+    required String empty,
+    required num totalRevenue,
+    required bool includeRecommendation,
+  }) {
     if (rows.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(18),
@@ -2566,25 +2719,509 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
       );
     }
     return _SimpleTable(
-      columns: const [
+      columns: [
+        'Rank',
         'Item',
         'Outlet',
+        'Category',
         'Qty',
         'Velocity/day',
         'Revenue',
-        'Profit'
+        'Profit',
+        'Contribution',
+        'Last Sold',
+        if (includeRecommendation) 'Recommendation',
+      ],
+      rows: rows.asMap().entries.map((entry) {
+        final item = entry.value;
+        final contribution =
+            totalRevenue > 0 ? (_num(item['revenue']) / totalRevenue) * 100 : 0;
+        return [
+          '#${entry.key + 1}',
+          _text(item, ['name', 'item_name']),
+          _text(item, ['outlet_label', 'category']),
+          _text(item, ['category']),
+          _num(item['quantity']).toStringAsFixed(0),
+          _num(item['velocity_per_day']).toStringAsFixed(2),
+          _money(_num(item['revenue'])),
+          _money(_num(item['gross_profit'])),
+          '${contribution.toStringAsFixed(1)}%',
+          _shortDate(_lastSoldDate(item)),
+          if (includeRecommendation) _slowRecommendation(item),
+        ];
+      }).toList(),
+    );
+  }
+
+  Widget _categoryMixTable(List<Map<String, dynamic>> rows) {
+    final totalRevenue =
+        rows.fold<num>(0, (sum, row) => sum + _num(row['revenue']));
+    final totalProfit =
+        rows.fold<num>(0, (sum, row) => sum + _num(row['gross_profit']));
+    final totalQuantity =
+        rows.fold<num>(0, (sum, row) => sum + _num(row['quantity']));
+    return _SimpleTable(
+      columns: const [
+        'Category',
+        'Items',
+        'Qty',
+        'Revenue',
+        'Revenue Mix',
+        'Profit',
+        'Profit Mix',
+        'Sales Mix',
+        'Margin'
       ],
       rows: rows
-          .map((item) => [
-                _text(item, ['name', 'item_name']),
-                _text(item, ['outlet_label', 'category']),
-                _num(item['quantity']).toStringAsFixed(0),
-                _num(item['velocity_per_day']).toStringAsFixed(2),
-                _money(_num(item['revenue'])),
-                _money(_num(item['gross_profit'])),
+          .map((row) => [
+                _text(row, ['category']),
+                '${row['item_count'] ?? 0}',
+                _num(row['quantity']).toStringAsFixed(0),
+                _money(_num(row['revenue'])),
+                totalRevenue > 0
+                    ? '${((_num(row['revenue']) / totalRevenue) * 100).toStringAsFixed(1)}%'
+                    : '0.0%',
+                _money(_num(row['gross_profit'])),
+                totalProfit > 0
+                    ? '${((_num(row['gross_profit']) / totalProfit) * 100).toStringAsFixed(1)}%'
+                    : '0.0%',
+                totalQuantity > 0
+                    ? '${((_num(row['quantity']) / totalQuantity) * 100).toStringAsFixed(1)}%'
+                    : '0.0%',
+                '${_num(row['profit_margin']).toStringAsFixed(1)}%',
               ])
           .toList(),
     );
+  }
+
+  Widget _profitabilityTables({
+    required List<Map<String, dynamic>> mostProfitable,
+    required List<Map<String, dynamic>> leastProfitable,
+    required List<Map<String, dynamic>> highestMargin,
+    required List<Map<String, dynamic>> lowestMargin,
+  }) {
+    final panels = [
+      _profitTable('Most Profitable Items', mostProfitable),
+      _profitTable('Least Profitable Items', leastProfitable),
+      _profitTable('Highest Margin Products', highestMargin),
+      _profitTable('Lowest Margin Products', lowestMargin),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth < 980) {
+        return Column(
+          children: panels
+              .expand((panel) => [panel, const SizedBox(height: 14)])
+              .toList(),
+        );
+      }
+      return Wrap(
+        spacing: 14,
+        runSpacing: 14,
+        children: panels
+            .map((panel) => SizedBox(
+                  width: (constraints.maxWidth - 14) / 2,
+                  child: panel,
+                ))
+            .toList(),
+      );
+    });
+  }
+
+  Widget _profitTable(String title, List<Map<String, dynamic>> rows) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.kDivider),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        _SimpleTable(
+          columns: const ['Item', 'Outlet', 'Revenue', 'Profit', 'Margin'],
+          rows: rows
+              .map((item) => [
+                    _text(item, ['name', 'item_name']),
+                    _text(item, ['outlet_label', 'category']),
+                    _money(_num(item['revenue'])),
+                    _money(_num(item['gross_profit'])),
+                    '${_num(item['profit_margin']).toStringAsFixed(1)}%',
+                  ])
+              .toList(),
+        ),
+      ]),
+    );
+  }
+
+  void _applyPeriod(String value) {
+    final now = DateTime.now();
+    DateTime start;
+    DateTime end = now;
+    switch (value) {
+      case 'today':
+        start = now;
+        break;
+      case 'yesterday':
+        start = now.subtract(const Duration(days: 1));
+        end = start;
+        break;
+      case 'last_7_days':
+        start = now.subtract(const Duration(days: 6));
+        break;
+      case 'this_week':
+        start = now.subtract(Duration(days: now.weekday - DateTime.monday));
+        break;
+      case 'last_week':
+        final thisWeek =
+            now.subtract(Duration(days: now.weekday - DateTime.monday));
+        start = thisWeek.subtract(const Duration(days: 7));
+        end = thisWeek.subtract(const Duration(days: 1));
+        break;
+      case 'this_month':
+        start = DateTime(now.year, now.month, 1);
+        break;
+      case 'last_month':
+        final thisMonth = DateTime(now.year, now.month, 1);
+        start = DateTime(thisMonth.year, thisMonth.month - 1, 1);
+        end = thisMonth.subtract(const Duration(days: 1));
+        break;
+      case 'this_quarter':
+        final quarterMonth = ((now.month - 1) ~/ 3) * 3 + 1;
+        start = DateTime(now.year, quarterMonth, 1);
+        break;
+      case 'this_year':
+        start = DateTime(now.year, 1, 1);
+        break;
+      case 'custom':
+        setState(() => _period = value);
+        return;
+      case 'last_30_days':
+      default:
+        start = now.subtract(const Duration(days: 30));
+        break;
+    }
+    setState(() {
+      _period = value;
+      _from = _date(start);
+      _to = _date(end);
+      _future = _load();
+    });
+  }
+
+  Map<String, String> _outletLabels(List<Map<String, dynamic>> rows) {
+    return {
+      'all': 'All Outlets',
+      for (final row in rows)
+        if (_text(row, ['key']).isNotEmpty)
+          _text(row, ['key']): _text(row, ['label']).isEmpty
+              ? _title(_text(row, ['key']))
+              : _text(row, ['label'])
+    };
+  }
+
+  List<Map<String, dynamic>> _outletBreakdownFromItems(
+    List<Map<String, dynamic>> items,
+    List<Map<String, dynamic>> sourceRows,
+  ) {
+    final keys = <String>{
+      for (final row in sourceRows)
+        if (_text(row, ['key']).isNotEmpty) _text(row, ['key']),
+      for (final item in items)
+        if (_text(item, ['outlet_group']).isNotEmpty)
+          _text(item, ['outlet_group']),
+    };
+    if (keys.isEmpty) {
+      keys.addAll(const ['restaurant', 'bar', 'rooms', 'non_consumables']);
+    }
+    final useOriginal =
+        items.isEmpty && _search.trim().isEmpty && _outletGroup == 'all';
+    return keys.map((key) {
+      final rows =
+          items.where((item) => _text(item, ['outlet_group']) == key).toList();
+      final original = sourceRows.firstWhere(
+        (row) => _text(row, ['key']) == key,
+        orElse: () => <String, dynamic>{},
+      );
+      final revenue = _sum(rows, 'revenue');
+      final cogs = _sum(rows, 'cost_of_goods_sold');
+      final quantity = _sum(rows, 'quantity');
+      final sourceRevenue =
+          useOriginal && rows.isEmpty ? _num(original['revenue']) : revenue;
+      final sourceProfit = useOriginal && rows.isEmpty
+          ? _num(original['gross_profit'])
+          : revenue - cogs;
+      return {
+        'key': key,
+        'label': _text(original, ['label']).isNotEmpty
+            ? _text(original, ['label'])
+            : soldOutletLabel(key),
+        'item_count': useOriginal && rows.isEmpty
+            ? _num(original['item_count'])
+            : rows.length,
+        'quantity':
+            useOriginal && rows.isEmpty ? _num(original['quantity']) : quantity,
+        'revenue': sourceRevenue,
+        'cost_of_goods_sold': useOriginal && rows.isEmpty
+            ? _num(original['cost_of_goods_sold'])
+            : cogs,
+        'gross_profit': sourceProfit,
+        'profit_margin':
+            sourceRevenue > 0 ? (sourceProfit / sourceRevenue) * 100 : 0,
+      };
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _dailyRevenueFromItems(
+      List<Map<String, dynamic>> items) {
+    final daily = <String, Map<String, dynamic>>{};
+    for (final item in items) {
+      for (final row in _list(item['daily'])) {
+        final date = _text(row, ['date']);
+        if (date.isEmpty) continue;
+        final target = daily.putIfAbsent(date, () {
+          return {
+            'date': date,
+            'revenue': 0,
+            'cost_of_goods_sold': 0,
+            'gross_profit': 0,
+            'quantity': 0,
+          };
+        });
+        target['revenue'] = _num(target['revenue']) + _num(row['revenue']);
+        target['cost_of_goods_sold'] = _num(target['cost_of_goods_sold']) +
+            _num(row['cost_of_goods_sold']);
+        target['gross_profit'] =
+            _num(target['revenue']) - _num(target['cost_of_goods_sold']);
+        target['quantity'] = _num(target['quantity']) + _num(row['quantity']);
+      }
+    }
+    final rows = daily.values.toList();
+    rows.sort((a, b) => _text(a, ['date']).compareTo(_text(b, ['date'])));
+    return rows;
+  }
+
+  List<Map<String, dynamic>> _categoryBreakdown(
+      List<Map<String, dynamic>> items) {
+    final categories = <String, Map<String, dynamic>>{};
+    for (final item in items) {
+      final key = _text(item, ['category']).isEmpty
+          ? 'Uncategorised'
+          : _text(item, ['category']);
+      final row = categories.putIfAbsent(key, () {
+        return {
+          'category': key,
+          'item_count': 0,
+          'quantity': 0,
+          'revenue': 0,
+          'cost_of_goods_sold': 0,
+          'gross_profit': 0,
+          'profit_margin': 0,
+        };
+      });
+      row['item_count'] = _num(row['item_count']) + 1;
+      row['quantity'] = _num(row['quantity']) + _num(item['quantity']);
+      row['revenue'] = _num(row['revenue']) + _num(item['revenue']);
+      row['cost_of_goods_sold'] =
+          _num(row['cost_of_goods_sold']) + _num(item['cost_of_goods_sold']);
+      row['gross_profit'] =
+          _num(row['revenue']) - _num(row['cost_of_goods_sold']);
+      row['profit_margin'] = _num(row['revenue']) > 0
+          ? (_num(row['gross_profit']) / _num(row['revenue'])) * 100
+          : 0;
+    }
+    final rows = categories.values.toList();
+    rows.sort((a, b) => _num(b['revenue']).compareTo(_num(a['revenue'])));
+    return rows;
+  }
+
+  List<Map<String, dynamic>> _rankedItems(
+    List<Map<String, dynamic>> items, {
+    required String metric,
+  }) {
+    final rows = [...items];
+    rows.sort((a, b) => _num(b[metric]).compareTo(_num(a[metric])));
+    return rows;
+  }
+
+  List<Map<String, dynamic>> _slowMovingItems(
+      List<Map<String, dynamic>> items) {
+    final rows = [...items];
+    rows.sort((a, b) {
+      final velocity =
+          _num(a['velocity_per_day']).compareTo(_num(b['velocity_per_day']));
+      if (velocity != 0) return velocity;
+      return _num(a['quantity']).compareTo(_num(b['quantity']));
+    });
+    return rows;
+  }
+
+  Map<String, dynamic> _soldItemsFilteredSummary(
+      List<Map<String, dynamic>> items) {
+    final quantity = _sum(items, 'quantity');
+    final revenue = _sum(items, 'revenue');
+    final grossRevenue = items.fold<num>(
+        0, (sum, item) => sum + _num(item['gross_revenue'] ?? item['revenue']));
+    final netRevenue = items.fold<num>(
+        0, (sum, item) => sum + _num(item['net_revenue'] ?? item['revenue']));
+    final cogs = _sum(items, 'cost_of_goods_sold');
+    final profit = netRevenue - cogs;
+    final transactions =
+        items.fold<num>(0, (sum, item) => sum + _transactionCount(item));
+    return {
+      'total_items_sold': items.length,
+      'total_quantity_sold': quantity.toStringAsFixed(0),
+      'total_transactions': transactions.toStringAsFixed(0),
+      'gross_revenue': grossRevenue,
+      'net_revenue': netRevenue,
+      'total_revenue': revenue,
+      'total_cogs': cogs,
+      'gross_profit': profit,
+      'profit_margin': netRevenue > 0 ? (profit / netRevenue) * 100 : 0,
+      'average_order_value': quantity > 0 ? netRevenue / quantity : 0,
+      'fast_moving_count': items
+          .where((item) => _text(item, ['movement_tier']) == 'fast')
+          .length,
+      'slow_moving_count': items
+          .where((item) => _text(item, ['movement_tier']) == 'slow')
+          .length,
+    };
+  }
+
+  Map<String, dynamic> _bestOutlet(
+    List<Map<String, dynamic>> rows, {
+    required bool highest,
+  }) {
+    final candidates =
+        rows.where((row) => _num(row['revenue']) > 0).toList(growable: false);
+    if (candidates.isEmpty) return {};
+    candidates.sort((a, b) => highest
+        ? _num(b['revenue']).compareTo(_num(a['revenue']))
+        : _num(a['revenue']).compareTo(_num(b['revenue'])));
+    return candidates.first;
+  }
+
+  String _lastSoldDate(Map<String, dynamic> item) {
+    final direct = _text(item, ['last_sold_at', 'last_sold_date']);
+    if (direct.isNotEmpty) return direct;
+    final dates = _list(item['daily'])
+        .map((row) => _text(row, ['date']))
+        .where((date) => date.isNotEmpty)
+        .toList();
+    if (dates.isEmpty) return '';
+    dates.sort();
+    return dates.last;
+  }
+
+  num _averageSellingPrice(Map<String, dynamic> item) {
+    final explicit = _num(item['average_selling_price']);
+    if (explicit > 0) return explicit;
+    final quantity = _num(item['quantity']);
+    return quantity > 0 ? _num(item['revenue']) / quantity : 0;
+  }
+
+  int _transactionCount(Map<String, dynamic> item) {
+    final explicit = _num(item['transaction_count']).toInt();
+    if (explicit > 0) return explicit;
+    final refs = item['references'];
+    if (refs is List && refs.isNotEmpty) return refs.length;
+    return _num(item['transaction_count']).toInt();
+  }
+
+  String _slowRecommendation(Map<String, dynamic> item) {
+    final velocity = _num(item['velocity_per_day']);
+    final quantity = _num(item['quantity']);
+    final stockRequested = _num(item['stock_requested']);
+    final revenue = _num(item['revenue']);
+    if (quantity <= 0 || revenue <= 0) return 'Remove Item';
+    if (velocity < .15 && stockRequested > quantity) return 'Restock Less';
+    if (_num(item['profit_margin']) < 15) return 'Discount';
+    return 'Promote';
+  }
+
+  Future<void> _downloadCsv(List<Map<String, dynamic>> items) async {
+    try {
+      final headers = [
+        'Date',
+        'Item Name',
+        'SKU',
+        'Category',
+        'Quantity',
+        'Revenue',
+        'COGS',
+        'Profit',
+        'Profit Margin',
+        'Transactions',
+        'Outlet',
+        'Branch',
+        'Average Selling Price',
+        'Movement',
+      ];
+      final buffer = StringBuffer()..writeln(headers.map(_csvCell).join(','));
+      for (final item in items) {
+        buffer.writeln([
+          _lastSoldDate(item),
+          _text(item, ['name', 'item_name']),
+          _text(item, ['sku', 'item_id']),
+          _text(item, ['category']),
+          _num(item['quantity']).toStringAsFixed(0),
+          _num(item['revenue']).toStringAsFixed(2),
+          _num(item['cost_of_goods_sold']).toStringAsFixed(2),
+          _num(item['gross_profit']).toStringAsFixed(2),
+          _num(item['profit_margin']).toStringAsFixed(2),
+          '${_transactionCount(item)}',
+          _text(item, ['outlet_label']),
+          _text(item, ['branch_name']),
+          _averageSellingPrice(item).toStringAsFixed(2),
+          _text(item, ['movement_tier']).toUpperCase(),
+        ].map(_csvCell).join(','));
+      }
+      final directory = await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/FG_Sold_Items_${_from}_to_$_to.csv');
+      await file.writeAsString(buffer.toString(), flush: true);
+      if (mounted) _notify(context, 'Sold items CSV prepared: ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to export sold items CSV: $e');
+    }
+  }
+
+  String _csvCell(Object? value) {
+    var text = '${value ?? ''}'.replaceAll('\r', ' ').replaceAll('\n', ' ');
+    if (text.startsWith('=') ||
+        text.startsWith('+') ||
+        text.startsWith('-') ||
+        text.startsWith('@')) {
+      text = "'$text";
+    }
+    return '"${text.replaceAll('"', '""')}"';
+  }
+
+  Map<String, dynamic> _kdsFromItems(
+    List<Map<String, dynamic>> items,
+    Map<String, dynamic> fallback,
+  ) {
+    final kdsItems =
+        items.where((item) => _num(item['average_kds_minutes']) > 0).toList();
+    if (kdsItems.isEmpty) {
+      if (_search.trim().isEmpty && _outletGroup == 'all') return fallback;
+      return {
+        'average_prep_minutes': null,
+        'slowest_items': <Map<String, dynamic>>[],
+        'fastest_items': <Map<String, dynamic>>[],
+      };
+    }
+    final average = kdsItems.fold<num>(
+            0, (sum, item) => sum + _num(item['average_kds_minutes'])) /
+        kdsItems.length;
+    final slowest = [...kdsItems]..sort((a, b) => _num(b['average_kds_minutes'])
+        .compareTo(_num(a['average_kds_minutes'])));
+    final fastest = [...kdsItems]..sort((a, b) => _num(a['average_kds_minutes'])
+        .compareTo(_num(b['average_kds_minutes'])));
+    return {
+      'average_prep_minutes': average,
+      'slowest_items': slowest.take(10).toList(),
+      'fastest_items': fastest.take(10).toList(),
+    };
   }
 
   Widget _kdsTable(Map<String, dynamic> kds) {
@@ -2644,10 +3281,15 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   Widget _soldItemsTable(List<Map<String, dynamic>> items) {
     return _SimpleTable(
       columns: const [
+        'Last Sold',
         'Product',
+        'SKU',
+        'Category',
         'Outlet',
         'Branch',
         'Qty',
+        'Transactions',
+        'Avg Price',
         'Revenue',
         'COGS',
         'Gross Profit',
@@ -2657,10 +3299,15 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
       ],
       rows: items
           .map((item) => [
+                _shortDate(_lastSoldDate(item)),
                 _text(item, ['name', 'item_name']),
+                _text(item, ['sku', 'item_id']),
+                _text(item, ['category']),
                 _text(item, ['outlet_label', 'category']),
                 _text(item, ['branch_name']),
                 _num(item['quantity']).toStringAsFixed(0),
+                '${_transactionCount(item)}',
+                _money(_averageSellingPrice(item)),
                 _money(_num(item['revenue'])),
                 _money(_num(item['cost_of_goods_sold'])),
                 _money(_num(item['gross_profit'])),
@@ -2690,6 +3337,90 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
+  }
+}
+
+class _SoldItemsDatePicker extends StatelessWidget {
+  const _SoldItemsDatePicker({
+    required this.value,
+    required this.tooltip,
+    required this.onChanged,
+  });
+
+  final String value;
+  final String tooltip;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          final initial = DateTime.tryParse(value) ?? DateTime.now();
+          final selected = await showDatePicker(
+            context: context,
+            initialDate: initial,
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now().add(const Duration(days: 366)),
+          );
+          if (selected != null) onChanged(_date(selected));
+        },
+        icon: const Icon(Icons.calendar_today, size: 18),
+        label: Text(value),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(150, 44),
+          alignment: Alignment.centerLeft,
+        ),
+      ),
+    );
+  }
+}
+
+class _SoldItemsDropdown extends StatelessWidget {
+  const _SoldItemsDropdown({
+    required this.value,
+    required this.values,
+    required this.onChanged,
+    this.labels = const {},
+  });
+
+  final String value;
+  final List<String> values;
+  final ValueChanged<String> onChanged;
+  final Map<String, String> labels;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 138, maxWidth: 210),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.kDivider),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: values.contains(value)
+              ? value
+              : (values.isNotEmpty ? values.first : null),
+          isExpanded: true,
+          items: values
+              .map((item) => DropdownMenuItem(
+                    value: item,
+                    child: Text(
+                      labels[item] ?? _title(item),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
+        ),
+      ),
+    );
   }
 }
 
@@ -2907,6 +3638,29 @@ Color _soldChartColor(String key) {
       return Colors.green;
     default:
       return AppColors.kPrimary;
+  }
+}
+
+String soldOutletLabel(String key) {
+  switch (key) {
+    case 'restaurant':
+      return 'Restaurant';
+    case 'bar':
+      return 'Bar';
+    case 'rooms':
+      return 'Rooms';
+    case 'room_service':
+      return 'Room Service';
+    case 'coffee_shop':
+      return 'Coffee Shop';
+    case 'bakery':
+      return 'Bakery';
+    case 'fast_food':
+      return 'Fast Food';
+    case 'non_consumables':
+      return 'Non-consumables';
+    default:
+      return _title(key);
   }
 }
 

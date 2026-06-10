@@ -2452,10 +2452,12 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     }, {});
 
     const soldItemsMap: Record<string, any> = {};
+    const soldTransactionIds = new Set<string>();
 
     const addSoldItem = (payload: {
       branchId: string;
       itemId?: string;
+      sku?: string;
       name: string;
       quantity: number;
       revenue: number;
@@ -2464,6 +2466,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       source: string;
       outletGroup?: string;
       soldAt?: string;
+      orderId?: string;
+      receiptNumber?: string;
       kdsMinutes?: number | null;
     }) => {
       const key = `${payload.branchId}_${payload.source}_${payload.itemId || payload.name}`;
@@ -2472,6 +2476,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           branch_id: payload.branchId,
           branch_name: branchNameMap[payload.branchId] || `Branch ${payload.branchId}`,
           item_id: payload.itemId || null,
+          sku: payload.sku || payload.itemId || null,
           name: payload.name,
           quantity: 0,
           revenue: 0,
@@ -2480,6 +2485,9 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           source: payload.source,
           outlet_group: payload.outletGroup || outletGroupFor(payload.source, payload.category),
           daily: {},
+          transaction_ids: new Set<string>(),
+          references: new Set<string>(),
+          last_sold_at: null,
           kds_count: 0,
           kds_total_minutes: 0
         };
@@ -2494,6 +2502,17 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         soldItemsMap[key].daily[day].quantity += payload.quantity;
         soldItemsMap[key].daily[day].revenue += payload.revenue;
         soldItemsMap[key].daily[day].cost_of_goods_sold += Number(payload.cost || 0);
+        if (!soldItemsMap[key].last_sold_at || new Date(payload.soldAt).getTime() > new Date(soldItemsMap[key].last_sold_at).getTime()) {
+          soldItemsMap[key].last_sold_at = payload.soldAt;
+        }
+      }
+      if (payload.orderId) {
+        const orderKey = `${payload.source}:${payload.orderId}`;
+        soldItemsMap[key].transaction_ids.add(orderKey);
+        soldTransactionIds.add(orderKey);
+      }
+      if (payload.receiptNumber) {
+        soldItemsMap[key].references.add(String(payload.receiptNumber));
       }
       if (payload.kdsMinutes !== null && payload.kdsMinutes !== undefined && Number.isFinite(payload.kdsMinutes)) {
         soldItemsMap[key].kds_count += 1;
@@ -2525,6 +2544,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           source: 'restaurant',
           outletGroup: outletGroupFor('restaurant', order.department, order.order_type),
           soldAt: order.created_at,
+          orderId: String(order.id),
           kdsMinutes
         });
       });
@@ -2549,7 +2569,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           category: barItem?.category || 'Bar',
           source: 'bar',
           outletGroup: order.room_number ? 'rooms' : 'bar',
-          soldAt: order.created_at
+          soldAt: order.created_at,
+          orderId: String(order.id)
         });
       });
     });
@@ -2575,6 +2596,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         addSoldItem({
           branchId: branchKey,
           itemId,
+          sku: item.sku || stockRow.sku || itemId,
           name: item.name || item.item_name || stockRow.item_name || 'POS Item',
           quantity,
           revenue,
@@ -2583,6 +2605,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           source: String(outlet.outlet_type || 'pos_outlet'),
           outletGroup,
           soldAt: order.created_at,
+          orderId: String(order.id),
+          receiptNumber: order.order_number ? String(order.order_number) : undefined,
           kdsMinutes
         });
       });
@@ -2681,15 +2705,22 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         branch_id: sold.branch_id,
         branch_name: sold.branch_name,
         item_id: sold.item_id,
+        sku: sold.sku,
         name: sold.name,
         category: sold.category,
         outlet_group: sold.outlet_group,
         outlet_label: soldOutletLabel(sold.outlet_group),
         quantity: sold.quantity,
+        gross_revenue: sold.revenue,
+        net_revenue: sold.revenue,
         revenue: sold.revenue,
         cost_of_goods_sold: sold.cost_of_goods_sold,
         gross_profit: sold.revenue - sold.cost_of_goods_sold,
         profit_margin: sold.revenue > 0 ? ((sold.revenue - sold.cost_of_goods_sold) / sold.revenue) * 100 : 0,
+        average_selling_price: sold.quantity > 0 ? sold.revenue / sold.quantity : 0,
+        transaction_count: sold.transaction_ids?.size || 0,
+        references: Array.from(sold.references || []),
+        last_sold_at: sold.last_sold_at,
         stock_requested: stockRequested,
         consumption_ratio: stockRequested > 0 ? sold.quantity / stockRequested : 0,
         average_kds_minutes: sold.kds_count > 0 ? sold.kds_total_minutes / sold.kds_count : null,
@@ -2745,7 +2776,10 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const summary = {
       total_items_sold: enrichedAnalysis.length,
       total_quantity_sold: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0),
+      total_transactions: soldTransactionIds.size,
       total_revenue: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.revenue || 0), 0),
+      gross_revenue: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.gross_revenue || item.revenue || 0), 0),
+      net_revenue: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.net_revenue || item.revenue || 0), 0),
       total_cogs: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.cost_of_goods_sold || 0), 0),
       gross_profit: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.gross_profit || 0), 0),
       profit_margin: 0,
