@@ -21,6 +21,8 @@ Future<void> printCustomerDocument(
   String? staffLabel,
   String? publicCode,
   String? barcodeValue,
+  num? amountTendered,
+  num? changeGiven,
 }) async {
   final doc = await resolveDocumentCached(
     ref,
@@ -41,6 +43,8 @@ Future<void> printCustomerDocument(
       staffLabel: staffLabel,
       publicCode: publicCode,
       barcodeValue: barcodeValue,
+      amountTendered: amountTendered,
+      changeGiven: changeGiven,
     );
     await TemplatePrintRenderer().printThermal(sections, data);
     return;
@@ -57,6 +61,8 @@ Future<void> printCustomerDocument(
     staffLabel: staffLabel,
     publicCode: publicCode,
     barcodeValue: barcodeValue,
+    amountTendered: amountTendered,
+    changeGiven: changeGiven,
     tillNumber: doc?.tillNumber,
   );
 }
@@ -107,8 +113,10 @@ Future<void> printCreditBillDocument(
         'payment_method': 'CREDIT BILL',
       },
       extraKvRows: [
-        MapEntry('Bill Ref:', _clean(sourceReference) ?? _clean(creditNumber) ?? ''),
-        if (_clean(cashierName) != null) MapEntry('Issued by:', cashierName!.trim()),
+        MapEntry(
+            'Bill Ref:', _clean(sourceReference) ?? _clean(creditNumber) ?? ''),
+        if (_clean(cashierName) != null)
+          MapEntry('Issued by:', cashierName!.trim()),
       ],
       staff: {
         'name': staffName,
@@ -185,9 +193,11 @@ Future<void> printVoidOrderDocument(
       },
       extraKvRows: [
         MapEntry('Voided:', _dateString(voidedAt ?? DateTime.now())),
-        if (_clean(stationName) != null) MapEntry('Station:', stationName!.trim()),
+        if (_clean(stationName) != null)
+          MapEntry('Station:', stationName!.trim()),
         if (_clean(waiterName) != null) MapEntry('Waiter:', waiterName!.trim()),
-        if (_clean(printedBy) != null) MapEntry('Printed by:', printedBy!.trim()),
+        if (_clean(printedBy) != null)
+          MapEntry('Printed by:', printedBy!.trim()),
       ],
     );
     await TemplatePrintRenderer().printThermal(sections, data);
@@ -220,6 +230,8 @@ TemplatePrintData _templateData({
   String? staffLabel,
   String? publicCode,
   String? barcodeValue,
+  num? amountTendered,
+  num? changeGiven,
   Map<String, String> extraValues = const {},
   List<MapEntry<String, String>> extraKvRows = const [],
   Map<String, String> staff = const {},
@@ -239,6 +251,9 @@ TemplatePrintData _templateData({
   final resolvedRoom = _clean(roomNumber);
   final resolvedStaffLabel = _clean(staffLabel) ?? 'Cashier';
   final resolvedStaffName = _clean(sale.cashierName);
+  final tendered = amountTendered ?? 0;
+  final change = changeGiven ?? 0;
+  final drawerCash = tendered > 0 ? tendered - change : 0;
 
   return TemplatePrintData(
     values: {
@@ -261,6 +276,9 @@ TemplatePrintData _templateData({
       'tax': 'KES ${money.format(tax)}',
       'total': 'KES ${money.format(total)}',
       'paid': 'KES ${money.format(paid)}',
+      'amount_tendered': tendered > 0 ? 'KES ${money.format(tendered)}' : '',
+      'change_given': change > 0 ? 'KES ${money.format(change)}' : '',
+      'drawer_cash': drawerCash > 0 ? 'KES ${money.format(drawerCash)}' : '',
       ...extraValues,
     },
     items: items
@@ -281,6 +299,11 @@ TemplatePrintData _templateData({
       if (resolvedCustomer != null) MapEntry('Customer:', resolvedCustomer),
       if (resolvedStaffName != null)
         MapEntry('$resolvedStaffLabel:', resolvedStaffName),
+      if (tendered > 0)
+        MapEntry('Cash tendered:', 'KES ${money.format(tendered)}'),
+      if (change > 0) MapEntry('Change given:', 'KES ${money.format(change)}'),
+      if (drawerCash > 0)
+        MapEntry('Drawer cash in:', 'KES ${money.format(drawerCash)}'),
       ...extraKvRows.where((row) => row.value.trim().isNotEmpty),
     ],
     staff: staff,

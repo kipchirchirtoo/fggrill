@@ -321,6 +321,18 @@ class _StationTabState extends ConsumerState<_StationTab> {
                       color: AppColors.kPrimary,
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: StatCard(
+                      label: 'Expected Drawer Cash',
+                      value: _money(_num(shift['opening_float']) +
+                          _num(shift['total_cash_sales'] ??
+                              shift['total_cash'] ??
+                              shift['total_cash_in'])),
+                      icon: Icons.account_balance_wallet,
+                      color: AppColors.kAccent,
+                    ),
+                  ),
                 ],
               );
             },
@@ -694,6 +706,16 @@ class _StationTabState extends ConsumerState<_StationTab> {
         };
       }
       final isCash = _method == 'cash';
+      if (isCash) {
+        if (_tendered <= 0) {
+          setState(() => _loading = false);
+          return _snack('Enter cash given before processing cash payment');
+        }
+        if (_tendered < amount) {
+          setState(() => _loading = false);
+          return _snack('Cash given is short by ${_money(amount - _tendered)}');
+        }
+      }
       final paymentResponse =
           await ref.read(cashierRepositoryProvider).processPayment(
                 bookingId: _lookupController.text.trim(),
@@ -734,6 +756,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
               ? _referenceController.text.trim()
               : _text(_payload(createdCredit), ['credit_number', 'id']),
           changeGiven: changeGiven,
+          amountTendered: isCash ? _tendered : 0,
         );
         _snack(changeGiven > 0
             ? 'Payment recorded · Give change ${_money(changeGiven)}'
@@ -768,6 +791,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
     final payments = _paymentLinesFromPayload(body);
     if (payments.isEmpty) return _snack('Add at least one payment line');
     final changeGiven = _num(body['change_given']);
+    final amountTendered = _num(body['amount_tendered']);
+    final auditedPayments =
+        _withCashAudit(payments, amountTendered, changeGiven);
 
     final totalPaid = payments.fold<num>(
       0,
@@ -780,7 +806,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final responses = <Map<String, dynamic>>[];
       final receiptRefs = <String>[];
 
-      for (final payment in payments) {
+      for (final payment in auditedPayments) {
         final amount = _num(payment['payment_amount']);
         final method = _backendPaymentMethod(
             _text(payment, ['payment_method']).isEmpty
@@ -822,6 +848,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   method: method,
                   reference: reference,
                   creditBill: paymentCreditBill,
+                  tendered: _num(payment['amount_tendered']) > 0
+                      ? _num(payment['amount_tendered'])
+                      : null,
+                  change: _num(payment['change_given']) > 0
+                      ? _num(payment['change_given'])
+                      : null,
                 );
         responses.add(response);
         receiptRefs.add(
@@ -839,6 +871,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         response: responses.isEmpty ? const {} : responses.last,
         fallbackReference: receiptRefs.join(' | '),
         changeGiven: changeGiven,
+        amountTendered: amountTendered,
       );
       _snack(
         changeGiven > 0
@@ -883,6 +916,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
     required Map<String, dynamic> response,
     required String fallbackReference,
     num changeGiven = 0,
+    num amountTendered = 0,
   }) async {
     try {
       final payload = _payload(response);
@@ -915,6 +949,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
         branchName: nav.branchName,
         customerName: _customerName(bill),
         publicCode: _lookupController.text.trim(),
+        amountTendered: amountTendered,
+        changeGiven: changeGiven,
       );
     } catch (error) {
       _snack('Payment recorded, but receipt failed: ${apiErrorMessage(error)}');
@@ -1421,6 +1457,9 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
     if (body == null) return;
     final payments = _paymentLinesFromPayload(body);
     final changeGiven = _num(body['change_given']);
+    final amountTendered = _num(body['amount_tendered']);
+    final auditedPayments =
+        _withCashAudit(payments, amountTendered, changeGiven);
     final repo = ref.read(cashierRepositoryProvider);
     try {
       final source = _text(row, ['source']);
@@ -1428,7 +1467,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
           (source == 'restaurant' || source == 'bar' || source == 'pos');
       final responses = <Map<String, dynamic>>[];
       final receiptRefs = <String>[];
-      for (final payment in payments) {
+      for (final payment in auditedPayments) {
         if (_text(payment, ['payment_method']) == 'credit_bill') {
           // Settle as a staff credit bill. This must CLEAR the source order and
           // record to the active shift — the credit is owed by the SELECTED
@@ -1524,6 +1563,8 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
                 : 'split',
             response: responses.isEmpty ? const {} : responses.last,
             fallbackReference: receiptRefs.join(' | '),
+            amountTendered: amountTendered,
+            changeGiven: changeGiven,
           );
         } catch (error) {
           _snack(
@@ -4405,6 +4446,25 @@ List<Map<String, dynamic>> _paymentLinesFromPayload(
       .toList();
 }
 
+List<Map<String, dynamic>> _withCashAudit(
+  List<Map<String, dynamic>> payments,
+  num amountTendered,
+  num changeGiven,
+) {
+  if (amountTendered <= 0 && changeGiven <= 0) return payments;
+  var attached = false;
+  return payments.map((payment) {
+    final copy = Map<String, dynamic>.from(payment);
+    final method = _backendPaymentMethod(_text(copy, ['payment_method']));
+    if (!attached && method == 'cash') {
+      if (amountTendered > 0) copy['amount_tendered'] = amountTendered;
+      if (changeGiven > 0) copy['change_given'] = changeGiven;
+      attached = true;
+    }
+    return copy;
+  }).toList();
+}
+
 Future<Map<String, dynamic>?> _creditBillPayload(
   BuildContext context,
   num amount, {
@@ -4853,6 +4913,8 @@ Future<void> _printCashierBillReceipt({
   required String method,
   required Map<String, dynamic> response,
   required String fallbackReference,
+  num amountTendered = 0,
+  num changeGiven = 0,
 }) async {
   final payload = _payload(response);
   final data = _payload(payload['data']);
@@ -4889,6 +4951,8 @@ Future<void> _printCashierBillReceipt({
       'order_number',
       'invoice_number'
     ]),
+    amountTendered: amountTendered,
+    changeGiven: changeGiven,
   );
 }
 

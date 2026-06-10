@@ -1580,6 +1580,72 @@ async function recordActiveShiftSale(params: {
     }
 }
 
+async function loadCashierTransactionsForShift(shift: any): Promise<any[]> {
+    if (!shift?.id) return [];
+    const byId = await safeLogbookQuery(
+        'cashier_shift_transactions_by_shift_id',
+        supabase
+            .from('cashier_transactions')
+            .select('*')
+            .eq('shift_id', shift.id)
+            .order('created_at', { ascending: true })
+    );
+
+    let byWindow: any[] = [];
+    if (shift.cashier_id && shift.branch_id && (shift.start_time || shift.shift_start)) {
+        let query = supabase
+            .from('cashier_transactions')
+            .select('*')
+            .eq('branch_id', shift.branch_id)
+            .eq('cashier_id', shift.cashier_id)
+            .gte('created_at', shift.start_time || shift.shift_start)
+            .order('created_at', { ascending: true });
+        if (shift.end_time || shift.closed_at || shift.shift_end) {
+            query = query.lte('created_at', shift.end_time || shift.closed_at || shift.shift_end);
+        }
+        byWindow = await safeLogbookQuery('cashier_shift_transactions_by_window', query);
+    }
+
+    return dedupeLogbookLines(
+        [...byId, ...byWindow].map((line) => normalizeLogbookLine(line, 'cashier_transaction'))
+    );
+}
+
+function cashierShiftTotals(shift: any, transactions: any[]): Record<string, number> {
+    const totalFor = (method: string) => transactions
+        .filter((transaction) => normalizeLogbookPaymentMethod(transaction.payment_method) === method)
+        .reduce((sum, transaction) => sum + logbookNumber(transaction.amount), 0);
+    const cash = totalFor('cash');
+    const mpesa = totalFor('mpesa');
+    const card = totalFor('card');
+    const creditBill = totalFor('credit_bill');
+    const cashTendered = transactions
+        .filter((transaction) => normalizeLogbookPaymentMethod(transaction.payment_method) === 'cash')
+        .reduce((sum, transaction) => sum + logbookNumber(transaction.amount_tendered), 0);
+    const changeGiven = transactions
+        .filter((transaction) => normalizeLogbookPaymentMethod(transaction.payment_method) === 'cash')
+        .reduce((sum, transaction) => sum + logbookNumber(transaction.change_given), 0);
+    const totalRevenue = transactions.reduce((sum, transaction) => sum + logbookNumber(transaction.amount), 0);
+    const openingFloat = logbookNumber(shift?.opening_float);
+    return {
+        total_cash_sales: cash,
+        total_cash_in: cash,
+        total_mpesa_sales: mpesa,
+        total_mpesa_in: mpesa,
+        total_card_sales: card,
+        total_card_in: card,
+        total_credit_bill: creditBill,
+        total_cash_tendered: cashTendered,
+        total_change_given: changeGiven,
+        drawer_cash_in: cash,
+        expected_cash: openingFloat + cash,
+        current_float: openingFloat + cash,
+        total_sales: totalRevenue,
+        total_revenue: totalRevenue,
+        transaction_count: transactions.length
+    };
+}
+
 /**
  * Process Manual/Cash Payment
  */
@@ -3244,6 +3310,8 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
         const { id } = req.params;
         const { payment_amount, payment_method, payment_reference, credit_bill_id } = req.body;
         const paymentAmount = Number(payment_amount || 0);
+        const amountTendered = Number(req.body.amount_tendered) || 0;
+        const changeGiven = Number(req.body.change_given) || 0;
 
         if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
             throw new AppError('Payment amount must be greater than zero', 400);
@@ -3315,6 +3383,8 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
                 credit_bill_id: credit_bill_id || null,
                 payment_method,
                 amount: paymentAmount,
+                amount_tendered: amountTendered,
+                change_given: changeGiven,
                 payment_reference,
                 customer_name: bill.customer_name
             })
@@ -4560,11 +4630,25 @@ export const getCashierShifts = async (req: Request, res: Response, next: NextFu
         const { data, error } = await query;
 
         if (error) throw error;
+        const decorated = await Promise.all((data || []).map(async (shift: any) => {
+            const transactions = await loadCashierTransactionsForShift(shift);
+            const liveTotals = cashierShiftTotals(shift, transactions);
+            return {
+                ...shift,
+                ...liveTotals,
+                cash_audit: {
+                    amount_tendered: liveTotals.total_cash_tendered,
+                    change_given: liveTotals.total_change_given,
+                    drawer_cash_in: liveTotals.drawer_cash_in,
+                    expected_cash: liveTotals.expected_cash
+                }
+            };
+        }));
 
         res.json({
             success: true,
             message: 'Cashier shifts retrieved successfully',
-            data
+            data: decorated
         });
     } catch (error) {
         next(error);
@@ -4642,23 +4726,25 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
             throw new AppError('Shift not found', 404);
         }
 
-        // Get all transactions for this shift
-        const { data: transactions } = await supabase
-            .from('cashier_transactions')
-            .select('*')
-            .eq('shift_id', id);
+        // Get all transactions for this shift. Older cashier payments were not
+        // always linked by shift_id, so fall back to cashier/branch/time window.
+        const transactions = await loadCashierTransactionsForShift(shift);
 
         // Calculate totals
-        const total_cash = transactions?.filter(t => t.payment_method === 'cash')
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+        const total_cash = transactions?.filter(t => normalizeLogbookPaymentMethod(t.payment_method) === 'cash')
+            .reduce((sum, t) => sum + logbookNumber(t.amount), 0) || 0;
+        const total_cash_tendered = transactions?.filter(t => normalizeLogbookPaymentMethod(t.payment_method) === 'cash')
+            .reduce((sum, t) => sum + logbookNumber(t.amount_tendered), 0) || 0;
+        const total_change_given = transactions?.filter(t => normalizeLogbookPaymentMethod(t.payment_method) === 'cash')
+            .reduce((sum, t) => sum + logbookNumber(t.change_given), 0) || 0;
 
-        const total_mpesa = transactions?.filter(t => t.payment_method === 'mpesa')
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+        const total_mpesa = transactions?.filter(t => normalizeLogbookPaymentMethod(t.payment_method) === 'mpesa')
+            .reduce((sum, t) => sum + logbookNumber(t.amount), 0) || 0;
 
-        const total_card = transactions?.filter(t => t.payment_method === 'card')
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+        const total_card = transactions?.filter(t => normalizeLogbookPaymentMethod(t.payment_method) === 'card')
+            .reduce((sum, t) => sum + logbookNumber(t.amount), 0) || 0;
 
-        const total_revenue = transactions?.reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
+        const total_revenue = transactions?.reduce((sum, t) => sum + logbookNumber(t.amount), 0) || 0;
 
         const expected_cash = shift.opening_float + total_cash;
         const actualCashWasProvided = actual_cash !== undefined && actual_cash !== null && actual_cash !== '';
@@ -4733,6 +4819,10 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
                 closing_float: closingFloatValue,
                 sales_breakdown: {
                     total_cash,
+                    total_cash_tendered,
+                    total_change_given,
+                    drawer_cash_in: total_cash,
+                    expected_cash,
                     total_mpesa,
                     total_card,
                     total_revenue,
@@ -5293,6 +5383,8 @@ async function safeLogbookQuery(label: string, query: any): Promise<any[]> {
 
 function normalizeLogbookLine(line: any, fallbackSection = 'transaction'): any {
     const amount = logbookNumber(line?.amount ?? line?.total_amount ?? line?.total ?? line?.paid_amount);
+    const amountTendered = logbookNumber(line?.amount_tendered ?? line?.cash_tendered);
+    const changeGiven = logbookNumber(line?.change_given ?? line?.cash_change);
     const fallbackSourceTable = fallbackSection === 'cashier_shift_transaction'
         ? 'cashier_shift_transactions'
         : fallbackSection === 'cashier_transaction'
@@ -5325,6 +5417,9 @@ function normalizeLogbookLine(line: any, fallbackSection = 'transaction'): any {
         ),
         payment_method: normalizeLogbookPaymentMethod(line?.payment_method ?? line?.method ?? line?.type),
         amount,
+        amount_tendered: amountTendered,
+        change_given: changeGiven,
+        drawer_cash_in: amountTendered > 0 ? Math.max(0, amountTendered - changeGiven) : amount,
         status: logbookText(line?.status ?? line?.payment_status, 'recorded'),
         created_at: line?.transaction_time || line?.transaction_date || line?.paid_at || line?.created_at || null,
         source_table: line?.source_table || fallbackSourceTable,
@@ -5569,6 +5664,11 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const totalCreditBill = logbookNumber(payments.credit_bill);
     const totalBank = logbookNumber(payments.bank);
     const totalOther = logbookNumber(payments.other);
+    const cashAuditLines = allLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === 'cash');
+    const cashTenderedFromLines = cashAuditLines.reduce((sum, line) => sum + logbookNumber(line.amount_tendered), 0);
+    const changeGivenFromLines = cashAuditLines.reduce((sum, line) => sum + logbookNumber(line.change_given), 0);
+    const totalCashTendered = logbookNumber(breakdown.total_cash_tendered) || cashTenderedFromLines;
+    const totalChangeGiven = logbookNumber(breakdown.total_change_given) || changeGivenFromLines;
     const totalSales = logbookNumber(
         breakdown.total_sales ?? shift?.total_sales,
         totalCash + totalMpesa + totalCard + totalCreditBill + totalBank + totalOther
@@ -5654,6 +5754,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         cash_reconciliation: {
             opening_float: openingFloat,
             cash_sales: totalCash,
+            cash_tendered: totalCashTendered,
+            change_given: totalChangeGiven,
+            drawer_cash_in: totalCash,
             credit_payments_received: creditPaymentsReceived,
             cash_drops: cashDrops,
             payouts,
@@ -5791,6 +5894,9 @@ export const downloadCashierLogbookReport = async (req: Request, res: Response, 
         sectionHeader('Cash Reconciliation');
         pairRow('Opening Float', logbookMoney(cr.opening_float));
         pairRow('+ Cash Sales', logbookMoney(cr.cash_sales), { fill: LIGHT });
+        if (logbookNumber(cr.cash_tendered) > 0) pairRow('Cash Tendered', logbookMoney(cr.cash_tendered));
+        if (logbookNumber(cr.change_given) > 0) pairRow('- Change Given', logbookMoney(cr.change_given), { fill: LIGHT });
+        if (logbookNumber(cr.drawer_cash_in) > 0) pairRow('Net Drawer Cash In', logbookMoney(cr.drawer_cash_in), { bold: true });
         pairRow('+ Credit Payments Received', logbookMoney(cr.credit_payments_received));
         if (logbookNumber(cr.cash_drops) > 0) pairRow('- Cash Drops', logbookMoney(cr.cash_drops), { fill: LIGHT });
         if (logbookNumber(cr.payouts) > 0) pairRow('- Payouts', logbookMoney(cr.payouts));
@@ -5871,16 +5977,19 @@ export const downloadCashierLogbookReport = async (req: Request, res: Response, 
                 .text('No transaction lines were captured for this shift.', LEFT + 8, doc.y, { lineBreak: false });
             doc.fillColor('black');
         } else {
-            tableRow(['#', 'Time', 'Reference', 'Customer', 'Method', 'Amount'],
-                [0.05, 0.16, 0.19, 0.28, 0.14, 0.18],
-                { bold: true, fill: LIGHT, color: MUTED, aligns: ['left', 'left', 'left', 'left', 'left', 'right'] });
+            tableRow(['#', 'Time', 'Reference', 'Customer', 'Method', 'Tendered', 'Change', 'Amount'],
+                [0.04, 0.13, 0.16, 0.24, 0.11, 0.11, 0.1, 0.11],
+                { bold: true, fill: LIGHT, color: MUTED, size: 7.2, aligns: ['left', 'left', 'left', 'left', 'left', 'right', 'right', 'right'] });
             lines.forEach((line: any, index: number) => {
                 const time = String(line.created_at || '—').replace('T', ' ').slice(0, 19);
                 tableRow(
                     [`${index + 1}`, time, line.reference || '—', line.customer_name || '—',
-                        String(line.payment_method || '—').replace(/_/g, ' '), logbookMoney(line.amount)],
-                    [0.05, 0.16, 0.19, 0.28, 0.14, 0.18],
-                    { aligns: ['left', 'left', 'left', 'left', 'left', 'right'], fill: index % 2 ? LIGHT : undefined }
+                        String(line.payment_method || '—').replace(/_/g, ' '),
+                        logbookNumber(line.amount_tendered) > 0 ? logbookMoney(line.amount_tendered) : '—',
+                        logbookNumber(line.change_given) > 0 ? logbookMoney(line.change_given) : '—',
+                        logbookMoney(line.amount)],
+                    [0.04, 0.13, 0.16, 0.24, 0.11, 0.11, 0.1, 0.11],
+                    { aligns: ['left', 'left', 'left', 'left', 'left', 'right', 'right', 'right'], size: 7.2, fill: index % 2 ? LIGHT : undefined }
                 );
             });
         }
@@ -6878,6 +6987,8 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
             staff_credit_bill_id,
             skip_credit_bill_creation = false
         } = req.body;
+        const amountTendered = Number(req.body.amount_tendered) || 0;
+        const changeGiven = Number(req.body.change_given) || 0;
 
         const userRole = (req.user as any)?.role?.toLowerCase() || '';
         const isGlobal = isGlobalRole(userRole);
@@ -7049,6 +7160,8 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                 reference_id: (order as any).id,
                 payment_method,
                 amount: amountPaid,
+                amount_tendered: amountTendered,
+                change_given: changeGiven,
                 payment_reference,
                 credit_bill_id: credit_bill_id || null,
                 customer_name: (order as any)[customerField] || (order as any).order_number

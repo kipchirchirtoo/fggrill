@@ -22,6 +22,8 @@ class PrintService {
     String? staffLabel,
     String? publicCode,
     String? barcodeValue,
+    num? amountTendered,
+    num? changeGiven,
     String? tillNumber,
   }) async {
     final doc = pw.Document();
@@ -31,6 +33,9 @@ class PrintService {
     final totalAmount = sale.total;
     final baseAmount = totalAmount > 0 ? totalAmount / 1.16 : 0;
     final taxAmount = totalAmount - baseAmount;
+    final tenderedAmount = amountTendered ?? 0;
+    final changeAmount = changeGiven ?? 0;
+    final drawerCashIn = tenderedAmount > 0 ? tenderedAmount - changeAmount : 0;
     final isPendingPayment =
         ['pending', 'unpaid'].contains(sale.paymentMethod.trim().toLowerCase());
 
@@ -170,6 +175,14 @@ class PrintService {
               _infoRow('Payment:', sale.paymentMethod.toUpperCase()),
               _infoRow('Paid:',
                   'KES ${money.format(isPendingPayment ? 0 : totalAmount)}'),
+              if (tenderedAmount > 0)
+                _infoRow(
+                    'Cash tendered:', 'KES ${money.format(tenderedAmount)}'),
+              if (changeAmount > 0)
+                _infoRow('Change given:', 'KES ${money.format(changeAmount)}'),
+              if (drawerCashIn > 0)
+                _infoRow(
+                    'Drawer cash in:', 'KES ${money.format(drawerCashIn)}'),
               pw.SizedBox(height: 6),
               _dashedLine(context),
               pw.SizedBox(height: 6),
