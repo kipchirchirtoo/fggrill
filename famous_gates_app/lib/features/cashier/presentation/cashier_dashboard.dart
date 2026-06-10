@@ -47,7 +47,6 @@ class CashierDashboard extends ConsumerStatefulWidget {
 class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   static const _visibleTabs = [
     CashierTab.station,
-    CashierTab.bills,
     CashierTab.voided,
     CashierTab.credit,
     CashierTab.shifts,
@@ -72,11 +71,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           initialAmount: widget.initialAmount,
           initialMethod: widget.initialMethod,
         )),
-      ),
-      const DashboardTab(
-        label: 'Unpaid Bills',
-        icon: Icons.receipt_long,
-        content: _RequiresOpenShift(child: _UnpaidBillsTab()),
       ),
       const DashboardTab(
         label: 'Voided Orders',
@@ -207,6 +201,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
   final _referenceController = TextEditingController();
   final _mpesaPhoneController = TextEditingController();
   final _tenderedController = TextEditingController();
+  String _unpaidSearch = '';
+  String? _selectedUnpaidRef;
   String _method = 'cash';
 
   /// Cash handed over by the customer (for computing change).
@@ -273,8 +269,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
   @override
   Widget build(BuildContext context) {
     final currentShift = ref.watch(cashierCurrentShiftProvider);
-    final unpaidBills =
-        ref.watch(cashierUnpaidBillsProvider(const CashierBillFilters()));
+    final unpaidBills = ref.watch(
+        cashierUnpaidBillsProvider(CashierBillFilters(search: _unpaidSearch)));
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -306,7 +302,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: StatCard(
-                      label: 'Unpaid Bills (Shift)',
+                      label: 'Unpaid Bills',
                       value: unpaidCount == null ? '…' : '$unpaidCount',
                       icon: Icons.receipt_long,
                       color: AppColors.kWarning,
@@ -343,7 +339,16 @@ class _StationTabState extends ConsumerState<_StationTab> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(flex: 2, child: _lookupPanel()),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    _lookupPanel(),
+                    const SizedBox(height: 16),
+                    _unpaidQueuePanel(unpaidBills),
+                  ],
+                ),
+              ),
               const SizedBox(width: 16),
               Expanded(child: _paymentPanel()),
             ],
@@ -400,9 +405,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   onPressed: () {
                     setState(() {
                       _bill = null;
+                      _selectedUnpaidRef = null;
                       _lookupController.clear();
                       _amountController.clear();
                       _referenceController.clear();
+                      _tenderedController.clear();
                       _mpesaMatches = const [];
                     });
                   },
@@ -424,6 +431,169 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   _snack('Bill reference copied');
                 },
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _unpaidQueuePanel(AsyncValue<List<Map<String, dynamic>>> unpaidBills) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Unpaid Bills for Clearance',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Refresh unpaid bills',
+                  onPressed: () => ref.invalidate(cashierUnpaidBillsProvider),
+                  icon: const Icon(Icons.refresh, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              onChanged: (value) => setState(() => _unpaidSearch = value),
+              decoration: const InputDecoration(
+                labelText: 'Search unpaid bills',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            const SizedBox(height: 12),
+            unpaidBills.when(
+              data: (rows) {
+                if (rows.isEmpty) {
+                  return const EmptyState(message: 'No unpaid bills to clear');
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: rows.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final row = rows[index];
+                    final refText = _billLookupReference(row);
+                    final selected =
+                        refText.isNotEmpty && refText == _selectedUnpaidRef;
+                    final balance = _num(row['balance_amount'] ??
+                        row['balance'] ??
+                        row['total_amount']);
+                    final status = _text(row, ['status', 'payment_status']);
+                    final customer = _customerName(row);
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _loading ? null : () => _loadUnpaidBill(row),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppColors.kPrimary.withValues(alpha: 0.08)
+                              : AppColors.kSurface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selected
+                                ? AppColors.kPrimary
+                                : AppColors.kDivider,
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor:
+                                  AppColors.kWarning.withValues(alpha: 0.12),
+                              child: const Icon(Icons.receipt_long,
+                                  color: AppColors.kWarning, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _billTitle(row),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _money(balance),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    children: [
+                                      if (refText.isNotEmpty)
+                                        _MiniMeta(
+                                            icon: Icons.qr_code_2,
+                                            text: refText),
+                                      if (customer.isNotEmpty)
+                                        _MiniMeta(
+                                            icon: Icons.person_outline,
+                                            text: customer),
+                                      if (_text(row, [
+                                        'station_name',
+                                        'outlet_name'
+                                      ]).isNotEmpty)
+                                        _MiniMeta(
+                                          icon: Icons.storefront,
+                                          text: _text(row,
+                                              ['station_name', 'outlet_name']),
+                                        ),
+                                      if (status.isNotEmpty)
+                                        _MiniMeta(
+                                            icon: Icons.info_outline,
+                                            text: status),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    selected
+                                        ? 'Loaded in payment panel'
+                                        : 'Tap to auto-lookup and clear',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: selected
+                                          ? AppColors.kPrimary
+                                          : AppColors.kTextSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () => const LoadingSkeleton(type: SkeletonType.list),
+              error: (error, _) => ErrorState(message: apiErrorMessage(error)),
+            ),
           ],
         ),
       ),
@@ -632,9 +802,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
     );
   }
 
-  Future<void> _lookupBill({bool keepAmount = false}) async {
+  Future<Map<String, dynamic>?> _lookupBill({bool keepAmount = false}) async {
     final id = _lookupController.text.trim();
-    if (id.isEmpty) return _snack('Enter a bill reference');
+    if (id.isEmpty) {
+      _snack('Enter a bill reference');
+      return null;
+    }
     setState(() => _loading = true);
     try {
       final bill = await ref.read(cashierRepositoryProvider).getBillDetails(id);
@@ -647,10 +820,34 @@ class _StationTabState extends ConsumerState<_StationTab> {
           _amountController.text = _balanceFromBill(data).toStringAsFixed(0);
         }
       });
+      return data;
     } catch (error) {
       _snack('Bill lookup failed: ${apiErrorMessage(error)}');
+      return null;
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadUnpaidBill(Map<String, dynamic> row) async {
+    final reference = _billLookupReference(row);
+    if (reference.isEmpty) return _snack('This bill has no lookup reference');
+    setState(() {
+      _selectedUnpaidRef = reference;
+      _lookupController.text = reference;
+      _amountController.clear();
+      _referenceController.clear();
+      _tenderedController.clear();
+      _mpesaMatches = const [];
+    });
+    final loaded = await _lookupBill();
+    if (!mounted || loaded == null) return;
+    final balance = _balanceFromBill(loaded);
+    if (balance <= 0) {
+      _snack('This bill is already cleared');
+      ref.invalidate(cashierUnpaidBillsProvider);
+    } else {
+      _snack('Bill loaded for clearance');
     }
   }
 
@@ -3953,6 +4150,45 @@ class _MpesaMatches extends StatelessWidget {
   }
 }
 
+class _MiniMeta extends StatelessWidget {
+  const _MiniMeta({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.kSurface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppColors.kTextSecondary),
+          const SizedBox(width: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.kTextSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _KeyValueGrid extends StatelessWidget {
   const _KeyValueGrid({required this.values});
 
@@ -5029,6 +5265,44 @@ String _billTitle(Map<String, dynamic> bill) {
     if (value.isNotEmpty) return value;
   }
   return _text(bill, ['id', 'type']);
+}
+
+String _billLookupReference(Map<String, dynamic> bill) {
+  final direct = _text(bill, [
+    'short_code',
+    'scan_reference',
+    'order_number',
+    'bill_number',
+    'invoice_number',
+    'confirmation_number',
+    'transaction_ref',
+    'reference',
+    'id',
+  ]);
+  if (direct.isNotEmpty) return direct;
+  for (final nestedKey in [
+    'booking',
+    'order',
+    'invoice',
+    'transaction',
+    'bill'
+  ]) {
+    final nested = _asMap(bill[nestedKey]);
+    final value = _text(nested, [
+      'short_code',
+      'scan_reference',
+      'booking_number',
+      'order_number',
+      'bill_number',
+      'invoice_number',
+      'confirmation_number',
+      'transaction_ref',
+      'reference',
+      'id',
+    ]);
+    if (value.isNotEmpty) return value;
+  }
+  return '';
 }
 
 String _customerName(Map<String, dynamic> bill) {
