@@ -17,6 +17,11 @@ class LinaRepository {
     return Map<String, dynamic>.from(r.data['data'] ?? r.data);
   }
 
+  Future<Map<String, dynamic>> getModelRouter() async {
+    final r = await _get('/lina/model-router');
+    return Map<String, dynamic>.from(r.data['data'] ?? r.data);
+  }
+
   Future<Map<String, dynamic>> getExecutiveSummary() async {
     final r = await _get('/lina/executive-summary');
     return Map<String, dynamic>.from(r.data['data'] ?? r.data);
@@ -67,6 +72,29 @@ class LinaRepository {
 
   Future<List<Map<String, dynamic>>> getPendingRemediations() async {
     final r = await _get('/lina/remediations/pending');
+    final data = r.data['data'];
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  Future<List<Map<String, dynamic>>> getRemediationHistory() async {
+    final r = await _get('/lina/remediations/history');
+    final data = r.data['data'];
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> getRemediationDetail(String id) async {
+    final r = await _get('/lina/remediations/$id/history');
+    return Map<String, dynamic>.from(r.data['data'] ?? r.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getAgentLogs() async {
+    final r = await _get('/lina/agent-logs');
     final data = r.data['data'];
     if (data is List) {
       return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();

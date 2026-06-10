@@ -1,16 +1,21 @@
 /**
  * LINA — Central Intelligence System
- * Dual-AI Architecture:
- *   Groq  (LLaMA 3.1 70B)  → live streaming chat  — fastest tokens/sec
- *   Gemini (1.5 Pro)        → deep intelligence     — best reasoning + long context
+ * Governed multi-model architecture:
+ *   OpenAI Responses API → primary orchestration / tool-heavy reasoning
+ *   Gemini 2.5 Flash     → secondary verification / summarization / fallback
+ *   Groq                 → legacy low-latency fallback when configured
  */
 import { Request, Response } from 'express';
+import axios from 'axios';
 import Groq from 'groq-sdk';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { supabase } from '../config/database';
+import db from '../db';
 import { logger } from '../utils/logger';
 
 // ── AI Clients ────────────────────────────────────────────────────────────────
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1';
 const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY ||
   process.env.GOOGLE_GEMINI_API_KEY ||
@@ -510,8 +515,272 @@ function aiFailureReason(err: any): string {
   return message;
 }
 
+type LinaIntent =
+  | 'chat'
+  | 'executive_summary'
+  | 'anomaly_report'
+  | 'employee_intelligence'
+  | 'financial_intelligence'
+  | 'recommendations'
+  | 'verification'
+  | 'routine_summary';
+
 type LinaActionClass = 'READ_ONLY' | 'SAFE_AUTO' | 'APPROVAL_REQUIRED' | 'MANUAL_ONLY';
 type LinaSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+const LINA_HIGH_RISK_INTENTS = new Set<LinaIntent>([
+  'executive_summary',
+  'anomaly_report',
+  'financial_intelligence',
+  'recommendations',
+  'verification',
+]);
+
+function classifyLinaIntent(input: string): LinaIntent {
+  const text = input.toLowerCase();
+  if (/recommend|fix|remediat|action|proposal/.test(text)) return 'recommendations';
+  if (/anomal|audit|void|suspicious|risk|fraud|exception/.test(text)) return 'anomaly_report';
+  if (/finance|revenue|cash|payment|credit|expense|cost/.test(text)) return 'financial_intelligence';
+  if (/staff|hr|employee|attendance|payroll|leave|overtime/.test(text)) return 'employee_intelligence';
+  if (/executive|brief|summary|overview|health/.test(text)) return 'executive_summary';
+  return 'chat';
+}
+
+function modelRouterPolicy(intent: LinaIntent, actionClass: LinaActionClass = 'READ_ONLY') {
+  const highRisk = LINA_HIGH_RISK_INTENTS.has(intent) || actionClass === 'APPROVAL_REQUIRED' || actionClass === 'MANUAL_ONLY';
+  if (OPENAI_API_KEY.trim() && highRisk) {
+    return {
+      provider: 'openai',
+      model: OPENAI_MODEL,
+      reason: 'Primary orchestration model selected for high-context or policy-sensitive Lina reasoning.',
+    };
+  }
+  if (GEMINI_API_KEY.trim() && !highRisk) {
+    return {
+      provider: 'gemini',
+      model: GEMINI_MODEL,
+      reason: 'Secondary model selected for routine summarization or lower-risk analysis.',
+    };
+  }
+  if (OPENAI_API_KEY.trim()) {
+    return {
+      provider: 'openai',
+      model: OPENAI_MODEL,
+      reason: 'Primary model selected because Gemini is unavailable or the task needs reliable orchestration.',
+    };
+  }
+  if (GEMINI_API_KEY.trim()) {
+    return {
+      provider: 'gemini',
+      model: GEMINI_MODEL,
+      reason: 'Secondary model selected because OpenAI is unavailable.',
+    };
+  }
+  if (process.env.GROQ_API_KEY?.trim()) {
+    return {
+      provider: 'groq',
+      model: GROQ_MODEL,
+      reason: 'Legacy fallback selected because OpenAI/Gemini are unavailable.',
+    };
+  }
+  return {
+    provider: 'local',
+    model: 'lina-engine',
+    reason: 'Deterministic fallback selected because no AI provider key is configured.',
+  };
+}
+
+function extractOpenAIText(payload: any): string {
+  if (typeof payload?.output_text === 'string') return payload.output_text.trim();
+  const parts: string[] = [];
+  for (const item of payload?.output || []) {
+    for (const content of item?.content || []) {
+      if (typeof content?.text === 'string') parts.push(content.text);
+      if (typeof content?.value === 'string') parts.push(content.value);
+    }
+  }
+  return parts.join('\n').trim();
+}
+
+async function generateOpenAIAnalysis(prompt: string, ctx: Record<string, any>, maxTokens = 2200): Promise<string | null> {
+  if (!OPENAI_API_KEY.trim()) return null;
+  const response = await axios.post(
+    'https://api.openai.com/v1/responses',
+    {
+      model: OPENAI_MODEL,
+      instructions: LINA_CORE_IDENTITY + buildContextBlock(ctx),
+      input: prompt,
+      max_output_tokens: maxTokens,
+      temperature: 0.25,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 60000,
+    },
+  );
+  return extractOpenAIText(response.data) || null;
+}
+
+async function generateGeminiAnalysis(prompt: string): Promise<string | null> {
+  if (!GEMINI_API_KEY.trim()) return null;
+  const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
+  const result = await model.generateContent(prompt);
+  return result.response.text();
+}
+
+async function generateRoutedAnalysis(
+  req: Request | null,
+  intent: LinaIntent,
+  prompt: string,
+  ctx: Record<string, any>,
+  actionClass: LinaActionClass = 'READ_ONLY',
+  maxTokens = 2200,
+): Promise<{ text: string | null; provider: string; model: string; fallback_from?: string; reason: string }> {
+  const route = modelRouterPolicy(intent, actionClass);
+  const started = Date.now();
+  const attempts = route.provider === 'openai'
+    ? ['openai', 'gemini', 'groq']
+    : route.provider === 'gemini'
+      ? ['gemini', 'openai', 'groq']
+      : route.provider === 'groq'
+        ? ['groq', 'openai', 'gemini']
+        : ['local'];
+
+  let fallbackFrom: string | undefined;
+  let lastError: string | undefined;
+  for (const provider of attempts) {
+    try {
+      let text: string | null = null;
+      let modelName = 'lina-engine';
+      if (provider === 'openai') {
+        text = await generateOpenAIAnalysis(prompt, ctx, maxTokens);
+        modelName = OPENAI_MODEL;
+      } else if (provider === 'gemini') {
+        text = await generateGeminiAnalysis(prompt);
+        modelName = GEMINI_MODEL;
+      } else if (provider === 'groq') {
+        text = await generateGroqAnalysis(prompt, ctx, maxTokens);
+        modelName = GROQ_MODEL;
+      }
+      if (text) {
+        await writeLinaAgentLog(req, {
+          action: 'model_routed_analysis',
+          tool_name: 'model.router',
+          risk_classification: actionClass,
+          input: { intent, requested_provider: route.provider, selected_provider: provider, model: modelName },
+          output: { latency_ms: Date.now() - started, fallback_from: fallbackFrom || null },
+          status: 'succeeded',
+        });
+        return { text, provider, model: modelName, fallback_from: fallbackFrom, reason: provider === route.provider ? route.reason : `Fallback from ${fallbackFrom} after provider failure.` };
+      }
+      if (provider !== 'local') {
+        fallbackFrom = fallbackFrom || provider;
+      }
+    } catch (err: any) {
+      lastError = aiFailureReason(err);
+      logger.warn('Lina model route attempt failed', { provider, intent, error: lastError });
+      fallbackFrom = fallbackFrom || provider;
+    }
+  }
+
+  await writeLinaAgentLog(req, {
+    action: 'model_routed_analysis',
+    tool_name: 'model.router',
+    risk_classification: actionClass,
+    input: { intent, requested_provider: route.provider },
+    output: { latency_ms: Date.now() - started, error: lastError || 'No AI provider produced output' },
+    status: 'failed',
+  });
+  return { text: null, provider: 'local', model: 'lina-engine', fallback_from: fallbackFrom, reason: lastError || route.reason };
+}
+
+const LINA_READABLE_TABLES = new Set([
+  'branches',
+  'users',
+  'cashier_shifts',
+  'audit_exceptions',
+  'audit_trail',
+  'bookings',
+  'staff_attendance',
+  'staff_payroll',
+  'staff_leave',
+  'auth_logs',
+  'feature_flags',
+  'security_config',
+  'finance_invoices',
+  'store_purchase_orders',
+  'impersonation_sessions',
+  'pos_transactions',
+  'restaurant_orders',
+  'bar_orders',
+  'rooms',
+  'expenses',
+  'lina_remediation_proposals',
+  'lina_remediation_executions',
+  'lina_remediation_events',
+  'lina_agent_logs',
+  'lina_system_snapshots',
+]);
+
+const LINA_BRANCH_SCOPED_TABLES = new Set([
+  'cashier_shifts',
+  'audit_exceptions',
+  'bookings',
+  'finance_invoices',
+  'store_purchase_orders',
+  'pos_transactions',
+  'restaurant_orders',
+  'bar_orders',
+  'rooms',
+  'expenses',
+  'lina_remediation_proposals',
+  'lina_system_snapshots',
+]);
+
+const LINA_GLOBAL_READ_ROLES = new Set([
+  'super_admin',
+  'director',
+  'general_manager',
+  'auditor',
+  'finance_manager',
+  'hr_manager',
+]);
+
+const LINA_SENSITIVE_TABLES = new Set([
+  'users',
+  'auth_logs',
+  'security_config',
+  'impersonation_sessions',
+  'lina_agent_logs',
+]);
+
+function canReadSensitiveLinaTable(req: Request, table: string): boolean {
+  const role = `${req.user?.role || ''}`;
+  if (!LINA_SENSITIVE_TABLES.has(table)) return true;
+  if (LINA_GLOBAL_READ_ROLES.has(role)) return true;
+  return table === 'users' && ['branch_accountant', 'branch_manager'].includes(role);
+}
+
+function sanitizedSelect(value: any): string {
+  const select = `${value || '*'}`.trim() || '*';
+  if (!/^[a-zA-Z0-9_,.*\s()!:\-]+$/.test(select)) return '*';
+  return select.slice(0, 500);
+}
+
+function sanitizeReadOnlySql(value: any): string | null {
+  const sql = `${value || ''}`.trim().replace(/;+\s*$/g, '');
+  if (!sql || sql.length > 8000) return null;
+  const compact = sql.toLowerCase();
+  if (!/^(select|with|explain)\b/.test(compact)) return null;
+  if (/[;]/.test(sql) || /--|\/\*|\*\/|\$\$/.test(sql)) return null;
+  if (/\b(insert|update|delete|drop|alter|truncate|create|replace|grant|revoke|copy|call|do|execute|merge|vacuum|analyze|refresh\s+materialized|set\s+role|reset|listen|notify)\b/.test(compact)) {
+    return null;
+  }
+  return sql;
+}
 
 const LINA_SAFE_JOB_TYPES = new Set([
   'refresh_context_snapshot',
@@ -1122,7 +1391,7 @@ export const getSystemContext = async (req: Request, res: Response): Promise<voi
   }
 };
 
-// ── GROQ: Streaming chat ──────────────────────────────────────────────────────
+// ── Chat: OpenAI-first router, SSE-compatible response ────────────────────────
 export const chat = async (req: Request, res: Response): Promise<void> => {
   const { message, history = [] } = req.body as {
     message: string;
@@ -1136,52 +1405,33 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
 
   try {
     const ctx = await gatherSystemContext();
-    if (!process.env.GROQ_API_KEY?.trim()) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      const fallback = localExecutiveSummary(ctx, 'GROQ_API_KEY is not configured.').summary;
-      res.write(`data: ${JSON.stringify({ type: 'delta', text: fallback, model: 'local-fallback' })}\n\n`);
-      res.write(`data: ${JSON.stringify({ type: 'done', full_text: fallback })}\n\n`);
-      res.end();
-      return;
-    }
-    const systemPrompt = GROQ_CHAT_SYSTEM + buildContextBlock(ctx);
-
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const messages: Groq.Chat.ChatCompletionMessageParam[] = [
-      ...history.slice(-20).map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-      { role: 'user', content: message },
-    ];
+    const intent = classifyLinaIntent(message);
+    const historyBlock = history.slice(-12).map((h) => `${h.role.toUpperCase()}: ${h.content}`).join('\n');
+    const prompt = `${GROQ_CHAT_SYSTEM}${buildContextBlock(ctx)}
 
-    const stream = await groq.chat.completions.create({
-      model: GROQ_MODEL,
-      max_tokens: 2048,
-      temperature: 0.4,
-      stream: true,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages,
-      ],
-    });
+RECENT CONVERSATION:
+${historyBlock || '(none)'}
 
-    let fullText = '';
-    for await (const chunk of stream as AsyncIterable<Groq.Chat.ChatCompletionChunk>) {
-      const delta = chunk.choices[0]?.delta?.content || '';
-      if (delta) {
-        fullText += delta;
-        res.write(`data: ${JSON.stringify({ type: 'delta', text: delta, model: 'groq/llama-3.1-70b' })}\n\n`);
-      }
+USER REQUEST:
+${message}
+
+Respond using Lina Core OS output style. If the user asks for action, classify it as READ_ONLY, SAFE_AUTO, APPROVAL_REQUIRED, or MANUAL_ONLY and route execution through Fix Center rather than pretending to mutate data.`;
+
+    const routed = await generateRoutedAnalysis(req, intent, prompt, ctx, normalizeActionClass(null, message), 2200);
+    const fullText = routed.text || localExecutiveSummary(ctx, routed.reason).summary;
+    const chunks = fullText.match(/[\s\S]{1,900}/g) || [fullText];
+    for (const chunk of chunks) {
+      res.write(`data: ${JSON.stringify({ type: 'delta', text: chunk, model: `${routed.provider}/${routed.model}` })}\n\n`);
     }
-
     res.write(`data: ${JSON.stringify({ type: 'done', full_text: fullText })}\n\n`);
     res.end();
   } catch (err: any) {
-    logger.error('Lina Groq chat error', err);
+    logger.error('Lina chat error', err);
     if (!res.headersSent) {
       try {
         const ctx = await gatherSystemContext();
@@ -1234,42 +1484,28 @@ Structure your response as:
 
 Be specific with KES amounts, percentages, and counts. Reference actual branch names from the context.`;
 
-    if (!GEMINI_API_KEY.trim()) {
-      const groqSummary = await generateGroqAnalysis(prompt, ctx);
-      if (groqSummary) {
-        res.json({ success: true, data: { summary: groqSummary, model: `groq/${GROQ_MODEL}`, context: ctx, ai_available: true, generated_at: new Date().toISOString() } });
-        return;
-      }
-      res.json({ success: true, data: localExecutiveSummary(ctx, 'No AI provider key is configured.') });
+    const routed = await generateRoutedAnalysis(req, 'executive_summary', prompt, ctx, 'READ_ONLY', 2600);
+    if (routed.text) {
+      res.json({
+        success: true,
+        data: {
+          summary: routed.text,
+          model: `${routed.provider}/${routed.model}`,
+          model_route: routed,
+          context: ctx,
+          ai_available: routed.provider !== 'local',
+          generated_at: new Date().toISOString(),
+        },
+      });
       return;
     }
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-
-    const result = await model.generateContent(prompt);
-    const summary = result.response.text();
-
-    res.json({ success: true, data: { summary, model: GEMINI_MODEL, context: ctx, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: localExecutiveSummary(ctx, routed.reason) });
   } catch (err: any) {
-    logger.warn('Lina Gemini executive summary unavailable; serving local analysis', {
+    logger.warn('Lina routed executive summary unavailable; serving local analysis', {
       error: aiFailureReason(err),
-      model: GEMINI_MODEL
+      model: OPENAI_MODEL
     });
     if (ctx) {
-      try {
-        const groqSummary = await generateGroqAnalysis(
-          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same executive briefing from the live system context.`,
-          ctx,
-        );
-        if (groqSummary) {
-          res.json({ success: true, data: { summary: groqSummary, model: `groq/${GROQ_MODEL}`, context: ctx, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
-          return;
-        }
-      } catch (groqErr: any) {
-        logger.warn('Lina Groq executive summary fallback unavailable', {
-          error: aiFailureReason(groqErr),
-          model: GROQ_MODEL
-        });
-      }
       res.json({ success: true, data: localExecutiveSummary(ctx, aiFailureReason(err)) });
       return;
     }
@@ -1307,36 +1543,18 @@ For each finding:
 ### 🎯 Priority Action Queue
 [Top 5 things to fix right now, in order]`;
 
-    if (!GEMINI_API_KEY.trim()) {
-      const groq = await generateGroqAnalysis(prompt, ctx);
-      if (groq) {
-        res.json({ success: true, data: { report: groq, model: `groq/${GROQ_MODEL}`, ai_available: true, generated_at: new Date().toISOString() } });
-        return;
-      }
-      res.json({ success: true, data: localAnomalyReport(ctx, 'No AI provider key is configured.') });
+    const routed = await generateRoutedAnalysis(req, 'anomaly_report', prompt, ctx, 'READ_ONLY', 2600);
+    if (routed.text) {
+      res.json({ success: true, data: { report: routed.text, model: `${routed.provider}/${routed.model}`, model_route: routed, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
       return;
     }
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-    const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { report: result.response.text(), model: GEMINI_MODEL, ai_available: true, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: localAnomalyReport(ctx, routed.reason) });
   } catch (err: any) {
-    logger.warn('Lina Gemini anomaly report unavailable; trying Groq then local', {
+    logger.warn('Lina routed anomaly report unavailable; serving local analysis', {
       error: aiFailureReason(err),
-      model: GEMINI_MODEL
+      model: OPENAI_MODEL
     });
     if (ctx) {
-      try {
-        const groq = await generateGroqAnalysis(
-          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same anomaly audit from the live system context.`,
-          ctx,
-        );
-        if (groq) {
-          res.json({ success: true, data: { report: groq, model: `groq/${GROQ_MODEL}`, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
-          return;
-        }
-      } catch (groqErr: any) {
-        logger.warn('Lina Groq anomaly fallback unavailable', { error: aiFailureReason(groqErr) });
-      }
       res.json({ success: true, data: localAnomalyReport(ctx, aiFailureReason(err)) });
       return;
     }
@@ -1395,37 +1613,18 @@ TASK: Deep employee intelligence analysis.
 ### 📋 HR Action Items
 [Priority recommendations for HR/management]`;
 
-    if (!GEMINI_API_KEY.trim()) {
-      const groq = await generateGroqAnalysis(prompt, ctx);
-      if (groq) {
-        res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: employeeData, ai_available: true, generated_at: new Date().toISOString() } });
-        return;
-      }
-      res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, 'No AI provider key is configured.') });
+    const routed = await generateRoutedAnalysis(req, 'employee_intelligence', prompt, ctx, 'READ_ONLY', 2600);
+    if (routed.text) {
+      res.json({ success: true, data: { analysis: routed.text, model: `${routed.provider}/${routed.model}`, model_route: routed, raw_context: employeeData, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
       return;
     }
-
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-    const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: employeeData, ai_available: true, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, routed.reason) });
   } catch (err: any) {
-    logger.warn('Lina Gemini employee intelligence unavailable; trying Groq then local', {
+    logger.warn('Lina routed employee intelligence unavailable; serving local analysis', {
       error: aiFailureReason(err),
-      model: GEMINI_MODEL
+      model: OPENAI_MODEL
     });
     if (ctx && employeeData) {
-      try {
-        const groq = await generateGroqAnalysis(
-          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same employee intelligence report from the live system context and employee data:\n${JSON.stringify(employeeData)}`,
-          ctx,
-        );
-        if (groq) {
-          res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: employeeData, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
-          return;
-        }
-      } catch (groqErr: any) {
-        logger.warn('Lina Groq employee fallback unavailable', { error: aiFailureReason(groqErr) });
-      }
       res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, aiFailureReason(err)) });
       return;
     }
@@ -1488,37 +1687,18 @@ TASK: Comprehensive financial intelligence analysis.
 ### 🎯 Financial Action Items
 [Ranked by financial impact — CRITICAL first]`;
 
-    if (!GEMINI_API_KEY.trim()) {
-      const groq = await generateGroqAnalysis(prompt, ctx);
-      if (groq) {
-        res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: financialData, ai_available: true, generated_at: new Date().toISOString() } });
-        return;
-      }
-      res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, 'No AI provider key is configured.') });
+    const routed = await generateRoutedAnalysis(req, 'financial_intelligence', prompt, ctx, 'READ_ONLY', 2800);
+    if (routed.text) {
+      res.json({ success: true, data: { analysis: routed.text, model: `${routed.provider}/${routed.model}`, model_route: routed, raw_context: financialData, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
       return;
     }
-
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-    const result = await model.generateContent(prompt);
-    res.json({ success: true, data: { analysis: result.response.text(), model: GEMINI_MODEL, raw_context: financialData, ai_available: true, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, routed.reason) });
   } catch (err: any) {
-    logger.warn('Lina Gemini financial intelligence unavailable; trying Groq then local', {
+    logger.warn('Lina routed financial intelligence unavailable; serving local analysis', {
       error: aiFailureReason(err),
-      model: GEMINI_MODEL
+      model: OPENAI_MODEL
     });
     if (ctx && financialData) {
-      try {
-        const groq = await generateGroqAnalysis(
-          `Gemini was unavailable (${aiFailureReason(err)}). Generate the same financial intelligence report from the live system context and financial data:\n${JSON.stringify(financialData)}`,
-          ctx,
-        );
-        if (groq) {
-          res.json({ success: true, data: { analysis: groq, model: `groq/${GROQ_MODEL}`, raw_context: financialData, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
-          return;
-        }
-      } catch (groqErr: any) {
-        logger.warn('Lina Groq financial fallback unavailable', { error: aiFailureReason(groqErr) });
-      }
       res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, aiFailureReason(err)) });
       return;
     }
@@ -1571,46 +1751,23 @@ Format:
       }
     };
 
-    if (!GEMINI_API_KEY.trim()) {
-      const groqText = await generateGroqAnalysis(prompt, ctx, 1800);
-      const recs = groqText ? parseRecs(groqText) : null;
-      if (recs) {
-        res.json({ success: true, data: { recommendations: recs, model: `groq/${GROQ_MODEL}`, ai_available: true, generated_at: new Date().toISOString() } });
-        return;
-      }
-      res.json({ success: true, data: localRecommendations(ctx, 'No AI provider key is configured.') });
+    const routed = await generateRoutedAnalysis(req, 'recommendations', prompt, ctx, 'READ_ONLY', 2000);
+    const recommendations = routed.text ? parseRecs(routed.text) : null;
+    if (!recommendations) {
+      res.json({ success: true, data: localRecommendations(ctx, routed.reason) });
       return;
     }
-
-    const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
-    const result = await model.generateContent(prompt);
-    const recommendations = parseRecs(result.response.text()) ?? [
+    const safeRecommendations = recommendations.length > 0 ? recommendations : [
       { title: 'AI analysis unavailable', severity: 'LOW', remediation_level: 'MANUAL_ONLY', suggested_action: 'Retry recommendation engine' },
     ];
 
-    res.json({ success: true, data: { recommendations, model: GEMINI_MODEL, ai_available: true, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { recommendations: safeRecommendations, model: `${routed.provider}/${routed.model}`, model_route: routed, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
   } catch (err: any) {
-    logger.warn('Lina Gemini recommendations unavailable; trying Groq then local', {
+    logger.warn('Lina routed recommendations unavailable; serving local recommendations', {
       error: aiFailureReason(err),
-      model: GEMINI_MODEL
+      model: OPENAI_MODEL
     });
     if (ctx) {
-      try {
-        const groqText = await generateGroqAnalysis(
-          `Gemini was unavailable (${aiFailureReason(err)}). Return ONLY a JSON array of 6-8 prioritized recommendations with fields title, severity, impact, suggested_action, remediation_level, estimated_effort, module, kpi_impact — from the live system context.`,
-          ctx,
-          1800,
-        );
-        const cleaned = (groqText || '').trim().replace(/^```json?\s*/i, '').replace(/\s*```$/i, '');
-        const match = cleaned.match(/\[[\s\S]*\]/);
-        const recs = match ? JSON.parse(match[0]) : null;
-        if (Array.isArray(recs) && recs.length > 0) {
-          res.json({ success: true, data: { recommendations: recs, model: `groq/${GROQ_MODEL}`, ai_available: true, fallback_from: GEMINI_MODEL, generated_at: new Date().toISOString() } });
-          return;
-        }
-      } catch (groqErr: any) {
-        logger.warn('Lina Groq recommendations fallback unavailable', { error: aiFailureReason(groqErr) });
-      }
       res.json({ success: true, data: localRecommendations(ctx, aiFailureReason(err)) });
       return;
     }
@@ -1666,13 +1823,230 @@ export const getLiveMonitoring = async (req: Request, res: Response): Promise<vo
         system: { uptime_seconds: Math.floor(process.uptime()), memory_mb: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024), node_version: process.version },
         database: { status: dbErr ? 'degraded' : 'healthy', latency_ms: dbMs, error: dbErr?.message || null },
         ai_providers: {
+          openai: { model: OPENAI_MODEL, status: OPENAI_API_KEY ? 'configured' : 'missing_key', role: 'primary_orchestration' },
+          gemini: { model: GEMINI_MODEL, status: GEMINI_API_KEY ? 'configured' : 'missing_key', role: 'secondary_verification_fallback' },
           groq: { model: GROQ_MODEL, status: process.env.GROQ_API_KEY ? 'configured' : 'missing_key' },
-          gemini: { model: GEMINI_MODEL, status: GEMINI_API_KEY ? 'configured' : 'missing_key' },
         },
         maintenance_mode: maintenanceOn,
         pending_remediations: pendingCount || 0,
       },
     });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getModelRouterStatus = async (req: Request, res: Response): Promise<void> => {
+  const sampleIntents: LinaIntent[] = ['chat', 'executive_summary', 'anomaly_report', 'financial_intelligence', 'recommendations'];
+  res.json({
+    success: true,
+    data: {
+      strategy: 'OpenAI primary orchestration, Gemini secondary verification/summarization, Groq legacy fallback, deterministic local fallback.',
+      providers: {
+        openai: { model: OPENAI_MODEL, status: OPENAI_API_KEY ? 'configured' : 'missing_key', role: 'primary' },
+        gemini: { model: GEMINI_MODEL, status: GEMINI_API_KEY ? 'configured' : 'missing_key', role: 'secondary' },
+        groq: { model: GROQ_MODEL, status: process.env.GROQ_API_KEY ? 'configured' : 'missing_key', role: 'legacy_fallback' },
+      },
+      routing_examples: sampleIntents.map((intent) => ({ intent, ...modelRouterPolicy(intent) })),
+      action_classes: ['READ_ONLY', 'SAFE_AUTO', 'APPROVAL_REQUIRED', 'MANUAL_ONLY'],
+    },
+  });
+};
+
+export const getLinaTools = async (req: Request, res: Response): Promise<void> => {
+  res.json({
+    success: true,
+    data: {
+      tools: [
+        { name: 'db.read_table', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-table', tables: Array.from(LINA_READABLE_TABLES).sort() },
+        { name: 'db.run_readonly_sql', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-only-sql', restricted_to: Array.from(LINA_GLOBAL_READ_ROLES).sort() },
+        { name: 'model.router', action_class: 'READ_ONLY', endpoint: 'GET /api/lina/model-router' },
+        { name: 'remediation.create_proposal', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/remediate' },
+        { name: 'remediation.approve', action_class: 'APPROVAL_REQUIRED', endpoint: 'POST /api/lina/remediations/:id/approve' },
+        { name: 'remediation.execute_safe_job', action_class: 'SAFE_AUTO', endpoint: 'POST /api/lina/remediations/:id/execute' },
+        { name: 'remediation.verify_job_completion', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/remediations/:id/verify' },
+      ],
+      policy: {
+        all_reads_logged: true,
+        raw_sql_from_flutter: false,
+        service_role_location: 'backend_only',
+        branch_scope_enforced: true,
+        sensitive_tables_require_leadership: true,
+      },
+    },
+  });
+};
+
+export const readLinaTableTool = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const table = `${req.body?.table || ''}`.trim();
+    if (!LINA_READABLE_TABLES.has(table)) {
+      res.status(400).json({ success: false, message: 'Table is not available to Lina read tools' });
+      return;
+    }
+    if (!canReadSensitiveLinaTable(req, table)) {
+      res.status(403).json({ success: false, message: 'Role is not allowed to read this Lina tool table' });
+      return;
+    }
+
+    const limit = Math.max(1, Math.min(Number(req.body?.limit || 50) || 50, 100));
+    const select = sanitizedSelect(req.body?.select);
+    const filters = req.body?.filters && typeof req.body.filters === 'object' ? req.body.filters : {};
+    let query: any = supabase.from(table).select(select).limit(limit);
+
+    Object.entries(filters).slice(0, 10).forEach(([key, value]) => {
+      if (!/^[a-zA-Z0-9_]+$/.test(key)) return;
+      if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+        query = query.eq(key, value as any);
+      }
+    });
+
+    const role = `${req.user?.role || ''}`;
+    const branchId = req.user?.branch_id ?? req.user?.branchId;
+    if (!LINA_GLOBAL_READ_ROLES.has(role) && branchId != null) {
+      if (table === 'users') query = query.eq('branch_id', branchId);
+      if (LINA_BRANCH_SCOPED_TABLES.has(table)) {
+        const branchColumn = table === 'lina_remediation_proposals' ? 'affected_branch_id' : 'branch_id';
+        query = query.eq(branchColumn, branchId);
+      }
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    await writeLinaAgentLog(req, {
+      action: 'tool_read_table',
+      tool_name: 'db.read_table',
+      risk_classification: 'READ_ONLY',
+      input: { table, select, filters, limit },
+      output: { rows: data?.length || 0 },
+      status: 'succeeded',
+    });
+    res.json({ success: true, data: { table, rows: data || [], row_count: data?.length || 0, generated_at: new Date().toISOString() } });
+  } catch (err: any) {
+    logger.error('Lina read table tool error', err);
+    await writeLinaAgentLog(req, {
+      action: 'tool_read_table',
+      tool_name: 'db.read_table',
+      risk_classification: 'READ_ONLY',
+      input: req.body || {},
+      output: { error: err.message },
+      status: 'failed',
+    });
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const runReadOnlySqlTool = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const role = `${req.user?.role || ''}`;
+    if (!LINA_GLOBAL_READ_ROLES.has(role)) {
+      res.status(403).json({ success: false, message: 'Read-only SQL tool is restricted to global Lina review roles' });
+      return;
+    }
+    const sql = sanitizeReadOnlySql(req.body?.sql);
+    if (!sql) {
+      res.status(400).json({ success: false, message: 'Only single-statement read-only SELECT/WITH/EXPLAIN SQL is allowed' });
+      return;
+    }
+    const limit = Math.max(1, Math.min(Number(req.body?.limit || 100) || 100, 200));
+    const wrappedSql = `select * from (${sql}) lina_readonly_tool_rows limit $1`;
+    const result = await db.query(wrappedSql, [limit]);
+    await writeLinaAgentLog(req, {
+      action: 'tool_readonly_sql',
+      tool_name: 'db.run_readonly_sql',
+      risk_classification: 'READ_ONLY',
+      input: { sql, limit },
+      output: { rows: result.rows.length },
+      status: 'succeeded',
+    });
+    res.json({ success: true, data: { rows: result.rows, row_count: result.rows.length, limit, generated_at: new Date().toISOString() } });
+  } catch (err: any) {
+    logger.error('Lina read-only SQL tool error', err);
+    await writeLinaAgentLog(req, {
+      action: 'tool_readonly_sql',
+      tool_name: 'db.run_readonly_sql',
+      risk_classification: 'READ_ONLY',
+      input: { sql: req.body?.sql, limit: req.body?.limit },
+      output: { error: err.message },
+      status: 'failed',
+    });
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getRemediationHistory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = Math.max(1, Math.min(Number(req.query.limit || 100) || 100, 200));
+    let query: any = supabase
+      .from('lina_remediation_proposals')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    const role = `${req.user?.role || ''}`;
+    const branchId = req.user?.branch_id ?? req.user?.branchId;
+    if (!LINA_GLOBAL_READ_ROLES.has(role) && branchId != null) {
+      query = query.eq('affected_branch_id', branchId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json({ success: true, data: (data || []).map(mapProposalRow) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getRemediationDetails = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { data: proposal, error } = await supabase
+      .from('lina_remediation_proposals')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !proposal) {
+      res.status(404).json({ success: false, message: 'Remediation not found' });
+      return;
+    }
+    const role = `${req.user?.role || ''}`;
+    const branchId = req.user?.branch_id ?? req.user?.branchId;
+    if (!LINA_GLOBAL_READ_ROLES.has(role) && proposal.affected_branch_id && String(proposal.affected_branch_id) !== String(branchId)) {
+      res.status(403).json({ success: false, message: 'Not authorized to read this remediation' });
+      return;
+    }
+    const [eventsRes, executionsRes] = await Promise.all([
+      supabase.from('lina_remediation_events').select('*').eq('proposal_id', id).order('created_at', { ascending: false }).limit(100),
+      supabase.from('lina_remediation_executions').select('*').eq('proposal_id', id).order('created_at', { ascending: false }).limit(50),
+    ]);
+    if (eventsRes.error) throw eventsRes.error;
+    if (executionsRes.error) throw executionsRes.error;
+    res.json({
+      success: true,
+      data: {
+        proposal: mapProposalRow(proposal),
+        events: eventsRes.data || [],
+        executions: executionsRes.data || [],
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getAgentLogs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const role = `${req.user?.role || ''}`;
+    if (!LINA_GLOBAL_READ_ROLES.has(role) && role !== 'branch_accountant') {
+      res.status(403).json({ success: false, message: 'Not authorized to read Lina agent logs' });
+      return;
+    }
+    const limit = Math.max(1, Math.min(Number(req.query.limit || 80) || 80, 150));
+    const { data, error } = await supabase
+      .from('lina_agent_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -16,6 +16,11 @@ final linaMonitoringProvider =
   return ref.read(linaRepositoryProvider).getMonitoring();
 });
 
+final linaModelRouterProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  return ref.read(linaRepositoryProvider).getModelRouter();
+});
+
 final linaExecutiveSummaryProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   return ref.read(linaRepositoryProvider).getExecutiveSummary();
@@ -49,6 +54,16 @@ final linaRecommendationsProvider =
 final linaPendingRemediationsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.read(linaRepositoryProvider).getPendingRemediations();
+});
+
+final linaRemediationHistoryProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(linaRepositoryProvider).getRemediationHistory();
+});
+
+final linaAgentLogsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(linaRepositoryProvider).getAgentLogs();
 });
 
 final linaBranchBenchmarkProvider =
@@ -116,7 +131,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   void clear() => state = [];
 }
 
-final chatProvider =
-    StateNotifierProvider<ChatNotifier, List<ChatMessage>>((ref) => ChatNotifier());
+final chatProvider = StateNotifierProvider<ChatNotifier, List<ChatMessage>>(
+    (ref) => ChatNotifier());
 
 final chatLoadingProvider = StateProvider<bool>((ref) => false);

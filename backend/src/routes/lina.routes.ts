@@ -31,6 +31,10 @@ router.use(authorize(LINA_ROLES));
 // Core intelligence
 router.get('/context', lina.getSystemContext);
 router.get('/monitoring', lina.getLiveMonitoring);
+router.get('/model-router', lina.getModelRouterStatus);
+router.get('/tools', lina.getLinaTools);
+router.post('/tools/read-table', lina.readLinaTableTool);
+router.post('/tools/read-only-sql', lina.runReadOnlySqlTool);
 router.get('/executive-summary', lina.getExecutiveSummary);
 router.get('/anomaly-report', lina.getAnomalyReport);
 router.get('/incident-timeline', lina.getIncidentTimeline);
@@ -50,6 +54,9 @@ router.get('/forecast', lina.getForecast);
 // Remediation workflow
 router.post('/remediate', lina.proposeRemediation);
 router.get('/remediations/pending', lina.getPendingRemediations);
+router.get('/remediations/history', lina.getRemediationHistory);
+router.get('/remediations/:id/history', lina.getRemediationDetails);
+router.get('/agent-logs', lina.getAgentLogs);
 router.post('/remediations/:id/approve', lina.approveRemediation);
 router.post('/remediations/:id/reject', lina.rejectRemediation);
 router.post('/remediations/:id/execute', lina.executeRemediation);

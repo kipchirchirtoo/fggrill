@@ -1522,18 +1522,35 @@ class _FixCenterTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final remsAsync = ref.watch(linaPendingRemediationsProvider);
+    final historyAsync = ref.watch(linaRemediationHistoryProvider);
+    final logsAsync = ref.watch(linaAgentLogsProvider);
+    final routerAsync = ref.watch(linaModelRouterProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sectionHeader('Fix Center',
-            subtitle: 'Pending AI-proposed remediations awaiting approval',
+            subtitle:
+                'Governed approvals, execution history, verification, and model routing',
             action: OutlinedButton.icon(
-              onPressed: () => ref.invalidate(linaPendingRemediationsProvider),
+              onPressed: () {
+                ref.invalidate(linaPendingRemediationsProvider);
+                ref.invalidate(linaRemediationHistoryProvider);
+                ref.invalidate(linaAgentLogsProvider);
+                ref.invalidate(linaModelRouterProvider);
+              },
               icon: Icon(PhosphorIcons.arrowsClockwise(), size: 15),
               label: const Text('Refresh'),
               style: OutlinedButton.styleFrom(foregroundColor: _kLinaAccent),
             )),
+        _buildRouterPanel(routerAsync),
+        const SizedBox(height: 14),
+        const Text('Approval Review',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.kTextPrimary)),
+        const SizedBox(height: 10),
         remsAsync.when(
           data: (rems) => rems.isEmpty
               ? _card(
@@ -1560,8 +1577,191 @@ class _FixCenterTab extends ConsumerWidget {
           error: (e, _) => _errorCard(
               e, () => ref.invalidate(linaPendingRemediationsProvider)),
         ),
+        const SizedBox(height: 18),
+        _buildHistoryPanel(historyAsync),
+        const SizedBox(height: 18),
+        _buildAgentLogPanel(logsAsync),
       ]),
     );
+  }
+
+  Widget _buildRouterPanel(AsyncValue<Map<String, dynamic>> routerAsync) {
+    return routerAsync.when(
+      data: (data) {
+        final providers =
+            Map<String, dynamic>.from((data['providers'] as Map?) ?? {});
+        final examples = (data['routing_examples'] as List?) ?? [];
+        return _card(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(PhosphorIcons.brain(), size: 18, color: _kLinaAccent),
+            const SizedBox(width: 8),
+            const Text('Model Router Policy',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.kTextPrimary)),
+          ]),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: providers.entries.map((entry) {
+              final p = Map<String, dynamic>.from(entry.value as Map);
+              final status = (p['status'] ?? '').toString();
+              return _stateChip(
+                  entry.key, '${p['role'] ?? ''} · $status · ${p['model']}');
+            }).toList(),
+          ),
+          if (examples.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              examples.take(3).map((e) {
+                final m = Map<String, dynamic>.from(e as Map);
+                return '${m['intent']}: ${m['provider']}/${m['model']}';
+              }).join('   |   '),
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary),
+            ),
+          ],
+        ]));
+      },
+      loading: () => _loadingCard(),
+      error: (e, _) => _card(
+          child: Text('Model router unavailable: $e',
+              style: const TextStyle(color: AppColors.kTextSecondary))),
+    );
+  }
+
+  Widget _buildHistoryPanel(
+      AsyncValue<List<Map<String, dynamic>>> historyAsync) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Execution & Verification History',
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.kTextPrimary)),
+      const SizedBox(height: 10),
+      historyAsync.when(
+        data: (items) => items.isEmpty
+            ? _card(
+                child: const Text('No remediation history yet',
+                    style: TextStyle(color: AppColors.kTextSecondary)))
+            : Column(
+                children: items.take(8).map((item) {
+                  final execution =
+                      (item['execution_status'] ?? 'not_queued').toString();
+                  final verification =
+                      (item['verification_status'] ?? 'not_verified')
+                          .toString();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _card(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Expanded(
+                                    child: Text(
+                                        (item['title'] ??
+                                                item['action'] ??
+                                                'Remediation')
+                                            .toString(),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.kTextPrimary))),
+                                Text((item['severity'] ?? 'LOW').toString(),
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.kTextSecondary)),
+                              ]),
+                              const SizedBox(height: 8),
+                              Wrap(spacing: 8, runSpacing: 8, children: [
+                                _stateChip(
+                                    'Approval',
+                                    (item['approval_status'] ?? 'pending')
+                                        .toString()),
+                                _stateChip('Execution', execution),
+                                _stateChip('Verification', verification),
+                              ]),
+                              if ((item['execution_result'] as Map?)
+                                      ?.isNotEmpty ==
+                                  true) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                    'Result: ${item['execution_result'].toString()}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.kTextSecondary)),
+                              ],
+                            ])),
+                  );
+                }).toList(),
+              ),
+        loading: () => _loadingCard(),
+        error: (e, _) => _card(
+            child: Text('History unavailable: $e',
+                style: const TextStyle(color: AppColors.kTextSecondary))),
+      ),
+    ]);
+  }
+
+  Widget _buildAgentLogPanel(AsyncValue<List<Map<String, dynamic>>> logsAsync) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Agent Audit Trail',
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.kTextPrimary)),
+      const SizedBox(height: 10),
+      logsAsync.when(
+        data: (logs) => logs.isEmpty
+            ? _card(
+                child: const Text('No Lina agent logs yet',
+                    style: TextStyle(color: AppColors.kTextSecondary)))
+            : _card(
+                child: Column(
+                    children: logs.take(10).map((log) {
+                  final status = (log['status'] ?? 'recorded').toString();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(PhosphorIcons.clockCounterClockwise(),
+                              size: 16, color: _kLinaAccent),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                Text(
+                                    '${log['action'] ?? 'agent_action'} · ${log['tool_name'] ?? 'tool'}',
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.kTextPrimary)),
+                                Text(
+                                    '${log['actor_role'] ?? 'system'} · ${log['created_at'] ?? ''}',
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.kTextSecondary)),
+                              ])),
+                          _stateChip('Status', status),
+                        ]),
+                  );
+                }).toList()),
+              ),
+        loading: () => _loadingCard(),
+        error: (e, _) => _card(
+            child: Text('Agent logs unavailable: $e',
+                style: const TextStyle(color: AppColors.kTextSecondary))),
+      ),
+    ]);
   }
 
   Widget _buildRemCard(
@@ -1650,7 +1850,7 @@ class _FixCenterTab extends ConsumerWidget {
                   await ref
                       .read(linaRepositoryProvider)
                       .rejectRemediation(r['id']);
-                  ref.invalidate(linaPendingRemediationsProvider);
+                  _refreshFixCenter(ref);
                   if (!context.mounted) return;
                   AppNotifier.showSnackBar(context,
                       const SnackBar(content: Text('Remediation rejected')));
@@ -1674,7 +1874,7 @@ class _FixCenterTab extends ConsumerWidget {
                       await ref
                           .read(linaRepositoryProvider)
                           .approveRemediation(r['id']);
-                      ref.invalidate(linaPendingRemediationsProvider);
+                      _refreshFixCenter(ref);
                       if (!context.mounted) return;
                       AppNotifier.showSnackBar(
                           context,
@@ -1713,7 +1913,7 @@ class _FixCenterTab extends ConsumerWidget {
                           await ref
                               .read(linaRepositoryProvider)
                               .executeRemediation(r['id']);
-                          ref.invalidate(linaPendingRemediationsProvider);
+                          _refreshFixCenter(ref);
                           if (!context.mounted) return;
                           AppNotifier.showSnackBar(
                               context,
@@ -1744,7 +1944,7 @@ class _FixCenterTab extends ConsumerWidget {
                           await ref
                               .read(linaRepositoryProvider)
                               .verifyRemediation(r['id']);
-                          ref.invalidate(linaPendingRemediationsProvider);
+                          _refreshFixCenter(ref);
                           if (!context.mounted) return;
                           AppNotifier.showSnackBar(
                               context,
@@ -1791,6 +1991,13 @@ class _FixCenterTab extends ConsumerWidget {
           style: TextStyle(
               color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
+  }
+
+  void _refreshFixCenter(WidgetRef ref) {
+    ref.invalidate(linaPendingRemediationsProvider);
+    ref.invalidate(linaRemediationHistoryProvider);
+    ref.invalidate(linaAgentLogsProvider);
+    ref.invalidate(linaModelRouterProvider);
   }
 }
 
