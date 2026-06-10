@@ -6,9 +6,9 @@ import 'package:intl/intl.dart';
 import '../features/pos/domain/models.dart';
 
 class PrintService {
-  static const double _paperWidthMm = 76;
-  static const double _safeMarginMm = 3;
-  static const double _barcodeWidthMm = 56;
+  static const double _paperWidthMm = 80;
+  static const double _safeMarginMm = 2;
+  static const double _barcodeWidthMm = 60;
 
   final String companyName = 'FamousGate Hotels';
   final String companyAddress = 'Bomet, Kenya';
@@ -50,8 +50,8 @@ class PrintService {
       logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
     } catch (_) {}
 
-    // 76mm thermal roll with balanced safe margins. The printable content
-    // stays near 70mm wide so physical printers do not clip the right edge.
+    // 79-80mm thermal roll with a 76mm printable area. Keep symmetrical
+    // 2mm margins so the printer gets the correct roll size without clipping.
     const receiptFormat = PdfPageFormat(
       _paperWidthMm * PdfPageFormat.mm,
       double.infinity,

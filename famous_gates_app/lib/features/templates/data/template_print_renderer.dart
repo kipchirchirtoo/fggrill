@@ -41,9 +41,9 @@ class TemplateLineItem {
 }
 
 class TemplatePrintRenderer {
-  static const double _paperWidthMm = 76;
-  static const double _safeMarginMm = 3;
-  static const double _barcodeWidthMm = 56;
+  static const double _paperWidthMm = 80;
+  static const double _safeMarginMm = 2;
+  static const double _barcodeWidthMm = 60;
 
   final _money = NumberFormat('#,##0.00', 'en_KE');
 
