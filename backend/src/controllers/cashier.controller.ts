@@ -5439,11 +5439,13 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
         const status = requestedStatus || defaultStatus;
         const { from_date, to_date } = req.query;
 
+        // NOTE: branch is hydrated separately below — there is no FK relationship
+        // between cashier_logbooks and branches in PostgREST's schema cache, so an
+        // embedded branches(...) join 500s ("Could not find a relationship...").
         let query = supabase
             .from('cashier_logbooks')
             .select(`
                 *,
-                branch:branches(id, name),
                 lines:cashier_logbook_lines!logbook_id(id, section, customer_name, amount, reference)
             `)
             .eq('status', status)
@@ -5473,9 +5475,26 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
         if (error) throw error;
 
         const usersById = await fetchCashierUsersById((logbooks || []).map((logbook: any) => logbook.cashier_id));
+
+        // Hydrate branch names separately (no FK relationship in schema cache).
+        const branchIds = [...new Set((logbooks || [])
+            .map((logbook: any) => logbook.branch_id)
+            .filter((id: any) => id !== null && id !== undefined))];
+        const branchById = new Map<string, any>();
+        if (branchIds.length) {
+            const { data: branchRows } = await supabase
+                .from('branches')
+                .select('id, name')
+                .in('id', branchIds as any[]);
+            for (const b of (branchRows || []) as Array<Record<string, any>>) {
+                branchById.set(String(b.id), { id: b.id, name: b.name });
+            }
+        }
+
         const decoratedLogbooks = (logbooks || []).map((logbook: any) => ({
             ...logbook,
-            cashier: usersById.get(String(logbook.cashier_id || '')) || null
+            cashier: usersById.get(String(logbook.cashier_id || '')) || null,
+            branch: branchById.get(String(logbook.branch_id || '')) || null
         }));
 
         res.json({
