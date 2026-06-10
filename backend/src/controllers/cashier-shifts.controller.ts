@@ -1410,6 +1410,8 @@ export const closeShift = async (
                         description: `Shift Credit - Shift #${shift.shift_number} - ${bill.name}`,
                         bill_date: new Date().toISOString().split('T')[0],
                         status: 'pending',
+                        paid_amount: 0,
+                        balance: bill.amount,
                         branch_id: shift.branch_id,
                         shift_id: shift.id
                     }));
@@ -1429,6 +1431,7 @@ export const closeShift = async (
             if (paid_bills_details && Array.isArray(paid_bills_details)) {
                 for (const bill of paid_bills_details) {
                     if (!bill.staff_id) continue;
+                    if (bill.settled_at || Array.isArray(bill.settlement_applications)) continue;
 
                     let amountPaid = parseFloat(bill.amount);
                     if (isNaN(amountPaid) || amountPaid <= 0) continue;
@@ -1442,6 +1445,8 @@ export const closeShift = async (
                         description: `Shift Payment (${paidMethod}) - Shift #${shift.shift_number} - ${bill.name}`,
                         bill_date: new Date().toISOString().split('T')[0],
                         status: 'paid_cash',
+                        paid_amount: amountPaid,
+                        balance: 0,
                         branch_id: shift.branch_id,
                         paid_in_shift_id: shift.id
                     });
@@ -1457,9 +1462,10 @@ export const closeShift = async (
                     // B. SETTLE FIFO: Find pending credits ordered by oldest first
                     const { data: credits, error: fetchError } = await supabase
                         .from('staff_credit_bills')
-                        .select('id, amount')
+                        .select('id, amount, paid_amount, balance, status, source_cashier_credit_bill_id')
                         .eq('staff_id', bill.staff_id)
-                        .eq('status', 'pending')
+                        .not('status', 'in', '("paid","paid_cash","deducted","cancelled")')
+                        .order('bill_date', { ascending: true })
                         .order('created_at', { ascending: true });
 
                     if (fetchError) {
@@ -1473,15 +1479,65 @@ export const closeShift = async (
                             if (remainingPayment <= 0) break;
 
                             const creditAmount = parseFloat(credit.amount);
-                            if (remainingPayment >= creditAmount) {
-                                // Fully settle this credit bill
-                                await supabase
-                                    .from('staff_credit_bills')
-                                    .update({ status: 'paid_cash' })
-                                    .eq('id', credit.id);
-                                remainingPayment -= creditAmount;
+                            const currentPaid = parseFloat(credit.paid_amount || 0) || 0;
+                            const storedBalance = credit.balance === null || credit.balance === undefined
+                                ? NaN
+                                : parseFloat(credit.balance);
+                            const currentBalance = Number.isFinite(storedBalance)
+                                ? Math.max(0, storedBalance)
+                                : Math.max(0, creditAmount - currentPaid);
+
+                            if (currentBalance <= 0) continue;
+
+                            const appliedAmount = Math.min(remainingPayment, currentBalance);
+                            const newPaidAmount = Math.min(creditAmount, currentPaid + appliedAmount);
+                            const newBalance = Math.max(0, currentBalance - appliedAmount);
+
+                            await supabase
+                                .from('staff_credit_bills')
+                                .update({
+                                    paid_amount: newPaidAmount,
+                                    balance: newBalance,
+                                    status: newBalance <= 0 ? 'paid_cash' : 'partial',
+                                    paid_in_shift_id: shift.id
+                                })
+                                .eq('id', credit.id);
+
+                            await supabase.from('staff_credit_bill_payments').insert({
+                                credit_bill_id: credit.id,
+                                amount: appliedAmount,
+                                payment_method: paidMethod,
+                                reference: bill.reference || null,
+                                recorded_by: userId || null,
+                                shift_id: shift.id,
+                                notes: `Shift close paid-bill settlement - Shift #${shift.shift_number}`
+                            });
+
+                            if (credit.source_cashier_credit_bill_id) {
+                                const { data: linkedCredit } = await supabase
+                                    .from('credit_bills')
+                                    .select('id, total_amount, paid_amount')
+                                    .eq('id', credit.source_cashier_credit_bill_id)
+                                    .maybeSingle();
+                                if (linkedCredit) {
+                                    const linkedTotal = parseFloat(linkedCredit.total_amount || creditAmount) || creditAmount;
+                                    const linkedPaid = Math.min(
+                                        linkedTotal,
+                                        (parseFloat(linkedCredit.paid_amount || 0) || 0) + appliedAmount
+                                    );
+                                    const linkedBalance = Math.max(0, linkedTotal - linkedPaid);
+                                    await supabase
+                                        .from('credit_bills')
+                                        .update({
+                                            paid_amount: linkedPaid,
+                                            balance_amount: linkedBalance,
+                                            status: linkedBalance <= 0 ? 'paid' : 'active'
+                                        })
+                                        .eq('id', linkedCredit.id);
+                                }
                             }
-                            // Partial settlement: leave as pending (no partial balance column in schema)
+
+                            remainingPayment -= appliedAmount;
                         }
                     }
                 }

@@ -4134,6 +4134,7 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
             status: 'pending',
             branch_id: effectiveBranchId,
             balance: totalAmount,
+            created_by: req.user?.id,
             source_cashier_credit_bill_id: data.id
         };
 
@@ -4166,7 +4167,14 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
 export const confirmCreditBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
-        const { role } = req.body; // 'accountant' or 'auditor'
+        // Role may be passed explicitly; otherwise derive it from the signed-in
+        // user so a branch accountant simply confirming (no role in body) works.
+        let role = String(req.body.role || '').toLowerCase();
+        if (!role) {
+            const userRole = String(req.user?.role || '').toLowerCase();
+            role = userRole === 'auditor' ? 'auditor' : 'accountant';
+        }
+        const confirmedAt = new Date().toISOString();
 
         // 1. Fetch current credit bill
         const { data: bill, error: fetchError } = await supabase
@@ -4180,22 +4188,25 @@ export const confirmCreditBill = async (req: Request, res: Response, next: NextF
         }
 
         const updateData: any = {};
-        if (role === 'accountant') {
+        const payrollUpdate: any = {};
+        if (role === 'accountant' || role === 'branch_accountant') {
             if (bill.accountant_confirmed_at) {
                 throw new AppError('Credit bill already confirmed by accountant', 400);
             }
-            updateData.accountant_confirmed_at = new Date().toISOString();
+            updateData.accountant_confirmed_at = confirmedAt;
             updateData.accountant_id = req.user?.id;
+            payrollUpdate.accountant_confirmed_at = confirmedAt;
+            payrollUpdate.accountant_id = req.user?.id;
         } else if (role === 'auditor') {
             if (bill.auditor_confirmed_at) {
                 throw new AppError('Credit bill already confirmed by auditor', 400);
             }
-            // if (!bill.accountant_confirmed_at) throw new AppError('Accountant confirmation required first', 400);
-
-            updateData.auditor_confirmed_at = new Date().toISOString();
+            updateData.auditor_confirmed_at = confirmedAt;
             updateData.auditor_id = req.user?.id;
+            payrollUpdate.auditor_confirmed_at = confirmedAt;
+            payrollUpdate.auditor_id = req.user?.id;
 
-            // If both are confirmed, we could optionally update approval_status to 'confirmed'
+            // If both are confirmed, mark the bill confirmed.
             if (bill.accountant_confirmed_at) {
                 updateData.approval_status = 'confirmed';
             }
@@ -4211,6 +4222,17 @@ export const confirmCreditBill = async (req: Request, res: Response, next: NextF
             .single();
 
         if (error) throw error;
+
+        // 2. Flow the branch-accountant / auditor confirmation through to the
+        //    payroll-bound staff_credit_bills record so payroll + reporting see it.
+        try {
+            await supabase
+                .from('staff_credit_bills')
+                .update(payrollUpdate)
+                .eq('source_cashier_credit_bill_id', id);
+        } catch (propagateError) {
+            logger.warn('Could not propagate credit bill confirmation to staff_credit_bills:', propagateError);
+        }
 
         res.json({
             success: true,
@@ -4382,6 +4404,120 @@ function normalizePaymentMethod(raw: unknown): string {
     return 'cash';
 }
 
+async function applyStaffCreditPaymentFifo(params: {
+    staffId: string;
+    amount: number;
+    paymentMethod: string;
+    reference?: string | null;
+    recordedBy?: string | null;
+    shiftId?: string | null;
+}) {
+    let remainingPayment = Number(params.amount || 0);
+    const applications: Array<{ credit_bill_id: string; amount: number; balance: number }> = [];
+
+    if (!params.staffId || !Number.isFinite(remainingPayment) || remainingPayment <= 0) {
+        return applications;
+    }
+
+    const { data: credits, error: fetchError } = await supabase
+        .from('staff_credit_bills')
+        .select('id, amount, paid_amount, balance, status, source_cashier_credit_bill_id, bill_date, created_at')
+        .eq('staff_id', params.staffId)
+        .not('status', 'in', '("paid","paid_cash","deducted","cancelled")')
+        .order('bill_date', { ascending: true })
+        .order('created_at', { ascending: true });
+
+    if (fetchError) {
+        throw new AppError(`Unable to fetch staff credit bills for settlement: ${fetchError.message}`, 500);
+    }
+
+    for (const credit of credits || []) {
+        if (remainingPayment <= 0) break;
+
+        const creditAmount = Number(credit.amount || 0);
+        const currentPaid = Number(credit.paid_amount || 0);
+        const storedBalance = credit.balance === null || credit.balance === undefined
+            ? NaN
+            : Number(credit.balance);
+        const currentBalance = Number.isFinite(storedBalance)
+            ? Math.max(0, storedBalance)
+            : Math.max(0, creditAmount - currentPaid);
+
+        if (currentBalance <= 0) continue;
+
+        const appliedAmount = Math.min(remainingPayment, currentBalance);
+        const newPaidAmount = Math.min(creditAmount, currentPaid + appliedAmount);
+        const newBalance = Math.max(0, currentBalance - appliedAmount);
+
+        const updatePayload: any = {
+            paid_amount: newPaidAmount,
+            balance: newBalance,
+            status: newBalance <= 0 ? 'paid_cash' : 'partial'
+        };
+        if (params.shiftId) updatePayload.paid_in_shift_id = params.shiftId;
+
+        const { error: updateError } = await supabase
+            .from('staff_credit_bills')
+            .update(updatePayload)
+            .eq('id', credit.id);
+
+        if (updateError) {
+            throw new AppError(`Unable to update staff credit balance: ${updateError.message}`, 500);
+        }
+
+        try {
+            await supabase.from('staff_credit_bill_payments').insert({
+                credit_bill_id: credit.id,
+                amount: appliedAmount,
+                payment_method: params.paymentMethod,
+                reference: params.reference || null,
+                recorded_by: params.recordedBy || null,
+                shift_id: params.shiftId || null,
+                notes: 'Cashier paid-bill FIFO settlement'
+            });
+        } catch (paymentHistoryError: any) {
+            logger.warn('Unable to write staff credit payment history', {
+                credit_bill_id: credit.id,
+                error: paymentHistoryError?.message || paymentHistoryError
+            });
+        }
+
+        if (credit.source_cashier_credit_bill_id) {
+            const { data: linkedCredit } = await supabase
+                .from('credit_bills')
+                .select('id, total_amount, paid_amount')
+                .eq('id', credit.source_cashier_credit_bill_id)
+                .maybeSingle();
+
+            if (linkedCredit) {
+                const linkedTotal = Number(linkedCredit.total_amount || creditAmount);
+                const linkedPaid = Math.min(
+                    linkedTotal,
+                    Number(linkedCredit.paid_amount || 0) + appliedAmount
+                );
+                const linkedBalance = Math.max(0, linkedTotal - linkedPaid);
+                await supabase
+                    .from('credit_bills')
+                    .update({
+                        paid_amount: linkedPaid,
+                        balance_amount: linkedBalance,
+                        status: linkedBalance <= 0 ? 'paid' : 'active'
+                    })
+                    .eq('id', linkedCredit.id);
+            }
+        }
+
+        applications.push({
+            credit_bill_id: credit.id,
+            amount: appliedAmount,
+            balance: newBalance
+        });
+        remainingPayment -= appliedAmount;
+    }
+
+    return applications;
+}
+
 /**
  * Record a "paid bill": a staff member settling money toward their credit
  * during the cashier's shift. We do NOT pick a specific credit bill here — the
@@ -4429,6 +4565,17 @@ export const recordStaffPaidBill = async (
             ? shift.paid_bills_details
             : [];
 
+        const settlementApplications = staff_id
+            ? await applyStaffCreditPaymentFifo({
+                staffId: staff_id,
+                amount: paidAmount,
+                paymentMethod: method,
+                reference: reference || null,
+                recordedBy: req.user?.id || null,
+                shiftId: shift.id
+            })
+            : [];
+
         const entry = {
             id: `PB${Date.now()}`,
             staff_id: staff_id || null,
@@ -4438,6 +4585,8 @@ export const recordStaffPaidBill = async (
             reference: reference || null,
             recorded_at: new Date().toISOString(),
             recorded_by: req.user?.id || null,
+            settled_at: settlementApplications.length ? new Date().toISOString() : null,
+            settlement_applications: settlementApplications,
         };
 
         const updated = [...existing, entry];
@@ -5169,6 +5318,8 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                                 const { error } = await supabase.from('staff_credit_bills').insert({
                                     staff_id: bill.staff_id,
                                     amount: bill.amount,
+                                    paid_amount: 0,
+                                    balance: bill.amount,
                                     bill_date: today,
                                     description: `Cashier Logbook Credit (${type}): ${bill.customer_name || 'Staff'} - ${bill.reference || 'No Ref'}`,
                                     status: 'pending',
@@ -7085,6 +7236,8 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                 const { data: staffCreditBill } = await supabase.from('staff_credit_bills').insert({
                     staff_id: staffProfile.id,
                     amount: amountPaid,
+                    paid_amount: 0,
+                    balance: amountPaid,
                     description: `Credit bill for ${staffLabel || 'staff'} — ${isPosCaptainOrder ? 'captain POS' : normalizedSource} order ${billNumber}`,
                     bill_date: new Date().toISOString().slice(0, 10),
                     status: 'pending',

@@ -18,6 +18,7 @@ import {
   exportStockLedger,
   getBranchOrdersVerification,
   getSoldItemsAnalysis,
+  exportSoldItemsAnalysisPDF,
   getBarStockAudits,
   verifyBarStockTake,
   getAnomalyDetail,
@@ -164,6 +165,7 @@ router.get('/verify/stock-levels/export', authorize([UserRole.AUDITOR, UserRole.
 router.post('/export/stock-ledger', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), exportStockLedger);
 router.get('/verify/branch-orders', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchOrdersVerification);
 router.get('/verify/sold-items', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), getSoldItemsAnalysis);
+router.get('/verify/sold-items/export/pdf', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), exportSoldItemsAnalysisPDF);
 router.get('/verify/bar-stock', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);
 router.post('/verify/bar-stock/:id/verify', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), verifyBarStockTake);
 router.get('/bar/stock-audits', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBarStockAudits);

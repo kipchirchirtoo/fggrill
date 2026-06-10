@@ -106,4 +106,8 @@ export interface TransactionRecord {
   total_amount: number;
   status: string;
   source: 'booking' | 'restaurant' | 'shift_transaction';
+  code?: string | null;
+  short_code?: string | null;
+  waiter_name?: string | null;
+  outlet?: string | null;
 }

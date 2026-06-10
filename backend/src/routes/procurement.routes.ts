@@ -181,7 +181,7 @@ router.put('/invoices/:id/reject', authorize(auditorRoles), rejectInvoice);
 // =====================================================
 router.route('/payments')
     .get(authorize(allProcurementStaff), getPayments)
-    .post(authorize([...auditorRoles, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.STOREKEEPER, UserRole.PROCUREMENT]), createPayment); // Finance/Auditor/Storekeepers initiates payments
+    .post(authorize([...auditorRoles, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_ACCOUNTANT, UserRole.STOREKEEPER, UserRole.PROCUREMENT]), createPayment); // Finance/Auditor/Storekeepers initiates payments
 
 router.route('/payments/:id')
     .get(authorize(allProcurementStaff), getPayment);

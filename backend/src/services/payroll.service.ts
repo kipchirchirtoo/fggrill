@@ -62,10 +62,10 @@ export class PayrollService {
 
       // 3. Credit bills
       supabase.from('staff_credit_bills')
-        .select('id, staff_id, amount, description, status, accountant_id, auditor_id')
+        .select('id, staff_id, amount, paid_amount, balance, description, status, accountant_id, auditor_id')
         .in('staff_id', staffIds)
         .is('paid_via_payroll_run_id', null)
-        .in('status', ['pending', 'accountant_confirmed', 'auditor_confirmed', 'approved', 'reconciled', 'audited'])
+        .in('status', ['pending', 'partial', 'accountant_confirmed', 'auditor_confirmed', 'approved', 'reconciled', 'audited'])
         .lte('bill_date', endDate),
 
       // 4. Logbook payments (staff paid cash — offsets credit bills)
@@ -190,29 +190,30 @@ export class PayrollService {
     for (const bill of batchData.bills.get(staff.id) || []) {
       const isUnpaidBill = (bill.description || '').toLowerCase().includes('unsettled') || 
                            (bill.description || '').toLowerCase().includes('pending order');
+      const billAmount = parseFloat(bill.amount || '0');
+      const paidAmount = parseFloat(bill.paid_amount || '0');
+      const storedBalance = bill.balance === null || bill.balance === undefined
+        ? NaN
+        : parseFloat(bill.balance || '0');
+      const outstandingAmount = Number.isFinite(storedBalance)
+        ? Math.max(0, storedBalance)
+        : Math.max(0, billAmount - paidAmount);
+      if (outstandingAmount <= 0) continue;
       
       dynamicDeductions.push({
         category: isUnpaidBill ? 'unpaid_bills' : 'credit_bills',
         source: 'system',
         source_table: 'staff_credit_bills', source_id: bill.id,
-        amount: parseFloat(bill.amount || '0'),
+        amount: outstandingAmount,
         reference: bill.description || 'Credit bill',
         audit_ref: bill.auditor_id ? `Audited by ${bill.auditor_id}` : (bill.accountant_id ? `Approved by ${bill.accountant_id}` : 'Pending'),
         timestamp: ts,
       });
     }
 
-    // 4. Logbook payments (negative — offsets credit bills)
-    for (const payment of batchData.logbookPayments.get(staff.id) || []) {
-      dynamicDeductions.push({
-        category: 'credit_bills', source: 'system',
-        source_table: 'cashier_logbook_lines', source_id: payment.id,
-        amount: -parseFloat(payment.amount || '0'),
-        reference: `Payment Recorded in Logbook: ${payment.reference || 'Staff Payment'}`,
-        audit_ref: 'Reconciled by Accountant',
-        timestamp: ts,
-      });
-    }
+    // 4. Logbook payments are now applied directly to staff_credit_bills.balance
+    // by the cashier paid-bill workflow. Payroll therefore reads the remaining
+    // bill balance above instead of applying a second negative offset here.
 
     // 5. POS unpaid bills (explicitly tagged as unpaid_bills)
     for (const pos of batchData.posBillsRaw) {

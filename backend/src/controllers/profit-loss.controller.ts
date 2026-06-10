@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+
+const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
 
 /**
  * @desc    Get profit & loss statement
@@ -254,6 +257,281 @@ export const getProfitLossStatement = async (
     } catch (error) {
         console.error('❌ [P&L] Error:', error);
         logger.error('Error generating profit & loss statement:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Branch P&L sourced from cashier/POS transactions + sold items, broken
+ *          down per POS outlet (revenue, COGS, gross profit) plus branch expenses.
+ * @route   GET /api/finance/pos-profit-loss
+ * @access  Branch Accountant, Branch Manager, Director, Auditor, GM, Super Admin
+ */
+const resolvePnlParams = (req: Request): { branchId: any; startDate: string; endDate: string } | null => {
+    const role = String((req as any).user?.role || '');
+    const userBranchId = (req as any).user?.branch_id;
+    let branchId: any = req.query.branch_id;
+    if (['branch_manager', 'branch_accountant'].includes(role)) branchId = userBranchId;
+    if (!branchId || branchId === '0') return null;
+    const now = new Date();
+    const endDate = (req.query.to_date as string) || (req.query.end_date as string) ||
+        now.toISOString().split('T')[0];
+    const startDate = (req.query.from_date as string) || (req.query.start_date as string) ||
+        new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    return { branchId, startDate, endDate };
+};
+
+const computePosProfitLoss = async (branchId: any, startDate: string, endDate: string): Promise<any> => {
+        const startTs = `${startDate}T00:00:00`;
+        const endTs = `${endDate}T23:59:59`;
+        const n = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+        // Per-outlet accumulator
+        type OutletPnl = { outlet_id: string; name: string; type: string; revenue: number; cogs: number; units: number };
+        const outlets = new Map<string, OutletPnl>();
+        const outletFor = (id: string, name: string, type: string): OutletPnl => {
+            if (!outlets.has(id)) outlets.set(id, { outlet_id: id, name, type, revenue: 0, cogs: 0, units: 0 });
+            return outlets.get(id)!;
+        };
+
+        // ── 1. POS outlets: revenue + COGS from cashier shift stock counts ──────
+        const { data: posOutlets } = await supabase
+            .from('pos_outlets')
+            .select('id, name, outlet_type')
+            .eq('branch_id', branchId);
+        const posOutletIds = (posOutlets || []).map((o: any) => o.id);
+        const posOutletById = new Map<string, any>();
+        (posOutlets || []).forEach((o: any) => posOutletById.set(String(o.id), o));
+
+        if (posOutletIds.length) {
+            const { data: posOrders } = await supabase
+                .from('pos_shift_orders')
+                .select('id, outlet_id, shift_id, total_amount, created_at, status')
+                .in('outlet_id', posOutletIds)
+                .gte('created_at', startTs)
+                .lte('created_at', endTs);
+            const shiftToOutlet = new Map<string, string>();
+            const shiftIds = new Set<string>();
+            (posOrders || []).forEach((o: any) => {
+                if (o.shift_id) {
+                    shiftToOutlet.set(String(o.shift_id), String(o.outlet_id));
+                    shiftIds.add(String(o.shift_id));
+                }
+            });
+            if (shiftIds.size) {
+                const { data: counts } = await supabase
+                    .from('pos_shift_stock_counts')
+                    .select('shift_id, sold_quantity, cost_price, selling_price')
+                    .in('shift_id', Array.from(shiftIds));
+                (counts || []).forEach((c: any) => {
+                    const oid = shiftToOutlet.get(String(c.shift_id));
+                    if (!oid) return;
+                    const meta = posOutletById.get(oid);
+                    const acc = outletFor(oid, meta?.name || 'POS Outlet', meta?.outlet_type || 'pos');
+                    const qty = n(c.sold_quantity);
+                    acc.revenue += qty * n(c.selling_price);
+                    acc.cogs += qty * n(c.cost_price);
+                    acc.units += qty;
+                });
+            }
+        }
+
+        // ── 2. Branch cost map for restaurant/bar items (base + branch override) ─
+        const [{ data: rmi }, { data: bd }, { data: overrides }] = await Promise.all([
+            supabase.from('restaurant_menu_items').select('id, cost_price').or(`branch_id.is.null,branch_id.eq.${branchId}`),
+            supabase.from('bar_drinks').select('id, cost_price').or(`branch_id.is.null,branch_id.eq.${branchId}`),
+            supabase.from('menu_item_branch_pricing').select('item_type, item_id, cost_price').eq('branch_id', branchId),
+        ]);
+        const restCost = new Map<string, number>();
+        (rmi || []).forEach((m: any) => restCost.set(String(m.id), n(m.cost_price)));
+        const barCost = new Map<string, number>();
+        (bd || []).forEach((m: any) => barCost.set(String(m.id), n(m.cost_price)));
+        (overrides || []).forEach((o: any) => {
+            const map = o.item_type === 'bar' ? barCost : restCost;
+            if (o.cost_price != null) map.set(String(o.item_id), n(o.cost_price));
+        });
+
+        // ── 3. Restaurant orders → "Restaurant" outlet (revenue + item COGS) ────
+        const { data: restOrders } = await supabase
+            .from('restaurant_orders')
+            .select('id, total_amount, grand_total, status')
+            .eq('branch_id', branchId)
+            .gte('created_at', startTs)
+            .lte('created_at', endTs)
+            .not('status', 'eq', 'cancelled');
+        if ((restOrders || []).length) {
+            const acc = outletFor('restaurant', 'Restaurant', 'restaurant');
+            const restIds = (restOrders || []).map((o: any) => o.id);
+            (restOrders || []).forEach((o: any) => { acc.revenue += n(o.grand_total) || n(o.total_amount); });
+            const { data: items } = await supabase
+                .from('restaurant_order_items')
+                .select('order_id, menu_item_id, quantity')
+                .in('order_id', restIds);
+            (items || []).forEach((it: any) => {
+                const qty = n(it.quantity);
+                acc.cogs += qty * (restCost.get(String(it.menu_item_id)) || 0);
+                acc.units += qty;
+            });
+        }
+
+        // ── 4. Bar orders → "Bar" outlet (revenue + item COGS) ──────────────────
+        const { data: barOrders } = await supabase
+            .from('bar_orders')
+            .select('id, total, subtotal, status')
+            .eq('branch_id', branchId)
+            .gte('created_at', startTs)
+            .lte('created_at', endTs)
+            .not('status', 'eq', 'cancelled');
+        if ((barOrders || []).length) {
+            const acc = outletFor('bar', 'Bar', 'bar');
+            const barIds = (barOrders || []).map((o: any) => o.id);
+            (barOrders || []).forEach((o: any) => { acc.revenue += n(o.total) || n(o.subtotal); });
+            const { data: items } = await supabase
+                .from('bar_order_items')
+                .select('order_id, drink_id, quantity')
+                .in('order_id', barIds);
+            (items || []).forEach((it: any) => {
+                const qty = n(it.quantity);
+                acc.cogs += qty * (barCost.get(String(it.drink_id)) || 0);
+                acc.units += qty;
+            });
+        }
+
+        // ── 5. Cashier-recorded revenue cross-check (shift_transactions) ────────
+        const { data: shiftTxns } = await supabase
+            .from('shift_transactions')
+            .select('total_amount, is_voided')
+            .eq('branch_id', branchId)
+            .gte('created_at', startTs)
+            .lte('created_at', endTs);
+        const cashierRevenue = (shiftTxns || [])
+            .filter((t: any) => t.is_voided !== true)
+            .reduce((s: number, t: any) => s + n(t.total_amount), 0);
+
+        // ── 6. Branch operating expenses ────────────────────────────────────────
+        const [{ data: expenses }, { data: pettyCash }] = await Promise.all([
+            supabase.from('expenses').select('amount, category, status, approval_status')
+                .eq('branch_id', branchId).gte('expense_date', startDate).lte('expense_date', endDate),
+            supabase.from('petty_cash_transactions').select('amount, status')
+                .eq('branch_id', branchId).gte('date', startDate).lte('date', endDate),
+        ]);
+        const expensesByCategory: Record<string, number> = {};
+        let operatingExpenses = 0;
+        (expenses || []).forEach((e: any) => {
+            const ok = String(e.status || e.approval_status || '').toLowerCase();
+            if (ok && !['approved', 'completed', 'paid'].includes(ok)) return;
+            const cat = e.category || 'Other';
+            expensesByCategory[cat] = (expensesByCategory[cat] || 0) + n(e.amount);
+            operatingExpenses += n(e.amount);
+        });
+        const pettyCashTotal = (pettyCash || []).reduce((s: number, p: any) => s + n(p.amount), 0);
+        if (pettyCashTotal > 0) {
+            expensesByCategory['Petty Cash'] = (expensesByCategory['Petty Cash'] || 0) + pettyCashTotal;
+            operatingExpenses += pettyCashTotal;
+        }
+
+        // ── 7. Roll up ──────────────────────────────────────────────────────────
+        const outletList = Array.from(outlets.values())
+            .map((o) => {
+                const grossProfit = o.revenue - o.cogs;
+                const margin = o.revenue > 0 ? (grossProfit / o.revenue) * 100 : 0;
+                return {
+                    outlet_id: o.outlet_id,
+                    name: o.name,
+                    type: o.type,
+                    revenue: Math.round(o.revenue * 100) / 100,
+                    cogs: Math.round(o.cogs * 100) / 100,
+                    gross_profit: Math.round(grossProfit * 100) / 100,
+                    margin: Math.round(margin * 10) / 10,
+                    units: o.units,
+                };
+            })
+            .sort((a, b) => b.revenue - a.revenue);
+
+        const totalRevenue = outletList.reduce((s, o) => s + o.revenue, 0);
+        const totalCogs = outletList.reduce((s, o) => s + o.cogs, 0);
+        const grossProfit = totalRevenue - totalCogs;
+        const operatingIncome = grossProfit - operatingExpenses;
+        const netProfit = operatingIncome;
+        const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+        const netMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+        const revenueBySource: Record<string, number> = {};
+        outletList.forEach((o) => { revenueBySource[o.name] = o.revenue; });
+
+        return {
+            period: { from: startDate, to: endDate },
+            revenue: Math.round(totalRevenue * 100) / 100,
+            cashierRevenue: Math.round(cashierRevenue * 100) / 100,
+            costOfGoods: Math.round(totalCogs * 100) / 100,
+            grossProfit: Math.round(grossProfit * 100) / 100,
+            operatingExpenses: Math.round(operatingExpenses * 100) / 100,
+            operatingIncome: Math.round(operatingIncome * 100) / 100,
+            otherExpenses: 0,
+            netProfit: Math.round(netProfit * 100) / 100,
+            margin: Math.round(netMargin * 10) / 10,
+            grossMargin: Math.round(grossMargin * 10) / 10,
+            outlets: outletList,
+            revenueBySource,
+            expensesByCategory,
+        };
+};
+
+/**
+ * @route GET /api/finance/pos-profit-loss
+ */
+export const getPosProfitLoss = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const params = resolvePnlParams(req);
+        if (!params) {
+            res.status(400).json({ success: false, error: 'Branch ID is required' });
+            return;
+        }
+        const data = await computePosProfitLoss(params.branchId, params.startDate, params.endDate);
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        logger.error('Error generating POS profit & loss:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Export the per-outlet P&L as a FamousGate-branded PDF
+ * @route   GET /api/finance/pos-profit-loss/export/pdf
+ */
+export const exportPosProfitLossPDF = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const params = resolvePnlParams(req);
+        if (!params) {
+            res.status(400).json({ success: false, error: 'Branch ID is required' });
+            return;
+        }
+        const data = await computePosProfitLoss(params.branchId, params.startDate, params.endDate);
+        const { data: branch } = await supabase
+            .from('branches').select('name').eq('id', params.branchId).maybeSingle();
+        const branchName = branch?.name || 'Branch';
+
+        const response = await axios.post(
+            `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
+            {
+                reportType: 'branch_profit_loss',
+                useRealData: false,
+                filters: {
+                    start_date: params.startDate,
+                    end_date: params.endDate,
+                    branch_name: branchName,
+                    branch_id: params.branchId,
+                },
+                data,
+            },
+            { responseType: 'arraybuffer', timeout: 60000 }
+        );
+        const filename = `FG_Profit_Loss_${params.startDate}_${params.endDate}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(Buffer.from(response.data));
+    } catch (error: any) {
+        logger.error('Error exporting POS P&L PDF:', error?.message || error);
         next(error);
     }
 };

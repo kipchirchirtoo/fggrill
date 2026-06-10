@@ -60,8 +60,7 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         query = applyBranchFilter(query, req);
 
         if (staff_id) query = query.eq('staff_id', staff_id);
-        if (status === 'pending') query = query.eq('status', 'pending');
-        if (status === 'paid' || status === 'deducted') query = query.eq('status', status);
+        if (status && status !== 'all') query = query.eq('status', status);
 
 
 
@@ -71,7 +70,7 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         // Fetch staff names separately to avoid schema cache FK issues
         const staffIds = [...new Set((data || []).map((b: any) => b.staff_id).filter(Boolean))];
         const { data: staffProfiles } = staffIds.length > 0
-            ? await supabase.from('staff_profiles').select('id, role, first_name, last_name, user_id').in('id', staffIds)
+            ? await supabase.from('staff_profiles').select('id, role, position, department, employee_id, id_number, national_id, first_name, last_name, user_id').in('id', staffIds)
             : { data: [] };
         const userIds = (staffProfiles || []).map((s: any) => s.user_id).filter(Boolean);
         const { data: users } = userIds.length > 0
@@ -86,9 +85,14 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             const user = sp ? userMap.get(sp.user_id) : null;
             return {
                 ...bill,
+                staff_name: `${user?.first_name || sp?.first_name || ''} ${user?.last_name || sp?.last_name || ''}`.trim(),
+                employee_id: sp?.employee_id || sp?.id_number || sp?.national_id || null,
+                department: sp?.department || null,
                 staff: sp ? {
                     id: sp.id,
-                    role: sp.role,
+                    role: sp.role || sp.position,
+                    department: sp.department,
+                    employee_id: sp.employee_id || sp.id_number || sp.national_id,
                     first_name: user?.first_name || sp.first_name || '',
                     last_name: user?.last_name || sp.last_name || ''
                 } : null

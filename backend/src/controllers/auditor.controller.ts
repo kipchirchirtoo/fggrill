@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
 import { supabase } from '../config/supabase';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
 import * as BranchInventoryService from '../services/branch-inventory.service';
@@ -1992,12 +1994,38 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
   }
 };
 
-/**
- * G. Sold Items Analysis
- * Compare items sold against stock requested to identify patterns.
- */
-export const getSoldItemsAnalysis = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const normalizeDateWindow = (startDate?: any, endDate?: any) => {
+  const startRaw = startDate ? String(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const endRaw = endDate ? String(endDate) : new Date().toISOString().split('T')[0];
+  const startIso = startRaw.includes('T') ? startRaw : `${startRaw}T00:00:00.000Z`;
+  const endIso = endRaw.includes('T') ? endRaw : `${endRaw}T23:59:59.999Z`;
+  return { startRaw, endRaw, startIso, endIso };
+};
+
+const outletGroupFor = (source: string, category?: string, orderType?: string) => {
+  const normalized = `${source} ${category || ''} ${orderType || ''}`.toLowerCase();
+  if (normalized.includes('room')) return 'rooms';
+  if (normalized.includes('non_consumable') || normalized.includes('non-consumable')) return 'non_consumables';
+  if (normalized.includes('bar')) return 'bar';
+  return 'restaurant';
+};
+
+const soldOutletLabel = (group: string) => ({
+  restaurant: 'Restaurant',
+  bar: 'Bar',
+  rooms: 'Rooms',
+  non_consumables: 'Non-consumables',
+}[group] || group);
+
+const movementTier = (quantity: number, maxQuantity: number, days: number) => {
+  const velocity = days > 0 ? quantity / days : quantity;
+  if (maxQuantity > 0 && quantity >= maxQuantity * 0.6) return 'fast';
+  if (velocity >= 5) return 'fast';
+  if (velocity <= 1) return 'slow';
+  return 'steady';
+};
+
+const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const { branch_id, start_date, end_date } = req.query;
     const requestedBranchId = branch_id ? String(branch_id) : '';
     const userBranchId = req.user?.branch_id ? String(req.user.branch_id) : '';
@@ -2005,11 +2033,9 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
     const isBranchScopedUser = ['branch_manager', 'branch_accountant'].includes(userRole);
 
     if (isBranchScopedUser && requestedBranchId && requestedBranchId !== '0' && userBranchId && requestedBranchId !== userBranchId) {
-      res.status(403).json({
-        success: false,
-        message: 'Access denied. You can only view sold items analytics for your assigned branch.'
-      });
-      return;
+      const error = new Error('Access denied. You can only view sold items analytics for your assigned branch.') as any;
+      error.statusCode = 403;
+      throw error;
     }
 
     const effectiveBranchId = isBranchScopedUser
@@ -2024,13 +2050,19 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
       return acc;
     }, {});
 
-    const startDateStr = start_date as string || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const endDateStr = end_date as string || new Date().toISOString();
+    const { startRaw, endRaw, startIso, endIso } = normalizeDateWindow(start_date, end_date);
+    const days = Math.max(1, Math.ceil((new Date(endIso).getTime() - new Date(startIso).getTime()) / (24 * 60 * 60 * 1000)));
 
-    let restQuery = supabase.from('restaurant_orders').select('id, branch_id').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
-    let barQuery = supabase.from('bar_orders').select('id, branch_id').eq('status', 'completed').gte('created_at', startDateStr).lte('created_at', endDateStr);
-    let stockReqQuery = supabase.from('stock_requests').select('id, requesting_branch_id').gte('created_at', startDateStr).lte('created_at', endDateStr);
-    let barStockReqQuery = supabase.from('bar_stock_requests').select('id, bar_branch_id').gte('created_at', startDateStr).lte('created_at', endDateStr);
+    let restQuery = supabase.from('restaurant_orders').select('id, branch_id, created_at, order_type, room_number, department').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
+    let barQuery = supabase.from('bar_orders').select('id, branch_id, created_at, room_number').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
+    let outletOrderQuery = supabase
+      .from('pos_shift_orders')
+      .select('id, outlet_id, shift_id, order_number, order_type, room_number, customer_name, status, payment_status, total_amount, items, created_at, kitchen_status, kitchen_ready_at, updated_at')
+      .gte('created_at', startIso)
+      .lte('created_at', endIso)
+      .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)');
+    let stockReqQuery = supabase.from('stock_requests').select('id, requesting_branch_id').gte('created_at', startIso).lte('created_at', endIso);
+    let barStockReqQuery = supabase.from('bar_stock_requests').select('id, bar_branch_id').gte('created_at', startIso).lte('created_at', endIso);
 
     if (effectiveBranchId) {
       restQuery = restQuery.eq('branch_id', effectiveBranchId);
@@ -2039,17 +2071,44 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
       barStockReqQuery = barStockReqQuery.eq('bar_branch_id', effectiveBranchId);
     }
 
-    const [rawRest, rawBar, rawStock, rawBarStock] = await Promise.all([restQuery, barQuery, stockReqQuery, barStockReqQuery]);
+    const [rawRest, rawBar, rawOutletOrders, rawStock, rawBarStock] = await Promise.all([restQuery, barQuery, outletOrderQuery, stockReqQuery, barStockReqQuery]);
 
     if (rawRest.error) throw rawRest.error;
     if (rawBar.error) throw rawBar.error;
+    if (rawOutletOrders.error) throw rawOutletOrders.error;
     if (rawStock.error) throw rawStock.error;
     if (rawBarStock.error) throw rawBarStock.error;
 
     const restOrders = rawRest.data || [];
     const barOrders = rawBar.data || [];
+    let outletOrders = rawOutletOrders.data || [];
     const stockRequests = rawStock.data || [];
     const barStockRequests = rawBarStock.data || [];
+
+    const outletIds = [...new Set(outletOrders.map((order: any) => order.outlet_id).filter(Boolean))];
+    const shiftIds = [...new Set(outletOrders.map((order: any) => order.shift_id).filter(Boolean))];
+    const [outletsRes, outletStockRes] = await Promise.all([
+      outletIds.length
+        ? supabase.from('pos_outlets').select('id, branch_id, name, outlet_type').in('id', outletIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      shiftIds.length
+        ? supabase.from('pos_shift_stock_counts').select('shift_id, outlet_item_id, item_name, sku, cost_price, selling_price, sold_quantity').in('shift_id', shiftIds)
+        : Promise.resolve({ data: [], error: null } as any)
+    ]);
+    if (outletsRes.error) throw outletsRes.error;
+    if (outletStockRes.error) throw outletStockRes.error;
+
+    const outletMap = (outletsRes.data || []).reduce((acc: Record<string, any>, outlet: any) => {
+      acc[String(outlet.id)] = outlet;
+      return acc;
+    }, {});
+    if (effectiveBranchId) {
+      outletOrders = outletOrders.filter((order: any) => Number(outletMap[String(order.outlet_id)]?.branch_id) === Number(effectiveBranchId));
+    }
+    const stockCountByShiftItem = (outletStockRes.data || []).reduce((acc: Record<string, any>, row: any) => {
+      acc[`${row.shift_id}_${row.outlet_item_id}`] = row;
+      return acc;
+    }, {});
 
     const restIds = restOrders.map((order: any) => order.id).filter(Boolean);
     const barIds = barOrders.map((order: any) => order.id).filter(Boolean);
@@ -2058,7 +2117,7 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
 
     const [restItemsRes, barItemsRes, stockItemsRes, barStockItemsRes] = await Promise.all([
       restIds.length
-        ? supabase.from('restaurant_order_items').select('order_id, menu_item_id, item_name, quantity, unit_price, total_price').in('order_id', restIds)
+        ? supabase.from('restaurant_order_items').select('order_id, menu_item_id, item_name, quantity, unit_price, total_price, kitchen_status, kitchen_ready_at').in('order_id', restIds)
         : Promise.resolve({ data: [], error: null } as any),
       barIds.length
         ? supabase.from('bar_order_items').select('order_id, drink_id, drink_name, item_name, quantity, unit_price, total_price').in('order_id', barIds)
@@ -2153,8 +2212,12 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
       name: string;
       quantity: number;
       revenue: number;
+      cost?: number;
       category: string;
-      source: 'restaurant' | 'bar';
+      source: string;
+      outletGroup?: string;
+      soldAt?: string;
+      kdsMinutes?: number | null;
     }) => {
       const key = `${payload.branchId}_${payload.source}_${payload.itemId || payload.name}`;
       if (!soldItemsMap[key]) {
@@ -2165,13 +2228,30 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
           name: payload.name,
           quantity: 0,
           revenue: 0,
+          cost_of_goods_sold: 0,
           category: payload.category,
-          source: payload.source
+          source: payload.source,
+          outlet_group: payload.outletGroup || outletGroupFor(payload.source, payload.category),
+          daily: {},
+          kds_count: 0,
+          kds_total_minutes: 0
         };
       }
 
       soldItemsMap[key].quantity += payload.quantity;
       soldItemsMap[key].revenue += payload.revenue;
+      soldItemsMap[key].cost_of_goods_sold += Number(payload.cost || 0);
+      if (payload.soldAt) {
+        const day = String(payload.soldAt).slice(0, 10);
+        if (!soldItemsMap[key].daily[day]) soldItemsMap[key].daily[day] = { date: day, quantity: 0, revenue: 0, cost_of_goods_sold: 0 };
+        soldItemsMap[key].daily[day].quantity += payload.quantity;
+        soldItemsMap[key].daily[day].revenue += payload.revenue;
+        soldItemsMap[key].daily[day].cost_of_goods_sold += Number(payload.cost || 0);
+      }
+      if (payload.kdsMinutes !== null && payload.kdsMinutes !== undefined && Number.isFinite(payload.kdsMinutes)) {
+        soldItemsMap[key].kds_count += 1;
+        soldItemsMap[key].kds_total_minutes += payload.kdsMinutes;
+      }
     };
 
     restOrders.forEach((order: any) => {
@@ -2182,6 +2262,11 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
         const revenue = Number(item.total_price ?? quantity * unitPrice) || 0;
         const itemId = item.menu_item_id ? String(item.menu_item_id) : '';
         const name = menuItemNameMap[itemId] || item.item_name || 'Unknown Item';
+        const readyAt = item.kitchen_ready_at ? new Date(item.kitchen_ready_at).getTime() : NaN;
+        const createdAt = order.created_at ? new Date(order.created_at).getTime() : NaN;
+        const kdsMinutes = Number.isFinite(readyAt) && Number.isFinite(createdAt)
+          ? Math.max(0, (readyAt - createdAt) / 60000)
+          : null;
 
         addSoldItem({
           branchId: branchKey,
@@ -2190,7 +2275,10 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
           quantity,
           revenue,
           category: 'Restaurant',
-          source: 'restaurant'
+          source: 'restaurant',
+          outletGroup: outletGroupFor('restaurant', order.department, order.order_type),
+          soldAt: order.created_at,
+          kdsMinutes
         });
       });
     });
@@ -2212,7 +2300,43 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
           quantity,
           revenue,
           category: barItem?.category || 'Bar',
-          source: 'bar'
+          source: 'bar',
+          outletGroup: order.room_number ? 'rooms' : 'bar',
+          soldAt: order.created_at
+        });
+      });
+    });
+
+    outletOrders.forEach((order: any) => {
+      const outlet = outletMap[String(order.outlet_id)] || {};
+      const branchKey = String(outlet.branch_id || effectiveBranchId || '');
+      if (!branchKey) return;
+      const orderItems = Array.isArray(order.items) ? order.items : [];
+      orderItems.forEach((item: any) => {
+        const quantity = Number(item.quantity ?? item.qty ?? 0) || 0;
+        const unitPrice = Number(item.unit_price ?? item.selling_price ?? item.price ?? 0) || 0;
+        const revenue = Number(item.line_total ?? item.total_price ?? item.total ?? quantity * unitPrice) || 0;
+        const itemId = item.outlet_item_id ? String(item.outlet_item_id) : String(item.product_id || item.id || item.name || '');
+        const stockRow = stockCountByShiftItem[`${order.shift_id}_${itemId}`] || {};
+        const costPrice = Number(item.cost_price ?? stockRow.cost_price ?? 0) || 0;
+        const readyAt = order.kitchen_ready_at ? new Date(order.kitchen_ready_at).getTime() : NaN;
+        const createdAt = order.created_at ? new Date(order.created_at).getTime() : NaN;
+        const kdsMinutes = Number.isFinite(readyAt) && Number.isFinite(createdAt)
+          ? Math.max(0, (readyAt - createdAt) / 60000)
+          : null;
+        const outletGroup = outletGroupFor(String(outlet.outlet_type || item.outlet_type || ''), item.category, order.order_type);
+        addSoldItem({
+          branchId: branchKey,
+          itemId,
+          name: item.name || item.item_name || stockRow.item_name || 'POS Item',
+          quantity,
+          revenue,
+          cost: quantity * costPrice,
+          category: item.category || soldOutletLabel(outletGroup),
+          source: String(outlet.outlet_type || 'pos_outlet'),
+          outletGroup,
+          soldAt: order.created_at,
+          kdsMinutes
         });
       });
     });
@@ -2244,21 +2368,25 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
     if (effectiveBranchId) {
       branchSummaries[effectiveBranchId] = {
         branch_id: effectiveBranchId,
-        branch_name: branchNameMap[effectiveBranchId] || `Branch ${effectiveBranchId}`,
-        total_items_sold: 0,
-        total_revenue: 0,
-        total_quantity: 0
-      };
+	        branch_name: branchNameMap[effectiveBranchId] || `Branch ${effectiveBranchId}`,
+	        total_items_sold: 0,
+	        total_revenue: 0,
+	        total_quantity: 0,
+	        total_cogs: 0,
+	        gross_profit: 0
+	      };
     } else {
       (branches || []).forEach((branch: any) => {
         const branchKey = String(branch.id);
         branchSummaries[branchKey] = {
           branch_id: branch.id,
-          branch_name: branch.name,
-          total_items_sold: 0,
-          total_revenue: 0,
-          total_quantity: 0
-        };
+	          branch_name: branch.name,
+	          total_items_sold: 0,
+	          total_revenue: 0,
+	          total_quantity: 0,
+	          total_cogs: 0,
+	          gross_profit: 0
+	        };
       });
     }
 
@@ -2290,13 +2418,17 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
           branch_name: sold.branch_name,
           total_items_sold: 0,
           total_revenue: 0,
-          total_quantity: 0
+          total_quantity: 0,
+          total_cogs: 0,
+          gross_profit: 0
         };
       }
 
       branchSummaries[sold.branch_id].total_items_sold += 1;
       branchSummaries[sold.branch_id].total_revenue += sold.revenue;
       branchSummaries[sold.branch_id].total_quantity += sold.quantity;
+      branchSummaries[sold.branch_id].total_cogs += sold.cost_of_goods_sold;
+      branchSummaries[sold.branch_id].gross_profit += sold.revenue - sold.cost_of_goods_sold;
 
       return {
         branch_id: sold.branch_id,
@@ -2304,27 +2436,131 @@ export const getSoldItemsAnalysis = async (req: Request, res: Response, next: Ne
         item_id: sold.item_id,
         name: sold.name,
         category: sold.category,
+        outlet_group: sold.outlet_group,
+        outlet_label: soldOutletLabel(sold.outlet_group),
         quantity: sold.quantity,
         revenue: sold.revenue,
+        cost_of_goods_sold: sold.cost_of_goods_sold,
+        gross_profit: sold.revenue - sold.cost_of_goods_sold,
+        profit_margin: sold.revenue > 0 ? ((sold.revenue - sold.cost_of_goods_sold) / sold.revenue) * 100 : 0,
         stock_requested: stockRequested,
-        consumption_ratio: stockRequested > 0 ? sold.quantity / stockRequested : 0
+        consumption_ratio: stockRequested > 0 ? sold.quantity / stockRequested : 0,
+        average_kds_minutes: sold.kds_count > 0 ? sold.kds_total_minutes / sold.kds_count : null,
+        daily: Object.values(sold.daily)
       };
     });
 
-    const summary = {
-      total_items_sold: analysis.length,
-      total_quantity_sold: analysis.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0),
-      total_revenue: analysis.reduce((sum: number, item: any) => sum + Number(item.revenue || 0), 0),
-      branch_summaries: Object.values(branchSummaries)
+    const maxQuantity = analysis.reduce((max: number, item: any) => Math.max(max, Number(item.quantity || 0)), 0);
+    const enrichedAnalysis = analysis.map((item: any) => ({
+      ...item,
+      velocity_per_day: Number(item.quantity || 0) / days,
+      movement_tier: movementTier(Number(item.quantity || 0), maxQuantity, days)
+    })).sort((a, b) => b.quantity - a.quantity);
+
+    const outletBreakdown = ['restaurant', 'bar', 'rooms', 'non_consumables'].map((group) => {
+      const rows = enrichedAnalysis.filter((item: any) => item.outlet_group === group);
+      const revenue = rows.reduce((sum: number, item: any) => sum + Number(item.revenue || 0), 0);
+      const cogs = rows.reduce((sum: number, item: any) => sum + Number(item.cost_of_goods_sold || 0), 0);
+      const quantity = rows.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+      return {
+        key: group,
+        label: soldOutletLabel(group),
+        item_count: rows.length,
+        quantity,
+        revenue,
+        cost_of_goods_sold: cogs,
+        gross_profit: revenue - cogs,
+        profit_margin: revenue > 0 ? ((revenue - cogs) / revenue) * 100 : 0
+      };
+    });
+
+    const dailyMap: Record<string, any> = {};
+    enrichedAnalysis.forEach((item: any) => {
+      (item.daily || []).forEach((day: any) => {
+        if (!dailyMap[day.date]) dailyMap[day.date] = { date: day.date, revenue: 0, cost_of_goods_sold: 0, gross_profit: 0, quantity: 0 };
+        dailyMap[day.date].revenue += Number(day.revenue || 0);
+        dailyMap[day.date].cost_of_goods_sold += Number(day.cost_of_goods_sold || 0);
+        dailyMap[day.date].gross_profit += Number(day.revenue || 0) - Number(day.cost_of_goods_sold || 0);
+        dailyMap[day.date].quantity += Number(day.quantity || 0);
+      });
+    });
+    const dailyRevenue = Object.values(dailyMap).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+
+    const kdsItems = enrichedAnalysis.filter((item: any) => item.average_kds_minutes !== null && item.average_kds_minutes !== undefined);
+    const kdsIntelligence = {
+      average_prep_minutes: kdsItems.length
+        ? kdsItems.reduce((sum: number, item: any) => sum + Number(item.average_kds_minutes || 0), 0) / kdsItems.length
+        : null,
+      slowest_items: [...kdsItems].sort((a: any, b: any) => Number(b.average_kds_minutes || 0) - Number(a.average_kds_minutes || 0)).slice(0, 10),
+      fastest_items: [...kdsItems].sort((a: any, b: any) => Number(a.average_kds_minutes || 0) - Number(b.average_kds_minutes || 0)).slice(0, 10)
     };
+
+    const summary = {
+      total_items_sold: enrichedAnalysis.length,
+      total_quantity_sold: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0),
+      total_revenue: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.revenue || 0), 0),
+      total_cogs: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.cost_of_goods_sold || 0), 0),
+      gross_profit: enrichedAnalysis.reduce((sum: number, item: any) => sum + Number(item.gross_profit || 0), 0),
+      profit_margin: 0,
+      fast_moving_count: enrichedAnalysis.filter((item: any) => item.movement_tier === 'fast').length,
+      slow_moving_count: enrichedAnalysis.filter((item: any) => item.movement_tier === 'slow').length,
+      branch_summaries: Object.values(branchSummaries),
+      outlet_breakdown: outletBreakdown,
+      daily_revenue: dailyRevenue,
+      kds_intelligence: kdsIntelligence,
+      period: { start_date: startRaw, end_date: endRaw, days }
+    };
+    summary.profit_margin = summary.total_revenue > 0 ? (summary.gross_profit / summary.total_revenue) * 100 : 0;
+
+    return {
+      summary,
+      analysis: enrichedAnalysis,
+      fast_moving_items: enrichedAnalysis.filter((item: any) => item.movement_tier === 'fast').slice(0, 15),
+      slow_moving_items: [...enrichedAnalysis].filter((item: any) => item.movement_tier === 'slow').sort((a: any, b: any) => Number(a.quantity || 0) - Number(b.quantity || 0)).slice(0, 15)
+    };
+};
+
+/**
+ * G. Sold Items Analysis
+ * Compare items sold against stock requested to identify patterns.
+ */
+export const getSoldItemsAnalysis = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const payload = await buildSoldItemsAnalysisPayload(req);
 
     res.status(200).json({
       success: true,
-      data: {
-        summary,
-        analysis: analysis.sort((a, b) => b.quantity - a.quantity)
-      }
+      data: payload
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const exportSoldItemsAnalysisPDF = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const payload = await buildSoldItemsAnalysisPayload(req);
+    const summary = payload.summary || {};
+    const period = summary.period || {};
+    const branchName = (summary.branch_summaries || [])[0]?.branch_name || 'Branch';
+    const response = await axios.post(
+      `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
+      {
+        reportType: 'sold_items_analytics',
+        useRealData: false,
+        filters: {
+          start_date: period.start_date,
+          end_date: period.end_date,
+          branch_name: branchName,
+        },
+        data: payload
+      },
+      { responseType: 'arraybuffer', timeout: 60000 }
+    );
+    const filename = `FG_Sold_Items_${period.start_date || 'from'}_${period.end_date || 'to'}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(Buffer.from(response.data));
   } catch (error) {
     next(error);
   }
@@ -3128,24 +3364,75 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       return true;
     };
 
+    const numberValue = (value: any) => {
+      const parsed = Number(value || 0);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const isSettledCreditStatus = (status: any, isPaid?: any) => {
+      const normalized = String(status || '').toLowerCase();
+      return Boolean(isPaid) || ['paid', 'paid_cash', 'deducted', 'cancelled'].includes(normalized);
+    };
+
+    const creditOutstandingAmount = (bill: any) => {
+      const amount = numberValue(bill.amount);
+      if (isSettledCreditStatus(bill.status, bill.is_paid)) {
+        return 0;
+      }
+      if (bill.balance !== null && bill.balance !== undefined) {
+        return Math.max(0, numberValue(bill.balance));
+      }
+      if (bill.balance_amount !== null && bill.balance_amount !== undefined) {
+        return Math.max(0, numberValue(bill.balance_amount));
+      }
+      return Math.max(0, amount - numberValue(bill.paid_amount));
+    };
+
+    const advanceOutstandingAmount = (advance: any) => {
+      const status = String(advance.status || '').toLowerCase();
+      if (['deducted', 'paid', 'paid_cash', 'cancelled', 'rejected'].includes(status)) {
+        return 0;
+      }
+      return Math.max(0, numberValue(advance.balance ?? advance.balance_amount ?? advance.amount));
+    };
+
+    const loanOutstandingAmount = (loan: any) => {
+      const status = String(loan.status || '').toLowerCase();
+      if (['closed', 'paid', 'deducted', 'cancelled', 'rejected'].includes(status)) {
+        return 0;
+      }
+      return Math.max(0, numberValue(loan.remaining_balance ?? loan.balance ?? loan.total_amount));
+    };
+
     creditBills?.forEach((bill: any) => {
       if (!isWithinDateRange(bill.bill_date || bill.created_at)) {
         return;
       }
 
       const staffProfile = getStaffProfile(bill.staff_id);
+      const amount = numberValue(bill.amount);
+      const outstandingAmount = creditOutstandingAmount(bill);
       unifiedRecords.push({
         id: bill.id,
         date: bill.bill_date,
         type: 'Credit Bill',
-        amount: Number(bill.amount || 0),
+        amount,
         staff_id: bill.staff_id,
         description: bill.description || 'Staff credit bill',
         action: 'Credit Bill',
-        status: bill.status === 'pending' ? 'Unpaid' : bill.status === 'deducted' ? 'Deducted' : bill.status === 'paid_cash' ? 'Paid' : (bill.is_paid ? 'Paid' : 'Unpaid'),
+        status: outstandingAmount <= 0
+          ? 'Paid'
+          : bill.status === 'pending'
+            ? 'Unpaid'
+            : bill.status === 'deducted'
+              ? 'Deducted'
+              : bill.status === 'paid_cash'
+                ? 'Paid'
+                : bill.status || 'Unpaid',
         reference: (bill.id || '').substring(0, 8).toUpperCase(),
         created_at: bill.created_at || bill.bill_date,
-        outstanding_amount: bill.is_paid ? 0 : Number(bill.amount || 0),
+        outstanding_amount: outstandingAmount,
+        paid_amount: Math.max(0, amount - outstandingAmount),
         original_record: bill,
         ...buildStaffDetails(staffProfile)
       });
@@ -3157,11 +3444,12 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       }
 
       const staffProfile = getStaffProfile(adv.staff_id);
+      const outstandingAmount = advanceOutstandingAmount(adv);
       unifiedRecords.push({
         id: adv.id,
         date: adv.advance_date || adv.created_at,
         type: 'Advance',
-        amount: Number(adv.amount || 0),
+        amount: numberValue(adv.amount),
         staff_id: adv.staff_id,
         description: adv.reason || 'Salary advance',
         action: 'Advance',
@@ -3170,7 +3458,7 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         created_at: adv.created_at || adv.advance_date,
         auditor_id: adv.auditor_id,
         auditor_confirmed_at: adv.auditor_confirmed_at,
-        outstanding_amount: 0,
+        outstanding_amount: outstandingAmount,
         original_record: adv,
         ...buildStaffDetails(staffProfile)
       });
@@ -3182,11 +3470,12 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       }
 
       const staffProfile = getStaffProfile(loan.staff_id);
+      const outstandingAmount = loanOutstandingAmount(loan);
       unifiedRecords.push({
         id: loan.id,
         date: loan.loan_date || loan.created_at,
         type: 'Loan',
-        amount: Number(loan.total_amount || 0),
+        amount: numberValue(loan.total_amount || loan.amount),
         staff_id: loan.staff_id,
         description: loan.reason || 'Staff loan',
         action: 'Loan',
@@ -3195,7 +3484,7 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         created_at: loan.created_at || loan.loan_date,
         auditor_id: loan.auditor_id,
         auditor_confirmed_at: loan.auditor_confirmed_at,
-        outstanding_amount: Number(loan.remaining_balance || 0),
+        outstanding_amount: outstandingAmount,
         original_record: loan,
         ...buildStaffDetails(staffProfile)
       });
@@ -3220,7 +3509,7 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       }
 
       const normalizedStatus = String(bill.status || '').toLowerCase();
-      const outstandingAmount = Number(bill.balance_amount ?? bill.amount ?? bill.total_amount ?? 0);
+      const outstandingAmount = numberValue(bill.balance_amount ?? bill.amount ?? bill.total_amount ?? 0);
 
       if (normalizedStatus && !['unpaid', 'partial', 'overdue'].includes(normalizedStatus) && outstandingAmount <= 0) {
         return;
@@ -3259,16 +3548,22 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
         staff_id: staff.id,
         staff_name: staffName,
         employee_id: staff.employee_id || staff.staff_code || staff.id_number || staff.national_id || null,
+        national_id: staff.national_id || staff.id_number || null,
         department: staff.department || null,
         role: staff.role || staff.position || null,
         phone: staff.phone || staff.phone_number || null,
         branch_id: staff.branch_id || null,
         branch_name: staff.branch_id ? branchMap.get(staff.branch_id)?.name || null : null,
+        salary: numberValue(staff.basic_salary ?? staff.salary ?? staff.monthly_salary ?? staff.gross_salary),
         total_credit_bills: 0,
+        outstanding_credit_bills: 0,
         total_advances: 0,
+        outstanding_advances: 0,
         total_loans: 0,
+        outstanding_loans: 0,
         total_unpaid_bills: 0,
-        outstanding_balance: 0
+        outstanding_balance: 0,
+        net_payable: 0
       };
     });
 
@@ -3280,16 +3575,24 @@ export const getStaffAudit = async (req: Request, res: Response, next: NextFunct
       const summary = staffSummary[record.staff_id];
       if (record.type === 'Credit Bill') {
         summary.total_credit_bills += Number(record.amount || 0);
+        summary.outstanding_credit_bills += Number(record.outstanding_amount || 0);
         summary.outstanding_balance += Number(record.outstanding_amount || 0);
       } else if (record.type === 'Advance') {
         summary.total_advances += Number(record.amount || 0);
+        summary.outstanding_advances += Number(record.outstanding_amount || 0);
+        summary.outstanding_balance += Number(record.outstanding_amount || 0);
       } else if (record.type === 'Loan') {
         summary.total_loans += Number(record.amount || 0);
+        summary.outstanding_loans += Number(record.outstanding_amount || 0);
         summary.outstanding_balance += Number(record.outstanding_amount || 0);
       } else if (record.type === 'Unpaid Bill') {
         summary.total_unpaid_bills += Number(record.amount || 0);
         summary.outstanding_balance += Number(record.outstanding_amount || 0);
       }
+    });
+
+    Object.values(staffSummary).forEach((summary: any) => {
+      summary.net_payable = Math.max(0, numberValue(summary.salary) - numberValue(summary.outstanding_balance));
     });
 
     res.status(200).json({

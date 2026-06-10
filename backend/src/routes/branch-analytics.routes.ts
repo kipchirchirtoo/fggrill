@@ -6,7 +6,8 @@ import {
   getBranchSales,
   getBranchSalesSummary,
   exportBranchSalesPDF,
-  exportBranchSalesCSV
+  exportBranchSalesCSV,
+  getBranchSaleTransaction
 } from '../controllers/branch-analytics.controller';
 import { protect, authorize, UserRole } from '../middleware/auth';
 
@@ -58,6 +59,24 @@ router.post(
   '/branch-sales/export/csv',
   authorize([UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.GENERAL_MANAGER, UserRole.SUPER_ADMIN]),
   exportBranchSalesCSV
+);
+
+/**
+ * @route   GET /api/analytics/branch-sales/transaction/:source/:id
+ * @desc    Full POS detail of one branch-sale transaction (deep-dive page)
+ * @access  Protected (branch_manager, branch_accountant, auditor, director, gm, super_admin)
+ */
+router.get(
+  '/branch-sales/transaction/:source/:id',
+  authorize([
+    UserRole.BRANCH_MANAGER,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.AUDITOR,
+    UserRole.DIRECTOR,
+    UserRole.GENERAL_MANAGER,
+    UserRole.SUPER_ADMIN,
+  ]),
+  getBranchSaleTransaction
 );
 
 export default router;

@@ -118,14 +118,14 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
       .not('status', 'eq', 'cancelled'),
     supabase
       .from('restaurant_orders')
-      .select('id, branch_id, total_amount, payment_method, order_type, created_at, status')
+      .select('id, branch_id, total_amount, payment_method, order_type, created_at, status, order_number, bill_number, department')
       .eq('branch_id', requestData.branch_id)
       .gte('created_at', startTimestamp)
       .lte('created_at', endTimestamp)
       .not('status', 'eq', 'cancelled'),
     supabase
       .from('shift_transactions')
-      .select('id, branch_id, total_amount, payment_method, service_category, created_at, is_voided')
+      .select('id, branch_id, total_amount, payment_method, service_category, created_at, is_voided, transaction_number')
       .eq('branch_id', requestData.branch_id)
       .gte('created_at', startTimestamp)
       .lte('created_at', endTimestamp),
@@ -161,7 +161,10 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
     order_type: String(order.order_type || '').toLowerCase() as OrderType,
     total_amount: Number(order.total_amount || 0),
     status: String(order.status || 'completed'),
-    source: 'restaurant'
+    source: 'restaurant',
+    code: order.order_number || order.bill_number || null,
+    short_code: order.bill_number || (order.order_number ? String(order.order_number).slice(-6) : null),
+    outlet: order.department || 'Restaurant'
   }));
 
   const shiftTransactions: TransactionRecord[] = (shiftResult.data || [])
@@ -174,7 +177,10 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
       payment_method: normalizePaymentMethod(transaction.payment_method) as PaymentMethod,
       total_amount: Number(transaction.total_amount || 0),
       status: 'completed',
-      source: 'shift_transaction'
+      source: 'shift_transaction',
+      code: transaction.transaction_number || null,
+      short_code: transaction.transaction_number ? String(transaction.transaction_number).slice(-6) : null,
+      outlet: transaction.service_category || 'POS'
     }));
 
   const transactions = [...bookingTransactions, ...restaurantTransactions, ...shiftTransactions]
@@ -752,5 +758,224 @@ export const exportBranchSalesCSV = async (req: Request, res: Response): Promise
         code: 'INTERNAL_SERVER_ERROR'
       });
     }
+  }
+};
+
+/**
+ * Get a single branch-sale transaction with full POS detail (date/time, waiter,
+ * items, payment method, outlet, order code + short code) — for the deep-dive
+ * page opened from the Branch Sales & Payments feed.
+ * @route GET /api/analytics/branch-sales/transaction/:source/:id
+ * @access branch_manager, branch_accountant, auditor, director, gm, super_admin
+ */
+export const getBranchSaleTransaction = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const source = String(req.params.source || '');
+    const id = String(req.params.id || '');
+    const userRole = String((req as any).user?.role || '');
+    const userBranchId = (req as any).user?.branch_id;
+    const branchScoped = ['branch_manager', 'branch_accountant'].includes(userRole);
+
+    const num = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+    const denyIfOtherBranch = (rowBranch: any): boolean =>
+      branchScoped && userBranchId != null && Number(rowBranch) !== Number(userBranchId);
+
+    let detail: Record<string, any> | null = null;
+
+    if (source === 'restaurant') {
+      const { data: order, error } = await supabase
+        .from('restaurant_orders')
+        .select('id, branch_id, order_number, bill_number, table_number, room_number, guest_name, waiter_id, department, payment_method, payment_status, status, total_amount, grand_total, service_charge, tax_amount, discount_amount, created_at, paid_at')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!order || denyIfOtherBranch(order.branch_id)) {
+        res.status(404).json({ error: 'Order not found in your branch' });
+        return;
+      }
+
+      const { data: rawItems } = await supabase
+        .from('restaurant_order_items')
+        .select('menu_item_id, quantity, unit_price, total_price, special_instructions')
+        .eq('order_id', id);
+      const menuIds = [...new Set((rawItems || []).map((i: any) => i.menu_item_id).filter(Boolean))];
+      const nameById = new Map<string, string>();
+      if (menuIds.length) {
+        const { data: menu } = await supabase
+          .from('restaurant_menu_items')
+          .select('id, name')
+          .in('id', menuIds);
+        for (const m of (menu || []) as any[]) nameById.set(String(m.id), m.name);
+      }
+      let waiterName = '';
+      if (order.waiter_id) {
+        const { data: w } = await supabase
+          .from('users')
+          .select('first_name, last_name')
+          .eq('id', order.waiter_id)
+          .maybeSingle();
+        if (w) waiterName = `${w.first_name || ''} ${w.last_name || ''}`.trim();
+      }
+
+      detail = {
+        source,
+        id: String(order.id),
+        code: order.order_number || order.bill_number || String(order.id),
+        short_code: order.bill_number || (order.order_number ? String(order.order_number).slice(-6) : null),
+        outlet: order.department || 'Restaurant',
+        waiter_name: waiterName,
+        customer_name: order.guest_name || null,
+        table_number: order.table_number || order.room_number || null,
+        payment_method: order.payment_method || null,
+        payment_status: order.payment_status || null,
+        status: order.status || null,
+        date: order.created_at,
+        paid_at: order.paid_at,
+        subtotal: num(order.total_amount),
+        service_charge: num(order.service_charge),
+        tax_amount: num(order.tax_amount),
+        discount_amount: num(order.discount_amount),
+        total: num(order.grand_total) || num(order.total_amount),
+        items: (rawItems || []).map((i: any) => ({
+          name: nameById.get(String(i.menu_item_id)) || 'Item',
+          quantity: num(i.quantity),
+          unit_price: num(i.unit_price),
+          total_price: num(i.total_price),
+          notes: i.special_instructions || null,
+        })),
+      };
+    } else if (source === 'bar') {
+      const { data: order, error } = await supabase
+        .from('bar_orders')
+        .select('id, branch_id, order_number, room_number, seat_number, guest_name, created_by, payment_method, payment_status, status, subtotal, total, created_at, completed_at')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!order || denyIfOtherBranch(order.branch_id)) {
+        res.status(404).json({ error: 'Order not found in your branch' });
+        return;
+      }
+      const { data: items } = await supabase
+        .from('bar_order_items')
+        .select('drink_name, quantity, unit_price, total_price, notes')
+        .eq('order_id', id);
+      let waiterName = '';
+      if (order.created_by) {
+        const { data: w } = await supabase
+          .from('users')
+          .select('first_name, last_name')
+          .eq('id', order.created_by)
+          .maybeSingle();
+        if (w) waiterName = `${w.first_name || ''} ${w.last_name || ''}`.trim();
+      }
+      detail = {
+        source,
+        id: String(order.id),
+        code: order.order_number || String(order.id),
+        short_code: order.order_number ? String(order.order_number).slice(-6) : null,
+        outlet: 'Bar',
+        waiter_name: waiterName,
+        customer_name: order.guest_name || null,
+        table_number: order.seat_number || order.room_number || null,
+        payment_method: order.payment_method || null,
+        payment_status: order.payment_status || null,
+        status: order.status || null,
+        date: order.created_at,
+        paid_at: order.completed_at,
+        subtotal: num(order.subtotal),
+        total: num(order.total),
+        items: (items || []).map((i: any) => ({
+          name: i.drink_name || 'Drink',
+          quantity: num(i.quantity),
+          unit_price: num(i.unit_price),
+          total_price: num(i.total_price),
+          notes: i.notes || null,
+        })),
+      };
+    } else if (source === 'shift_transaction') {
+      const { data: txn, error } = await supabase
+        .from('shift_transactions')
+        .select('id, branch_id, transaction_number, service_category, sales_point_id, served_by, customer_name, customer_room_number, payment_method, subtotal, discount_amount, tax_amount, total_amount, created_at, is_voided')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!txn || denyIfOtherBranch(txn.branch_id)) {
+        res.status(404).json({ error: 'Transaction not found in your branch' });
+        return;
+      }
+      let outlet = txn.service_category || 'POS';
+      if (txn.sales_point_id) {
+        const { data: sp } = await supabase
+          .from('sales_points')
+          .select('name, code')
+          .eq('id', txn.sales_point_id)
+          .maybeSingle();
+        if (sp) outlet = sp.name || sp.code || outlet;
+      }
+      const { data: items } = await supabase
+        .from('shift_transaction_items')
+        .select('item_name, quantity, unit_price, total_price, service_staff_name, notes')
+        .eq('transaction_id', id);
+      const waiterName =
+        ((items || []).find((i: any) => i.service_staff_name)?.service_staff_name as string) || '';
+      detail = {
+        source,
+        id: String(txn.id),
+        code: txn.transaction_number || String(txn.id),
+        short_code: txn.transaction_number ? String(txn.transaction_number).slice(-6) : null,
+        outlet,
+        waiter_name: waiterName,
+        customer_name: txn.customer_name || null,
+        table_number: txn.customer_room_number || null,
+        payment_method: txn.payment_method || null,
+        status: txn.is_voided ? 'voided' : 'completed',
+        date: txn.created_at,
+        subtotal: num(txn.subtotal),
+        discount_amount: num(txn.discount_amount),
+        tax_amount: num(txn.tax_amount),
+        total: num(txn.total_amount),
+        items: (items || []).map((i: any) => ({
+          name: i.item_name || 'Item',
+          quantity: num(i.quantity),
+          unit_price: num(i.unit_price),
+          total_price: num(i.total_price),
+          notes: i.notes || null,
+        })),
+      };
+    } else if (source === 'booking') {
+      const { data: b, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!b || denyIfOtherBranch(b.branch_id)) {
+        res.status(404).json({ error: 'Booking not found in your branch' });
+        return;
+      }
+      detail = {
+        source,
+        id: String(b.id),
+        code: b.confirmation_number || b.booking_number || String(b.id),
+        short_code: b.confirmation_number ? String(b.confirmation_number).slice(-6) : null,
+        outlet: 'Rooms / Front Office',
+        waiter_name: '',
+        customer_name: b.guest_name || null,
+        payment_method: b.payment_method || null,
+        status: b.status || null,
+        date: b.created_at,
+        total: num(b.total_amount),
+        items: [],
+      };
+    } else {
+      res.status(400).json({ error: 'Unknown transaction source' });
+      return;
+    }
+
+    res.status(200).json({ success: true, data: detail });
+  } catch (error: any) {
+    logger.error('getBranchSaleTransaction failed', { error: error.message });
+    res.status(500).json({ error: 'Failed to load transaction detail', code: 'INTERNAL_SERVER_ERROR' });
   }
 };

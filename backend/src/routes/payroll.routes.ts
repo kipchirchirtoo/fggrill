@@ -18,7 +18,7 @@ import {
   partialPayCreditBill,
   getCreditBillPayments
 } from '../controllers/credit-bills.controller';
-import { getLoans, createLoan, approveLoan, rejectLoan } from '../controllers/loans.controller';
+import { getLoans, createLoan, approveLoan, rejectLoan, recordLoanPayment } from '../controllers/loans.controller';
 import { getAdvances, createAdvance, approveAdvance, rejectAdvance } from '../controllers/advances.controller';
 import { getPayrollSummary } from '../controllers/payroll-simple.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
@@ -156,6 +156,12 @@ router.post(
   '/loans/:id/reject',
   authorize([UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   rejectLoan
+);
+
+router.post(
+  '/loans/:id/payment',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  recordLoanPayment
 );
 
 // Staff Advances

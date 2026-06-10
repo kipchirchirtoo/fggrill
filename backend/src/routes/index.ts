@@ -96,6 +96,8 @@ import communicationsRoutes from './communications.routes';
 import superadminRoutes from './superadmin.routes';
 import linaRoutes from './lina.routes';
 import documentTemplateRoutes from './document-template.routes';
+import menuPricingRoutes from './menu-pricing.routes';
+import branchSearchRoutes from './branch-search.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
@@ -215,6 +217,8 @@ router.use('/security', securityRoutes);
 router.use('/superadmin', superadminRoutes);
 router.use('/lina', linaRoutes);
 router.use('/document-templates', documentTemplateRoutes);
+router.use('/menu-pricing', menuPricingRoutes);
+router.use('/branch-search', branchSearchRoutes);
 
 // Food Control System routes
 router.use('/buffet', buffetRoutes);
