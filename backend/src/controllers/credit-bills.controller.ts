@@ -70,11 +70,11 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         // Fetch staff names separately to avoid schema cache FK issues
         const staffIds = [...new Set((data || []).map((b: any) => b.staff_id).filter(Boolean))];
         const { data: staffProfiles } = staffIds.length > 0
-            ? await supabase.from('staff_profiles').select('id, role, position, department, employee_id, id_number, national_id, first_name, last_name, user_id').in('id', staffIds)
+            ? await supabase.from('staff_profiles').select('id, role, position, department, id_number, national_id, first_name, last_name, user_id').in('id', staffIds)
             : { data: [] };
         const userIds = (staffProfiles || []).map((s: any) => s.user_id).filter(Boolean);
         const { data: users } = userIds.length > 0
-            ? await supabase.from('users').select('id, first_name, last_name').in('id', userIds)
+            ? await supabase.from('users').select('id, first_name, last_name, employee_id').in('id', userIds)
             : { data: [] };
 
         const staffMap = new Map((staffProfiles || []).map((s: any) => [s.id, s]));
@@ -86,13 +86,13 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
             return {
                 ...bill,
                 staff_name: `${user?.first_name || sp?.first_name || ''} ${user?.last_name || sp?.last_name || ''}`.trim(),
-                employee_id: sp?.employee_id || sp?.id_number || sp?.national_id || null,
+                employee_id: user?.employee_id || sp?.id_number || sp?.national_id || null,
                 department: sp?.department || null,
                 staff: sp ? {
                     id: sp.id,
                     role: sp.role || sp.position,
                     department: sp.department,
-                    employee_id: sp.employee_id || sp.id_number || sp.national_id,
+                    employee_id: user?.employee_id || sp.id_number || sp.national_id,
                     first_name: user?.first_name || sp.first_name || '',
                     last_name: user?.last_name || sp.last_name || ''
                 } : null
