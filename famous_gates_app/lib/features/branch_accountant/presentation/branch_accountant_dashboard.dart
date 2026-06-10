@@ -11440,6 +11440,10 @@ class _DailyEntryDialog extends ConsumerStatefulWidget {
 class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
   int _tab = 0;
   bool _autofilling = false;
+  // After Lina auto-fills, the figures are locked: the accountant reviews and
+  // submits to the Director but cannot edit the numbers.
+  bool _linaLocked = false;
+  List<Map<String, dynamic>> _linaAnomalies = const [];
   late final String _recordDate =
       _text(widget.existing, ['record_date']).isEmpty
           ? _today()
@@ -11527,6 +11531,7 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
   Widget build(BuildContext context) {
     const tabs = ['Revenue', 'Payments', 'Banking', 'COGS', 'Expenses'];
     final isReadOnly = widget.isReadOnly;
+    final fieldsReadOnly = isReadOnly || _linaLocked;
     final statusText = _text(widget.existing, ['status']).toUpperCase();
     return AlertDialog(
       title: Row(children: [
@@ -11581,8 +11586,9 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
                   ),
                 ]),
               ),
+            if (_linaLocked) _linaBanner(),
             const SizedBox(height: 8),
-            Expanded(child: SingleChildScrollView(child: _tabBody(isReadOnly))),
+            Expanded(child: SingleChildScrollView(child: _tabBody(fieldsReadOnly))),
             const Divider(),
             _KeyValueList({
               'Total Revenue': _money(_total(_revenueFields)),
@@ -11899,20 +11905,100 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
         set(f, expense[f]);
       }
       final notes = _text(data, ['notes']);
-      if (notes.isNotEmpty &&
-          (_controllers['notes']?.text.trim().isEmpty ?? false)) {
+      if (notes.isNotEmpty) {
         _controllers['notes']?.text = notes;
       }
+      final anomalies = _list(data['anomalies'])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       if (mounted) {
-        setState(() {});
-        _toast(
-            'Lina AI filled the entry from system data — review, then submit to Director');
+        setState(() {
+          _linaLocked = true;
+          _linaAnomalies = anomalies;
+        });
+        AppNotifier.show(
+          context,
+          anomalies.isEmpty
+              ? 'Lina filled & locked this entry. Review and Submit to the Director.'
+              : 'Lina filled & locked this entry and flagged ${anomalies.length} anomaly(ies). Review and Submit to the Director.',
+        );
       }
     } catch (e) {
       if (mounted) _toast('Lina autofill failed: $e');
     } finally {
       if (mounted) setState(() => _autofilling = false);
     }
+  }
+
+  Widget _linaBanner() {
+    final hasAnomalies = _linaAnomalies.isNotEmpty;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: hasAnomalies ? Colors.orange.shade50 : Colors.green.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+            color: hasAnomalies ? Colors.orange.shade200 : Colors.green.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.auto_awesome,
+                size: 16,
+                color:
+                    hasAnomalies ? Colors.orange.shade800 : Colors.green.shade700),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Filled & locked by Lina AI — review and Submit to the Director. Figures cannot be edited.',
+                style: TextStyle(
+                  color: hasAnomalies
+                      ? Colors.orange.shade900
+                      : Colors.green.shade800,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ]),
+          if (hasAnomalies) ...[
+            const SizedBox(height: 8),
+            Text('Anomalies for the Director (${_linaAnomalies.length}):',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.orange.shade900)),
+            const SizedBox(height: 4),
+            ..._linaAnomalies.map((a) => Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _text(a, ['severity']) == 'high'
+                            ? Icons.error
+                            : Icons.warning_amber,
+                        size: 13,
+                        color: _text(a, ['severity']) == 'high'
+                            ? Colors.red.shade700
+                            : Colors.orange.shade700,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${_text(a, ['title'])} — ${_text(a, ['detail'])}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _save(String status) async {

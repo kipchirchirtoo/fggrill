@@ -999,42 +999,59 @@ export const getDailyAutofill = async (
             non_consumables: 0, swimming_pool: 0, other: 0,
         };
         const payments: Record<string, number> = { cash: 0, mpesa: 0, swipe: 0, credit_bills: 0 };
+        let banked = 0;
+        let shiftVariance = 0;
+        let sourceLabel = 'shift logs';
 
-        // ── Cashier-recorded sales (shift_transactions) → revenue by category +
-        //    payments by method ────────────────────────────────────────────────
-        const { data: shiftTxns } = await supabase
-            .from('shift_transactions')
-            .select('service_category, total_amount, payment_method, is_voided')
+        // ── PRIMARY: cashier_shift_logs — the cashier-reconciled daily figures
+        //    (per-category revenue, payment split, banking, credit/paid bills). ──
+        const { data: shiftLogs } = await supabase
+            .from('cashier_shift_logs')
+            .select('total_cash_sales, total_mpesa_sales, total_card_sales, restaurant_revenue, bar_revenue, room_booking_revenue, conference_revenue, swimming_pool_revenue, pool_token_revenue, other_revenue, credit_bills_taken, paid_bills_value, cash_deposited, variance, shift_start')
             .eq('branch_id', branchId)
-            .gte('created_at', startTs)
-            .lte('created_at', endTs);
-        for (const t of (shiftTxns || []) as Array<Record<string, any>>) {
-            if (t.is_voided === true) continue;
-            const amt = n(t.total_amount);
-            revenue[mapCategory(t.service_category)] += amt;
-            const pm = String(t.payment_method || '').toLowerCase();
-            if (pm.includes('mpesa') || pm.includes('m-pesa')) payments.mpesa += amt;
-            else if (pm.includes('card') || pm.includes('swipe') || pm.includes('visa')) payments.swipe += amt;
-            else if (pm.includes('credit')) payments.credit_bills += amt;
-            else payments.cash += amt;
+            .gte('shift_start', startTs)
+            .lte('shift_start', endTs);
+        const hasShiftLogs = (shiftLogs || []).length > 0;
+        for (const s of (shiftLogs || []) as Array<Record<string, any>>) {
+            revenue.restaurant += n(s.restaurant_revenue);
+            revenue.bar += n(s.bar_revenue);
+            revenue.rooms += n(s.room_booking_revenue);
+            revenue.conferences += n(s.conference_revenue);
+            revenue.swimming_pool += n(s.swimming_pool_revenue) + n(s.pool_token_revenue);
+            revenue.other += n(s.paid_bills_value); // "Paid Bills" field
+            payments.cash += n(s.total_cash_sales);
+            payments.mpesa += n(s.total_mpesa_sales);
+            payments.swipe += n(s.total_card_sales);
+            payments.credit_bills += n(s.credit_bills_taken);
+            banked += n(s.cash_deposited);
+            shiftVariance += n(s.variance);
         }
 
-        // ── POS outlet orders (granular bar/pool/etc. + payments) ──────────────
+        // ── POS outlets: capture extra outlets not represented in shift-log
+        //    fields (executive/sports bar, pool table, spa, carwash, non-consumables). ──
         const { data: posOutlets } = await supabase
             .from('pos_outlets').select('id, outlet_type').eq('branch_id', branchId);
         const outletType = new Map<string, string>();
         (posOutlets || []).forEach((o: any) => outletType.set(String(o.id), String(o.outlet_type || '')));
+        const extraOutletFields = new Set([
+            'executive_bar', 'sports_bar', 'pool_table', 'spa_sauna', 'carwash',
+            'non_consumables', 'outside_catering',
+        ]);
         if ((posOutlets || []).length) {
             const { data: posOrders } = await supabase
                 .from('pos_shift_orders')
-                .select('outlet_id, total_amount, payment_method, payment_status, created_at')
+                .select('outlet_id, total_amount, payment_method, created_at')
                 .in('outlet_id', (posOutlets || []).map((o: any) => o.id))
                 .gte('created_at', startTs)
                 .lte('created_at', endTs);
             for (const o of (posOrders || []) as Array<Record<string, any>>) {
                 const amt = n(o.total_amount);
                 if (amt <= 0) continue;
-                revenue[mapCategory(outletType.get(String(o.outlet_id)))] += amt;
+                const field = mapCategory(outletType.get(String(o.outlet_id)));
+                // When shift logs exist, only add the EXTRA outlet categories to
+                // avoid double-counting restaurant/bar/rooms already in the logs.
+                if (hasShiftLogs && !extraOutletFields.has(field)) continue;
+                revenue[field] += amt;
                 const pm = String(o.payment_method || '').toLowerCase();
                 if (pm.includes('mpesa')) payments.mpesa += amt;
                 else if (pm.includes('card') || pm.includes('swipe')) payments.swipe += amt;
@@ -1043,39 +1060,55 @@ export const getDailyAutofill = async (
             }
         }
 
-        // ── Supplement empty categories from source tables (no double-count) ───
-        if (revenue.restaurant === 0) {
-            const { data: ro } = await supabase
-                .from('restaurant_orders').select('grand_total, total_amount')
-                .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs)
-                .not('status', 'eq', 'cancelled');
-            revenue.restaurant = (ro || []).reduce((s: number, r: any) => s + (n(r.grand_total) || n(r.total_amount)), 0);
-        }
-        if (revenue.bar === 0) {
-            const { data: bo } = await supabase
-                .from('bar_orders').select('total, subtotal')
-                .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs)
-                .not('status', 'eq', 'cancelled');
-            revenue.bar = (bo || []).reduce((s: number, r: any) => s + (n(r.total) || n(r.subtotal)), 0);
-        }
-        if (revenue.rooms === 0) {
-            const { data: bk } = await supabase
-                .from('bookings').select('total_amount, status, created_at')
+        // ── FALLBACK: no shift logs → reconstruct from transactions + orders ───
+        if (!hasShiftLogs) {
+            sourceLabel = 'transactions';
+            const { data: shiftTxns } = await supabase
+                .from('shift_transactions')
+                .select('service_category, total_amount, payment_method, is_voided')
                 .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs);
-            revenue.rooms = (bk || [])
-                .filter((b: any) => String(b.status || '').toLowerCase() !== 'cancelled')
-                .reduce((s: number, b: any) => s + n(b.total_amount), 0);
-        }
-
-        // ── Banking deposits for the day ───────────────────────────────────────
-        let banked = 0;
-        const { data: bankTxns } = await supabase
-            .from('banking_transactions').select('amount, transaction_type, transaction_date')
-            .eq('branch_id', branchId).gte('transaction_date', startTs).lte('transaction_date', endTs);
-        for (const b of (bankTxns || []) as Array<Record<string, any>>) {
-            const tt = String(b.transaction_type || '').toLowerCase();
-            if (tt.includes('withdraw')) continue;
-            banked += n(b.amount);
+            for (const t of (shiftTxns || []) as Array<Record<string, any>>) {
+                if (t.is_voided === true) continue;
+                const amt = n(t.total_amount);
+                revenue[mapCategory(t.service_category)] += amt;
+                const pm = String(t.payment_method || '').toLowerCase();
+                if (pm.includes('mpesa')) payments.mpesa += amt;
+                else if (pm.includes('card') || pm.includes('swipe')) payments.swipe += amt;
+                else if (pm.includes('credit')) payments.credit_bills += amt;
+                else payments.cash += amt;
+            }
+            if (revenue.restaurant === 0) {
+                const { data: ro } = await supabase
+                    .from('restaurant_orders').select('grand_total, total_amount, payment_method')
+                    .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs)
+                    .not('status', 'eq', 'cancelled');
+                revenue.restaurant = (ro || []).reduce((s: number, r: any) => s + (n(r.grand_total) || n(r.total_amount)), 0);
+            }
+            if (revenue.bar === 0) {
+                const { data: bo } = await supabase
+                    .from('bar_orders').select('total, subtotal')
+                    .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs)
+                    .not('status', 'eq', 'cancelled');
+                revenue.bar = (bo || []).reduce((s: number, r: any) => s + (n(r.total) || n(r.subtotal)), 0);
+            }
+            if (revenue.rooms === 0) {
+                const { data: bk } = await supabase
+                    .from('bookings').select('total_amount, status')
+                    .eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs);
+                revenue.rooms = (bk || [])
+                    .filter((b: any) => String(b.status || '').toLowerCase() !== 'cancelled')
+                    .reduce((s: number, b: any) => s + n(b.total_amount), 0);
+            }
+            // Banking from banking_transactions when no shift-log deposits
+            if (banked === 0) {
+                const { data: bankTxns } = await supabase
+                    .from('banking_transactions').select('amount, transaction_type, transaction_date')
+                    .eq('branch_id', branchId).gte('transaction_date', startTs).lte('transaction_date', endTs);
+                for (const b of (bankTxns || []) as Array<Record<string, any>>) {
+                    if (String(b.transaction_type || '').toLowerCase().includes('withdraw')) continue;
+                    banked += n(b.amount);
+                }
+            }
         }
 
         // ── Expenses for the day ───────────────────────────────────────────────
@@ -1098,12 +1131,65 @@ export const getDailyAutofill = async (
         Object.keys(payments).forEach((k) => (payments[k] = round(payments[k])));
 
         const totalRevenue = Object.values(revenue).reduce((s, v) => s + v, 0);
+        const totalPayments = payments.cash + payments.mpesa + payments.swipe + payments.credit_bills;
+        const totalExpenses = pettyCashTotal + otherExpensesTotal;
+        const netProfit = totalRevenue - totalExpenses;
+        const expectedCash = payments.cash - pettyCashTotal;
+        const unbanked = expectedCash - banked;
+
+        // ── Lina anomaly detection — surfaced to the Director ──────────────────
+        const anomalies: Array<{ severity: string; title: string; detail: string }> = [];
+        const variance = round(totalPayments - totalRevenue);
+        if (Math.abs(variance) > 1) {
+            anomalies.push({
+                severity: 'high',
+                title: 'Payment / revenue mismatch',
+                detail: `Payments (${round(totalPayments)}) do not reconcile with revenue (${round(totalRevenue)}). Variance ${variance}.`,
+            });
+        }
+        if (Math.abs(round(shiftVariance)) > 1) {
+            anomalies.push({
+                severity: 'high',
+                title: 'Cashier shift cash variance',
+                detail: `Cashier shift logs report a combined float variance of ${round(shiftVariance)}.`,
+            });
+        }
+        if (round(unbanked) > 1) {
+            anomalies.push({
+                severity: 'medium',
+                title: 'Unbanked cash',
+                detail: `Expected drawer cash ${round(expectedCash)} exceeds banked ${round(banked)} by ${round(unbanked)}.`,
+            });
+        }
+        if (netProfit < 0) {
+            anomalies.push({
+                severity: 'high',
+                title: 'Net loss for the day',
+                detail: `Expenses (${round(totalExpenses)}) exceed revenue (${round(totalRevenue)}) — net ${round(netProfit)}.`,
+            });
+        }
+        if (totalRevenue === 0 && totalExpenses > 0) {
+            anomalies.push({
+                severity: 'medium',
+                title: 'Expenses without revenue',
+                detail: `No revenue recorded but ${round(totalExpenses)} in expenses was logged.`,
+            });
+        }
+        if (totalRevenue > 0 && payments.credit_bills / totalRevenue > 0.2) {
+            anomalies.push({
+                severity: 'medium',
+                title: 'High credit-bill exposure',
+                detail: `Credit bills (${round(payments.credit_bills)}) are ${round((payments.credit_bills / totalRevenue) * 100)}% of revenue.`,
+            });
+        }
 
         res.status(200).json({
             success: true,
             data: {
                 record_date: date,
                 generated_by: 'lina_ai',
+                source: sourceLabel,
+                locked: true,
                 revenue_data: revenue,
                 payment_data: payments,
                 banking_data: { banked: round(banked) },
@@ -1122,7 +1208,11 @@ export const getDailyAutofill = async (
                     other_expenses_total: round(otherExpensesTotal),
                 },
                 total_revenue: round(totalRevenue),
-                notes: `Auto-filled by Lina AI from system data for ${date}. Please review before submitting to the Director.`,
+                net_profit: round(netProfit),
+                anomalies,
+                notes: anomalies.length
+                    ? `Auto-filled by Lina AI from ${sourceLabel} for ${date}. Lina flagged ${anomalies.length} anomaly(ies) for the Director: ${anomalies.map((a) => a.title).join('; ')}. Review and submit — figures are locked.`
+                    : `Auto-filled by Lina AI from ${sourceLabel} for ${date}. No anomalies detected. Review and submit to the Director — figures are locked.`,
             },
         });
     } catch (error) {
