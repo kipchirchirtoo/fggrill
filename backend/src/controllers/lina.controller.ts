@@ -15,7 +15,8 @@ import { logger } from '../utils/logger';
 
 // ── AI Clients ────────────────────────────────────────────────────────────────
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const LINA_AI_REPORTS = process.env.LINA_AI_REPORTS === 'true';
 const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY ||
   process.env.GOOGLE_GEMINI_API_KEY ||
@@ -76,11 +77,20 @@ TIMEZONE: Africa/Nairobi (EAT, UTC+3)
 
 YOUR PERSONALITY:
 - Executive authority — direct, precise, data-driven
-- Never say "I don't know" — instead say "Not visible in current snapshot — check [specific table/module]"
+- If data is missing, say "Not visible in the current live snapshot" and name the table/module to check.
 - When detecting risk: be explicit about severity (CRITICAL / HIGH / MEDIUM / LOW)
-- Always reference real data from the injected system context
-- Never hallucinate table names, columns, or business rules
+- Always reference real data from the injected system context or an executed Lina tool result.
+- Never hallucinate table names, columns, counts, money, staff names, branch names, statuses, business rules, or actions.
+- Do not estimate operational numbers unless you clearly label them as estimates and show the formula/source fields.
 - Propose solutions, not just problems
+
+STRICT EVIDENCE MODE:
+- LIVE SYSTEM CONTEXT is the only source of truth for generated answers.
+- If a metric is absent, stale, empty, or not loaded, explicitly say it is not visible in the current snapshot.
+- Do not use generic hotel assumptions, memory, or training data for business facts.
+- Do not invent causes. Use "possible cause" only when evidence supports it.
+- Every recommendation must cite the exact observed signal that triggered it.
+- Prefer deterministic values already computed by the backend over model-derived numbers.
 
 REMEDIATION LEVELS (always declare when proposing fixes):
 READ_ONLY — inspect, summarize, diagnose, forecast, search, compare.
@@ -147,12 +157,12 @@ const GEMINI_ANALYSIS_SYSTEM = `${LINA_CORE_IDENTITY}
 DEEP ANALYSIS MODE (Gemini):
 You are performing thorough, structured enterprise analysis. Take full advantage of your large context window.
 - Produce comprehensive, structured reports with executive summaries
-- Include quantitative analysis wherever possible
+- Include quantitative analysis only when the fields exist in the provided context
 - Cross-reference multiple data points to find patterns
 - Flag ALL anomalies — financial, operational, staff, security
 - Structure output: Executive Summary → Findings → Risk Matrix → Recommendations → Action Items
-- For financial analysis: always compute branch-by-branch comparison
-- For staff analysis: identify pattern, not just individual anomalies
+- For financial analysis: compute branch-by-branch comparison only from provided branch revenue fields
+- For staff analysis: identify patterns only from provided attendance/payroll/performance fields
 - Quality is more important than speed in this mode
 `;
 
@@ -610,8 +620,8 @@ async function generateOpenAIAnalysis(prompt: string, ctx: Record<string, any>, 
       model: OPENAI_MODEL,
       instructions: LINA_CORE_IDENTITY + buildContextBlock(ctx),
       input: prompt,
-      max_output_tokens: maxTokens,
-      temperature: 0.25,
+      max_output_tokens: Math.min(maxTokens, 1200),
+      temperature: 0.05,
     },
     {
       headers: {
@@ -622,6 +632,10 @@ async function generateOpenAIAnalysis(prompt: string, ctx: Record<string, any>, 
     },
   );
   return extractOpenAIText(response.data) || null;
+}
+
+function shouldUseGenerativeReports(req: Request): boolean {
+  return LINA_AI_REPORTS || `${req.query.ai || ''}`.toLowerCase() === 'true';
 }
 
 async function generateGeminiAnalysis(prompt: string): Promise<string | null> {
@@ -1424,7 +1438,7 @@ ${message}
 
 Respond using Lina Core OS output style. If the user asks for action, classify it as READ_ONLY, SAFE_AUTO, APPROVAL_REQUIRED, or MANUAL_ONLY and route execution through Fix Center rather than pretending to mutate data.`;
 
-    const routed = await generateRoutedAnalysis(req, intent, prompt, ctx, normalizeActionClass(null, message), 2200);
+    const routed = await generateRoutedAnalysis(req, intent, prompt, ctx, normalizeActionClass(null, message), 1200);
     const fullText = routed.text || localExecutiveSummary(ctx, routed.reason).summary;
     const chunks = fullText.match(/[\s\S]{1,900}/g) || [fullText];
     for (const chunk of chunks) {
@@ -1486,6 +1500,11 @@ Structure your response as:
 
 Be specific with KES amounts, percentages, and counts. Reference actual branch names from the context.`;
 
+    if (!shouldUseGenerativeReports(req)) {
+      res.json({ success: true, data: { ...localExecutiveSummary(ctx, 'Deterministic evidence mode.'), lina_status: 'evidence_mode' } });
+      return;
+    }
+
     const routed = await generateRoutedAnalysis(req, 'executive_summary', prompt, ctx, 'READ_ONLY', 2600);
     if (routed.text) {
       res.json({
@@ -1544,6 +1563,11 @@ For each finding:
 
 ### 🎯 Priority Action Queue
 [Top 5 things to fix right now, in order]`;
+
+    if (!shouldUseGenerativeReports(req)) {
+      res.json({ success: true, data: { ...localAnomalyReport(ctx, 'Deterministic evidence mode.'), lina_status: 'evidence_mode' } });
+      return;
+    }
 
     const routed = await generateRoutedAnalysis(req, 'anomaly_report', prompt, ctx, 'READ_ONLY', 2600);
     if (routed.text) {
@@ -1614,6 +1638,11 @@ TASK: Deep employee intelligence analysis.
 
 ### 📋 HR Action Items
 [Priority recommendations for HR/management]`;
+
+    if (!shouldUseGenerativeReports(req)) {
+      res.json({ success: true, data: { ...localEmployeeAnalysis(ctx, employeeData, 'Deterministic evidence mode.'), lina_status: 'evidence_mode' } });
+      return;
+    }
 
     const routed = await generateRoutedAnalysis(req, 'employee_intelligence', prompt, ctx, 'READ_ONLY', 2600);
     if (routed.text) {
@@ -1689,6 +1718,11 @@ TASK: Comprehensive financial intelligence analysis.
 ### 🎯 Financial Action Items
 [Ranked by financial impact — CRITICAL first]`;
 
+    if (!shouldUseGenerativeReports(req)) {
+      res.json({ success: true, data: { ...localFinancialAnalysis(ctx, financialData, 'Deterministic evidence mode.'), lina_status: 'evidence_mode' } });
+      return;
+    }
+
     const routed = await generateRoutedAnalysis(req, 'financial_intelligence', prompt, ctx, 'READ_ONLY', 2800);
     if (routed.text) {
       res.json({ success: true, data: { analysis: routed.text, model: 'LINA AI', lina_status: routed.provider === 'local' ? 'fallback' : 'operational', raw_context: financialData, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
@@ -1732,6 +1766,11 @@ Format:
     "kpi_impact": "revenue|staff|security|operations|compliance"
   }
 ]`;
+
+    if (!shouldUseGenerativeReports(req)) {
+      res.json({ success: true, data: { ...localRecommendations(ctx, 'Deterministic evidence mode.'), lina_status: 'evidence_mode' } });
+      return;
+    }
 
     const parseRecs = (raw: string): any[] | null => {
       const cleaned = raw.trim().replace(/^```json?\s*/i, '').replace(/\s*```$/i, '');
@@ -1854,7 +1893,11 @@ export const getModelRouterStatus = async (req: Request, res: Response): Promise
         audit: 'logged',
         tools: ['database reads', 'audit trails', 'workflow approvals', 'safe job execution', 'verification'],
       },
-      workflow: sampleIntents.map((intent) => ({ intent, agent: 'LINA AI', policy: modelRouterPolicy(intent).reason })),
+      workflow: sampleIntents.map((intent) => ({
+        intent,
+        agent: 'LINA AI',
+        policy: 'Evidence-first routing with backend validation and fallback summaries.',
+      })),
       action_classes: ['READ_ONLY', 'SAFE_AUTO', 'APPROVAL_REQUIRED', 'MANUAL_ONLY'],
     },
   });
