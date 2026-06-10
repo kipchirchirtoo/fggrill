@@ -1,9 +1,112 @@
 import { Request, Response, NextFunction } from 'express';
-import axios from 'axios';
+import path from 'path';
+import fs from 'fs';
+import PDFDocument from 'pdfkit';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
+// ── FamousGate branded PDF helpers (self-contained — no external service) ────
+const PL_PRIMARY = '#1a1a1a';
+const PL_SECONDARY = '#555555';
+const PL_GOLD = '#c8a84b';
+const PL_BORDER = '#e0e0e0';
+const PL_HEADER_BG = '#333333';
+const PL_ROW_BG = '#f9f9f9';
+const PL_COMPANY = 'FamousGate Hotels';
+const PL_ADDRESS = 'Bomet, Kenya';
+const PL_EMAIL = 'famousgateshotelsbmt@gmail.com';
+const PL_PHONE = '0706 782 828';
+
+const plLogoPath = (): string | null => {
+    const candidates = [
+        path.join(process.cwd(), '../frontend/public/fglogo.png'),
+        path.join(process.cwd(), 'frontend/public/fglogo.png'),
+        path.join(__dirname, '../../../frontend/public/fglogo.png'),
+    ];
+    return candidates.find((c) => fs.existsSync(c)) || null;
+};
+
+const plMoney = (v: any): string => {
+    const n = Number(v);
+    return `KES ${(Number.isFinite(n) ? n : 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const plHeader = (doc: PDFKit.PDFDocument, title: string, subtitle: string): number => {
+    const logo = plLogoPath();
+    if (logo) {
+        try { doc.image(logo, 40, 30, { width: 55 }); } catch { /* ignore */ }
+    } else {
+        doc.circle(67, 57, 27).fill(PL_PRIMARY);
+        doc.fillColor('white').fontSize(20).font('Helvetica-Bold').text('FG', 53, 47);
+    }
+    doc.fillColor(PL_PRIMARY).fontSize(15).font('Helvetica-Bold').text(PL_COMPANY, 110, 30, { align: 'right' });
+    doc.fontSize(9).font('Helvetica').fillColor(PL_SECONDARY)
+        .text(PL_ADDRESS, 110, 50, { align: 'right' })
+        .text(`Email: ${PL_EMAIL}`, { align: 'right' })
+        .text(`Tel: ${PL_PHONE}`, { align: 'right' });
+    doc.strokeColor(PL_BORDER).lineWidth(1).moveTo(40, 100).lineTo(doc.page.width - 40, 100).stroke();
+    doc.rect(40, 101, doc.page.width - 80, 3).fill(PL_GOLD);
+    doc.fillColor(PL_PRIMARY).fontSize(14).font('Helvetica-Bold').text(title, 40, 114, { align: 'center' });
+    doc.fontSize(9).font('Helvetica').fillColor(PL_SECONDARY).text(subtitle, 40, 132, { align: 'center' });
+    doc.strokeColor(PL_BORDER).lineWidth(0.5).moveTo(40, 146).lineTo(doc.page.width - 40, 146).stroke();
+    doc.fillColor(PL_PRIMARY);
+    return 158;
+};
+
+const plFooter = (doc: PDFKit.PDFDocument): void => {
+    const y = doc.page.height - 52;
+    doc.strokeColor(PL_BORDER).lineWidth(0.5).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke();
+    doc.fillColor(PL_SECONDARY).fontSize(7.5).font('Helvetica')
+        .text(`Generated: ${new Date().toLocaleString('en-KE')} | ${PL_COMPANY} - Confidential`, 40, y + 7, {
+            width: doc.page.width - 80, align: 'center', lineBreak: false, ellipsis: true,
+        });
+};
+
+const plSpace = (doc: PDFKit.PDFDocument, y: number, needed = 60): number => {
+    if (y + needed < doc.page.height - 70) return y;
+    plFooter(doc);
+    doc.addPage();
+    return plHeader(doc, 'PROFIT & LOSS STATEMENT', 'Continued');
+};
+
+const plSectionTitle = (doc: PDFKit.PDFDocument, title: string, y: number): number => {
+    doc.fillColor(PL_PRIMARY).fontSize(11).font('Helvetica-Bold').text(title, 40, y);
+    doc.rect(40, y + 15, doc.page.width - 80, 2).fill(PL_GOLD);
+    return y + 26;
+};
+
+const plTable = (
+    doc: PDFKit.PDFDocument,
+    y: number,
+    headers: string[],
+    rows: string[][],
+    widths: number[],
+    aligns: Array<'left' | 'center' | 'right'> = []
+): number => {
+    const left = 40;
+    let cy = y;
+    doc.rect(left, cy, doc.page.width - 80, 20).fill(PL_HEADER_BG);
+    doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+    let x = left + 6;
+    headers.forEach((h, i) => {
+        doc.text(h, x, cy + 6, { width: widths[i] - 8, align: aligns[i] || 'left', ellipsis: true });
+        x += widths[i];
+    });
+    cy += 20;
+    rows.forEach((row, ri) => {
+        cy = plSpace(doc, cy, 22);
+        if (ri % 2 === 0) doc.rect(left, cy, doc.page.width - 80, 18).fill(PL_ROW_BG);
+        doc.fillColor(PL_PRIMARY).fontSize(8).font('Helvetica');
+        x = left + 6;
+        row.forEach((value, i) => {
+            doc.text(value, x, cy + 5, { width: widths[i] - 8, align: aligns[i] || 'left', ellipsis: true });
+            x += widths[i];
+        });
+        doc.strokeColor(PL_BORDER).lineWidth(0.3).moveTo(left, cy + 18).lineTo(doc.page.width - 40, cy + 18).stroke();
+        cy += 18;
+    });
+    return cy + 12;
+};
 
 /**
  * @desc    Get profit & loss statement
@@ -510,26 +613,72 @@ export const exportPosProfitLossPDF = async (req: Request, res: Response, next: 
         const { data: branch } = await supabase
             .from('branches').select('name').eq('id', params.branchId).maybeSingle();
         const branchName = branch?.name || 'Branch';
+        const num = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+        const pct = (v: any) => `${num(v).toFixed(1)}%`;
 
-        const response = await axios.post(
-            `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
-            {
-                reportType: 'branch_profit_loss',
-                useRealData: false,
-                filters: {
-                    start_date: params.startDate,
-                    end_date: params.endDate,
-                    branch_name: branchName,
-                    branch_id: params.branchId,
-                },
-                data,
-            },
-            { responseType: 'arraybuffer', timeout: 60000 }
-        );
+        const doc = new PDFDocument({ margin: 40, size: 'A4' });
+        const chunks: Buffer[] = [];
+        doc.on('data', (c: any) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        const done = new Promise<Buffer>((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
+
+        let y = plHeader(doc, 'PROFIT & LOSS STATEMENT',
+            `${branchName}  |  ${params.startDate} to ${params.endDate}`);
+
+        // Summary
+        y = plSectionTitle(doc, 'Summary', y);
+        y = plTable(doc, y,
+            ['Line', 'Amount', 'Margin'],
+            [
+                ['Total Revenue', plMoney(data.revenue), ''],
+                ['Cashier-Recorded Sales', plMoney(data.cashierRevenue), ''],
+                ['Cost of Goods Sold (COGS)', plMoney(data.costOfGoods), ''],
+                ['Gross Profit', plMoney(data.grossProfit), pct(data.grossMargin)],
+                ['Operating Expenses', plMoney(data.operatingExpenses), ''],
+                ['Operating Income', plMoney(data.operatingIncome), ''],
+                ['NET PROFIT / (LOSS)', plMoney(data.netProfit), pct(data.margin)],
+            ],
+            [240, 175, 100], ['left', 'right', 'right']);
+
+        // Per-outlet
+        y = plSpace(doc, y, 80);
+        y = plSectionTitle(doc, 'Profit & Loss by POS Outlet', y);
+        const outlets = Array.isArray(data.outlets) ? data.outlets : [];
+        if (outlets.length) {
+            const rows = outlets.map((o: any) => [
+                String(o.name || 'Outlet'), plMoney(o.revenue), plMoney(o.cogs),
+                plMoney(o.gross_profit), pct(o.margin), String(num(o.units)),
+            ]);
+            rows.push(['TOTAL', plMoney(data.revenue), plMoney(data.costOfGoods),
+                plMoney(data.grossProfit), pct(data.grossMargin), '']);
+            y = plTable(doc, y,
+                ['POS Outlet', 'Revenue', 'COGS', 'Gross Profit', 'Margin', 'Units'],
+                rows, [150, 95, 85, 95, 55, 35],
+                ['left', 'right', 'right', 'right', 'right', 'right']);
+        } else {
+            doc.fillColor(PL_SECONDARY).fontSize(9).font('Helvetica')
+                .text('No POS outlet sales in this period.', 40, y);
+            y += 20;
+        }
+
+        // Expenses
+        const exp = (data.expensesByCategory || {}) as Record<string, any>;
+        const expKeys = Object.keys(exp);
+        if (expKeys.length) {
+            y = plSpace(doc, y, 80);
+            y = plSectionTitle(doc, 'Operating Expenses', y);
+            const rows = expKeys.map((k) => [k, plMoney(exp[k])]);
+            rows.push(['TOTAL', plMoney(data.operatingExpenses)]);
+            y = plTable(doc, y, ['Category', 'Amount'], rows, [380, 135], ['left', 'right']);
+        }
+
+        plFooter(doc);
+        doc.end();
+        const pdf = await done;
+
         const filename = `FG_Profit_Loss_${params.startDate}_${params.endDate}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.send(Buffer.from(response.data));
+        res.send(pdf);
     } catch (error: any) {
         logger.error('Error exporting POS P&L PDF:', error?.message || error);
         next(error);
