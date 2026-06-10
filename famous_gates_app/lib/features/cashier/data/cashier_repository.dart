@@ -78,8 +78,7 @@ class CashierRepository {
       'limit': limit,
     };
 
-    final unpaidOrders =
-        await _getList('/cashier/unpaid-pos-orders', query: query);
+    final unpaidOrders = await _getList('/cashier/unpaid-orders', query: query);
     final unpaidBills = await _getList('/cashier/unpaid-bills', query: query)
         .catchError((_) => <Map<String, dynamic>>[]);
 
