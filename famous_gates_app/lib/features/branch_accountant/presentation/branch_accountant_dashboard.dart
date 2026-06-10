@@ -6588,16 +6588,21 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       return {'customer_bills': await repo.getCustomerUnpaidBills()};
     }
     final results = await Future.wait([
-      repo.getPayrollCreditBills(status: _status),
+      repo.getPayrollCreditBills(
+          status: _status == 'all' ? 'outstanding' : _status),
+      repo.getPayrollCreditBills(status: 'pending'),
+      repo.getCashierPaidCreditEntries(status: 'pending'),
       repo.getPayrollAdvances(status: _status),
       repo.getPayrollLoans(status: _status),
       repo.getBranchStaff(),
     ]);
     return {
       'credit_bills': results[0],
-      'advances': results[1],
-      'loans': results[2],
-      'staff': results[3],
+      'pending_credit_bills': results[1],
+      'paid_credit_entries': results[2],
+      'advances': results[3],
+      'loans': results[4],
+      'staff': results[5],
     };
   }
 
@@ -6620,11 +6625,15 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
 
   Widget _buildStaffLedger(Map<String, dynamic> data) {
     final creditBills = _list(data['credit_bills']);
+    final pendingCreditBills = _list(data['pending_credit_bills']);
+    final paidCreditEntries = _list(data['paid_credit_entries']);
     final advances = _list(data['advances']);
     final loans = _list(data['loans']);
     final staff = _list(data['staff']);
     final lower = _query.trim().toLowerCase();
     final selectedItems = switch (_staffTab) {
+      'approval' => pendingCreditBills,
+      'paid_entries' => paidCreditEntries,
       'advance' => advances,
       'loan' => loans,
       _ => creditBills,
@@ -6651,7 +6660,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         ),
         SegmentedButton<String>(
           segments: const [
-            ButtonSegment(value: 'credit', label: Text('Credit Bills')),
+            ButtonSegment(value: 'approval', label: Text('Pending Approval')),
+            ButtonSegment(value: 'credit', label: Text('Outstanding')),
+            ButtonSegment(value: 'paid_entries', label: Text('Paid Entries')),
             ButtonSegment(value: 'advance', label: Text('Advances')),
             ButtonSegment(value: 'loan', label: Text('Loans')),
           ],
@@ -6663,13 +6674,11 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
           values: const [
             'all',
             'pending',
-            'partial',
             'paid_cash',
             'deducted',
-            'approved',
-            'active',
-            'pending_approval',
-            'accountant_confirmed'
+            'cancelled',
+            'accountant_confirmed',
+            'auditor_confirmed'
           ],
           onChanged: (v) => setState(() {
             _status = v;
@@ -6688,7 +6697,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         ),
         _RefreshButton(onPressed: _refresh),
         FilledButton.icon(
-          onPressed: () => _createStaffLedgerEntry(staff),
+          onPressed: _staffTab == 'approval' || _staffTab == 'paid_entries'
+              ? null
+              : () => _createStaffLedgerEntry(staff),
           icon: const Icon(Icons.add),
           label: Text(switch (_staffTab) {
             'advance' => 'New Advance',
@@ -6699,7 +6710,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       ],
       children: [
         _ResponsiveGrid(children: [
-          _MetricCard('Credit Bills', '${creditBills.length}',
+          _MetricCard('Pending Approval', '${pendingCreditBills.length}',
+              Icons.fact_check, Colors.amber),
+          _MetricCard('Outstanding Bills', '${creditBills.length}',
               Icons.credit_card, Colors.blue),
           _MetricCard(
               'Credit Outstanding',
@@ -6708,9 +6721,9 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
               Icons.warning,
               Colors.orange),
           _MetricCard(
-              'Paid Credits',
-              _money(creditBills.fold<num>(
-                  0, (sum, e) => sum + _num(e['paid_amount']))),
+              'Paid Entries To Apply',
+              _money(paidCreditEntries.fold<num>(
+                  0, (sum, e) => sum + _num(e['remaining_amount']))),
               Icons.payments,
               Colors.green),
           _MetricCard(
@@ -6728,15 +6741,20 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         ]),
         _SectionCard(
           title: switch (_staffTab) {
+            'approval' => 'Pending Staff Credit Approval',
+            'paid_entries' => 'Cashier Paid Credits Pending Application',
             'advance' => 'Salary Advances',
             'loan' => 'Staff Loans',
-            _ => 'Staff Credit Bills & Paid Credits',
+            _ => 'Outstanding Staff Credit Bills',
           },
-          child: _staffTab == 'advance'
-              ? _buildAdvancesTable(selectedItems)
-              : _staffTab == 'loan'
-                  ? _buildLoansTable(selectedItems)
-                  : _buildCreditBillsTable(selectedItems),
+          child: switch (_staffTab) {
+            'approval' => _buildPendingCreditBillsTable(selectedItems),
+            'paid_entries' =>
+              _buildPaidCreditEntriesTable(selectedItems, creditBills),
+            'advance' => _buildAdvancesTable(selectedItems),
+            'loan' => _buildLoansTable(selectedItems),
+            _ => _buildCreditBillsTable(selectedItems),
+          },
         ),
       ],
     );
@@ -6774,12 +6792,109 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                     onPressed: () => _showRecord(context, e),
                   ),
                   const SizedBox(width: 6),
+                  _CompactAction(
+                    label: 'History',
+                    icon: Icons.history,
+                    onPressed: () => _showCreditPaymentHistory(e),
+                  ),
+                  const SizedBox(width: 6),
                   if (_staffCreditBalance(e) > 0)
                     _CompactAction(
                       label: 'Pay',
                       icon: Icons.payments_outlined,
                       filled: true,
                       onPressed: () => _recordPayrollCreditPayment(e),
+                    ),
+                ]),
+              ])
+          .toList(),
+    );
+  }
+
+  Widget _buildPendingCreditBillsTable(List<Map<String, dynamic>> items) {
+    return _SimpleTable(
+      columns: const [
+        'Staff',
+        'Employee ID',
+        'Department',
+        'Description',
+        'Amount',
+        'Source',
+        'Date',
+        'Actions'
+      ],
+      rows: items
+          .map((e) => [
+                _staffName(e),
+                _text(e, ['employee_id', 'staff_code']),
+                _text(e, ['department']),
+                _text(e, ['description', 'credit_number']),
+                _money(_num(e['amount'] ?? e['total_amount'])),
+                _text(e, ['source_type', 'reference_type']).isEmpty
+                    ? 'Cashier / Branch'
+                    : _text(e, ['source_type', 'reference_type']),
+                _text(e, ['bill_date', 'created_at']),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  _CompactAction(
+                    label: 'View',
+                    icon: Icons.visibility_outlined,
+                    onPressed: () => _showRecord(context, e),
+                  ),
+                  const SizedBox(width: 6),
+                  _CompactAction(
+                    label: 'Approve',
+                    icon: Icons.check_circle_outline,
+                    filled: true,
+                    onPressed: () => _approvePayrollCreditBill(e),
+                  ),
+                ]),
+              ])
+          .toList(),
+    );
+  }
+
+  Widget _buildPaidCreditEntriesTable(
+    List<Map<String, dynamic>> items,
+    List<Map<String, dynamic>> outstandingBills,
+  ) {
+    return _SimpleTable(
+      columns: const [
+        'Staff',
+        'Cashier',
+        'Shift',
+        'Amount',
+        'Applied',
+        'Remaining',
+        'Method',
+        'Status',
+        'Date',
+        'Actions'
+      ],
+      rows: items
+          .map((e) => [
+                _text(e, ['staff_name', 'employee_name', 'name']),
+                _text(e, ['cashier_name']),
+                _text(e, ['shift_number']),
+                _money(_num(e['amount'])),
+                _money(_num(e['applied_amount'])),
+                _money(_num(e['remaining_amount'])),
+                _text(e, ['payment_method']),
+                _StatusPill(_text(e, ['review_status'])),
+                _text(e, ['recorded_at', 'shift_end', 'shift_start']),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  _CompactAction(
+                    label: 'View',
+                    icon: Icons.visibility_outlined,
+                    onPressed: () => _showRecord(context, e),
+                  ),
+                  const SizedBox(width: 6),
+                  if (_num(e['remaining_amount']) > 0)
+                    _CompactAction(
+                      label: 'Apply',
+                      icon: Icons.call_merge,
+                      filled: true,
+                      onPressed: () =>
+                          _applyPaidCreditEntry(e, outstandingBills),
                     ),
                 ]),
               ])
@@ -6878,6 +6993,7 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       _text(row, ['employee_id', 'staff_code']),
       _text(row, ['department']),
       _text(row, ['description', 'reason', 'credit_number', 'reference']),
+      _text(row, ['cashier_name', 'shift_number', 'review_status']),
       _text(row, ['status']),
     ].join(' ').toLowerCase();
   }
@@ -7150,6 +7266,208 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     });
     if (mounted) _notify(context, 'Credit bill payment recorded');
     _refresh();
+  }
+
+  Future<void> _approvePayrollCreditBill(Map<String, dynamic> bill) async {
+    final data = await _formDialog(
+      context,
+      'Approve Staff Credit Bill',
+      const ['notes'],
+      initial: {'notes': ''},
+    );
+    if (data == null || !mounted) return;
+    await ref.read(branchAccountantRepositoryProvider).approvePayrollCreditBill(
+        '${bill['id']}',
+        notes: '${data['notes'] ?? ''}');
+    if (mounted) _notify(context, 'Credit bill approved');
+    _refresh();
+  }
+
+  Future<void> _applyPaidCreditEntry(
+    Map<String, dynamic> entry,
+    List<Map<String, dynamic>> seedOutstandingBills,
+  ) async {
+    final staffId = _text(entry, ['staff_id']);
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final bills = staffId.isNotEmpty
+        ? await repo.getPayrollCreditBills(
+            status: 'outstanding',
+            staffId: staffId,
+          )
+        : seedOutstandingBills;
+    if (!mounted) return;
+    if (bills.isEmpty) {
+      _notify(context, 'No approved outstanding credit bill for this staff');
+      return;
+    }
+    final selected = await _selectCreditBillForPaidEntry(entry, bills);
+    if (selected == null || !mounted) return;
+    await repo
+        .applyCashierPaidCreditEntry('${entry['entry_id'] ?? entry['id']}', {
+      'staff_credit_bill_id': selected['bill']['id'],
+      'amount': selected['amount'],
+      if ('${selected['notes'] ?? ''}'.trim().isNotEmpty)
+        'notes': '${selected['notes']}'.trim(),
+    });
+    if (mounted) _notify(context, 'Cashier paid credit applied');
+    _refresh();
+  }
+
+  Future<Map<String, dynamic>?> _selectCreditBillForPaidEntry(
+    Map<String, dynamic> entry,
+    List<Map<String, dynamic>> bills,
+  ) {
+    Map<String, dynamic>? selected = bills.first;
+    final amountController = TextEditingController(
+      text: _num(entry['remaining_amount']).toStringAsFixed(0),
+    );
+    final notesController = TextEditingController();
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final balance = selected == null ? 0 : _staffCreditBalance(selected!);
+          return AlertDialog(
+            title: const Text('Apply Cashier Paid Credit'),
+            content: SizedBox(
+              width: 680,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '${_text(entry, [
+                          'staff_name'
+                        ])} paid ${_money(_num(entry['remaining_amount']))} via ${_text(entry, [
+                          'payment_method'
+                        ])}',
+                  ),
+                  const SizedBox(height: 12),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: bills.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final bill = bills[index];
+                        final isSelected = selected?['id'] == bill['id'];
+                        return ListTile(
+                          selected: isSelected,
+                          leading: Icon(isSelected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked),
+                          title: Text(_text(bill, ['description']).isNotEmpty
+                              ? _text(bill, ['description'])
+                              : 'Staff credit bill'),
+                          subtitle: Text(
+                            '${_text(bill, [
+                                  'bill_date',
+                                  'created_at'
+                                ])} • Balance ${_money(_staffCreditBalance(bill))}',
+                          ),
+                          onTap: () => setDialogState(() => selected = bill),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Amount to apply',
+                      helperText: 'Selected bill balance: ${_money(balance)}',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (optional)',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: selected == null
+                    ? null
+                    : () {
+                        final amount = _num(amountController.text);
+                        if (amount <= 0) return;
+                        Navigator.pop(dialogContext, {
+                          'bill': selected,
+                          'amount': amount,
+                          'notes': notesController.text,
+                        });
+                      },
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showCreditPaymentHistory(Map<String, dynamic> bill) async {
+    final rows = await ref
+        .read(branchAccountantRepositoryProvider)
+        .getPayrollCreditBillPayments('${bill['id']}');
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Credit Bill Payment History'),
+        content: SizedBox(
+          width: 780,
+          child: rows.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('No payment history recorded yet'),
+                )
+              : _SimpleTable(
+                  columns: const [
+                    'Date',
+                    'Amount',
+                    'Method',
+                    'Reference',
+                    'Recorded By',
+                    'Notes'
+                  ],
+                  rows: rows
+                      .map((row) => [
+                            _text(row, ['payment_date', 'created_at']),
+                            _money(_num(row['amount'])),
+                            _text(row, ['payment_method']),
+                            _text(row, ['reference']),
+                            _recordedByName(row),
+                            _text(row, ['notes']),
+                          ])
+                      .toList(),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _recordedByName(Map<String, dynamic> row) {
+    final user = _map(row['recorded_by_user']);
+    final name =
+        '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim();
+    return name.isEmpty ? _text(row, ['recorded_by']) : name;
   }
 
   Future<void> _recordLoanPayment(Map<String, dynamic> loan) async {

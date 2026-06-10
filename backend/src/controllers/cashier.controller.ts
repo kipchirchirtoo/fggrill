@@ -4215,6 +4215,7 @@ export const confirmCreditBill = async (req: Request, res: Response, next: NextF
             updateData.accountant_id = confirmedBy;
             payrollUpdate.accountant_confirmed_at = confirmedAt;
             payrollUpdate.accountant_id = confirmedBy;
+            payrollUpdate.status = 'accountant_confirmed';
         } else if (role === 'auditor') {
             if (bill.auditor_confirmed_at) {
                 throw new AppError('Credit bill already confirmed by auditor', 400);
@@ -4223,6 +4224,7 @@ export const confirmCreditBill = async (req: Request, res: Response, next: NextF
             updateData.auditor_id = confirmedBy;
             payrollUpdate.auditor_confirmed_at = confirmedAt;
             payrollUpdate.auditor_id = confirmedBy;
+            payrollUpdate.status = 'auditor_confirmed';
 
             // If both are confirmed, mark the bill confirmed.
             if (bill.accountant_confirmed_at) {
@@ -4339,7 +4341,7 @@ export const recordCreditPayment = async (req: Request, res: Response, next: Nex
                 .update({
                     paid_amount: payrollPaid,
                     balance: payrollBalance,
-                    status: payrollBalance <= 0 ? 'paid_cash' : 'partial'
+                    status: payrollBalance <= 0 ? 'paid_cash' : payrollBill.status
                 })
                 .eq('id', payrollBill.id);
 

@@ -548,6 +548,38 @@ class BranchAccountantRepository {
     await _dio.post('/payroll/credit-bills/$id/partial-payment', data: data);
   }
 
+  Future<void> approvePayrollCreditBill(String id, {String notes = ''}) async {
+    await _dio.patch('/payroll/credit-bills/$id/approve', data: {
+      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getCashierPaidCreditEntries({
+    String status = 'pending',
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/payroll/credit-bills/cashier-paid-credits', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+    });
+  }
+
+  Future<void> applyCashierPaidCreditEntry(
+    String entryId,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.post(
+      '/payroll/credit-bills/cashier-paid-credits/$entryId/apply',
+      data: data,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollCreditBillPayments(
+    String id,
+  ) async {
+    return _getList('/payroll/credit-bills/$id/payments');
+  }
+
   Future<void> updatePayrollCreditBillStatus(String id, String status) async {
     await _dio.patch('/payroll/credit-bills/$id', data: {'status': status});
   }

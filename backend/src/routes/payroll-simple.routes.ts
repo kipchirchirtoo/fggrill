@@ -2,10 +2,13 @@ import { Router } from 'express';
 import {
     createCreditBill,
     getCreditBills,
+    approveCreditBill,
     updateCreditBillStatus,
     triggerPendingBillsMigration,
     partialPayCreditBill,
-    getCreditBillPayments
+    getCreditBillPayments,
+    getCashierPaidCreditEntries,
+    applyCashierPaidCreditEntry
 } from '../controllers/credit-bills.controller';
 import {
     createAdvance,
@@ -40,8 +43,11 @@ router.use(protect);
 // ==========================================
 // Static paths MUST come before dynamic /:id routes
 router.post('/credit-bills/migrate-pending', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), triggerPendingBillsMigration);
+router.get('/credit-bills/cashier-paid-credits', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]), getCashierPaidCreditEntries);
+router.post('/credit-bills/cashier-paid-credits/:entryId/apply', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), applyCashierPaidCreditEntry);
 router.post('/credit-bills', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.RECEPTIONIST, UserRole.RESTAURANT, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), createCreditBill);
 router.get('/credit-bills', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.EMPLOYEE, UserRole.AUDITOR, UserRole.HR_MANAGER]), getCreditBills);
+router.patch('/credit-bills/:id/approve', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), approveCreditBill);
 router.patch('/credit-bills/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), updateCreditBillStatus);
 router.post('/credit-bills/:id/partial-payment', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), partialPayCreditBill);
 router.get('/credit-bills/:id/payments', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]), getCreditBillPayments);
