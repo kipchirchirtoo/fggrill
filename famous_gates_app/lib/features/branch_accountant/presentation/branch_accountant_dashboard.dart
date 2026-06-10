@@ -209,8 +209,6 @@ const _navItems = [
   // ── Finance & oversight ──
   _NavItem(BranchAccountantSection.financialWorkspace, 'Financial Workspace',
       Icons.calendar_month),
-  _NavItem(BranchAccountantSection.banking, 'Banking', Icons.account_balance),
-  _NavItem(BranchAccountantSection.shiftPnl, 'Shift P&L', Icons.insights),
   _NavItem(
       BranchAccountantSection.analytics, 'Branch Analytics', Icons.analytics),
   _NavItem(BranchAccountantSection.revenueOversight, 'Revenue Oversight',
@@ -219,17 +217,9 @@ const _navItems = [
       BranchAccountantSection.profitLoss, 'Profit & Loss', Icons.bar_chart),
   // ── Inventory & operations ──
   _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
-  _NavItem(
-      BranchAccountantSection.foodVariance, 'Food Variance', Icons.warning),
-  _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings Invoices',
-      Icons.hotel),
   _NavItem(BranchAccountantSection.stockTake, 'Stock Takes', Icons.inventory),
   _NavItem(BranchAccountantSection.supplierFinance, 'Supplier Finance',
       Icons.account_balance_wallet),
-  _NavItem(BranchAccountantSection.buffet, 'Buffet Control', Icons.restaurant),
-  _NavItem(
-      BranchAccountantSection.catering, 'Catering Control', Icons.room_service),
-  _NavItem(BranchAccountantSection.budgets, 'Budgets', Icons.account_balance),
 ];
 
 class _BranchAccountantSideNav extends ConsumerWidget {
@@ -694,7 +684,6 @@ class _QuickActions extends StatelessWidget {
         BranchAccountantSection.financialWorkspace
       ),
       ('Discrepancies', Icons.warning, BranchAccountantSection.discrepancies),
-      ('Banking', Icons.account_balance, BranchAccountantSection.banking),
       ('Credit Bills', Icons.credit_card, BranchAccountantSection.creditBills),
       (
         'Supplier Finance',
