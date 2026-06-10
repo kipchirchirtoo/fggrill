@@ -470,7 +470,7 @@ function formatKes(value: number): string {
 
 function aiFallbackMeta(reason: string) {
   return {
-    model: 'lina-engine',
+    model: 'LINA AI',
     engine: 'deterministic',
     ai_available: false,
     generated_at: new Date().toISOString(),
@@ -1026,8 +1026,10 @@ async function executeRemediationJob(executionId: string) {
           database: { status: dbErr ? 'degraded' : 'healthy', latency_ms: Date.now() - dbStart, error: dbErr?.message || null },
           system: { uptime_seconds: Math.floor(process.uptime()), memory_mb: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024) },
           ai_providers: {
-            groq: !!process.env.GROQ_API_KEY,
-            gemini: !!GEMINI_API_KEY,
+            lina: {
+              label: 'LINA AI',
+              status: OPENAI_API_KEY || GEMINI_API_KEY || process.env.GROQ_API_KEY ? 'configured' : 'fallback',
+            },
           },
         };
         const snap = await supabase.from('lina_system_snapshots').insert({
@@ -1426,7 +1428,7 @@ Respond using Lina Core OS output style. If the user asks for action, classify i
     const fullText = routed.text || localExecutiveSummary(ctx, routed.reason).summary;
     const chunks = fullText.match(/[\s\S]{1,900}/g) || [fullText];
     for (const chunk of chunks) {
-      res.write(`data: ${JSON.stringify({ type: 'delta', text: chunk, model: `${routed.provider}/${routed.model}` })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'delta', text: chunk, model: 'LINA AI' })}\n\n`);
     }
     res.write(`data: ${JSON.stringify({ type: 'done', full_text: fullText })}\n\n`);
     res.end();
@@ -1439,7 +1441,7 @@ Respond using Lina Core OS output style. If the user asks for action, classify i
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
-        res.write(`data: ${JSON.stringify({ type: 'delta', text: fallback, model: 'local-fallback' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'delta', text: fallback, model: 'LINA AI' })}\n\n`);
         res.write(`data: ${JSON.stringify({ type: 'done', full_text: fallback })}\n\n`);
         res.end();
       } catch {
@@ -1490,8 +1492,8 @@ Be specific with KES amounts, percentages, and counts. Reference actual branch n
         success: true,
         data: {
           summary: routed.text,
-          model: `${routed.provider}/${routed.model}`,
-          model_route: routed,
+          model: 'LINA AI',
+          lina_status: routed.provider === 'local' ? 'fallback' : 'operational',
           context: ctx,
           ai_available: routed.provider !== 'local',
           generated_at: new Date().toISOString(),
@@ -1545,7 +1547,7 @@ For each finding:
 
     const routed = await generateRoutedAnalysis(req, 'anomaly_report', prompt, ctx, 'READ_ONLY', 2600);
     if (routed.text) {
-      res.json({ success: true, data: { report: routed.text, model: `${routed.provider}/${routed.model}`, model_route: routed, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
+      res.json({ success: true, data: { report: routed.text, model: 'LINA AI', lina_status: routed.provider === 'local' ? 'fallback' : 'operational', ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
       return;
     }
     res.json({ success: true, data: localAnomalyReport(ctx, routed.reason) });
@@ -1615,7 +1617,7 @@ TASK: Deep employee intelligence analysis.
 
     const routed = await generateRoutedAnalysis(req, 'employee_intelligence', prompt, ctx, 'READ_ONLY', 2600);
     if (routed.text) {
-      res.json({ success: true, data: { analysis: routed.text, model: `${routed.provider}/${routed.model}`, model_route: routed, raw_context: employeeData, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
+      res.json({ success: true, data: { analysis: routed.text, model: 'LINA AI', lina_status: routed.provider === 'local' ? 'fallback' : 'operational', raw_context: employeeData, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
       return;
     }
     res.json({ success: true, data: localEmployeeAnalysis(ctx, employeeData, routed.reason) });
@@ -1689,7 +1691,7 @@ TASK: Comprehensive financial intelligence analysis.
 
     const routed = await generateRoutedAnalysis(req, 'financial_intelligence', prompt, ctx, 'READ_ONLY', 2800);
     if (routed.text) {
-      res.json({ success: true, data: { analysis: routed.text, model: `${routed.provider}/${routed.model}`, model_route: routed, raw_context: financialData, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
+      res.json({ success: true, data: { analysis: routed.text, model: 'LINA AI', lina_status: routed.provider === 'local' ? 'fallback' : 'operational', raw_context: financialData, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
       return;
     }
     res.json({ success: true, data: localFinancialAnalysis(ctx, financialData, routed.reason) });
@@ -1761,7 +1763,7 @@ Format:
       { title: 'AI analysis unavailable', severity: 'LOW', remediation_level: 'MANUAL_ONLY', suggested_action: 'Retry recommendation engine' },
     ];
 
-    res.json({ success: true, data: { recommendations: safeRecommendations, model: `${routed.provider}/${routed.model}`, model_route: routed, ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: { recommendations: safeRecommendations, model: 'LINA AI', lina_status: routed.provider === 'local' ? 'fallback' : 'operational', ai_available: routed.provider !== 'local', generated_at: new Date().toISOString() } });
   } catch (err: any) {
     logger.warn('Lina routed recommendations unavailable; serving local recommendations', {
       error: aiFailureReason(err),
@@ -1823,9 +1825,11 @@ export const getLiveMonitoring = async (req: Request, res: Response): Promise<vo
         system: { uptime_seconds: Math.floor(process.uptime()), memory_mb: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024), node_version: process.version },
         database: { status: dbErr ? 'degraded' : 'healthy', latency_ms: dbMs, error: dbErr?.message || null },
         ai_providers: {
-          openai: { model: OPENAI_MODEL, status: OPENAI_API_KEY ? 'configured' : 'missing_key', role: 'primary_orchestration' },
-          gemini: { model: GEMINI_MODEL, status: GEMINI_API_KEY ? 'configured' : 'missing_key', role: 'secondary_verification_fallback' },
-          groq: { model: GROQ_MODEL, status: process.env.GROQ_API_KEY ? 'configured' : 'missing_key' },
+          lina: {
+            status: OPENAI_API_KEY || GEMINI_API_KEY || process.env.GROQ_API_KEY ? 'configured' : 'fallback',
+            label: 'LINA AI',
+            capabilities: ['reasoning', 'workflow automation', 'verification', 'audit logging'],
+          },
         },
         maintenance_mode: maintenanceOn,
         pending_remediations: pendingCount || 0,
@@ -1841,13 +1845,16 @@ export const getModelRouterStatus = async (req: Request, res: Response): Promise
   res.json({
     success: true,
     data: {
-      strategy: 'OpenAI primary orchestration, Gemini secondary verification/summarization, Groq legacy fallback, deterministic local fallback.',
-      providers: {
-        openai: { model: OPENAI_MODEL, status: OPENAI_API_KEY ? 'configured' : 'missing_key', role: 'primary' },
-        gemini: { model: GEMINI_MODEL, status: GEMINI_API_KEY ? 'configured' : 'missing_key', role: 'secondary' },
-        groq: { model: GROQ_MODEL, status: process.env.GROQ_API_KEY ? 'configured' : 'missing_key', role: 'legacy_fallback' },
+      strategy: 'LINA AI routes reasoning internally and exposes only governed automation status to users.',
+      lina_ai: {
+        label: 'LINA AI',
+        reasoning: OPENAI_API_KEY || GEMINI_API_KEY || process.env.GROQ_API_KEY ? 'active' : 'fallback',
+        automation: 'policy gated',
+        verification: 'enabled',
+        audit: 'logged',
+        tools: ['database reads', 'audit trails', 'workflow approvals', 'safe job execution', 'verification'],
       },
-      routing_examples: sampleIntents.map((intent) => ({ intent, ...modelRouterPolicy(intent) })),
+      workflow: sampleIntents.map((intent) => ({ intent, agent: 'LINA AI', policy: modelRouterPolicy(intent).reason })),
       action_classes: ['READ_ONLY', 'SAFE_AUTO', 'APPROVAL_REQUIRED', 'MANUAL_ONLY'],
     },
   });

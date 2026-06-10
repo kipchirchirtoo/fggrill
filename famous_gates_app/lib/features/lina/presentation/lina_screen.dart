@@ -66,6 +66,7 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHeader(),
+        _buildAutomationStrip(),
         _buildTabBar(),
         Expanded(
           child: TabBarView(
@@ -123,7 +124,7 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
             ),
           ),
           const SizedBox(width: 12),
-          Text('Ai Service',
+          Text('AI Command Center',
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -168,7 +169,7 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: _kLinaAccent.withValues(alpha: 0.25)),
             ),
-            child: const Text('GROQ · GEMINI',
+            child: const Text('LINA AI',
                 style: TextStyle(
                     color: _kLinaAccent,
                     fontSize: 11,
@@ -186,6 +187,116 @@ class _LinaScreenState extends ConsumerState<LinaScreen>
           ]),
         ],
       ),
+    );
+  }
+
+  Widget _buildAutomationStrip() {
+    final lanes = [
+      (
+        'Cashier',
+        'Shift logbook close, cash-change audit, unpaid bill migration',
+        PhosphorIcons.receipt(),
+        AppColors.kSuccess
+      ),
+      (
+        'Branch Accountant',
+        'Daily financial workspace, void review, director escalation',
+        PhosphorIcons.bank(),
+        _kLinaTeal
+      ),
+      (
+        'Auditor',
+        'Revenue exceptions, staff audit, void exposure, compliance trail',
+        PhosphorIcons.shieldCheck(),
+        AppColors.kWarning
+      ),
+      (
+        'HR',
+        'Payroll intelligence, staff audit signals, attendance variance',
+        PhosphorIcons.users(),
+        _kLinaAccent
+      ),
+      (
+        'Central Store',
+        'Stock logs, variance signals, issue trail, dispatch evidence',
+        PhosphorIcons.package(),
+        const Color(0xFF0F766E)
+      ),
+    ];
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 980) {
+            final tileWidth = constraints.maxWidth < 560
+                ? constraints.maxWidth
+                : (constraints.maxWidth - 10) / 2;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: lanes
+                  .map((lane) => SizedBox(
+                        width: tileWidth,
+                        child:
+                            _automationLane(lane.$1, lane.$2, lane.$3, lane.$4),
+                      ))
+                  .toList(),
+            );
+          }
+          return Row(
+            children: [
+              for (var i = 0; i < lanes.length; i++) ...[
+                Expanded(
+                  child: _automationLane(
+                    lanes[i].$1,
+                    lanes[i].$2,
+                    lanes[i].$3,
+                    lanes[i].$4,
+                  ),
+                ),
+                if (i != lanes.length - 1) const SizedBox(width: 10),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _automationLane(
+      String title, String subtitle, IconData icon, Color color) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 72),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 9),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: color, fontWeight: FontWeight.w800, fontSize: 12)),
+            const SizedBox(height: 4),
+            Text(subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: AppColors.kTextSecondary,
+                    fontSize: 11,
+                    height: 1.25)),
+          ]),
+        ),
+      ]),
     );
   }
 
@@ -309,17 +420,9 @@ Widget _severityBadge(String severity) {
   );
 }
 
-// Dynamic source chip — shows the real model that produced the report.
+// Dynamic source chip — internal providers are intentionally hidden from users.
 Widget _modelChip(Map<String, dynamic> data) {
-  final model = (data['model'] ?? '').toString();
-  final engine = data['engine'] == 'deterministic' || model == 'lina-engine';
-  final label = engine
-      ? 'Lina Engine'
-      : model.startsWith('groq/')
-          ? 'Groq · ${model.substring(5)}'
-          : model.isEmpty
-              ? 'Lina'
-              : model;
+  final engine = data['engine'] == 'deterministic';
   final color = engine ? _kLinaTeal : _kLinaAccent;
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -330,7 +433,7 @@ Widget _modelChip(Map<String, dynamic> data) {
       Icon(engine ? PhosphorIcons.brain() : PhosphorIcons.sparkle(),
           size: 11, color: color),
       const SizedBox(width: 4),
-      Text(label,
+      Text(engine ? 'LINA AI Engine' : 'LINA AI',
           style: TextStyle(
               color: color, fontSize: 11, fontWeight: FontWeight.w600)),
     ]),
@@ -940,8 +1043,8 @@ class _MonitoringTabState extends ConsumerState<_MonitoringTab> {
     final system = data['system'] as Map<String, dynamic>? ?? {};
     final db = data['database'] as Map<String, dynamic>? ?? {};
     final ai = data['ai_providers'] as Map<String, dynamic>? ?? {};
-    final groq = ai['groq'] as Map<String, dynamic>? ?? {};
-    final geminiProv = ai['gemini'] as Map<String, dynamic>? ?? {};
+    final linaAi = ai['lina'] as Map<String, dynamic>? ?? {};
+    final aiReady = (linaAi['status'] ?? '') == 'configured';
     final dbOk = (db['status'] ?? '') == 'healthy';
     final maintenance = data['maintenance_mode'] == true;
     final pending = data['pending_remediations'] ?? 0;
@@ -961,18 +1064,18 @@ class _MonitoringTabState extends ConsumerState<_MonitoringTab> {
             AppColors.kSuccess),
         const SizedBox(width: 12),
         _statusCard(
-            'Groq AI',
-            groq['status'] == 'configured' ? 'Connected' : 'No Key',
-            groq['model'] ?? '',
-            groq['status'] == 'configured' ? _kLinaAccent : AppColors.kWarning),
+            'LINA AI',
+            aiReady ? 'Operational' : 'Fallback mode',
+            aiReady
+                ? 'Reasoning, workflow automation, verification'
+                : 'Deterministic summaries active',
+            aiReady ? _kLinaAccent : AppColors.kWarning),
         const SizedBox(width: 12),
         _statusCard(
-            'Gemini AI',
-            geminiProv['status'] == 'configured' ? 'Connected' : 'No Key',
-            geminiProv['model'] ?? '',
-            geminiProv['status'] == 'configured'
-                ? _kLinaAccent
-                : AppColors.kWarning),
+            'Automation',
+            pending == 0 ? 'Clear' : '$pending active',
+            'Approvals, execution, verification',
+            pending == 0 ? AppColors.kSuccess : AppColors.kWarning),
       ]),
       const SizedBox(height: 16),
       Row(children: [
@@ -1588,16 +1691,15 @@ class _FixCenterTab extends ConsumerWidget {
   Widget _buildRouterPanel(AsyncValue<Map<String, dynamic>> routerAsync) {
     return routerAsync.when(
       data: (data) {
-        final providers =
-            Map<String, dynamic>.from((data['providers'] as Map?) ?? {});
-        final examples = (data['routing_examples'] as List?) ?? [];
+        final lina = Map<String, dynamic>.from((data['lina_ai'] as Map?) ?? {});
+        final tools = (lina['tools'] as List?) ?? const [];
         return _card(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Icon(PhosphorIcons.brain(), size: 18, color: _kLinaAccent),
             const SizedBox(width: 8),
-            const Text('Model Router Policy',
+            const Text('LINA AI Governance',
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -1607,20 +1709,20 @@ class _FixCenterTab extends ConsumerWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: providers.entries.map((entry) {
-              final p = Map<String, dynamic>.from(entry.value as Map);
-              final status = (p['status'] ?? '').toString();
-              return _stateChip(
-                  entry.key, '${p['role'] ?? ''} · $status · ${p['model']}');
-            }).toList(),
+            children: [
+              _stateChip(
+                  'Reasoning', (lina['reasoning'] ?? 'active').toString()),
+              _stateChip('Automation',
+                  (lina['automation'] ?? 'policy gated').toString()),
+              _stateChip('Verification',
+                  (lina['verification'] ?? 'enabled').toString()),
+              _stateChip('Audit', (lina['audit'] ?? 'logged').toString()),
+            ],
           ),
-          if (examples.isNotEmpty) ...[
+          if (tools.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              examples.take(3).map((e) {
-                final m = Map<String, dynamic>.from(e as Map);
-                return '${m['intent']}: ${m['provider']}/${m['model']}';
-              }).join('   |   '),
+              tools.take(5).join('   |   '),
               style: const TextStyle(
                   fontSize: 12, color: AppColors.kTextSecondary),
             ),
