@@ -531,7 +531,7 @@ class _ThermalPreview extends StatelessWidget {
     'company_name': 'FamousGate Hotels',
     'branch_name': 'BOMET TOWN',
     'company_phone': '+254 706 782 828',
-    'company_email': 'info@famousgatehotels.com',
+    'company_email': 'famousgateshotelsbmt@gmail.com',
     'till_number': '8118084',
     'receipt_number': 'POS-1780998668619',
     'public_code': 'JZWLY3',
@@ -607,12 +607,59 @@ class _ThermalPreview extends StatelessWidget {
   List<TemplateSection> _thermalOrder(List<TemplateSection> sections) {
     TemplateSection? till;
     final ordered = <TemplateSection>[];
+    final hasPhone = sections.any((s) =>
+        s.visible != false &&
+        ((s.content ?? '').contains('{{company_phone}}') ||
+            (s.content ?? '').toLowerCase().contains('tel:')));
+    final hasEmail = sections.any((s) =>
+        s.visible != false &&
+        ((s.content ?? '').contains('{{company_email}}') ||
+            (s.content ?? '').toLowerCase().contains('email:')));
+    final shouldInjectPhone =
+        !hasPhone && (_sample['company_phone'] ?? '').isNotEmpty;
+    final shouldInjectEmailAfterPhone =
+        hasPhone && !hasEmail && (_sample['company_email'] ?? '').isNotEmpty;
+    final shouldInjectFullContact = shouldInjectPhone &&
+        !hasEmail &&
+        (_sample['company_email'] ?? '').isNotEmpty;
+    var contactInjected = false;
     for (final section in sections) {
       if (_isTillSection(section)) {
         if (section.visible && till == null) till = section;
         continue;
       }
       ordered.add(section);
+      if (!contactInjected &&
+          shouldInjectFullContact &&
+          _isHeaderAnchorSection(section)) {
+        ordered.add(_autoPhoneSection());
+        ordered.add(_autoEmailSection());
+        contactInjected = true;
+      } else if (!contactInjected &&
+          shouldInjectPhone &&
+          _isHeaderAnchorSection(section)) {
+        ordered.add(_autoPhoneSection());
+        contactInjected = true;
+      } else if (!contactInjected &&
+          shouldInjectEmailAfterPhone &&
+          _isPhoneSection(section)) {
+        ordered.add(_autoEmailSection());
+        contactInjected = true;
+      }
+    }
+    if (shouldInjectPhone && !ordered.any(_isPhoneSection)) {
+      ordered.insert(0, _autoPhoneSection());
+      if (!hasEmail && (_sample['company_email'] ?? '').isNotEmpty) {
+        ordered.insert(1, _autoEmailSection());
+      }
+    } else if (shouldInjectEmailAfterPhone &&
+        !ordered.any((s) => (s.content ?? '').contains('{{company_email}}'))) {
+      final phoneIndex = ordered.indexWhere(_isPhoneSection);
+      if (phoneIndex >= 0) {
+        ordered.insert(phoneIndex + 1, _autoEmailSection());
+      } else {
+        ordered.add(_autoEmailSection());
+      }
     }
     if (till == null) return ordered;
 
@@ -656,6 +703,40 @@ class _ThermalPreview extends StatelessWidget {
 
   bool _isThankYouSection(TemplateSection s) =>
       (s.content ?? '').toLowerCase().contains('thank you');
+
+  bool _isPhoneSection(TemplateSection s) {
+    final content = (s.content ?? '').toLowerCase();
+    return s.visible != false &&
+        (s.id == 'phone' ||
+            content.contains('{{company_phone}}') ||
+            content.contains('tel:'));
+  }
+
+  bool _isHeaderAnchorSection(TemplateSection s) {
+    return s.visible != false &&
+        (s.id == 'branch' ||
+            s.id == 'company' ||
+            (s.content ?? '').contains('{{branch_name}}') ||
+            (s.content ?? '').contains('{{company_name}}'));
+  }
+
+  TemplateSection _autoPhoneSection() => TemplateSection(
+        id: 'company_phone_auto',
+        type: 'text',
+        content: 'Tel: {{company_phone}}',
+        visible: true,
+        align: 'center',
+        size: 8,
+      );
+
+  TemplateSection _autoEmailSection() => TemplateSection(
+        id: 'company_email_auto',
+        type: 'text',
+        content: 'Email: {{company_email}}',
+        visible: true,
+        align: 'center',
+        size: 8,
+      );
 
   List<Widget> _previewSection(TemplateSection s) {
     Widget txt(String t,
@@ -737,7 +818,35 @@ class _ThermalPreview extends StatelessWidget {
         ];
       case 'items':
         return [
-          txt('1x Delmonte 1 ltr            KES 350.00'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Row(children: const [
+              Expanded(
+                child: Text('Description',
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+              SizedBox(width: 6),
+              SizedBox(
+                width: 92,
+                child: Text('Price',
+                    textAlign: TextAlign.right,
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ]),
+          ),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+            Expanded(
+                child:
+                    Text('1x Delmonte 1 ltr', style: TextStyle(fontSize: 10))),
+            SizedBox(width: 6),
+            SizedBox(
+              width: 92,
+              child: Text('KES 350.00',
+                  textAlign: TextAlign.right, style: TextStyle(fontSize: 10)),
+            ),
+          ]),
         ];
       case 'totals':
         return [

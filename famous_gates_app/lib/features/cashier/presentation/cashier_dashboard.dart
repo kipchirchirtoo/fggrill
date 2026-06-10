@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/storage/secure_storage_provider.dart';
 import '../../../core/utils/api_error_message.dart';
 import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/widgets.dart';
@@ -50,7 +52,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     CashierTab.voided,
     CashierTab.credit,
     CashierTab.shifts,
-    CashierTab.barcode,
     CashierTab.insights,
   ];
 
@@ -86,11 +87,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         label: 'Shifts',
         icon: Icons.access_time,
         content: _ShiftsTab(),
-      ),
-      const DashboardTab(
-        label: 'Barcode',
-        icon: Icons.qr_code_scanner,
-        content: _BarcodeTab(),
       ),
       const DashboardTab(
         label: 'Insights',
@@ -205,6 +201,110 @@ class _StationTabState extends ConsumerState<_StationTab> {
   String? _selectedUnpaidRef;
   String _method = 'cash';
 
+  // Barcode scanner (merged into Station). Mode 'camera' uses the device
+  // camera; 'hardware' keeps the lookup field focused for keyboard-wedge
+  // scanners. Persisted per device via secure storage.
+  static const _kScanModeKey = 'cashier_scanner_mode';
+  static const _kScanAutoKey = 'cashier_scanner_autosubmit';
+  String _scannerMode = 'camera';
+  bool _scannerAutoSubmit = true;
+
+  Future<void> _loadScannerConfig() async {
+    final storage = ref.read(secureStorageProvider);
+    final mode = await storage.read(key: _kScanModeKey);
+    final auto = await storage.read(key: _kScanAutoKey);
+    if (!mounted) return;
+    setState(() {
+      if (mode == 'hardware' || mode == 'camera') _scannerMode = mode!;
+      if (auto != null) _scannerAutoSubmit = auto != 'false';
+    });
+  }
+
+  Future<void> _saveScannerConfig() async {
+    final storage = ref.read(secureStorageProvider);
+    await storage.write(key: _kScanModeKey, value: _scannerMode);
+    await storage.write(
+        key: _kScanAutoKey, value: _scannerAutoSubmit ? 'true' : 'false');
+  }
+
+  Future<void> _scanWithCamera() async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const _CashierBarcodeScannerScreen()),
+    );
+    if (!mounted || code == null || code.trim().isEmpty) return;
+    _lookupController.text = code.trim();
+    if (_scannerAutoSubmit) {
+      _lookupBill();
+    }
+  }
+
+  Future<void> _openScannerConfig() async {
+    var mode = _scannerMode;
+    var auto = _scannerAutoSubmit;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Barcode Scanner Configuration'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Scanner mode',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                      value: 'camera',
+                      label: Text('Camera'),
+                      icon: Icon(Icons.qr_code_scanner)),
+                  ButtonSegment(
+                      value: 'hardware',
+                      label: Text('Hardware'),
+                      icon: Icon(Icons.usb)),
+                ],
+                selected: {mode},
+                onSelectionChanged: (s) => setLocal(() => mode = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                mode == 'hardware'
+                    ? 'Keeps the lookup field focused for keyboard-wedge / USB scanners.'
+                    : 'Use the device camera to scan barcodes.',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const Divider(),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: auto,
+                onChanged: (v) => setLocal(() => auto = v),
+                title: const Text('Auto-lookup after scan'),
+                subtitle:
+                    const Text('Immediately load the bill once a code is read'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      setState(() {
+        _scannerMode = mode;
+        _scannerAutoSubmit = auto;
+      });
+      await _saveScannerConfig();
+    }
+  }
+
   /// Cash handed over by the customer (for computing change).
   num get _tendered => num.tryParse(_tenderedController.text.trim()) ?? 0;
   num get _amountDue => num.tryParse(_amountController.text.trim()) ?? 0;
@@ -235,6 +335,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   @override
   void initState() {
     super.initState();
+    _loadScannerConfig();
     final method = widget.initialMethod;
     if (method != null && method.isNotEmpty) {
       // Normalise reception methods (mpesa/card) to station methods.
@@ -378,18 +479,50 @@ class _StationTabState extends ConsumerState<_StationTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Bill Lookup',
-              style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Bill Lookup & Barcode',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.kPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _scannerMode == 'hardware' ? 'Hardware scanner' : 'Camera',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.kPrimary),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Scanner configuration',
+                  icon: const Icon(Icons.settings, size: 20),
+                  onPressed: _openScannerConfig,
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _lookupController,
+              autofocus: _scannerMode == 'hardware',
               onSubmitted: (_) => _lookupBill(),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText:
                     'Order number, short code, barcode, invoice, booking, POS ref',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  tooltip: 'Scan barcode with camera',
+                  icon: const Icon(Icons.qr_code_scanner),
+                  onPressed: _loading ? null : _scanWithCamera,
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -399,6 +532,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   onPressed: _loading ? null : _lookupBill,
                   icon: const Icon(Icons.search, size: 16),
                   label: const Text('Lookup'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _loading ? null : _scanWithCamera,
+                  icon: const Icon(Icons.qr_code_scanner, size: 16),
+                  label: const Text('Scan'),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton(
@@ -3437,17 +3576,23 @@ Widget _smallNumberCell({
   );
 }
 
-class _BarcodeTab extends ConsumerStatefulWidget {
-  const _BarcodeTab();
+/// Full-screen camera barcode scanner used by the Station tab. Returns the
+/// scanned raw value to the caller via Navigator.pop, or null if cancelled.
+class _CashierBarcodeScannerScreen extends StatefulWidget {
+  const _CashierBarcodeScannerScreen();
 
   @override
-  ConsumerState<_BarcodeTab> createState() => _BarcodeTabState();
+  State<_CashierBarcodeScannerScreen> createState() =>
+      _CashierBarcodeScannerScreenState();
 }
 
-class _BarcodeTabState extends ConsumerState<_BarcodeTab> {
-  final _controller = TextEditingController();
-  bool _loading = false;
-  Map<String, dynamic>? _result;
+class _CashierBarcodeScannerScreenState
+    extends State<_CashierBarcodeScannerScreen> {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    returnImage: false,
+  );
+  bool _handled = false;
 
   @override
   void dispose() {
@@ -3455,67 +3600,65 @@ class _BarcodeTabState extends ConsumerState<_BarcodeTab> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Barcode Scan',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _controller,
-                autofocus: true,
-                onSubmitted: (_) => _scan(),
-                decoration: const InputDecoration(
-                  labelText: 'Scan barcode or enter short code / order number',
-                  prefixIcon: Icon(Icons.qr_code_scanner),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: _loading ? null : _scan,
-                icon: const Icon(Icons.search, size: 16),
-                label: const Text('Scan'),
-              ),
-              const SizedBox(height: 20),
-              if (_loading)
-                const LoadingSkeleton(type: SkeletonType.list)
-              else if (_result == null)
-                const EmptyState(message: 'No scanned bill loaded')
-              else
-                _BillSummary(bill: _payload(_result!), onCopyReference: null),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled) return;
+    final barcode = capture.barcodes.isNotEmpty ? capture.barcodes.first : null;
+    final code = barcode?.rawValue;
+    if (code == null || code.trim().isEmpty) return;
+    _handled = true;
+    HapticFeedback.lightImpact();
+    Navigator.of(context).pop(code.trim());
   }
 
-  Future<void> _scan() async {
-    final code = _controller.text.trim();
-    if (code.isEmpty) return;
-    setState(() => _loading = true);
-    try {
-      final result =
-          await ref.read(cashierRepositoryProvider).scanPOSBarcode(code);
-      setState(() => _result = result);
-    } catch (error) {
-      if (mounted) {
-        AppNotifier.show(
-          context,
-          'Scan failed: ${apiErrorMessage(error)}',
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Scan Barcode'),
+        actions: [
+          IconButton(
+            tooltip: 'Toggle torch',
+            icon: const Icon(Icons.flash_on),
+            onPressed: () => _controller.toggleTorch(),
+          ),
+          IconButton(
+            tooltip: 'Switch camera',
+            icon: const Icon(Icons.cameraswitch),
+            onPressed: () => _controller.switchCamera(),
+          ),
+        ],
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(controller: _controller, onDetect: _onDetect),
+          // Simple framing guide
+          Center(
+            child: Container(
+              width: 260,
+              height: 160,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white70, width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 40,
+            child: Text(
+              'Point the camera at the bill barcode',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

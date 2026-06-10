@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +6,7 @@ import '../network/dio_client.dart';
 import '../storage/secure_storage_provider.dart';
 import '../theme/app_theme.dart';
 import '../../features/auth/data/auth_repository.dart';
+import 'branch_sale_detail_screen.dart';
 
 /// Shared "Branch Sales & Payments" view used by Branch Manager, Branch
 /// Accountant, Auditor and Director so every branch sale flows to all of them
@@ -422,16 +422,20 @@ class _BranchSalesPaymentsViewState
 
   Widget _txnTile(Map<String, dynamic> t) {
     final method = '${t['payment_method'] ?? 'unknown'}';
-    final source = '${t['source'] ?? t['category'] ?? ''}';
+    final source = '${t['source'] ?? ''}';
+    final outlet = '${t['outlet'] ?? t['category'] ?? ''}';
     final amount = _n(t['total_amount'] ?? t['amount']);
-    final ref =
-        '${t['order_number'] ?? t['reference'] ?? t['short_code'] ?? t['id'] ?? ''}';
+    final code =
+        '${t['code'] ?? t['order_number'] ?? t['transaction_number'] ?? t['reference'] ?? t['id'] ?? ''}';
+    final shortCode = '${t['short_code'] ?? ''}';
+    final id = '${t['id'] ?? ''}';
     final waiter = '${t['waiter_name'] ?? ''}';
-    final created = '${t['created_at'] ?? t['date'] ?? ''}';
+    final created = '${t['created_at'] ?? t['transaction_date'] ?? t['date'] ?? ''}';
     String when = created;
     final parsed = DateTime.tryParse(created);
     if (parsed != null) when = DateFormat('MMM d, HH:mm').format(parsed);
     final color = _methodColor(method);
+    final canOpen = source.isNotEmpty && id.isNotEmpty;
 
     return ListTile(
       leading: CircleAvatar(
@@ -440,25 +444,48 @@ class _BranchSalesPaymentsViewState
       ),
       title: Row(children: [
         Expanded(
-          child: Text(ref.isEmpty ? 'Sale' : ref,
+          child: Text(code.isEmpty ? 'Sale' : code,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w700)),
         ),
+        if (shortCode.isNotEmpty && shortCode != 'null')
+          Container(
+            margin: const EdgeInsets.only(left: 6, right: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text('#$shortCode',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+          ),
         Text(_money0(amount),
             style: const TextStyle(fontWeight: FontWeight.w900)),
       ]),
       subtitle: Text(
         [
-          if (source.isNotEmpty) _title(source),
+          if (outlet.isNotEmpty) _title(outlet),
           _methodLabel(method),
-          if (waiter.isNotEmpty) 'Waiter: $waiter',
+          if (waiter.isNotEmpty && waiter != 'null') 'Waiter: $waiter',
           if (when.isNotEmpty) when,
         ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
       ),
+      trailing: canOpen ? const Icon(Icons.chevron_right, size: 18) : null,
+      onTap: canOpen
+          ? () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => BranchSaleDetailScreen(
+                    source: source,
+                    id: id,
+                    fallbackCode: code.isEmpty ? null : code,
+                  ),
+                ),
+              )
+          : null,
     );
   }
 

@@ -266,6 +266,9 @@ class BrandedPDFGenerator:
             'daily_sales': self._generate_daily_sales_report,
             'occupancy': self._generate_occupancy_report,
             'financial_summary': self._generate_financial_report,
+            'branch_profit_loss': self._generate_profit_loss_report,
+            'profit_loss': self._generate_profit_loss_report,
+            'pos_profit_loss': self._generate_profit_loss_report,
             'revenue_analysis': self._generate_revenue_report,
             'inventory_status': self._generate_inventory_report,
             'housekeeping': self._generate_housekeeping_report,
@@ -282,6 +285,7 @@ class BrandedPDFGenerator:
             'stock_movement': self._generate_stock_movement_report,
             'branch_performance': self._generate_branch_performance_report,
             'sales_performance': self._generate_sales_performance_report,
+            'sold_items_analytics': self._generate_sales_performance_report,
             'staff_overview': self._generate_staff_overview_report,
             'staff_performance': self._generate_staff_performance_report,
             'compliance': self._generate_compliance_report,
@@ -345,7 +349,9 @@ class BrandedPDFGenerator:
             'expenditure_audit': 'expense',
             'variance_report': 'financial_variance',
             'consumption_audit': 'inventory_discrepancy',
-            'grn_audit': 'procurement_analysis'
+            'grn_audit': 'procurement_analysis',
+            'sold_items_analysis': 'sold_items_analytics',
+            'sold_items_report': 'sold_items_analytics',
         }
         
         report_type = aliases.get(report_type, report_type)
@@ -945,6 +951,117 @@ class BrandedPDFGenerator:
         ]))
         elements.append(profit_table)
         
+        return self._create_pdf(elements)
+
+    def _generate_profit_loss_report(self, data: Dict, filters: Dict) -> str:
+        """Branded Profit & Loss statement with per-POS-outlet breakdown."""
+        elements = []
+
+        def num(v):
+            try:
+                return float(v or 0)
+            except Exception:
+                return 0.0
+
+        date_range = f"{filters.get('start_date', 'N/A')} to {filters.get('end_date', 'N/A')}"
+        branch = filters.get('branch_name')
+        elements.extend(self._create_header("PROFIT & LOSS STATEMENT", date_range, branch))
+
+        revenue = num(data.get('revenue'))
+        cogs = num(data.get('costOfGoods'))
+        gross = num(data.get('grossProfit'))
+        opex = num(data.get('operatingExpenses'))
+        op_income = num(data.get('operatingIncome'))
+        net = num(data.get('netProfit'))
+        gross_margin = num(data.get('grossMargin'))
+        net_margin = num(data.get('margin'))
+
+        # ── Summary table ──────────────────────────────────────────────────
+        elements.append(Paragraph("<b>SUMMARY</b>", self.styles['SectionHeader']))
+        summary_rows = [
+            ['Line', 'Amount', 'Margin'],
+            ['Total Revenue', self._format_currency(revenue), ''],
+            ['Cost of Goods Sold (COGS)', self._format_currency(cogs), ''],
+            ['Gross Profit', self._format_currency(gross), self._format_percent(gross_margin)],
+            ['Operating Expenses', self._format_currency(opex), ''],
+            ['Operating Income', self._format_currency(op_income), ''],
+            ['NET PROFIT / (LOSS)', self._format_currency(net), self._format_percent(net_margin)],
+        ]
+        summary_table = Table(summary_rows, colWidths=[3.2*inch, 2.3*inch, 2*inch])
+        net_color = HEADER_GREEN if net >= 0 else colors.HexColor('#FFCDD2')
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HEADER_GRAY),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 3), (0, 3), 'Helvetica-Bold'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), net_color),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, FG_GRAY),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LINEABOVE', (0, -1), (-1, -1), 1, FG_DARK),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.3*inch))
+
+        # ── Per-POS-outlet breakdown ───────────────────────────────────────
+        outlets = data.get('outlets') or []
+        elements.append(Paragraph("<b>PROFIT &amp; LOSS BY POS OUTLET</b>", self.styles['SectionHeader']))
+        if outlets:
+            outlet_rows = [['POS Outlet', 'Revenue', 'COGS', 'Gross Profit', 'Margin', 'Units']]
+            tot_rev = tot_cogs = tot_gp = tot_units = 0.0
+            for o in outlets:
+                rev = num(o.get('revenue'))
+                c = num(o.get('cogs'))
+                gp = num(o.get('gross_profit'))
+                units = num(o.get('units'))
+                tot_rev += rev
+                tot_cogs += c
+                tot_gp += gp
+                tot_units += units
+                outlet_rows.append([
+                    str(o.get('name', 'Outlet')),
+                    self._format_currency(rev),
+                    self._format_currency(c),
+                    self._format_currency(gp),
+                    self._format_percent(num(o.get('margin'))),
+                    self._format_number(units),
+                ])
+            outlet_rows.append([
+                'TOTAL',
+                self._format_currency(tot_rev),
+                self._format_currency(tot_cogs),
+                self._format_currency(tot_gp),
+                self._format_percent((tot_gp / tot_rev * 100) if tot_rev else 0),
+                self._format_number(tot_units),
+            ])
+            outlet_table = Table(outlet_rows, colWidths=[2.1*inch, 1.3*inch, 1.2*inch, 1.3*inch, 0.9*inch, 0.7*inch])
+            style = self._get_table_style()
+            style.add('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')
+            style.add('BACKGROUND', (0, -1), (-1, -1), HEADER_YELLOW)
+            style.add('ALIGN', (1, 0), (-1, -1), 'RIGHT')
+            outlet_table.setStyle(style)
+            elements.append(outlet_table)
+        else:
+            elements.append(Paragraph("No POS outlet sales in this period.", self.styles['SmallText']))
+        elements.append(Spacer(1, 0.3*inch))
+
+        # ── Expenses by category ───────────────────────────────────────────
+        exp_by_cat = data.get('expensesByCategory') or {}
+        if exp_by_cat:
+            elements.append(Paragraph("<b>OPERATING EXPENSES</b>", self.styles['SectionHeader']))
+            exp_rows = [['Category', 'Amount']]
+            for cat, amt in exp_by_cat.items():
+                exp_rows.append([str(cat), self._format_currency(num(amt))])
+            exp_rows.append(['TOTAL', self._format_currency(opex)])
+            exp_table = Table(exp_rows, colWidths=[4.5*inch, 3*inch])
+            estyle = self._get_table_style()
+            estyle.add('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')
+            estyle.add('BACKGROUND', (0, -1), (-1, -1), HEADER_GRAY)
+            estyle.add('ALIGN', (1, 0), (-1, -1), 'RIGHT')
+            exp_table.setStyle(estyle)
+            elements.append(exp_table)
+
         return self._create_pdf(elements)
 
     def _generate_revenue_report(self, data: Dict, filters: Dict) -> str:
@@ -3431,7 +3548,12 @@ class BrandedPDFGenerator:
             ['METRIC', 'VALUE'],
             ['Unique Items Sold', str(summary.get('total_items_sold', 0))],
             ['Total Quantity Sold', self._format_number(summary.get('total_quantity_sold', 0))],
-            ['Total Gross Revenue', self._format_currency(summary.get('total_revenue', 0))]
+            ['Total Gross Revenue', self._format_currency(summary.get('total_revenue', 0))],
+            ['Cost of Goods Sold', self._format_currency(summary.get('total_cogs', 0))],
+            ['Gross Profit', self._format_currency(summary.get('gross_profit', 0))],
+            ['Profit Margin', self._format_percent(summary.get('profit_margin', 0))],
+            ['Fast Moving Items', str(summary.get('fast_moving_count', 0))],
+            ['Slow Moving Items', str(summary.get('slow_moving_count', 0))]
         ]
         
         summary_table = Table(summary_data, colWidths=[3*inch, 3*inch])
@@ -3448,45 +3570,44 @@ class BrandedPDFGenerator:
         # 2. Detailed Performance Table
         elements.append(Paragraph("<b>ITEM MOVEMENT & EFFICIENCY ANALYSIS</b>", self.styles['SectionHeader']))
         
-        headers = ['Item Details', 'Dept.', 'Qty Sold', 'Revenue', 'Stock Req.', 'Efficiency']
+        headers = ['Item Details', 'Outlet', 'Qty', 'Revenue', 'COGS', 'Profit', 'Move']
         perf_data = [headers]
         
         for item in data.get('analysis', []):
-            ratio = item.get('consumption_ratio', 0) * 100
             perf_data.append([
                 Paragraph(f"<b>{item.get('name', 'Unknown')}</b>", self.styles['Normal']),
-                item.get('category', '-'),
+                item.get('outlet_label') or item.get('category', '-'),
                 self._format_number(item.get('quantity', 0)),
                 self._format_currency(item.get('revenue', 0)),
-                self._format_number(item.get('stock_requested', 0)) if item.get('stock_requested') else '-',
-                self._format_percent(ratio) if item.get('stock_requested') else 'N/A'
+                self._format_currency(item.get('cost_of_goods_sold', 0)),
+                self._format_currency(item.get('gross_profit', 0)),
+                str(item.get('movement_tier', '-')).upper()
             ])
-            
+
         if not data.get('analysis'):
-            perf_data.append(['No data found', '-', '-', '-', '-', '-'])
-            
-        perf_table = Table(perf_data, colWidths=[1.8*inch, 1*inch, 0.9*inch, 1.2*inch, 1*inch, 0.9*inch])
+            perf_data.append(['No data found', '-', '-', '-', '-', '-', '-'])
+
+        perf_table = Table(perf_data, colWidths=[1.7*inch, 1*inch, 0.65*inch, 1*inch, 0.9*inch, 0.9*inch, 0.65*inch])
         perf_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), HEADER_BLUE),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('ALIGN', (2, 0), (5, -1), 'CENTER'),
-            ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+            ('ALIGN', (2, 0), (6, -1), 'CENTER'),
+            ('ALIGN', (3, 1), (5, -1), 'RIGHT'),
             ('GRID', (0, 0), (-1, -1), 0.2, FG_GRAY),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('PADDING', (0, 0), (-1, -1), 6),
         ]))
-        
-        # Apply conditional coloring for efficiency
+
+        # Apply conditional coloring for item movement
         for i, item in enumerate(data.get('analysis', []), 1):
-            if item.get('stock_requested'):
-                ratio = item.get('consumption_ratio', 0) * 100
-                color = FG_GREEN if ratio > 90 else colors.orange if ratio > 50 else FG_RED
-                perf_table.setStyle(TableStyle([
-                    ('TEXTCOLOR', (5, i), (5, i), color),
-                    ('FONTNAME', (5, i), (5, i), 'Helvetica-Bold'),
-                ]))
+            tier = str(item.get('movement_tier', '')).lower()
+            color = FG_GREEN if tier == 'fast' else colors.orange if tier == 'steady' else FG_RED
+            perf_table.setStyle(TableStyle([
+                ('TEXTCOLOR', (6, i), (6, i), color),
+                ('FONTNAME', (6, i), (6, i), 'Helvetica-Bold'),
+            ]))
 
         elements.append(perf_table)
         

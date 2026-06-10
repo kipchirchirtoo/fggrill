@@ -261,7 +261,7 @@ TemplatePrintData _templateData({
       'branch_name': branchName,
       'company_address': 'Bomet, Kenya',
       'company_phone': '+254 706 782 828',
-      'company_email': 'info@famousgatehotels.com',
+      'company_email': 'famousgateshotelsbmt@gmail.com',
       'till_number': _clean(tillNumber) ?? '',
       'receipt_number': receiptNumber,
       'public_code': code ?? '',

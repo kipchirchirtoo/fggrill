@@ -6,6 +6,7 @@ import 'dart:io';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../auth/domain/auth_notifier.dart';
 
 final branchAccountantRepositoryProvider =
     Provider<BranchAccountantRepository>((ref) {
@@ -19,8 +20,21 @@ class BranchAccountantRepository {
   final Ref _ref;
 
   Future<String> getBranchId() async {
+    final authBranchId =
+        _ref.read(authNotifierProvider).valueOrNull?.branchId.trim() ?? '';
+    if (_validBranchId(authBranchId)) return authBranchId;
     final storage = _ref.read(secureStorageProvider);
-    return await storage.read(key: AuthRepository.branchIdKey) ?? '';
+    final storedBranchId =
+        (await storage.read(key: AuthRepository.branchIdKey))?.trim() ?? '';
+    return _validBranchId(storedBranchId) ? storedBranchId : '';
+  }
+
+  bool _validBranchId(String value) {
+    final normalized = value.trim().toLowerCase();
+    return normalized.isNotEmpty &&
+        normalized != '0' &&
+        normalized != 'null' &&
+        normalized != 'nan';
   }
 
   Future<Map<String, dynamic>> getCashierClearances({
@@ -186,9 +200,14 @@ class BranchAccountantRepository {
 
   Future<List<Map<String, dynamic>>> getDiscrepancies() async {
     final branchId = await getBranchId();
-    return _getList('/finance/discrepancies', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
+    try {
+      return await _getList('/finance/discrepancies', query: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
+    } on DioException catch (e) {
+      if (_isRecoverableBranchEndpointError(e)) return [];
+      rethrow;
+    }
   }
 
   Future<void> respondDiscrepancy(String id, String response) async {
@@ -207,6 +226,40 @@ class BranchAccountantRepository {
       'from_date': fromDate,
       'to_date': toDate,
     });
+  }
+
+  /// Per-POS-outlet P&L sourced from cashier transactions + sold items.
+  Future<Map<String, dynamic>> getPosProfitLoss({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final branchId = await getBranchId();
+    return _getMap('/finance/pos-profit-loss', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      'from_date': fromDate,
+      'to_date': toDate,
+    });
+  }
+
+  /// Download the FamousGate-branded P&L PDF generated server-side.
+  Future<File> exportPosProfitLossPdf({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final branchId = await getBranchId();
+    final res = await _dio.get<List<int>>(
+      '/finance/pos-profit-loss/export/pdf',
+      queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        'from_date': fromDate,
+        'to_date': toDate,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(
+      res.data ?? const [],
+      'FG_Profit_Loss_${fromDate}_$toDate.pdf',
+    );
   }
 
   Future<Map<String, dynamic>> getRevenueOversight(
@@ -230,18 +283,44 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<File> downloadSoldItemsReport({
+    required String startDate,
+    required String endDate,
+  }) async {
+    final branchId = await getBranchId();
+    final res = await _dio.get<List<int>>(
+      '/auditor/verify/sold-items/export/pdf',
+      queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        'start_date': startDate,
+        'end_date': endDate,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(
+      res.data ?? const [],
+      'FG_Sold_Items_${startDate}_to_$endDate.pdf',
+    );
+  }
+
   Future<Map<String, dynamic>> getStaffAudit({
     required String startDate,
     required String endDate,
     String? staffId,
   }) async {
     final branchId = await getBranchId();
-    return _getMap('/auditor/staff-audit', query: {
+    final audit = await _getMap('/auditor/staff-audit', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       'start_date': startDate,
       'end_date': endDate,
       if (staffId != null && staffId != 'all') 'staff_id': staffId,
     });
+    try {
+      final staff = await getBranchStaff();
+      return _enrichStaffAuditWithProfiles(audit, staff);
+    } catch (_) {
+      return audit;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getShiftLogs(
@@ -337,10 +416,15 @@ class BranchAccountantRepository {
     String status = 'all',
   }) async {
     final branchId = await getBranchId();
-    return _getList('/banking/transactions', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-      if (status != 'all') 'status': status,
-    });
+    try {
+      return await _getList('/banking/transactions', query: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        if (status != 'all') 'status': status,
+      });
+    } on DioException catch (e) {
+      if (_isRecoverableBranchEndpointError(e)) return [];
+      rethrow;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getBankAccounts() async {
@@ -388,6 +472,7 @@ class BranchAccountantRepository {
 
   Future<void> confirmCreditBill(String id, String notes) async {
     await _dio.patch('/cashier/credit-bills/$id/confirm', data: {
+      'role': 'accountant',
       if (notes.trim().isNotEmpty) 'notes': notes.trim(),
     });
   }
@@ -404,6 +489,101 @@ class BranchAccountantRepository {
     await _dio.post('/cashier/credit-bills/$id/payroll-deduct', data: {
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
     });
+  }
+
+  Future<List<Map<String, dynamic>>> getBranchStaff(
+      {String search = ''}) async {
+    final branchId = await getBranchId();
+    return _getList('/staff', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (search.trim().isNotEmpty) 'search': search.trim(),
+      'status': 'active',
+      'limit': 500,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollCreditBills({
+    String status = 'all',
+    String? staffId,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/payroll/credit-bills', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+      if (staffId != null && staffId.isNotEmpty) 'staff_id': staffId,
+    });
+  }
+
+  Future<Map<String, dynamic>> createPayrollCreditBill(
+      Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/payroll/credit-bills', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...data,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<void> recordPayrollCreditBillPayment(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.post('/payroll/credit-bills/$id/partial-payment', data: data);
+  }
+
+  Future<void> updatePayrollCreditBillStatus(String id, String status) async {
+    await _dio.patch('/payroll/credit-bills/$id', data: {'status': status});
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollAdvances({
+    String status = 'all',
+    String? staffId,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/payroll/advances', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+      if (staffId != null && staffId.isNotEmpty) 'staff_id': staffId,
+    });
+  }
+
+  Future<Map<String, dynamic>> createPayrollAdvance(
+      Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/payroll/advances', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...data,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollLoans({
+    String status = 'all',
+    String? staffId,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/payroll/loans', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+      if (staffId != null && staffId.isNotEmpty) 'staff_id': staffId,
+    });
+  }
+
+  Future<Map<String, dynamic>> createPayrollLoan(
+      Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/payroll/loans', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...data,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<void> recordPayrollLoanPayment(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.post('/payroll/loans/$id/payment', data: data);
   }
 
   // ── Customer credit bills (unpaid bills) ──────────────────────────────────
@@ -580,17 +760,47 @@ class BranchAccountantRepository {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getSupplierInvoices() {
-    return _getList('/procurement/invoices');
+  Future<List<Map<String, dynamic>>> getSupplierInvoices({
+    String? supplierId,
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) {
+    return _getList('/procurement/invoices', query: {
+      if (supplierId != null && supplierId.isNotEmpty)
+        'supplier_id': supplierId,
+      if (status != null && status.isNotEmpty && status != 'all')
+        'status': status,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+    });
   }
 
-  Future<List<Map<String, dynamic>>> getSupplierPayments() {
-    return _getList('/procurement/payments');
+  Future<List<Map<String, dynamic>>> getSupplierPayments({
+    String? supplierId,
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) {
+    return _getList('/procurement/payments', query: {
+      if (supplierId != null && supplierId.isNotEmpty)
+        'supplier_id': supplierId,
+      if (status != null && status.isNotEmpty && status != 'all')
+        'status': status,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+    });
   }
 
   // Suppliers (branch-scoped) for PO/invoice creation
-  Future<List<Map<String, dynamic>>> getSuppliers() {
-    return _getList('/store/suppliers', query: {'scope': 'branch'});
+  Future<List<Map<String, dynamic>>> getSuppliers({
+    String scope = 'branch',
+    String? search,
+  }) {
+    return _getList('/store/suppliers', query: {
+      'scope': scope,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    });
   }
 
   // Catalog items for PO line selection
@@ -614,6 +824,33 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
+  Future<Map<String, dynamic>> createSupplierPayment(
+      Map<String, dynamic> data) async {
+    final res = await _dio.post('/procurement/payments', data: data);
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> createStoreSupplier(
+      Map<String, dynamic> data) async {
+    final res = await _dio.post('/store/suppliers', data: data);
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> getSupplierAging({String? supplierId}) {
+    return _getMap('/procurement/reports/aging', query: {
+      if (supplierId != null && supplierId.isNotEmpty)
+        'supplier_id': supplierId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierLedger(String supplierId) {
+    return _getList('/procurement/ledger/$supplierId');
+  }
+
+  Future<Map<String, dynamic>> getSupplierPerformance(String supplierId) {
+    return _getMap('/procurement/performance/$supplierId');
+  }
+
   Future<List<Map<String, dynamic>>> getBuffets() {
     return _getList('/buffet');
   }
@@ -632,8 +869,13 @@ class BranchAccountantRepository {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getCateringEvents() {
-    return _getList('/catering-food-control/events');
+  Future<List<Map<String, dynamic>>> getCateringEvents() async {
+    try {
+      return await _getList('/catering-food-control/events');
+    } on DioException catch (e) {
+      if (_isRecoverableBranchEndpointError(e)) return [];
+      rethrow;
+    }
   }
 
   Future<void> completeCateringEvent(String id) async {
@@ -700,6 +942,16 @@ class BranchAccountantRepository {
     return _asList(res.data);
   }
 
+  bool _isRecoverableBranchEndpointError(DioException error) {
+    final status = error.response?.statusCode;
+    if (status == 403 || status == 404) return true;
+    if (status != 500) return false;
+    final data = error.response?.data;
+    final message = data is Map ? '${data['message'] ?? ''}' : '$data';
+    return message.contains('Could not find a relationship') ||
+        message.contains('schema cache');
+  }
+
   Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) {
       if (value['data'] is Map) {
@@ -714,11 +966,99 @@ class BranchAccountantRepository {
     return {};
   }
 
+  Map<String, dynamic> _enrichStaffAuditWithProfiles(
+    Map<String, dynamic> audit,
+    List<Map<String, dynamic>> staff,
+  ) {
+    if (staff.isEmpty) return audit;
+    final enriched = Map<String, dynamic>.from(audit);
+    final byId = <String, Map<String, dynamic>>{};
+    final byEmployee = <String, Map<String, dynamic>>{};
+    final byName = <String, Map<String, dynamic>>{};
+
+    for (final profile in staff) {
+      final id = _text(profile, const ['id', 'staff_id']);
+      if (id.isNotEmpty) byId[id] = profile;
+      final employeeId = _text(profile, const [
+        'employee_id',
+        'staff_code',
+        'id_number',
+        'national_id',
+      ]);
+      if (employeeId.isNotEmpty) byEmployee[_norm(employeeId)] = profile;
+      final name = _staffName(profile);
+      if (name.isNotEmpty) byName[_norm(name)] = profile;
+    }
+
+    Map<String, dynamic> enrichRow(Map<String, dynamic> row) {
+      final profile = byId[_text(row, const ['staff_id', 'id'])] ??
+          byEmployee[_norm(_text(row, const [
+            'employee_id',
+            'staff_code',
+            'id_number',
+            'national_id',
+          ]))] ??
+          byName[_norm(_text(row, const ['staff_name', 'name']))];
+      if (profile == null) return row;
+
+      final merged = Map<String, dynamic>.from(row);
+      final salary = _firstPositiveNum(profile, const [
+        'basic_salary',
+        'salary',
+        'monthly_salary',
+        'gross_salary',
+        'gross_pay',
+        'net_pay',
+      ]);
+      if (_num(merged['salary']) <= 0 && salary > 0) {
+        merged['salary'] = salary;
+      }
+      merged['basic_salary'] ??= salary > 0 ? salary : null;
+
+      _fillText(merged, 'national_id', profile, const [
+        'national_id',
+        'id_number',
+        'identity_number',
+      ]);
+      _fillText(merged, 'id_number', profile, const [
+        'id_number',
+        'national_id',
+      ]);
+      _fillText(merged, 'employee_id', profile, const [
+        'employee_id',
+        'staff_code',
+        'id_number',
+      ]);
+      _fillText(merged, 'staff_code', profile, const [
+        'staff_code',
+        'employee_id',
+        'id_number',
+      ]);
+      _fillText(merged, 'department', profile, const ['department']);
+      _fillText(merged, 'role', profile, const ['role', 'position']);
+      _fillText(merged, 'branch_name', profile, const ['branch_name']);
+      return merged;
+    }
+
+    final summary = _asList(enriched['summary']);
+    if (summary.isNotEmpty) {
+      enriched['summary'] = summary.map(enrichRow).toList();
+    }
+    final records = _asList(enriched['data'] ?? enriched['records']);
+    if (records.isNotEmpty) {
+      enriched['data'] = records.map(enrichRow).toList();
+    }
+    return enriched;
+  }
+
   List<Map<String, dynamic>> _asList(dynamic value) {
     var data = value is Map
         ? value['data'] ??
             value['items'] ??
             value['records'] ??
+            value['staff'] ??
+            value['staff_profiles'] ??
+            value['employees'] ??
             value['analysis'] ??
             []
         : value;
@@ -726,6 +1066,9 @@ class BranchAccountantRepository {
       data = data['data'] ??
           data['items'] ??
           data['records'] ??
+          data['staff'] ??
+          data['staff_profiles'] ??
+          data['employees'] ??
           data['rows'] ??
           data['results'] ??
           data['clearances'] ??
@@ -746,6 +1089,52 @@ class BranchAccountantRepository {
           .toList();
     }
     return [];
+  }
+
+  String _staffName(Map<String, dynamic> row) {
+    final explicit = _text(row, const ['staff_name', 'full_name', 'name']);
+    if (explicit.isNotEmpty) return explicit;
+    return [
+      _text(row, const ['first_name', 'firstName']),
+      _text(row, const ['last_name', 'lastName']),
+    ].where((part) => part.isNotEmpty).join(' ').trim();
+  }
+
+  String _text(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      final value = row[key];
+      final text = value == null ? '' : '$value'.trim();
+      if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+    }
+    return '';
+  }
+
+  void _fillText(
+    Map<String, dynamic> target,
+    String targetKey,
+    Map<String, dynamic> source,
+    List<String> sourceKeys,
+  ) {
+    final current = _text(target, [targetKey]);
+    if (current.isNotEmpty && current.toLowerCase() != 'pending') return;
+    final value = _text(source, sourceKeys);
+    if (value.isNotEmpty) target[targetKey] = value;
+  }
+
+  String _norm(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  num _num(dynamic value) {
+    if (value is num) return value;
+    return num.tryParse('$value') ?? 0;
+  }
+
+  num _firstPositiveNum(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      final value = _num(row[key]);
+      if (value > 0) return value;
+    }
+    return 0;
   }
 
   Future<File> _saveBytes(List<int> bytes, String filename) async {

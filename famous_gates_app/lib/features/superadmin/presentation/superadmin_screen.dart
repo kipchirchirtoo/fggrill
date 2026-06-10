@@ -26,6 +26,7 @@ import 'sections/emergency_controls_section.dart';
 import 'sections/data_override_section.dart';
 import 'sections/document_templates_section.dart';
 import 'sections/till_numbers_section.dart';
+import 'sections/menu_pricing_section.dart';
 
 // Admin sections reused in superadmin
 import '../../admin/presentation/sections/misc_admin_sections.dart';
@@ -115,6 +116,7 @@ class SuperAdminScreen extends ConsumerWidget {
       SuperAdminSection.tillNumbers: const TillNumbersSection(),
       SuperAdminSection.restaurantMenu: const RestaurantMenuAdminSection(),
       SuperAdminSection.barMenu: const BarMenuAdminSection(),
+      SuperAdminSection.menuPricing: const MenuPricingSection(),
       SuperAdminSection.kyogongServices: const KyogongServicesAdminSection(),
       SuperAdminSection.cashierStationConfig:
           const CashierStationConfigSection(),

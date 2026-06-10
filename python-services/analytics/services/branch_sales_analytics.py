@@ -44,7 +44,10 @@ class BranchSalesAnalytics:
                     'rooms'::text as category,
                     NULL::text as order_type,
                     b.created_at as transaction_date,
-                    b.status::text as status
+                    b.status::text as status,
+                    b.booking_number::text as code,
+                    NULL::text as short_code,
+                    'Rooms / Front Office'::text as outlet
                 FROM bookings b
                 WHERE b.branch_id = %s
                     AND b.status NOT IN ('cancelled')
@@ -61,7 +64,10 @@ class BranchSalesAnalytics:
                     'restaurant'::text as category,
                     ro.order_type::text as order_type,
                     ro.created_at as transaction_date,
-                    ro.status::text as status
+                    ro.status::text as status,
+                    ro.order_number::text as code,
+                    ro.bill_number::text as short_code,
+                    COALESCE(ro.department, 'Restaurant')::text as outlet
                 FROM restaurant_orders ro
                 WHERE ro.branch_id = %s
                     AND ro.status NOT IN ('cancelled')
@@ -78,7 +84,10 @@ class BranchSalesAnalytics:
                     COALESCE(st.service_category::text, 'other') as category,
                     NULL::text as order_type,
                     st.created_at as transaction_date,
-                    'completed'::text as status
+                    'completed'::text as status,
+                    st.transaction_number::text as code,
+                    NULL::text as short_code,
+                    COALESCE(st.service_category::text, 'POS')::text as outlet
                 FROM shift_transactions st
                 WHERE st.branch_id = %s
                     AND DATE(st.created_at) BETWEEN %s AND %s
@@ -101,6 +110,9 @@ class BranchSalesAnalytics:
                 order_type,
                 transaction_date,
                 status,
+                code,
+                short_code,
+                outlet,
                 DATE(transaction_date) as sale_date
             FROM all_sales
             ORDER BY transaction_date DESC
@@ -273,7 +285,10 @@ class BranchSalesAnalytics:
             'order_type': transaction['order_type'],
             'total_amount': float(transaction['total_amount']) if isinstance(transaction['total_amount'], Decimal) else float(transaction['total_amount'] or 0),
             'status': transaction['status'],
-            'source': transaction['source']
+            'source': transaction['source'],
+            'code': transaction.get('code'),
+            'short_code': transaction.get('short_code'),
+            'outlet': transaction.get('outlet')
         }
 
     def get_branch_name(self, branch_id: int) -> str:

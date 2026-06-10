@@ -115,6 +115,10 @@ class SuperAdminNavItem {
                 label: 'Bar Menu',
                 icon: PhosphorIcons.wine()),
             SuperAdminNavItem(
+                section: SuperAdminSection.menuPricing,
+                label: 'Menu Pricing & Cost',
+                icon: PhosphorIcons.tag()),
+            SuperAdminNavItem(
                 section: SuperAdminSection.kyogongServices,
                 label: 'Kyogong Services',
                 icon: PhosphorIcons.sparkle()),

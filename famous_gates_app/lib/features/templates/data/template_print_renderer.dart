@@ -44,6 +44,7 @@ class TemplatePrintRenderer {
   static const double _paperWidthMm = 80;
   static const double _safeMarginMm = 2;
   static const double _barcodeWidthMm = 60;
+  static const double _priceColumnMm = 29;
 
   final _money = NumberFormat('#,##0.00', 'en_KE');
 
@@ -92,7 +93,7 @@ class TemplatePrintRenderer {
       pageFormat: fmt,
       build: (context) {
         final widgets = <pw.Widget>[];
-        for (final s in _thermalOrder(sections)) {
+        for (final s in _thermalOrder(sections, data)) {
           if (s.visible == false) continue;
           final w = _renderSection(s, data, logo);
           if (w != null) widgets.add(w);
@@ -107,9 +108,27 @@ class TemplatePrintRenderer {
     await Printing.layoutPdf(onLayout: (f) async => doc.save());
   }
 
-  List<TemplateSection> _thermalOrder(List<TemplateSection> sections) {
+  List<TemplateSection> _thermalOrder(
+      List<TemplateSection> sections, TemplatePrintData data) {
     TemplateSection? till;
     final ordered = <TemplateSection>[];
+    final hasPhone = sections.any((s) =>
+        s.visible != false &&
+        ((s.content ?? '').contains('{{company_phone}}') ||
+            (s.content ?? '').toLowerCase().contains('tel:')));
+    final hasEmail = sections.any((s) =>
+        s.visible != false &&
+        ((s.content ?? '').contains('{{company_email}}') ||
+            (s.content ?? '').toLowerCase().contains('email:')));
+    final shouldInjectPhone =
+        !hasPhone && (data.values['company_phone'] ?? '').isNotEmpty;
+    final shouldInjectEmailAfterPhone = hasPhone &&
+        !hasEmail &&
+        (data.values['company_email'] ?? '').isNotEmpty;
+    final shouldInjectFullContact = shouldInjectPhone &&
+        !hasEmail &&
+        (data.values['company_email'] ?? '').isNotEmpty;
+    var contactInjected = false;
 
     for (final section in sections) {
       if (_isTillSection(section)) {
@@ -117,6 +136,38 @@ class TemplatePrintRenderer {
         continue;
       }
       ordered.add(section);
+      if (!contactInjected &&
+          shouldInjectFullContact &&
+          _isHeaderAnchorSection(section)) {
+        ordered.add(_autoPhoneSection());
+        ordered.add(_autoEmailSection());
+        contactInjected = true;
+      } else if (!contactInjected &&
+          shouldInjectPhone &&
+          _isHeaderAnchorSection(section)) {
+        ordered.add(_autoPhoneSection());
+        contactInjected = true;
+      } else if (!contactInjected &&
+          shouldInjectEmailAfterPhone &&
+          _isPhoneSection(section)) {
+        ordered.add(_autoEmailSection());
+        contactInjected = true;
+      }
+    }
+
+    if (shouldInjectPhone && !ordered.any(_isPhoneSection)) {
+      ordered.insert(0, _autoPhoneSection());
+      if (!hasEmail && (data.values['company_email'] ?? '').isNotEmpty) {
+        ordered.insert(1, _autoEmailSection());
+      }
+    } else if (shouldInjectEmailAfterPhone &&
+        !ordered.any((s) => (s.content ?? '').contains('{{company_email}}'))) {
+      final phoneIndex = ordered.indexWhere(_isPhoneSection);
+      if (phoneIndex >= 0) {
+        ordered.insert(phoneIndex + 1, _autoEmailSection());
+      } else {
+        ordered.add(_autoEmailSection());
+      }
     }
 
     if (till == null) return ordered;
@@ -141,6 +192,40 @@ class TemplatePrintRenderer {
         s.id == 'till_compliance' ||
         content.contains('{{till_number}}');
   }
+
+  bool _isPhoneSection(TemplateSection s) {
+    final content = (s.content ?? '').toLowerCase();
+    return s.visible != false &&
+        (s.id == 'phone' ||
+            content.contains('{{company_phone}}') ||
+            content.contains('tel:'));
+  }
+
+  bool _isHeaderAnchorSection(TemplateSection s) {
+    return s.visible != false &&
+        (s.id == 'branch' ||
+            s.id == 'company' ||
+            (s.content ?? '').contains('{{branch_name}}') ||
+            (s.content ?? '').contains('{{company_name}}'));
+  }
+
+  TemplateSection _autoPhoneSection() => TemplateSection(
+        id: 'company_phone_auto',
+        type: 'text',
+        content: 'Tel: {{company_phone}}',
+        visible: true,
+        align: 'center',
+        size: 8,
+      );
+
+  TemplateSection _autoEmailSection() => TemplateSection(
+        id: 'company_email_auto',
+        type: 'text',
+        content: 'Email: {{company_email}}',
+        visible: true,
+        align: 'center',
+        size: 8,
+      );
 
   bool _isThankYouSection(TemplateSection s) {
     final content = (s.content ?? '').toLowerCase();
@@ -247,6 +332,7 @@ class TemplatePrintRenderer {
 
       case 'items':
         if (data.items.isEmpty) return null;
+        final priceWidth = _priceColumnMm * PdfPageFormat.mm;
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
@@ -255,9 +341,14 @@ class TemplatePrintRenderer {
                   child: pw.Text('Description',
                       style: pw.TextStyle(
                           fontWeight: pw.FontWeight.bold, fontSize: 8))),
-              pw.Text('Price',
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 8)),
+              pw.SizedBox(width: 4),
+              pw.SizedBox(
+                width: priceWidth,
+                child: pw.Text('Price',
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 8)),
+              ),
             ]),
             pw.SizedBox(height: 2),
             ...data.items.map((it) => pw.Padding(
@@ -269,11 +360,14 @@ class TemplatePrintRenderer {
                             child: pw.Text('${it.qty}x ${it.name}',
                                 maxLines: 2,
                                 style: const pw.TextStyle(fontSize: 8))),
-                        pw.SizedBox(width: 6),
-                        pw.Flexible(
-                          child: pw.Text('KES ${_money.format(it.lineTotal)}',
-                              textAlign: pw.TextAlign.right,
-                              style: const pw.TextStyle(fontSize: 8)),
+                        pw.SizedBox(width: 4),
+                        pw.SizedBox(
+                          width: priceWidth,
+                          child: pw.Text(
+                            'KES ${_money.format(it.lineTotal)}',
+                            textAlign: pw.TextAlign.right,
+                            style: const pw.TextStyle(fontSize: 8),
+                          ),
                         ),
                       ]),
                 )),

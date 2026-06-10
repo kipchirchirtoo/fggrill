@@ -11,6 +11,7 @@ final branchAccountantOverviewProvider =
   final endText = _date(today);
   final results = await Future.wait([
     repo.getCashierClearances(date: endText),
+    repo.getDailyRecords(startDate: startText, endDate: endText),
     repo.getBranchSalesAnalytics(startDate: startText, endDate: endText),
     repo.getBranchFinancials(startDate: startText, endDate: endText),
     repo.getDiscrepancies(),
@@ -18,10 +19,11 @@ final branchAccountantOverviewProvider =
   ]);
   return {
     'clearances': results[0],
-    'sales': results[1],
-    'financials': results[2],
-    'discrepancies': results[3],
-    'budget_summary': results[4],
+    'daily_records': results[1],
+    'sales': results[2],
+    'financials': results[3],
+    'discrepancies': results[4],
+    'budget_summary': results[5],
   };
 });
 

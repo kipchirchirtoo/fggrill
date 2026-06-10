@@ -8,6 +8,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:famous_gates_app/core/widgets/branch_sales_payments_view.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -15,11 +16,13 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
 import '../../auth/domain/auth_notifier.dart';
+import '../../branch_search/presentation/branch_search_screen.dart';
 import '../data/repository.dart';
 import '../domain/providers.dart';
 
 enum BranchAccountantSection {
   overview,
+  search,
   cashierClearance,
   analytics,
   salesPayments,
@@ -40,7 +43,7 @@ enum BranchAccountantSection {
   shiftPnl,
   bookingsInvoices,
   stockTake,
-  purchases,
+  supplierFinance,
   buffet,
   catering,
   budgets,
@@ -106,6 +109,8 @@ class _BranchAccountantDashboardState
         return _OverviewSection(
           onNavigate: (section) => setState(() => _section = section),
         );
+      case BranchAccountantSection.search:
+        return const BranchSearchSection();
       case BranchAccountantSection.cashierClearance:
         return const _CashierClearanceSection();
       case BranchAccountantSection.analytics:
@@ -146,7 +151,7 @@ class _BranchAccountantDashboardState
         return const _BookingsInvoicesSection();
       case BranchAccountantSection.stockTake:
         return const _StockTakeSection();
-      case BranchAccountantSection.purchases:
+      case BranchAccountantSection.supplierFinance:
         return const _PurchasesSection();
       case BranchAccountantSection.buffet:
         return const _BuffetSection();
@@ -182,6 +187,7 @@ class _NavItem {
 
 const _navItems = [
   _NavItem(BranchAccountantSection.overview, 'Overview', Icons.dashboard),
+  _NavItem(BranchAccountantSection.search, 'Branch Search', Icons.search),
   // ── Daily cashier, shift & bill operations (most accessed) ──
   _NavItem(BranchAccountantSection.shiftReview, 'Shift Reconciliation',
       Icons.schedule),
@@ -218,7 +224,8 @@ const _navItems = [
   _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings Invoices',
       Icons.hotel),
   _NavItem(BranchAccountantSection.stockTake, 'Stock Takes', Icons.inventory),
-  _NavItem(BranchAccountantSection.purchases, 'Purchases', Icons.shopping_cart),
+  _NavItem(BranchAccountantSection.supplierFinance, 'Supplier Finance',
+      Icons.account_balance_wallet),
   _NavItem(BranchAccountantSection.buffet, 'Buffet Control', Icons.restaurant),
   _NavItem(
       BranchAccountantSection.catering, 'Catering Control', Icons.room_service),
@@ -512,6 +519,8 @@ class _OverviewSection extends ConsumerWidget {
       builder: (payload) {
         final clearance = _map(payload['clearances']);
         final summary = _map(clearance['summary']);
+        final clearanceItems = _list(clearance['clearances']);
+        final dailyRecords = _list(payload['daily_records']);
         // Branch-sales analytics nests its totals under `summary`.
         final sales = _map(payload['sales']);
         final salesSummary = _map(sales['summary']);
@@ -519,27 +528,62 @@ class _OverviewSection extends ConsumerWidget {
         final financials = _map(payload['financials']);
         final finSummary = _map(financials['summary']);
         final discrepancies = _list(payload['discrepancies']);
+        final openDiscrepancies =
+            discrepancies.where(_isOpenDiscrepancy).toList();
         final budget = _map(payload['budget_summary']);
 
-        num totalRevenue =
-            _num(salesSummary['total_sales'] ?? sales['total_sales']);
+        final hasDailyRecords = dailyRecords.isNotEmpty;
+        final dailyRevenue = dailyRecords.fold<num>(
+            0, (sum, e) => sum + _num(e['total_revenue']));
+        final dailyExpenses = dailyRecords.fold<num>(
+            0, (sum, e) => sum + _num(e['total_expenses']));
+        final dailyNetProfit =
+            dailyRecords.fold<num>(0, (sum, e) => sum + _num(e['net_profit']));
+
+        num totalRevenue = hasDailyRecords
+            ? dailyRevenue
+            : _firstNonZeroNum([
+                salesSummary['total_sales'],
+                sales['total_sales'],
+                finSummary['revenue'],
+                financials['total_revenue'],
+                financials['revenue'],
+              ]);
         num netProfit = _num(finSummary['netProfit'] ??
             finSummary['net_profit'] ??
             financials['net_profit'] ??
             financials['netProfit']);
-        num finRevenue = _num(finSummary['revenue'] ??
-            financials['total_revenue'] ??
-            financials['revenue']);
-        num finExpenses = _num(finSummary['expenses'] ??
-            financials['total_expenses'] ??
-            financials['expenses']);
+        if (hasDailyRecords) netProfit = dailyNetProfit;
+        num finRevenue = hasDailyRecords
+            ? dailyRevenue
+            : _firstNonZeroNum([
+                finSummary['revenue'],
+                financials['total_revenue'],
+                financials['revenue'],
+                salesSummary['total_sales'],
+              ]);
+        num finExpenses = hasDailyRecords
+            ? dailyExpenses
+            : _firstNonZeroNum([
+                finSummary['expenses'],
+                financials['total_expenses'],
+                financials['expenses'],
+              ]);
         num receivables = _num(financials['receivables']);
         num payables = _num(financials['payables']);
         num budgetUtil = _num(budget['utilization_percentage'] ??
+            budget['usage_percentage'] ??
             budget['utilization'] ??
             budget['utilisation_percentage']);
         num pendingClear = _num(summary['pending'] ?? summary['pending_count']);
+        if (pendingClear == 0 && clearanceItems.isNotEmpty) {
+          pendingClear = clearanceItems.where(_isPendingClearance).length;
+        }
         num variance = _num(summary['total_variance']);
+        if (variance == 0 && clearanceItems.isNotEmpty) {
+          variance = clearanceItems.fold<num>(
+              0, (sum, c) => sum + _num(c['variance']));
+        }
 
         return _Page(
           title: 'Branch Accountant Overview',
@@ -568,7 +612,7 @@ class _OverviewSection extends ConsumerWidget {
                   variance.abs() > 0 ? Colors.red : Colors.green),
               _MetricCard('Pending Clearances', '${pendingClear.toInt()}',
                   Icons.hourglass_bottom, Colors.orange),
-              _MetricCard('Open Discrepancies', '${discrepancies.length}',
+              _MetricCard('Open Discrepancies', '${openDiscrepancies.length}',
                   Icons.warning, Colors.red),
               _MetricCard('Net Profit', _money(netProfit),
                   Icons.account_balance_wallet, Colors.blue),
@@ -588,8 +632,9 @@ class _OverviewSection extends ConsumerWidget {
                 'Expenses': _money(finExpenses),
                 'Receivables': _money(receivables),
                 'Payables': _money(payables),
-                'Budget Balance': _money(
-                    _num(budget['remaining_budget'] ?? budget['balance'])),
+                'Budget Balance': _money(_num(budget['remaining_budget'] ??
+                    budget['total_remaining'] ??
+                    budget['balance'])),
               }),
             ),
           ],
@@ -625,7 +670,11 @@ class _QuickActions extends StatelessWidget {
       ('Discrepancies', Icons.warning, BranchAccountantSection.discrepancies),
       ('Banking', Icons.account_balance, BranchAccountantSection.banking),
       ('Credit Bills', Icons.credit_card, BranchAccountantSection.creditBills),
-      ('Purchases', Icons.shopping_cart, BranchAccountantSection.purchases),
+      (
+        'Supplier Finance',
+        Icons.account_balance_wallet,
+        BranchAccountantSection.supplierFinance
+      ),
       ('Stock Takes', Icons.inventory, BranchAccountantSection.stockTake),
       ('Profit & Loss', Icons.bar_chart, BranchAccountantSection.profitLoss),
     ];
@@ -2061,10 +2110,12 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
       _date(DateTime(DateTime.now().year, DateTime.now().month));
   late String _to = _today();
   late Future<Map<String, dynamic>> _future = _load();
+  bool _exporting = false;
 
+  // Sourced from cashier transactions + sold items, broken down per POS outlet.
   Future<Map<String, dynamic>> _load() => ref
       .read(branchAccountantRepositoryProvider)
-      .getProfitLoss(fromDate: _from, toDate: _to);
+      .getPosProfitLoss(fromDate: _from, toDate: _to);
   void _refresh() => setState(() {
         _future = _load();
       });
@@ -2076,89 +2127,128 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (pl) => _Page(
-          title: 'Profit & Loss Statement',
-          subtitle:
-              'Revenue, COGS, expenses, operating income, and net margin.',
-          actions: [
-            _DateField(
-                value: _from, onChanged: (v) => setState(() => _from = v)),
-            _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
-            _RefreshButton(onPressed: _refresh),
-            OutlinedButton.icon(
-              onPressed: () => _export(pl),
-              icon: const Icon(Icons.picture_as_pdf),
-              label: const Text('Export PDF'),
-            ),
-          ],
-          children: [
-            _ResponsiveGrid(children: [
-              _MetricCard('Gross Profit', _money(_num(pl['grossProfit'])),
-                  Icons.trending_up, Colors.green),
-              _MetricCard(
-                  'Operating Income',
-                  _money(_num(pl['operatingIncome'])),
-                  Icons.savings,
-                  Colors.blue),
-              _MetricCard(
-                  'Net Profit',
-                  _money(_num(pl['netProfit'])),
-                  Icons.wallet,
-                  _num(pl['netProfit']) >= 0 ? Colors.green : Colors.red),
-              _MetricCard('Margin', '${_num(pl['margin']).toStringAsFixed(2)}%',
-                  Icons.percent, Colors.purple),
-            ]),
-            _TwoColumn(
-              left: _BreakdownCard(
-                title: 'Revenue Breakdown',
-                values: _map(pl['revenueBySource']).isNotEmpty
-                    ? _map(pl['revenueBySource'])
-                    : {'Total Revenue': pl['revenue']},
+        builder: (pl) {
+          final outlets = _list(pl['outlets']);
+          return _Page(
+            title: 'Profit & Loss Statement',
+            subtitle:
+                'From cashier transactions & sold items — per POS outlet, COGS, and net margin.',
+            actions: [
+              _DateField(
+                  value: _from, onChanged: (v) => setState(() => _from = v)),
+              _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
+              _RefreshButton(onPressed: _refresh),
+              OutlinedButton.icon(
+                onPressed: _exporting ? null : _exportBranded,
+                icon: _exporting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.picture_as_pdf),
+                label: Text(_exporting ? 'Generating…' : 'Export Branded PDF'),
               ),
-              right: _BreakdownCard(
-                title: 'Expense Breakdown',
-                values: {
-                  'Cost of Goods Sold': pl['costOfGoods'],
-                  'Operating Expenses': pl['operatingExpenses'],
-                  'Other Expenses': pl['otherExpenses'],
-                  ..._map(pl['expensesByCategory']),
-                },
+            ],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Revenue', _money(_num(pl['revenue'])),
+                    Icons.payments, Colors.teal),
+                _MetricCard('Cashier Sales', _money(_num(pl['cashierRevenue'])),
+                    Icons.point_of_sale, Colors.indigo),
+                _MetricCard('Cost of Goods', _money(_num(pl['costOfGoods'])),
+                    Icons.inventory_2, Colors.orange),
+                _MetricCard('Gross Profit', _money(_num(pl['grossProfit'])),
+                    Icons.trending_up, Colors.green),
+                _MetricCard(
+                    'Operating Expenses',
+                    _money(_num(pl['operatingExpenses'])),
+                    Icons.receipt_long,
+                    Colors.redAccent),
+                _MetricCard(
+                    'Net Profit',
+                    _money(_num(pl['netProfit'])),
+                    Icons.wallet,
+                    _num(pl['netProfit']) >= 0 ? Colors.green : Colors.red),
+                _MetricCard(
+                    'Net Margin',
+                    '${_num(pl['margin']).toStringAsFixed(1)}%',
+                    Icons.percent,
+                    Colors.purple),
+              ]),
+              _SectionCard(
+                title: 'Profit & Loss by POS Outlet',
+                child: outlets.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text(
+                            'No POS outlet sales recorded for this period.'),
+                      )
+                    : _SimpleTable(
+                        columns: const [
+                          'POS Outlet',
+                          'Revenue',
+                          'COGS',
+                          'Gross Profit',
+                          'Margin',
+                          'Units'
+                        ],
+                        rows: [
+                          ...outlets.map((o) => [
+                                _text(o, ['name']),
+                                _money(_num(o['revenue'])),
+                                _money(_num(o['cogs'])),
+                                _money(_num(o['gross_profit'])),
+                                '${_num(o['margin']).toStringAsFixed(1)}%',
+                                '${_num(o['units']).toInt()}',
+                              ]),
+                          [
+                            'TOTAL',
+                            _money(_num(pl['revenue'])),
+                            _money(_num(pl['costOfGoods'])),
+                            _money(_num(pl['grossProfit'])),
+                            '${_num(pl['grossMargin']).toStringAsFixed(1)}%',
+                            '',
+                          ],
+                        ],
+                      ),
               ),
-            ),
-          ],
-        ),
+              _TwoColumn(
+                left: _BreakdownCard(
+                  title: 'Revenue by Outlet',
+                  values: _map(pl['revenueBySource']).isNotEmpty
+                      ? _map(pl['revenueBySource'])
+                      : {'Total Revenue': pl['revenue']},
+                ),
+                right: _BreakdownCard(
+                  title: 'Operating Expenses',
+                  values: _map(pl['expensesByCategory']).isNotEmpty
+                      ? _map(pl['expensesByCategory'])
+                      : {'Operating Expenses': pl['operatingExpenses']},
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Future<void> _export(Map<String, dynamic> pl) async {
-    final file = await _exportPdf(
-      filename: 'profit-loss-$_from-to-$_to.pdf',
-      title: 'Profit & Loss Statement',
-      subtitle: 'Period: $_from to $_to',
-      metrics: {
-        'Revenue': _money(_num(pl['revenue'])),
-        'Cost of Goods': _money(_num(pl['costOfGoods'])),
-        'Gross Profit': _money(_num(pl['grossProfit'])),
-        'Operating Expenses': _money(_num(pl['operatingExpenses'])),
-        'Operating Income': _money(_num(pl['operatingIncome'])),
-        'Other Expenses': _money(_num(pl['otherExpenses'])),
-        'Net Profit': _money(_num(pl['netProfit'])),
-        'Margin': '${_num(pl['margin']).toStringAsFixed(2)}%',
-      },
-      sections: {
-        'Revenue Breakdown': _map(pl['revenueBySource']).isNotEmpty
-            ? _map(pl['revenueBySource'])
-            : {'Total Revenue': pl['revenue']},
-        'Expenses Breakdown': {
-          'Cost of Goods Sold': pl['costOfGoods'],
-          'Operating Expenses': pl['operatingExpenses'],
-          'Other Expenses': pl['otherExpenses'],
-          ..._map(pl['expensesByCategory']),
-        },
-      },
-    );
-    if (mounted) _notify(context, 'P&L PDF saved to ${file.path}');
+  Future<void> _exportBranded() async {
+    setState(() => _exporting = true);
+    try {
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .exportPosProfitLossPdf(fromDate: _from, toDate: _to);
+      final bytes = await file.readAsBytes();
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'FG_Profit_Loss_${_from}_$_to.pdf',
+      );
+    } catch (e) {
+      if (mounted) _notify(context, 'Export failed: $e');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 }
 
@@ -2286,6 +2376,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   late String _from = _date(DateTime.now().subtract(const Duration(days: 30)));
   late String _to = _today();
   String _search = '';
+  String _outletGroup = 'all';
+  bool _downloading = false;
   late Future<Map<String, dynamic>> _future = _load();
   Future<Map<String, dynamic>> _load() => ref
       .read(branchAccountantRepositoryProvider)
@@ -2305,16 +2397,24 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
           final payload =
               _map(data['data']).isNotEmpty ? _map(data['data']) : data;
           final summary = _map(payload['summary']);
+          final outletBreakdown = _list(summary['outlet_breakdown']);
+          final dailyRevenue = _list(summary['daily_revenue']);
+          final kds = _map(summary['kds_intelligence']);
+          final fastMoving = _list(payload['fast_moving_items']);
+          final slowMoving = _list(payload['slow_moving_items']);
           final items = _list(payload['analysis']).where((item) {
             final q = _search.toLowerCase();
-            return q.isEmpty ||
+            final matchesSearch = q.isEmpty ||
                 _text(item, ['name', 'item_name']).toLowerCase().contains(q) ||
                 _text(item, ['item_id', 'sku']).toLowerCase().contains(q);
+            final group = _text(item, ['outlet_group']);
+            final matchesGroup = _outletGroup == 'all' || group == _outletGroup;
+            return matchesSearch && matchesGroup;
           }).toList();
           return _Page(
             title: 'Sold Items Analytics',
             subtitle:
-                'Product revenue, stock requested, and consumption efficiency.',
+                'Restaurant, bar, rooms, and non-consumables revenue, COGS, gross profit, movement velocity, and KDS timing.',
             actions: [
               _DateField(
                   value: _from, onChanged: (v) => setState(() => _from = v)),
@@ -2329,9 +2429,9 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
               ),
               _RefreshButton(onPressed: _refresh),
               OutlinedButton.icon(
-                onPressed: () => _export(items, summary),
+                onPressed: _downloading ? null : _downloadBackendReport,
                 icon: const Icon(Icons.download),
-                label: const Text('Export Report'),
+                label: Text(_downloading ? 'Preparing PDF' : 'Export PDF'),
               ),
             ],
             children: [
@@ -2347,37 +2447,65 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                     Icons.inventory,
                     Colors.blue),
                 _MetricCard(
-                    'Unique Items',
-                    '${summary['total_items_sold'] ?? items.length}',
-                    Icons.category,
+                    'Cost of Goods',
+                    _money(_num(summary['total_cogs'])),
+                    Icons.receipt_long,
+                    Colors.orange),
+                _MetricCard(
+                    'Gross Profit',
+                    _money(_num(summary['gross_profit'])),
+                    Icons.account_balance_wallet,
+                    Colors.teal),
+                _MetricCard(
+                    'Profit Margin',
+                    '${_num(summary['profit_margin']).toStringAsFixed(1)}%',
+                    Icons.percent,
+                    Colors.indigo),
+                _MetricCard(
+                    'Fast / Slow',
+                    '${summary['fast_moving_count'] ?? 0} / ${summary['slow_moving_count'] ?? 0}',
+                    Icons.speed,
                     Colors.purple),
               ]),
               _SectionCard(
-                title: 'Sold Items Inventory',
-                child: _SimpleTable(
-                  columns: const [
-                    'Product',
-                    'Category',
-                    'Branch',
-                    'Qty',
-                    'Revenue',
-                    'Requested',
-                    'Efficiency'
+                title: 'Outlet Revenue Breakdown',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _outletFilters(outletBreakdown),
+                    const SizedBox(height: 16),
+                    _ResponsiveGrid(
+                      children: outletBreakdown
+                          .map((row) => _OutletSummaryTile(row: row))
+                          .toList(),
+                    ),
                   ],
-                  rows: items
-                      .map((item) => [
-                            _text(item, ['name', 'item_name']),
-                            _text(item, ['category']),
-                            _text(item, ['branch_name']),
-                            _num(item['quantity']).toStringAsFixed(0),
-                            _money(_num(item['revenue'])),
-                            _num(item['stock_requested']).toStringAsFixed(0),
-                            _num(item['stock_requested']) > 0
-                                ? '${(_num(item['consumption_ratio']) * 100).toStringAsFixed(1)}%'
-                                : 'N/A',
-                          ])
-                      .toList(),
                 ),
+              ),
+              _SectionCard(
+                title: 'Revenue, Profit & Mix Analysis',
+                child: _SoldItemsCharts(
+                  outletBreakdown: outletBreakdown,
+                  dailyRevenue: dailyRevenue,
+                ),
+              ),
+              _SectionCard(
+                title: 'Fast Moving Items',
+                child:
+                    _movementTable(fastMoving, empty: 'No fast movers found.'),
+              ),
+              _SectionCard(
+                title: 'Slow Moving Items',
+                child: _movementTable(slowMoving,
+                    empty: 'No slow moving items found.'),
+              ),
+              _SectionCard(
+                title: 'KDS Order Intelligence',
+                child: _kdsTable(kds),
+              ),
+              _SectionCard(
+                title: 'Detailed Sold Items Ledger',
+                child: _soldItemsTable(items),
               ),
             ],
           );
@@ -2386,43 +2514,387 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
     );
   }
 
-  Future<void> _export(
-    List<Map<String, dynamic>> items,
-    Map<String, dynamic> summary,
-  ) async {
-    final file = await _exportPdf(
-      filename: 'sold-items-$_from-to-$_to.pdf',
-      title: 'Sold Items Report',
-      subtitle: 'Period: $_from to $_to',
-      metrics: {
-        'Total Revenue': _money(_num(summary['total_revenue'])),
-        'Units Sold': '${summary['total_quantity_sold'] ?? 0}',
-        'Unique Items': '${summary['total_items_sold'] ?? items.length}',
-      },
-      tableHeaders: const [
-        'Product',
-        'Category',
-        'Branch',
-        'Qty Sold',
+  Widget _outletFilters(List<Map<String, dynamic>> outletBreakdown) {
+    final labels = {
+      'all': 'All Outlets',
+      for (final row in outletBreakdown)
+        _text(row, ['key']): _text(row, ['label'])
+    };
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: labels.entries
+          .map((entry) => FilterChip(
+                label: Text(entry.value),
+                selected: _outletGroup == entry.key,
+                onSelected: (_) => setState(() => _outletGroup = entry.key),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _movementTable(List<Map<String, dynamic>> rows,
+      {required String empty}) {
+    if (rows.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(18),
+        child: Text(empty,
+            style: const TextStyle(color: AppColors.kTextSecondary)),
+      );
+    }
+    return _SimpleTable(
+      columns: const [
+        'Item',
+        'Outlet',
+        'Qty',
+        'Velocity/day',
         'Revenue',
-        'Requested',
-        'Efficiency'
+        'Profit'
       ],
-      tableRows: items
+      rows: rows
           .map((item) => [
                 _text(item, ['name', 'item_name']),
-                _categoryLabel(_text(item, ['category'])),
+                _text(item, ['outlet_label', 'category']),
+                _num(item['quantity']).toStringAsFixed(0),
+                _num(item['velocity_per_day']).toStringAsFixed(2),
+                _money(_num(item['revenue'])),
+                _money(_num(item['gross_profit'])),
+              ])
+          .toList(),
+    );
+  }
+
+  Widget _kdsTable(Map<String, dynamic> kds) {
+    final slowest = _list(kds['slowest_items']);
+    final fastest = _list(kds['fastest_items']);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _MetricCard(
+          'Average Prep Time',
+          _num(kds['average_prep_minutes']) > 0
+              ? '${_num(kds['average_prep_minutes']).toStringAsFixed(1)} min'
+              : 'No KDS timing',
+          Icons.timer,
+          Colors.blueGrey,
+        ),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final slow = _SimpleTable(
+              columns: const ['Slowest Item', 'Outlet', 'Avg Prep'],
+              rows: slowest
+                  .map((item) => [
+                        _text(item, ['name']),
+                        _text(item, ['outlet_label']),
+                        '${_num(item['average_kds_minutes']).toStringAsFixed(1)} min',
+                      ])
+                  .toList(),
+            );
+            final fast = _SimpleTable(
+              columns: const ['Fastest Item', 'Outlet', 'Avg Prep'],
+              rows: fastest
+                  .map((item) => [
+                        _text(item, ['name']),
+                        _text(item, ['outlet_label']),
+                        '${_num(item['average_kds_minutes']).toStringAsFixed(1)} min',
+                      ])
+                  .toList(),
+            );
+            if (constraints.maxWidth < 900) {
+              return Column(children: [slow, const SizedBox(height: 16), fast]);
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: slow),
+                const SizedBox(width: 16),
+                Expanded(child: fast),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _soldItemsTable(List<Map<String, dynamic>> items) {
+    return _SimpleTable(
+      columns: const [
+        'Product',
+        'Outlet',
+        'Branch',
+        'Qty',
+        'Revenue',
+        'COGS',
+        'Gross Profit',
+        'Margin',
+        'Movement',
+        'KDS Avg'
+      ],
+      rows: items
+          .map((item) => [
+                _text(item, ['name', 'item_name']),
+                _text(item, ['outlet_label', 'category']),
                 _text(item, ['branch_name']),
                 _num(item['quantity']).toStringAsFixed(0),
                 _money(_num(item['revenue'])),
-                _num(item['stock_requested']).toStringAsFixed(0),
-                _num(item['stock_requested']) > 0
-                    ? '${(_num(item['consumption_ratio']) * 100).toStringAsFixed(1)}%'
+                _money(_num(item['cost_of_goods_sold'])),
+                _money(_num(item['gross_profit'])),
+                '${_num(item['profit_margin']).toStringAsFixed(1)}%',
+                _text(item, ['movement_tier']).toUpperCase(),
+                _num(item['average_kds_minutes']) > 0
+                    ? '${_num(item['average_kds_minutes']).toStringAsFixed(1)} min'
                     : 'N/A',
               ])
           .toList(),
     );
-    if (mounted) _notify(context, 'Sold items PDF saved to ${file.path}');
+  }
+
+  Future<void> _downloadBackendReport() async {
+    setState(() => _downloading = true);
+    try {
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadSoldItemsReport(startDate: _from, endDate: _to);
+      if (mounted) _notify(context, 'Sold items PDF downloaded: ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to export sold items PDF: $e');
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+}
+
+class _OutletSummaryTile extends StatelessWidget {
+  const _OutletSummaryTile({required this.row});
+
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.kDivider),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color:
+                  _soldChartColor(_text(row, ['key'])).withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _soldOutletIcon(_text(row, ['key'])),
+              color: _soldChartColor(_text(row, ['key'])),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _text(row, ['label']),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  '${_num(row['quantity']).toStringAsFixed(0)} units • ${_money(_num(row['gross_profit']))} profit',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.kTextSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            _money(_num(row['revenue'])),
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SoldItemsCharts extends StatelessWidget {
+  const _SoldItemsCharts({
+    required this.outletBreakdown,
+    required this.dailyRevenue,
+  });
+
+  final List<Map<String, dynamic>> outletBreakdown;
+  final List<Map<String, dynamic>> dailyRevenue;
+
+  @override
+  Widget build(BuildContext context) {
+    final outletRows =
+        outletBreakdown.where((row) => _num(row['revenue']) > 0).toList();
+    final dailyRows = dailyRevenue.length > 14
+        ? dailyRevenue.sublist(dailyRevenue.length - 14)
+        : dailyRevenue;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pie = _chartPanel(
+          title: 'Revenue Mix',
+          child: outletRows.isEmpty
+              ? const Center(child: Text('No revenue mix yet'))
+              : PieChart(
+                  PieChartData(
+                    centerSpaceRadius: 42,
+                    sectionsSpace: 2,
+                    sections: outletRows.map((row) {
+                      final key = _text(row, ['key']);
+                      return PieChartSectionData(
+                        value: _num(row['revenue']).toDouble(),
+                        title: _text(row, ['label']),
+                        radius: 72,
+                        color: _soldChartColor(key),
+                        titleStyle: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+        );
+        final bars = _chartPanel(
+          title: 'Daily Revenue vs Profit',
+          child: dailyRows.isEmpty
+              ? const Center(child: Text('No daily trend yet'))
+              : BarChart(
+                  BarChartData(
+                    gridData: const FlGridData(show: true),
+                    borderData: FlBorderData(show: false),
+                    titlesData: FlTitlesData(
+                      leftTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 28,
+                          getTitlesWidget: (value, meta) {
+                            final index = value.toInt();
+                            if (index < 0 || index >= dailyRows.length) {
+                              return const SizedBox.shrink();
+                            }
+                            final date = _text(dailyRows[index], ['date']);
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                date.length >= 10 ? date.substring(5) : date,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    barGroups: dailyRows.asMap().entries.map((entry) {
+                      final row = entry.value;
+                      return BarChartGroupData(
+                        x: entry.key,
+                        barsSpace: 3,
+                        barRods: [
+                          BarChartRodData(
+                            toY: _num(row['revenue']).toDouble(),
+                            color: Colors.green,
+                            width: 8,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                          BarChartRodData(
+                            toY: _num(row['gross_profit']).toDouble(),
+                            color: AppColors.kPrimary,
+                            width: 8,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+        );
+        if (constraints.maxWidth < 1000) {
+          return Column(children: [pie, const SizedBox(height: 16), bars]);
+        }
+        return Row(
+          children: [
+            Expanded(child: pie),
+            const SizedBox(width: 16),
+            Expanded(child: bars),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _chartPanel({required String title, required Widget child}) {
+    return Container(
+      height: 320,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.kDivider),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+Color _soldChartColor(String key) {
+  switch (key) {
+    case 'bar':
+      return Colors.indigo;
+    case 'rooms':
+      return Colors.teal;
+    case 'non_consumables':
+      return Colors.deepOrange;
+    case 'restaurant':
+      return Colors.green;
+    default:
+      return AppColors.kPrimary;
+  }
+}
+
+IconData _soldOutletIcon(String key) {
+  switch (key) {
+    case 'bar':
+      return Icons.local_bar;
+    case 'rooms':
+      return Icons.bed;
+    case 'non_consumables':
+      return Icons.shopping_bag;
+    case 'restaurant':
+      return Icons.restaurant;
+    default:
+      return Icons.point_of_sale;
   }
 }
 
@@ -2492,14 +2964,16 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
                 _text(e, ['staff_name']) == _staffFilter;
             final haystack = '${_text(e, ['staff_name'])} ${_text(e, [
                   'department'
-                ])} ${_text(e, ['role'])}'
+                ])} ${_text(e, ['branch_name'])} ${_text(e, [
+                  'employee_id'
+                ])} ${_text(e, ['national_id'])} ${_text(e, ['role'])}'
                 .toLowerCase();
             return matchesStaff && (lower.isEmpty || haystack.contains(lower));
           }).toList();
           return _Page(
             title: 'Staff Financial Audit',
             subtitle:
-                'Credit bills, advances, loans, unpaid bills, and outstanding staff balances.',
+                'Payroll-style staff deductions, outstanding balances, and net payable after deductions.',
             actions: [
               SegmentedButton<bool>(
                 segments: const [
@@ -2559,18 +3033,21 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
                 _MetricCard('Staff in Scope', '${filteredSummary.length}',
                     Icons.people, Colors.blue),
                 _MetricCard(
-                    'Credit Bills',
-                    _money(_sum(filteredSummary, 'total_credit_bills')),
+                    'Outstanding Credit Bills',
+                    _money(filteredSummary.fold<num>(
+                        0, (sum, e) => sum + _staffOutstandingCreditBills(e))),
                     Icons.credit_card,
                     Colors.orange),
                 _MetricCard(
-                    'Advances',
-                    _money(_sum(filteredSummary, 'total_advances')),
+                    'Salary Advances',
+                    _money(filteredSummary.fold<num>(
+                        0, (sum, e) => sum + _staffOutstandingAdvances(e))),
                     Icons.payments,
                     Colors.indigo),
                 _MetricCard(
-                    'Loans',
-                    _money(_sum(filteredSummary, 'total_loans')),
+                    'Staff Loans',
+                    _money(filteredSummary.fold<num>(
+                        0, (sum, e) => sum + _staffOutstandingLoans(e))),
                     Icons.account_balance,
                     Colors.green),
                 _MetricCard(
@@ -2578,31 +3055,41 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
                     _money(_sum(filteredSummary, 'outstanding_balance')),
                     Icons.warning,
                     Colors.red),
+                _MetricCard(
+                    'Net Payable',
+                    _money(filteredSummary.fold<num>(
+                        0, (sum, e) => sum + _staffNetPayable(e))),
+                    Icons.account_balance_wallet,
+                    Colors.teal),
               ]),
               _SectionCard(
                 title: _summaryMode ? 'Staff Summary' : 'Transactions',
                 child: _summaryMode
                     ? _SimpleTable(
                         columns: const [
-                          'Staff',
+                          'Staff Name',
+                          'Employee ID',
+                          'National ID',
+                          'Branch',
                           'Department',
-                          'Role',
-                          'Credit Bills',
-                          'Advances',
-                          'Loans',
-                          'Unpaid',
-                          'Outstanding'
+                          'Salary',
+                          'Outstanding Credit Bills',
+                          'Salary Advances',
+                          'Staff Loans',
+                          'Net Payable'
                         ],
                         rows: filteredSummary
                             .map((e) => [
                                   _text(e, ['staff_name']),
+                                  _staffEmployeeId(e),
+                                  _staffNationalId(e),
+                                  _text(e, ['branch_name']),
                                   _text(e, ['department']),
-                                  _text(e, ['role']),
-                                  _money(_num(e['total_credit_bills'])),
-                                  _money(_num(e['total_advances'])),
-                                  _money(_num(e['total_loans'])),
-                                  _money(_num(e['total_unpaid_bills'])),
-                                  _money(_num(e['outstanding_balance'])),
+                                  _money(_staffSalary(e)),
+                                  _money(_staffOutstandingCreditBills(e)),
+                                  _money(_staffOutstandingAdvances(e)),
+                                  _money(_staffOutstandingLoans(e)),
+                                  _money(_staffNetPayable(e)),
                                 ])
                             .toList(),
                       )
@@ -2648,22 +3135,28 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
       subtitle: 'Period: $_from to $_to',
       metrics: {
         'Staff in Scope': '${summary.length}',
-        'Credit Bills': _money(_sum(summary, 'total_credit_bills')),
-        'Advances': _money(_sum(summary, 'total_advances')),
-        'Loans': _money(_sum(summary, 'total_loans')),
-        'Unpaid Bills': _money(_sum(summary, 'total_unpaid_bills')),
+        'Outstanding Credit Bills': _money(summary.fold<num>(
+            0, (sum, e) => sum + _staffOutstandingCreditBills(e))),
+        'Salary Advances': _money(summary.fold<num>(
+            0, (sum, e) => sum + _staffOutstandingAdvances(e))),
+        'Staff Loans': _money(
+            summary.fold<num>(0, (sum, e) => sum + _staffOutstandingLoans(e))),
         'Outstanding': _money(_sum(summary, 'outstanding_balance')),
+        'Net Payable':
+            _money(summary.fold<num>(0, (sum, e) => sum + _staffNetPayable(e))),
       },
       tableHeaders: _summaryMode
           ? const [
-              'Staff',
+              'Staff Name',
+              'Employee ID',
+              'National ID',
+              'Branch',
               'Department',
-              'Role',
-              'Credit Bills',
-              'Advances',
-              'Loans',
-              'Unpaid',
-              'Outstanding'
+              'Salary',
+              'Outstanding Credit Bills',
+              'Salary Advances',
+              'Staff Loans',
+              'Net Payable'
             ]
           : const [
               'Date',
@@ -2678,13 +3171,15 @@ class _StaffAuditSectionState extends ConsumerState<_StaffAuditSection> {
           ? summary
               .map((e) => [
                     _text(e, ['staff_name']),
+                    _staffEmployeeId(e),
+                    _staffNationalId(e),
+                    _text(e, ['branch_name']),
                     _text(e, ['department']),
-                    _text(e, ['role']),
-                    _money(_num(e['total_credit_bills'])),
-                    _money(_num(e['total_advances'])),
-                    _money(_num(e['total_loans'])),
-                    _money(_num(e['total_unpaid_bills'])),
-                    _money(_num(e['outstanding_balance'])),
+                    _money(_staffSalary(e)),
+                    _money(_staffOutstandingCreditBills(e)),
+                    _money(_staffOutstandingAdvances(e)),
+                    _money(_staffOutstandingLoans(e)),
+                    _money(_staffNetPayable(e)),
                   ])
               .toList()
           : records
@@ -3033,11 +3528,30 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
     final repo = ref.read(branchAccountantRepositoryProvider);
     final results = await Future.wait([
       repo.getShiftLogs(status: 'pending_open'),
+      repo.getPendingCashierLogbooks(),
       repo.getShiftLogs(status: 'closed'),
     ]);
+    final pendingOpenings = results[0]
+        .map((shift) => {...shift, '_shift_record_type': 'opening'})
+        .toList();
+    final pendingLogbooks = results[1]
+        .map((logbook) => {...logbook, '_shift_record_type': 'logbook_review'})
+        .toList();
+    final linkedShiftIds = pendingLogbooks
+        .expand((logbook) => [
+              '${logbook['cashier_shift_id'] ?? ''}',
+              '${logbook['outlet_shift_id'] ?? ''}',
+            ])
+        .where((id) => id.trim().isNotEmpty)
+        .toSet();
+    final closedShifts = results[2]
+        .where((shift) => !linkedShiftIds.contains('${shift['id'] ?? ''}'))
+        .map((shift) => {...shift, '_shift_record_type': 'closed_shift'})
+        .toList();
     return [
-      ...results[0],
-      ...results[1],
+      ...pendingOpenings,
+      ...pendingLogbooks,
+      ...closedShifts,
     ];
   }
 
@@ -3153,11 +3667,22 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
 
     if (id.isEmpty) return;
 
-    ref.read(branchAccountantRepositoryProvider).getShiftLog(id).then((detail) {
+    final detailRequest = _isShiftLogbookReview(shift)
+        ? ref
+            .read(branchAccountantRepositoryProvider)
+            .getCashierLogbookDetail(id)
+        : ref.read(branchAccountantRepositoryProvider).getShiftLog(id);
+
+    detailRequest.then((detail) {
       if (!mounted) return;
       if (_selectedShiftId != id) return;
       setState(() {
-        _selectedDetail = {...shift, ...detail};
+        _selectedDetail = {
+          ...shift,
+          ...detail,
+          '_shift_record_type': shift['_shift_record_type'],
+          '_queue_id': id,
+        };
         _loadingDetail = false;
       });
     }).catchError((_) {
@@ -3170,10 +3695,18 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
   }
 
   Future<void> _reconcileSelected(Map<String, dynamic> shift) async {
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .reconcileShift('${shift['id']}', _notesController.text.trim());
-    _toast('Shift reconciled');
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    if (_isShiftLogbookReview(shift)) {
+      await repo.auditCashierLogbook(
+        '${shift['_queue_id'] ?? shift['id']}',
+        approve: true,
+        notes: _notesController.text.trim(),
+      );
+      _toast('Lina shift logbook approved');
+    } else {
+      await repo.reconcileShift('${shift['id']}', _notesController.text.trim());
+      _toast('Shift reconciled');
+    }
     _notesController.clear();
     _selectedShiftId = null;
     _selectedShift = null;
@@ -3273,9 +3806,10 @@ class _ShiftReconciliationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final variance = _firstNumFrom(shift, ['variance', 'variance_amount']);
+    final variance = _shiftVariance(shift);
     final status = _firstTextFrom(shift, ['status']).toLowerCase();
     final isOpeningRequest = status == 'pending_open';
+    final isLogbook = _isShiftLogbookReview(shift);
     final varianceColor = variance == 0
         ? Colors.green.shade700
         : variance.abs() < 100
@@ -3324,9 +3858,11 @@ class _ShiftReconciliationCard extends StatelessWidget {
                       _MiniBadge(
                         isOpeningRequest
                             ? 'PENDING OPEN'
-                            : module.toLowerCase() == 'kyogong'
-                                ? 'KYOGONG'
-                                : 'FAMOUS GATE',
+                            : isLogbook
+                                ? 'LINA LOGBOOK'
+                                : module.toLowerCase() == 'kyogong'
+                                    ? 'KYOGONG'
+                                    : 'FAMOUS GATE',
                       ),
                     ],
                   ),
@@ -3348,15 +3884,14 @@ class _ShiftReconciliationCard extends StatelessWidget {
                     value: _firstTextFrom(
                       shift,
                       ['cashier_name', 'cashier', 'user_name'],
-                      fallback: 'N/A',
+                      fallback: _shiftCashierName(shift),
                     ),
                   ),
                   _ShiftCardField(
                     label: isOpeningRequest ? 'Opening Float' : 'Sales',
                     value: _money(isOpeningRequest
                         ? _firstNumFrom(shift, ['opening_float'])
-                        : _firstNumFrom(
-                            shift, ['total_sales', 'total_revenue', 'sales'])),
+                        : _shiftTotalSales(shift)),
                     valueColor: isOpeningRequest
                         ? Colors.orange.shade700
                         : Colors.green.shade700,
@@ -3605,8 +4140,23 @@ class _ShiftReconciliationPanel extends StatelessWidget {
       );
     }
 
+    final reconciliation = _shiftCashReconciliation(shift!);
+    final summary = _map(shift!['summary']);
+    final payments = _shiftPaymentRows(shift!);
+    final revenue = _shiftRevenueRows(shift!);
+    final lines = _shiftTransactionLines(shift!);
+    final creditBills = _shiftCreditBills(shift!);
+    final paidBills = _shiftPaidBills(shift!);
+    final totalSales = _shiftTotalSales(shift!);
+    final transactionCount = _shiftTransactionCount(shift!);
+    final creditBillsTotal = _creditBillsCreated(shift!);
+    final paidBillsTotal = _creditBillsPaid(shift!);
+    final changeGiven = _num(reconciliation['change_given']);
+    final titlePrefix =
+        _isShiftLogbookReview(shift!) ? 'Lina Shift Logbook' : 'Shift Details';
+
     return _SectionCard(
-      title: 'Shift Details — $shiftTitle',
+      title: '$titlePrefix — $shiftTitle',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3614,14 +4164,75 @@ class _ShiftReconciliationPanel extends StatelessWidget {
             const LinearProgressIndicator(minHeight: 2),
             const SizedBox(height: 12),
           ],
+          _ResponsiveGrid(
+            children: [
+              _MetricCard(
+                'Total Sales',
+                _money(totalSales),
+                Icons.point_of_sale,
+                Colors.green,
+              ),
+              _MetricCard(
+                'Orders / POS Bills',
+                '${transactionCount.toInt()}',
+                Icons.receipt_long,
+                AppColors.kPrimary,
+              ),
+              _MetricCard(
+                'Cash Change Given',
+                _money(changeGiven),
+                Icons.currency_exchange,
+                Colors.orange,
+              ),
+              _MetricCard(
+                'Credit Bills',
+                _money(creditBillsTotal),
+                Icons.badge_outlined,
+                Colors.red,
+              ),
+              _MetricCard(
+                'Paid Credit Bills',
+                _money(paidBillsTotal),
+                Icons.account_balance_wallet,
+                Colors.teal,
+              ),
+              _MetricCard(
+                'Variance',
+                _money(_varianceAmount(shift!)),
+                Icons.warning_amber,
+                _varianceAmount(shift!).abs() < 0.01
+                    ? Colors.green
+                    : Colors.red,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           _ShiftReportSection(
             number: '1.',
-            title: 'Cash Reconciliation',
+            title: 'Cash Drawer & Change Trace',
             rows: [
               _ShiftReportRow('Opening Float', _money(_openingFloat(shift!))),
               _ShiftReportRow('+ Cash Sales', _money(_cashSales(shift!))),
+              _ShiftReportRow(
+                'Cash Tendered by Customers',
+                _money(_num(reconciliation['cash_tendered'])),
+              ),
+              _ShiftReportRow(
+                '- Change Given',
+                _money(changeGiven),
+                emphasized: changeGiven > 0,
+              ),
+              _ShiftReportRow(
+                '= Net Drawer Cash From Sales',
+                _money(_num(reconciliation['drawer_cash_in'])),
+                emphasized: true,
+              ),
               _ShiftReportRow('+ Credit Payments Received',
                   _money(_creditPaymentsReceived(shift!))),
+              _ShiftReportRow(
+                  '- Cash Drops', _money(_num(reconciliation['cash_drops']))),
+              _ShiftReportRow(
+                  '- Payouts', _money(_num(reconciliation['payouts']))),
               _ShiftReportRow(
                 '= Expected Closing Amount',
                 _money(_expectedClosingAmount(shift!)),
@@ -3635,59 +4246,57 @@ class _ShiftReconciliationPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          _ShiftReportSection(
-            number: '2.',
-            title: 'Sales by Payment Method',
-            rows: [
-              _ShiftReportRow('Cash Sales', _money(_cashSales(shift!))),
-              _ShiftReportRow('M-Pesa Sales', _money(_mpesaSales(shift!))),
-              _ShiftReportRow('Card Sales', _money(_cardSales(shift!))),
-              _ShiftReportRow('Other Sales', _money(_otherSales(shift!))),
-              _ShiftReportRow(
-                'Total Sales',
-                _money(_totalSales(shift!)),
-                emphasized: true,
+          _TwoColumn(
+            left: _SectionCard(
+              title: 'Sales by Payment Method',
+              child: _LogbookBreakdownList(
+                rows: payments,
+                labelKey: 'method',
+                amountKey: 'amount',
+                countKey: 'count',
+                emptyText: 'No payment methods captured',
               ),
-            ],
+            ),
+            right: _SectionCard(
+              title: 'Sales by Revenue System / Outlet',
+              child: _LogbookBreakdownList(
+                rows: revenue,
+                labelKey: 'label',
+                amountKey: 'amount',
+                emptyText: 'No outlet or revenue stream captured',
+              ),
+            ),
           ),
           const SizedBox(height: 14),
-          _ShiftReportSection(
-            number: '3.',
-            title: 'Sales by Revenue Stream',
-            rows: [
-              _ShiftReportRow(
-                  'Room Booking Revenue', _money(_roomRevenue(shift!))),
-              _ShiftReportRow(
-                  'Restaurant Revenue', _money(_restaurantRevenue(shift!))),
-              _ShiftReportRow('Bar Revenue', _money(_barRevenue(shift!))),
-              _ShiftReportRow('Other Revenue', _money(_otherRevenue(shift!))),
-              _ShiftReportRow(
-                'Stream Subtotal',
-                _money(_streamSubtotal(shift!)),
-                emphasized: true,
-              ),
-            ],
-          ),
+          _ShiftPaymentEvidenceGroups(lines: lines),
           const SizedBox(height: 14),
-          _ShiftReportSection(
-            number: '4.',
-            title: 'Credit & Bills Summary',
-            rows: [
-              _ShiftReportRow(
-                  'Credit Bills Created', _money(_creditBillsCreated(shift!))),
-              _ShiftReportRow(
-                  'Credit Bills Paid', _money(_creditBillsPaid(shift!))),
-              _ShiftReportRow(
-                'Outstanding Credit',
-                _outstandingCredit(shift!) == 0
-                    ? 'None'
-                    : _money(_outstandingCredit(shift!)),
-                emphasized: true,
+          _ShiftOutletEvidenceGroups(shift: shift!, lines: lines),
+          const SizedBox(height: 14),
+          _TwoColumn(
+            left: _SectionCard(
+              title: 'Credit Bill Summary',
+              child: _ShiftCreditBillSummary(
+                creditBills: creditBills,
+                total: creditBillsTotal,
+                outstanding: _outstandingCredit(shift!),
               ),
-            ],
+            ),
+            right: _SectionCard(
+              title: 'Paid Credit Bills / Payroll Settlements',
+              child: _ShiftPaidBillsSummary(
+                paidBills: paidBills,
+                total: paidBillsTotal,
+                fallbackCount: _num(summary['paid_bills_count']).toInt(),
+              ),
+            ),
           ),
           const SizedBox(height: 14),
           _VarianceAnalysisBox(shift: shift!),
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Full POS Bill & Order Evidence',
+            child: _LogbookEvidenceTable(lines: lines),
+          ),
           const SizedBox(height: 18),
           const Text(
             'Reconciliation Notes',
@@ -3876,30 +4485,516 @@ class _VarianceAnalysisBox extends StatelessWidget {
   }
 }
 
-num _openingFloat(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['opening_float', 'float_opening']);
-num _cashSales(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['total_cash_sales', 'cash_sales', 'cash_collected']);
-num _mpesaSales(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['total_mpesa_sales', 'mpesa_sales']);
-num _cardSales(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['total_card_sales', 'card_sales']);
-num _otherSales(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['total_other_sales', 'other_sales']);
-num _totalSales(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['total_sales', 'total_revenue', 'sales']);
-num _creditPaymentsReceived(Map<String, dynamic> shift) => _firstNumFrom(shift,
-    ['credit_payments_received', 'credit_bills_paid', 'paid_bills_value']);
+class _ShiftPaymentEvidenceGroups extends StatelessWidget {
+  const _ShiftPaymentEvidenceGroups({required this.lines});
+
+  final List<Map<String, dynamic>> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _groupShiftLines(lines, (line) {
+      final method = _text(line, ['payment_method']);
+      return method.isEmpty ? 'other' : method;
+    });
+    return _ShiftEvidenceGroups(
+      title: 'POS Bills & Orders Aligned to Payment Method',
+      emptyText: 'No POS bills or order lines were attached to this shift.',
+      groups: groups,
+      labelBuilder: (key) => _title(key),
+    );
+  }
+}
+
+class _ShiftOutletEvidenceGroups extends StatelessWidget {
+  const _ShiftOutletEvidenceGroups({
+    required this.shift,
+    required this.lines,
+  });
+
+  final Map<String, dynamic> shift;
+  final List<Map<String, dynamic>> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _groupShiftLines(
+      lines,
+      (line) => _shiftRevenueSystemLabel(shift, line),
+    );
+    return _ShiftEvidenceGroups(
+      title: 'Sales by POS Outlet / Revenue System',
+      emptyText: 'No POS outlet evidence was attached to this shift.',
+      groups: groups,
+      labelBuilder: (key) => key,
+    );
+  }
+}
+
+class _ShiftEvidenceGroups extends StatelessWidget {
+  const _ShiftEvidenceGroups({
+    required this.title,
+    required this.emptyText,
+    required this.groups,
+    required this.labelBuilder,
+  });
+
+  final String title;
+  final String emptyText;
+  final Map<String, List<Map<String, dynamic>>> groups;
+  final String Function(String key) labelBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    if (groups.isEmpty) {
+      return _SectionCard(
+        title: title,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            emptyText,
+            style: const TextStyle(color: AppColors.kTextSecondary),
+          ),
+        ),
+      );
+    }
+
+    return _SectionCard(
+      title: title,
+      child: Column(
+        children: groups.entries.map((entry) {
+          final total = entry.value.fold<num>(
+            0,
+            (sum, line) => sum + _num(line['amount']),
+          );
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.kSurface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.kDivider),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          labelBuilder(entry.key),
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      Text(
+                        '${entry.value.length} line${entry.value.length == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          color: AppColors.kTextSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        _money(total),
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SimpleTable(
+                  columns: const [
+                    'Time',
+                    'Reference',
+                    'Customer / Staff',
+                    'Source',
+                    'Tendered',
+                    'Change',
+                    'Amount',
+                  ],
+                  rows: entry.value.map<List<Object>>((line) {
+                    return [
+                      _formatCompactDateTime(_text(line, ['created_at'])),
+                      _text(line, ['reference']).isEmpty
+                          ? '-'
+                          : _text(line, ['reference']),
+                      _text(line, ['customer_name']).isEmpty
+                          ? '-'
+                          : _text(line, ['customer_name']),
+                      _title(_text(line, ['section', 'source_table'])),
+                      _num(line['amount_tendered']) > 0
+                          ? _money(_num(line['amount_tendered']))
+                          : '-',
+                      _num(line['change_given']) > 0
+                          ? _money(_num(line['change_given']))
+                          : '-',
+                      _money(_num(line['amount'])),
+                    ];
+                  }).toList(),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _ShiftCreditBillSummary extends StatelessWidget {
+  const _ShiftCreditBillSummary({
+    required this.creditBills,
+    required this.total,
+    required this.outstanding,
+  });
+
+  final List<Map<String, dynamic>> creditBills;
+  final num total;
+  final num outstanding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _KeyValueList({
+          'credit_bills_created': total,
+          'credit_bill_count': creditBills.length,
+          'outstanding_credit': outstanding,
+        }),
+        const SizedBox(height: 12),
+        _SimpleTable(
+          columns: const [
+            'Staff',
+            'Reference',
+            'Department',
+            'Status',
+            'Amount'
+          ],
+          rows: creditBills.map<List<Object>>((bill) {
+            return [
+              _text(bill, ['staff_name', 'customer_name', 'name']).isEmpty
+                  ? 'Staff'
+                  : _text(bill, ['staff_name', 'customer_name', 'name']),
+              _text(bill, ['credit_number', 'reference']).isEmpty
+                  ? '-'
+                  : _text(bill, ['credit_number', 'reference']),
+              _text(bill, ['department']).isEmpty
+                  ? '-'
+                  : _text(bill, ['department']),
+              _text(bill, ['status']).isEmpty ? '-' : _text(bill, ['status']),
+              _money(_num(bill['amount'])),
+            ];
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShiftPaidBillsSummary extends StatelessWidget {
+  const _ShiftPaidBillsSummary({
+    required this.paidBills,
+    required this.total,
+    required this.fallbackCount,
+  });
+
+  final List<Map<String, dynamic>> paidBills;
+  final num total;
+  final int fallbackCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = paidBills.isNotEmpty ? paidBills.length : fallbackCount;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _KeyValueList({
+          'paid_credit_bills': total,
+          'paid_bill_count': count,
+          'payroll_effect': 'Reduces staff credit bill balance before payroll',
+        }),
+        const SizedBox(height: 12),
+        _SimpleTable(
+          columns: const [
+            'Staff',
+            'Method',
+            'Reference',
+            'Payroll Applied',
+            'Amount'
+          ],
+          rows: paidBills.map<List<Object>>((bill) {
+            final applications = _list(bill['settlement_applications']);
+            return [
+              _text(bill, ['name', 'staff_name', 'customer_name']).isEmpty
+                  ? 'Staff'
+                  : _text(bill, ['name', 'staff_name', 'customer_name']),
+              _title(_text(bill, ['payment_method'])),
+              _text(bill, ['reference']).isEmpty
+                  ? '-'
+                  : _text(bill, ['reference']),
+              applications.isEmpty
+                  ? (_text(bill, ['settled_at']).isEmpty
+                      ? 'Pending'
+                      : 'Applied')
+                  : '${applications.length} bill${applications.length == 1 ? '' : 's'}',
+              _money(_num(bill['amount'])),
+            ];
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+String _shiftRecordKind(Map<String, dynamic> shift) =>
+    _text(shift, ['_shift_record_type']);
+
+bool _isShiftLogbookReview(Map<String, dynamic> shift) =>
+    _shiftRecordKind(shift) == 'logbook_review' ||
+    (_text(shift, ['source']).contains('shift') &&
+        _text(shift, ['status']) == 'pending_accountant_review');
+
+String _shiftCashierName(Map<String, dynamic> shift) {
+  final cashier = _map(shift['cashier']);
+  final name =
+      '${_text(cashier, ['first_name'])} ${_text(cashier, ['last_name'])}'
+          .trim();
+  if (name.isNotEmpty) return name;
+  return _text(shift, ['cashier_name', 'cashier', 'user_name']);
+}
+
+Map<String, dynamic> _shiftSalesBreakdown(Map<String, dynamic> shift) =>
+    _map(shift['sales_breakdown']);
+
+Map<String, dynamic> _shiftCashReconciliation(Map<String, dynamic> shift) =>
+    _map(shift['cash_reconciliation']);
+
+List<Map<String, dynamic>> _shiftPaymentRows(Map<String, dynamic> shift) {
+  final rows = _list(shift['payment_breakdown']);
+  if (rows.isNotEmpty) return rows;
+  return [
+    {'method': 'cash', 'amount': _cashSales(shift), 'count': 0},
+    {'method': 'mpesa', 'amount': _mpesaSales(shift), 'count': 0},
+    {'method': 'card', 'amount': _cardSales(shift), 'count': 0},
+    {'method': 'credit_bill', 'amount': _creditBillsCreated(shift), 'count': 0},
+    {'method': 'other', 'amount': _otherSales(shift), 'count': 0},
+  ].where((row) => _num(row['amount']) > 0).toList();
+}
+
+List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
+  final rows = _list(shift['revenue_breakdown'])
+      .where((row) => _num(row['amount']) > 0)
+      .toList();
+  if (rows.isNotEmpty) return rows;
+  return [
+    {'label': 'Restaurant', 'amount': _restaurantRevenue(shift)},
+    {'label': 'Bar', 'amount': _barRevenue(shift)},
+    {'label': 'Rooms', 'amount': _roomRevenue(shift)},
+    {'label': 'Other', 'amount': _otherRevenue(shift)},
+  ].where((row) => _num(row['amount']) > 0).toList();
+}
+
+List<Map<String, dynamic>> _shiftTransactionLines(Map<String, dynamic> shift) {
+  final history = _list(shift['transaction_history']);
+  if (history.isNotEmpty) return history;
+  return _list(shift['lines']);
+}
+
+List<Map<String, dynamic>> _shiftCreditBills(Map<String, dynamic> shift) {
+  final direct = _list(shift['credit_bills']);
+  if (direct.isNotEmpty) return direct;
+  final breakdown = _shiftSalesBreakdown(shift);
+  final details = _list(breakdown['credit_bills_details']);
+  if (details.isNotEmpty) return details;
+  return _shiftTransactionLines(shift)
+      .where((line) => _text(line, ['section']) == 'credit_bill')
+      .toList();
+}
+
+List<Map<String, dynamic>> _shiftPaidBills(Map<String, dynamic> shift) {
+  final direct = _list(shift['paid_bills']);
+  if (direct.isNotEmpty) return direct;
+  final breakdown = _shiftSalesBreakdown(shift);
+  final details = _list(breakdown['paid_bills_details']);
+  if (details.isNotEmpty) return details;
+  return _shiftTransactionLines(shift).where((line) {
+    final section = _text(line, ['section']);
+    final source = _text(line, ['source_table']);
+    return section == 'paid_bill' && source != 'pos_shift_payments';
+  }).toList();
+}
+
+Map<String, List<Map<String, dynamic>>> _groupShiftLines(
+  List<Map<String, dynamic>> lines,
+  String Function(Map<String, dynamic> line) keyBuilder,
+) {
+  final groups = <String, List<Map<String, dynamic>>>{};
+  for (final line in lines) {
+    if (_num(line['amount']) <= 0) continue;
+    final key = keyBuilder(line).trim().isEmpty ? 'Other' : keyBuilder(line);
+    groups.putIfAbsent(key, () => []).add(line);
+  }
+  return groups;
+}
+
+num _firstNonZero(List<num> values) {
+  for (final value in values) {
+    if (value != 0) return value;
+  }
+  return 0;
+}
+
+num _paymentBreakdownAmount(Map<String, dynamic> shift, String method) {
+  final rows = _list(shift['payment_breakdown']);
+  for (final row in rows) {
+    if (_text(row, ['method']).toLowerCase() == method.toLowerCase()) {
+      return _num(row['amount']);
+    }
+  }
+  return 0;
+}
+
+String _shiftRevenueSystemLabel(
+  Map<String, dynamic> shift,
+  Map<String, dynamic> line,
+) {
+  final section = _text(line, ['section']).toLowerCase();
+  final source = _text(line, ['source_table']).toLowerCase();
+  final outlet = _text(_shiftSalesBreakdown(shift), ['outlet']);
+  if (section.contains('restaurant') || source.contains('restaurant')) {
+    return 'Restaurant POS';
+  }
+  if (section.contains('bar') || source.contains('bar')) return 'Bar POS';
+  if (section.contains('room') || source.contains('booking')) return 'Rooms';
+  if (section.contains('non_consum') || outlet.toLowerCase().contains('non')) {
+    return 'Non-Consumables POS';
+  }
+  if (section.contains('outlet') || source.contains('pos_shift')) {
+    return outlet.isEmpty ? 'Unified POS Outlet' : outlet;
+  }
+  if (section.contains('credit')) return 'Staff Credit Bills';
+  if (section.contains('paid')) return 'Paid Credit Bills';
+  return 'Cashier Clearance';
+}
+
+num _openingFloat(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['opening_float']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  return _firstNumFrom(shift, ['opening_float', 'float_opening']);
+}
+
+num _cashSales(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['cash_sales']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift, ['total_cash_sales', 'cash_sales', 'cash_collected']),
+    _paymentBreakdownAmount(shift, 'cash'),
+    _num(breakdown['total_cash']),
+  ]);
+}
+
+num _mpesaSales(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _paymentBreakdownAmount(shift, 'mpesa'),
+    _firstNumFrom(shift, ['total_mpesa_sales', 'mpesa_sales']),
+    _num(breakdown['total_mpesa']),
+  ]);
+}
+
+num _cardSales(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _paymentBreakdownAmount(shift, 'card'),
+    _firstNumFrom(shift, ['total_card_sales', 'card_sales']),
+    _num(breakdown['total_card']),
+  ]);
+}
+
+num _otherSales(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _paymentBreakdownAmount(shift, 'other'),
+    _firstNumFrom(shift, ['total_other_sales', 'other_sales']),
+    _num(breakdown['total_other']),
+  ]);
+}
+
+num _shiftTotalSales(Map<String, dynamic> shift) {
+  final summary = _map(shift['summary']);
+  final breakdown = _shiftSalesBreakdown(shift);
+  final direct =
+      _firstNumFrom(shift, ['total_sales', 'total_revenue', 'sales']);
+  if (direct != 0) return direct;
+  final fromSummary = _num(summary['total_sales']);
+  if (fromSummary != 0) return fromSummary;
+  final fromBreakdown = _num(breakdown['total_sales']);
+  if (fromBreakdown != 0) return fromBreakdown;
+  return _shiftPaymentRows(shift).fold<num>(
+    0,
+    (sum, row) => sum + _num(row['amount']),
+  );
+}
+
+num _shiftTransactionCount(Map<String, dynamic> shift) {
+  final summary = _map(shift['summary']);
+  final breakdown = _shiftSalesBreakdown(shift);
+  final direct = _firstNumFrom(shift, ['transaction_count', 'order_count']);
+  if (direct != 0) return direct;
+  final fromSummary = _num(summary['transaction_count']);
+  if (fromSummary != 0) return fromSummary;
+  final fromBreakdown =
+      _num(breakdown['transaction_count'] ?? breakdown['order_count']);
+  if (fromBreakdown != 0) return fromBreakdown;
+  return _shiftTransactionLines(shift).length;
+}
+
+num _shiftVariance(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['variance']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  final fromBreakdown = _num(breakdown['variance']);
+  if (fromBreakdown != 0) return fromBreakdown;
+  return _firstNumFrom(shift, ['variance', 'variance_amount']);
+}
+
+num _creditPaymentsReceived(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['credit_payments_received']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final summary = _map(shift['summary']);
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift,
+        ['credit_payments_received', 'credit_bills_paid', 'paid_bills_value']),
+    _num(summary['paid_bills_value']),
+    _num(breakdown['paid_bills_value']),
+  ]);
+}
+
 num _expectedClosingAmount(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['expected_closing']);
+  if (fromReconciliation != 0) return fromReconciliation;
   final stored = _firstNumFrom(
       shift, ['expected_closing_float', 'expected_closing_amount']);
   if (stored != 0) return stored;
   return _openingFloat(shift) +
       _cashSales(shift) +
-      _creditPaymentsReceived(shift);
+      _creditPaymentsReceived(shift) -
+      _num(reconciliation['cash_drops']) -
+      _num(reconciliation['payouts']);
 }
 
 num _actualCashCounted(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['actual_closing']);
+  if (fromReconciliation != 0) return fromReconciliation;
   final actual = _firstNumFrom(
       shift, ['actual_cash_counted', 'closing_float', 'cash_at_hand']);
   if (actual != 0) return actual;
@@ -3907,28 +5002,81 @@ num _actualCashCounted(Map<String, dynamic> shift) {
 }
 
 num _varianceAmount(Map<String, dynamic> shift) {
-  final stored = _firstNumFrom(shift, ['variance', 'variance_amount']);
+  final stored = _shiftVariance(shift);
   if (stored != 0) return stored;
   return _actualCashCounted(shift) - _expectedClosingAmount(shift);
 }
 
-num _roomRevenue(Map<String, dynamic> shift) => _firstNumFrom(
-    shift, ['room_booking_revenue', 'rooms_revenue', 'accommodation_revenue']);
-num _restaurantRevenue(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['restaurant_revenue']);
-num _barRevenue(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['bar_revenue']);
-num _otherRevenue(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['other_revenue']);
-num _streamSubtotal(Map<String, dynamic> shift) =>
-    _roomRevenue(shift) +
-    _restaurantRevenue(shift) +
-    _barRevenue(shift) +
-    _otherRevenue(shift);
-num _creditBillsCreated(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['credit_bills_taken', 'credit_bills_value']);
-num _creditBillsPaid(Map<String, dynamic> shift) =>
-    _firstNumFrom(shift, ['credit_bills_paid', 'paid_bills_value']);
+num _revenueBreakdownAmount(Map<String, dynamic> shift, String label) {
+  for (final row in _list(shift['revenue_breakdown'])) {
+    if (_text(row, ['label']).toLowerCase() == label.toLowerCase()) {
+      return _num(row['amount']);
+    }
+  }
+  return 0;
+}
+
+num _roomRevenue(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _revenueBreakdownAmount(shift, 'Rooms'),
+    _firstNumFrom(shift,
+        ['room_booking_revenue', 'rooms_revenue', 'accommodation_revenue']),
+    _num(breakdown['room_booking_revenue']),
+  ]);
+}
+
+num _restaurantRevenue(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _revenueBreakdownAmount(shift, 'Restaurant'),
+    _firstNumFrom(shift, ['restaurant_revenue']),
+    _num(breakdown['restaurant_revenue']),
+  ]);
+}
+
+num _barRevenue(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _revenueBreakdownAmount(shift, 'Bar'),
+    _firstNumFrom(shift, ['bar_revenue']),
+    _num(breakdown['bar_revenue']),
+  ]);
+}
+
+num _otherRevenue(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _revenueBreakdownAmount(shift, 'Other'),
+    _firstNumFrom(shift, ['other_revenue']),
+    _num(breakdown['other_revenue']),
+  ]);
+}
+
+num _creditBillsCreated(Map<String, dynamic> shift) {
+  final breakdown = _shiftSalesBreakdown(shift);
+  final creditBills = _shiftCreditBills(shift);
+  return _firstNonZero([
+    _num(shift['credit_bills_total']),
+    _firstNumFrom(shift, ['credit_bills_taken', 'credit_bills_value']),
+    _num(breakdown['total_credit_bills'] ?? breakdown['total_credit_bill']),
+    creditBills.fold<num>(0, (sum, bill) => sum + _num(bill['amount'])),
+  ]);
+}
+
+num _creditBillsPaid(Map<String, dynamic> shift) {
+  final summary = _map(shift['summary']);
+  final breakdown = _shiftSalesBreakdown(shift);
+  final paidBills = _shiftPaidBills(shift);
+  return _firstNonZero([
+    _num(shift['paid_bills_total']),
+    _firstNumFrom(shift, ['credit_bills_paid', 'paid_bills_value']),
+    _num(summary['paid_bills_value']),
+    _num(breakdown['paid_bills_value']),
+    paidBills.fold<num>(0, (sum, bill) => sum + _num(bill['amount'])),
+  ]);
+}
+
 num _outstandingCredit(Map<String, dynamic> shift) {
   final stored =
       _firstNumFrom(shift, ['outstanding_credit', 'outstanding_credit_value']);
@@ -4482,7 +5630,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                 final total = creditBills.isNotEmpty
                     ? (_num(detail['credit_bills_total']) > 0
                         ? _num(detail['credit_bills_total'])
-                        : creditBills.fold<num>(0, (s, c) => s + _num(c['amount'])))
+                        : creditBills.fold<num>(
+                            0, (s, c) => s + _num(c['amount'])))
                     : _num(detail['credit_bills_total']);
                 return _SectionCard(
                   title: 'Credit Bills — Who For (${_money(total)})',
@@ -4519,8 +5668,10 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                             style: const TextStyle(
                                                 fontWeight: FontWeight.w600),
                                           ),
-                                          if (_text(c, ['department']).isNotEmpty ||
-                                              _text(c, ['bill_type']).isNotEmpty)
+                                          if (_text(c, ['department'])
+                                                  .isNotEmpty ||
+                                              _text(c, ['bill_type'])
+                                                  .isNotEmpty)
                                             Text(
                                               [
                                                 _text(c, ['bill_type'])
@@ -4540,8 +5691,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                                     if (_text(c, ['credit_number', 'reference'])
                                         .isNotEmpty) ...[
                                       Text(
-                                          _text(
-                                              c, ['credit_number', 'reference']),
+                                          _text(c,
+                                              ['credit_number', 'reference']),
                                           style: const TextStyle(
                                               fontSize: 12,
                                               color: AppColors.kTextSecondary)),
@@ -5125,14 +6276,29 @@ class _CreditBillsSection extends ConsumerStatefulWidget {
 
 class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   String _status = 'all';
+  String _staffTab = 'credit';
+  String _query = '';
   bool _customerMode = false;
-  late Future<List<Map<String, dynamic>>> _future = _load();
+  late Future<Map<String, dynamic>> _future = _load();
 
-  Future<List<Map<String, dynamic>>> _load() => _customerMode
-      ? ref.read(branchAccountantRepositoryProvider).getCustomerUnpaidBills()
-      : ref
-          .read(branchAccountantRepositoryProvider)
-          .getCreditBills(status: _status);
+  Future<Map<String, dynamic>> _load() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    if (_customerMode) {
+      return {'customer_bills': await repo.getCustomerUnpaidBills()};
+    }
+    final results = await Future.wait([
+      repo.getPayrollCreditBills(status: _status),
+      repo.getPayrollAdvances(status: _status),
+      repo.getPayrollLoans(status: _status),
+      repo.getBranchStaff(),
+    ]);
+    return {
+      'credit_bills': results[0],
+      'advances': results[1],
+      'loans': results[2],
+      'staff': results[3],
+    };
+  }
 
   void _refresh() => setState(() {
         _future = _load();
@@ -5141,189 +6307,591 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   @override
   Widget build(BuildContext context) {
     if (_customerMode) return _buildCustomer();
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Credit Bills',
-          subtitle:
-              'Review staff credit bills from cashier clearance and payroll deductions.',
-          actions: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Staff')),
-                ButtonSegment(value: true, label: Text('Customer')),
-              ],
-              selected: {_customerMode},
-              onSelectionChanged: (v) => setState(() {
-                _customerMode = v.first;
-                _future = _load();
-              }),
-            ),
-            _Dropdown(
-              value: _status,
-              values: const ['all', 'pending', 'paid_cash', 'approved'],
-              onChanged: (v) => setState(() {
-                _status = v;
-                _future = _load();
-              }),
-            ),
-            _RefreshButton(onPressed: _refresh),
-          ],
-          children: [
-            _ResponsiveGrid(children: [
-              _MetricCard(
-                  'Bills', '${items.length}', Icons.credit_card, Colors.blue),
-              _MetricCard('Total', _money(_sum(items, 'amount')),
-                  Icons.payments, Colors.green),
-              _MetricCard('Outstanding', _money(_sum(items, 'balance_amount')),
-                  Icons.warning, Colors.orange),
-            ]),
-            _SectionCard(
-              title: 'Credit Bill Ledger',
-              child: _SimpleTable(
-                columns: const [
-                  'Staff',
-                  'Description',
-                  'Amount',
-                  'Status',
-                  'Date',
-                  'Actions'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e, ['staff_name', 'employee_name']),
-                          _text(e, ['description', 'credit_number']),
-                          _money(_num(e['amount'] ?? e['total_amount'])),
-                          _StatusPill(_text(e, ['status'])),
-                          _text(e, ['bill_date', 'created_at']),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _CompactAction(
-                                label: 'View',
-                                icon: Icons.visibility_outlined,
-                                onPressed: () => _showRecord(context, e),
-                              ),
-                              const SizedBox(width: 6),
-                              _CompactAction(
-                                label: 'Receipt',
-                                icon: Icons.payments_outlined,
-                                filled: true,
-                                onPressed: () => _recordPayment(e),
-                              ),
-                              const SizedBox(width: 6),
-                              _CompactAction(
-                                label: 'Payroll',
-                                icon: Icons.account_balance_wallet_outlined,
-                                outlined: true,
-                                onPressed: () => _deductFromPayroll(e),
-                              ),
-                            ],
-                          ),
-                        ])
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
+        builder: _buildStaffLedger,
       ),
     );
   }
 
-  Future<void> _deductFromPayroll(Map<String, dynamic> bill) async {
-    final staff = _text(bill, ['staff_name', 'employee_name']);
-    final balance = _num(bill['balance_amount'] ??
-        bill['balance'] ??
-        bill['amount'] ??
-        bill['total_amount']);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Deduct from Payroll'),
-        content: Text(
-            'Schedule ${_money(balance)} for $staff to be deducted from their next payroll? '
-            'The staff will not pay cash; the amount is taken from salary.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Schedule Deduction')),
-        ],
-      ),
+  Widget _buildStaffLedger(Map<String, dynamic> data) {
+    final creditBills = _list(data['credit_bills']);
+    final advances = _list(data['advances']);
+    final loans = _list(data['loans']);
+    final staff = _list(data['staff']);
+    final lower = _query.trim().toLowerCase();
+    final selectedItems = switch (_staffTab) {
+      'advance' => advances,
+      'loan' => loans,
+      _ => creditBills,
+    }
+        .where((item) =>
+            lower.isEmpty || _staffLedgerHaystack(item).contains(lower))
+        .toList();
+
+    return _Page(
+      title: 'Staff Credit, Advances & Loans',
+      subtitle:
+          'Branch-strict payroll ledger for cashier credit bills, paid credits, salary advances, and staff loans.',
+      actions: [
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('Staff')),
+            ButtonSegment(value: true, label: Text('Customer')),
+          ],
+          selected: {_customerMode},
+          onSelectionChanged: (v) => setState(() {
+            _customerMode = v.first;
+            _future = _load();
+          }),
+        ),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'credit', label: Text('Credit Bills')),
+            ButtonSegment(value: 'advance', label: Text('Advances')),
+            ButtonSegment(value: 'loan', label: Text('Loans')),
+          ],
+          selected: {_staffTab},
+          onSelectionChanged: (v) => setState(() => _staffTab = v.first),
+        ),
+        _Dropdown(
+          value: _status,
+          values: const [
+            'all',
+            'pending',
+            'partial',
+            'paid_cash',
+            'deducted',
+            'approved',
+            'active',
+            'pending_approval',
+            'accountant_confirmed'
+          ],
+          onChanged: (v) => setState(() {
+            _status = v;
+            _future = _load();
+          }),
+        ),
+        SizedBox(
+          width: 220,
+          child: TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search staff, ID, ref',
+            ),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        ),
+        _RefreshButton(onPressed: _refresh),
+        FilledButton.icon(
+          onPressed: () => _createStaffLedgerEntry(staff),
+          icon: const Icon(Icons.add),
+          label: Text(switch (_staffTab) {
+            'advance' => 'New Advance',
+            'loan' => 'New Loan',
+            _ => 'New Credit Bill',
+          }),
+        ),
+      ],
+      children: [
+        _ResponsiveGrid(children: [
+          _MetricCard('Credit Bills', '${creditBills.length}',
+              Icons.credit_card, Colors.blue),
+          _MetricCard(
+              'Credit Outstanding',
+              _money(creditBills.fold<num>(
+                  0, (sum, e) => sum + _staffCreditBalance(e))),
+              Icons.warning,
+              Colors.orange),
+          _MetricCard(
+              'Paid Credits',
+              _money(creditBills.fold<num>(
+                  0, (sum, e) => sum + _num(e['paid_amount']))),
+              Icons.payments,
+              Colors.green),
+          _MetricCard(
+              'Salary Advances',
+              _money(advances.fold<num>(
+                  0, (sum, e) => sum + _staffAdvanceBalance(e))),
+              Icons.account_balance_wallet,
+              Colors.indigo),
+          _MetricCard(
+              'Staff Loans',
+              _money(
+                  loans.fold<num>(0, (sum, e) => sum + _staffLoanBalance(e))),
+              Icons.account_balance,
+              Colors.purple),
+        ]),
+        _SectionCard(
+          title: switch (_staffTab) {
+            'advance' => 'Salary Advances',
+            'loan' => 'Staff Loans',
+            _ => 'Staff Credit Bills & Paid Credits',
+          },
+          child: _staffTab == 'advance'
+              ? _buildAdvancesTable(selectedItems)
+              : _staffTab == 'loan'
+                  ? _buildLoansTable(selectedItems)
+                  : _buildCreditBillsTable(selectedItems),
+        ),
+      ],
     );
-    if (confirmed != true) return;
-    try {
-      await ref
-          .read(branchAccountantRepositoryProvider)
-          .deductCreditBillFromPayroll('${bill['id']}');
-      if (mounted) _notify(context, 'Scheduled for payroll deduction');
-      _refresh();
-    } catch (e) {
-      if (mounted) {
-        _notify(context,
-            'Could not schedule: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
-      }
+  }
+
+  Widget _buildCreditBillsTable(List<Map<String, dynamic>> items) {
+    return _SimpleTable(
+      columns: const [
+        'Staff',
+        'Employee ID',
+        'Department',
+        'Description',
+        'Amount',
+        'Paid',
+        'Balance',
+        'Status',
+        'Date',
+        'Actions'
+      ],
+      rows: items
+          .map((e) => [
+                _staffName(e),
+                _text(e, ['employee_id', 'staff_code']),
+                _text(e, ['department']),
+                _text(e, ['description', 'credit_number']),
+                _money(_num(e['amount'] ?? e['total_amount'])),
+                _money(_num(e['paid_amount'])),
+                _money(_staffCreditBalance(e)),
+                _StatusPill(_text(e, ['status'])),
+                _text(e, ['bill_date', 'created_at']),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  _CompactAction(
+                    label: 'View',
+                    icon: Icons.visibility_outlined,
+                    onPressed: () => _showRecord(context, e),
+                  ),
+                  const SizedBox(width: 6),
+                  if (_staffCreditBalance(e) > 0)
+                    _CompactAction(
+                      label: 'Pay',
+                      icon: Icons.payments_outlined,
+                      filled: true,
+                      onPressed: () => _recordPayrollCreditPayment(e),
+                    ),
+                ]),
+              ])
+          .toList(),
+    );
+  }
+
+  Widget _buildAdvancesTable(List<Map<String, dynamic>> items) {
+    return _SimpleTable(
+      columns: const [
+        'Staff',
+        'Employee ID',
+        'Department',
+        'Amount',
+        'Deduct Month',
+        'Status',
+        'Reason',
+        'Date',
+        'Actions'
+      ],
+      rows: items
+          .map((e) => [
+                _staffName(e),
+                _text(e, ['employee_id', 'staff_code']),
+                _text(e, ['department']),
+                _money(_num(e['amount'])),
+                '${e['month_to_deduct'] ?? '-'} / ${e['year_to_deduct'] ?? '-'}',
+                _StatusPill(_text(e, ['status'])),
+                _text(e, ['reason', 'description']),
+                _text(e, ['advance_date', 'created_at']),
+                _CompactAction(
+                  label: 'View',
+                  icon: Icons.visibility_outlined,
+                  onPressed: () => _showRecord(context, e),
+                ),
+              ])
+          .toList(),
+    );
+  }
+
+  Widget _buildLoansTable(List<Map<String, dynamic>> items) {
+    return _SimpleTable(
+      columns: const [
+        'Staff',
+        'Employee ID',
+        'Department',
+        'Principal',
+        'Installment',
+        'Balance',
+        'Status',
+        'Reason',
+        'Actions'
+      ],
+      rows: items
+          .map((e) => [
+                _staffName(e),
+                _text(e, ['employee_id', 'staff_code']),
+                _text(e, ['department']),
+                _money(_num(e['total_amount'] ?? e['amount'])),
+                _money(_num(e['installment_amount'])),
+                _money(_staffLoanBalance(e)),
+                _StatusPill(_text(e, ['status'])),
+                _text(e, ['reason', 'description']),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  _CompactAction(
+                    label: 'View',
+                    icon: Icons.visibility_outlined,
+                    onPressed: () => _showRecord(context, e),
+                  ),
+                  const SizedBox(width: 6),
+                  if (_staffLoanBalance(e) > 0)
+                    _CompactAction(
+                      label: 'Pay',
+                      icon: Icons.payments_outlined,
+                      filled: true,
+                      onPressed: () => _recordLoanPayment(e),
+                    ),
+                ]),
+              ])
+          .toList(),
+    );
+  }
+
+  String _staffName(Map<String, dynamic> row) {
+    final staff = _map(row['staff']);
+    final nestedName =
+        '${staff['first_name'] ?? ''} ${staff['last_name'] ?? ''}'.trim();
+    return _text(row, ['staff_name', 'employee_name', 'name']).isNotEmpty
+        ? _text(row, ['staff_name', 'employee_name', 'name'])
+        : nestedName;
+  }
+
+  String _staffLedgerHaystack(Map<String, dynamic> row) {
+    return [
+      _staffName(row),
+      _text(row, ['employee_id', 'staff_code']),
+      _text(row, ['department']),
+      _text(row, ['description', 'reason', 'credit_number', 'reference']),
+      _text(row, ['status']),
+    ].join(' ').toLowerCase();
+  }
+
+  num _staffCreditBalance(Map<String, dynamic> row) {
+    final explicit = row['balance'];
+    if (explicit != null) return _num(explicit);
+    final cashierBalance = row['balance_amount'];
+    if (cashierBalance != null) return _num(cashierBalance);
+    return (_num(row['amount'] ?? row['total_amount']) -
+            _num(row['paid_amount']))
+        .clamp(0, double.infinity);
+  }
+
+  num _staffAdvanceBalance(Map<String, dynamic> row) {
+    final status = _text(row, ['status']).toLowerCase();
+    if (['deducted', 'paid', 'paid_cash', 'cancelled', 'rejected']
+        .contains(status)) {
+      return 0;
+    }
+    return _num(row['balance'] ?? row['balance_amount'] ?? row['amount']);
+  }
+
+  num _staffLoanBalance(Map<String, dynamic> row) {
+    final status = _text(row, ['status']).toLowerCase();
+    if (['paid', 'closed', 'deducted', 'cancelled', 'rejected']
+        .contains(status)) {
+      return 0;
+    }
+    return _num(
+        row['remaining_balance'] ?? row['balance'] ?? row['total_amount']);
+  }
+
+  Future<Map<String, dynamic>?> _pickStaff(
+      List<Map<String, dynamic>> seedStaff) {
+    var search = '';
+    Future<List<Map<String, dynamic>>> load(String q) => ref
+        .read(branchAccountantRepositoryProvider)
+        .getBranchStaff(search: q.trim());
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        Future<List<Map<String, dynamic>>> future =
+            Future.value(seedStaff.take(40).toList());
+        return StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Select Branch Staff'),
+            content: SizedBox(
+              width: 620,
+              height: 520,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Search staff name, employee ID, department',
+                    ),
+                    onChanged: (value) {
+                      search = value;
+                      setDialogState(() {
+                        future = load(search);
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                      future: future,
+                      builder: (context, snap) {
+                        final items = snap.data ?? const [];
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+                        if (items.isEmpty) {
+                          return const Center(child: Text('No staff found'));
+                        }
+                        return ListView.separated(
+                          itemCount: items.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final staff = items[index];
+                            final name =
+                                '${staff['first_name'] ?? ''} ${staff['last_name'] ?? ''}'
+                                    .trim();
+                            return ListTile(
+                              leading: const Icon(Icons.person),
+                              title: Text(name.isEmpty
+                                  ? _text(staff, ['name', 'email'])
+                                  : name),
+                              subtitle: Text([
+                                _text(staff, ['employee_id', 'id_number']),
+                                _text(staff, ['department']),
+                                _text(staff, ['role', 'position']),
+                              ].where((v) => v.isNotEmpty).join(' • ')),
+                              onTap: () => Navigator.pop(dialogContext, staff),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  Future<void> _createStaffLedgerEntry(
+      List<Map<String, dynamic>> staffList) async {
+    final staff = await _pickStaff(staffList);
+    if (staff == null) return;
+    switch (_staffTab) {
+      case 'advance':
+        await _createAdvance(staff);
+        break;
+      case 'loan':
+        await _createLoan(staff);
+        break;
+      default:
+        await _createPayrollCreditBill(staff);
     }
   }
 
-  Future<void> _recordPayment(Map<String, dynamic> bill) async {
-    final balance = _num(bill['balance_amount'] ??
-        bill['balance'] ??
-        bill['amount'] ??
-        bill['total_amount']);
+  Future<void> _createPayrollCreditBill(Map<String, dynamic> staff) async {
     final data = await _formDialog(
       context,
-      'Record Cash Receipt',
+      'Record Staff Credit Bill',
+      const ['amount', 'description', 'bill_date'],
+      initial: {
+        'bill_date': _today(),
+        'description': 'Branch accountant staff credit bill',
+      },
+    );
+    if (data == null) return;
+    if (!mounted) return;
+    final amount = _num(data['amount']);
+    if (amount <= 0) {
+      _notify(context, 'Enter an amount greater than zero');
+      return;
+    }
+    await ref.read(branchAccountantRepositoryProvider).createPayrollCreditBill({
+      'staff_id': staff['id'],
+      'amount': amount,
+      'description': '${data['description'] ?? ''}'.trim(),
+      'date': '${data['bill_date'] ?? _today()}',
+    });
+    if (mounted) _notify(context, 'Staff credit bill recorded');
+    _refresh();
+  }
+
+  Future<void> _createAdvance(Map<String, dynamic> staff) async {
+    final now = DateTime.now();
+    final data = await _formDialog(
+      context,
+      'Record Salary Advance',
+      const [
+        'amount',
+        'reason',
+        'advance_date',
+        'month_to_deduct',
+        'year_to_deduct'
+      ],
+      initial: {
+        'advance_date': _today(),
+        'month_to_deduct': '${now.month}',
+        'year_to_deduct': '${now.year}',
+      },
+    );
+    if (data == null) return;
+    if (!mounted) return;
+    final amount = _num(data['amount']);
+    if (amount <= 0) {
+      _notify(context, 'Enter an amount greater than zero');
+      return;
+    }
+    await ref.read(branchAccountantRepositoryProvider).createPayrollAdvance({
+      'staff_id': staff['id'],
+      'amount': amount,
+      'reason': '${data['reason'] ?? ''}'.trim(),
+      'advance_date': '${data['advance_date'] ?? _today()}',
+      'month_to_deduct':
+          int.tryParse('${data['month_to_deduct']}') ?? now.month,
+      'year_to_deduct': int.tryParse('${data['year_to_deduct']}') ?? now.year,
+    });
+    if (mounted) _notify(context, 'Salary advance recorded');
+    _refresh();
+  }
+
+  Future<void> _createLoan(Map<String, dynamic> staff) async {
+    final now = DateTime.now();
+    final data = await _formDialog(
+      context,
+      'Record Staff Loan',
+      const [
+        'total_amount',
+        'installment_amount',
+        'reason',
+        'loan_date',
+        'start_deduction_month',
+        'start_deduction_year'
+      ],
+      initial: {
+        'loan_date': _today(),
+        'start_deduction_month': '${now.month}',
+        'start_deduction_year': '${now.year}',
+      },
+    );
+    if (data == null) return;
+    if (!mounted) return;
+    final total = _num(data['total_amount']);
+    final installment = _num(data['installment_amount']);
+    if (total <= 0 || installment <= 0) {
+      _notify(context, 'Enter valid loan and installment amounts');
+      return;
+    }
+    await ref.read(branchAccountantRepositoryProvider).createPayrollLoan({
+      'staff_id': staff['id'],
+      'total_amount': total,
+      'installment_amount': installment,
+      'reason': '${data['reason'] ?? ''}'.trim(),
+      'loan_date': '${data['loan_date'] ?? _today()}',
+      'start_deduction_month':
+          int.tryParse('${data['start_deduction_month']}') ?? now.month,
+      'start_deduction_year':
+          int.tryParse('${data['start_deduction_year']}') ?? now.year,
+    });
+    if (mounted) _notify(context, 'Staff loan recorded');
+    _refresh();
+  }
+
+  Future<void> _recordPayrollCreditPayment(Map<String, dynamic> bill) async {
+    final balance = _staffCreditBalance(bill);
+    final data = await _formDialog(
+      context,
+      'Record Credit Bill Payment',
       const ['amount', 'payment_method', 'reference', 'notes'],
       initial: {
-        if (balance > 0) 'amount': '${balance.toStringAsFixed(0)}',
+        'amount': balance.toStringAsFixed(0),
         'payment_method': 'cash',
       },
     );
     if (data == null) return;
-    final amount = num.tryParse('${data['amount']}'.trim()) ?? 0;
+    if (!mounted) return;
+    final amount = _num(data['amount']);
     if (amount <= 0) {
-      if (mounted) _notify(context, 'Enter a payment amount greater than zero');
+      _notify(context, 'Enter a payment amount');
       return;
     }
-    final method = '${data['payment_method'] ?? ''}'.trim();
-    try {
-      await ref
-          .read(branchAccountantRepositoryProvider)
-          .recordCreditBillPayment(
-        '${bill['id']}',
-        {
-          'payment_amount': amount,
-          'payment_method': method.isEmpty ? 'cash' : method,
-          if ('${data['reference'] ?? ''}'.trim().isNotEmpty)
-            'payment_reference': '${data['reference']}'.trim(),
-          if ('${data['notes'] ?? ''}'.trim().isNotEmpty)
-            'notes': '${data['notes']}'.trim(),
-        },
-      );
-      if (mounted) _notify(context, 'Paid bill recorded');
-      _refresh();
-    } catch (e) {
-      if (mounted) {
-        _notify(context,
-            'Payment failed: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
-      }
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .recordPayrollCreditBillPayment('${bill['id']}', {
+      'amount': amount,
+      'payment_method': '${data['payment_method'] ?? 'cash'}'.trim(),
+      if ('${data['reference'] ?? ''}'.trim().isNotEmpty)
+        'reference': '${data['reference']}'.trim(),
+      if ('${data['notes'] ?? ''}'.trim().isNotEmpty)
+        'notes': '${data['notes']}'.trim(),
+    });
+    if (mounted) _notify(context, 'Credit bill payment recorded');
+    _refresh();
+  }
+
+  Future<void> _recordLoanPayment(Map<String, dynamic> loan) async {
+    final balance = _staffLoanBalance(loan);
+    final data = await _formDialog(
+      context,
+      'Record Staff Loan Payment',
+      const ['amount', 'payment_method', 'reference', 'notes'],
+      initial: {
+        'amount': balance.toStringAsFixed(0),
+        'payment_method': 'cash',
+      },
+    );
+    if (data == null) return;
+    if (!mounted) return;
+    final amount = _num(data['amount']);
+    if (amount <= 0) {
+      _notify(context, 'Enter a payment amount');
+      return;
     }
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .recordPayrollLoanPayment('${loan['id']}', {
+      'amount': amount,
+      'payment_method': '${data['payment_method'] ?? 'cash'}'.trim(),
+      if ('${data['reference'] ?? ''}'.trim().isNotEmpty)
+        'reference': '${data['reference']}'.trim(),
+      if ('${data['notes'] ?? ''}'.trim().isNotEmpty)
+        'notes': '${data['notes']}'.trim(),
+    });
+    if (mounted) _notify(context, 'Loan payment recorded');
+    _refresh();
   }
 
   // ── Customer credit bills view ──────────────────────────────────────────────
   Widget _buildCustomer() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (items) {
+        builder: (payload) {
+          final items = _list(payload['customer_bills']);
           num outstanding(Map<String, dynamic> b) =>
               _num(b['balance_amount'] ?? b['outstanding_amount']) != 0
                   ? _num(b['balance_amount'] ?? b['outstanding_amount'])
@@ -6150,17 +7718,48 @@ class _PurchasesSection extends ConsumerStatefulWidget {
 }
 
 class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
-  int _tab = 0; // 0 = orders, 1 = invoices
+  int _tab = 0;
+  String _status = 'all';
+  String _search = '';
+  String? _selectedSupplierId;
+  final _searchCtrl = TextEditingController();
   late Future<Map<String, dynamic>> _future = _load();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   Future<Map<String, dynamic>> _load() async {
     final repo = ref.read(branchAccountantRepositoryProvider);
-    final r = await Future.wait([
-      repo.getPurchaseOrders(),
-      repo.getSupplierInvoices(),
-      repo.getSupplierPayments(),
-    ]);
-    return {'pos': r[0], 'invoices': r[1], 'payments': r[2]};
+    final suppliers = await repo.getSuppliers();
+    final supplierIds = suppliers.map((e) => _text(e, ['id'])).toSet();
+    final pos = await repo.getPurchaseOrders();
+    final invoices = <Map<String, dynamic>>[];
+    final payments = <Map<String, dynamic>>[];
+
+    for (final supplierId in supplierIds.where((id) => id.isNotEmpty)) {
+      invoices.addAll(await repo.getSupplierInvoices(supplierId: supplierId));
+      payments.addAll(await repo.getSupplierPayments(supplierId: supplierId));
+    }
+
+    Map<String, dynamic> aging = {};
+    try {
+      aging = await repo.getSupplierAging();
+    } catch (_) {}
+
+    final ledger = _selectedSupplierId == null || _selectedSupplierId!.isEmpty
+        ? <Map<String, dynamic>>[]
+        : await repo.getSupplierLedger(_selectedSupplierId!);
+    return {
+      'suppliers': suppliers,
+      'pos': pos,
+      'invoices': invoices,
+      'payments': payments,
+      'aging': aging,
+      'ledger': ledger,
+    };
   }
 
   void _refresh() {
@@ -6181,64 +7780,395 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
           final pos = _list(data['pos']);
           final invoices = _list(data['invoices']);
           final payments = _list(data['payments']);
+          final suppliers = _list(data['suppliers']);
+          final agingRows = _agingRows(data['aging']);
+          final ledger = _list(data['ledger']);
+          final filteredSuppliers = _filterSuppliers(suppliers);
+          final filteredPos = _filterRecords(pos, type: 'po');
+          final filteredInvoices = _filterRecords(invoices, type: 'invoice');
+          final filteredPayments = _filterRecords(payments, type: 'payment');
+          final outstandingInvoices = invoices
+              .where((e) =>
+                  _num(e['balance_due'] ?? e['outstanding_amount']) > 0 ||
+                  _text(e, ['status']).toLowerCase() != 'paid')
+              .toList();
+          final openPoAmount = pos
+              .where((e) => !['received', 'closed', 'cancelled']
+                  .contains(_text(e, ['status']).toLowerCase()))
+              .fold<num>(
+                  0, (sum, e) => sum + _num(e['total_amount'] ?? e['total']));
+          final invoiceOutstanding = invoices.fold<num>(
+              0,
+              (sum, e) =>
+                  sum +
+                  _num(e['balance_due'] ??
+                      e['outstanding_amount'] ??
+                      e['total_amount']));
+          final paidTotal = payments.fold<num>(
+              0, (sum, e) => sum + _num(e['payment_amount'] ?? e['amount']));
+          final overdueCount = invoices.where(_isOverdue).length;
           return _Page(
-            title: 'Purchases',
+            title: 'Supplier Finance Workspace',
             subtitle:
-                'Purchase orders, supplier invoices, and supplier payments for branch accounting.',
+                'Branch-strict supplier accounts, purchase orders, invoice clearing, payments, aging, and ledger review.',
             actions: [
               _RefreshButton(onPressed: _refresh),
+              OutlinedButton.icon(
+                onPressed: _createSupplier,
+                icon: const Icon(Icons.person_add_alt_1, size: 18),
+                label: const Text('New Supplier'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _createPurchaseOrder,
+                icon: const Icon(Icons.add_shopping_cart, size: 18),
+                label: const Text('New PO'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _createInvoice,
+                icon: const Icon(Icons.receipt_long, size: 18),
+                label: const Text('Record Invoice'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _downloadSupplierFinanceReportPdf(
+                  suppliers: filteredSuppliers,
+                  pos: filteredPos,
+                  invoices: filteredInvoices,
+                  payments: filteredPayments,
+                ),
+                icon: const Icon(Icons.picture_as_pdf, size: 18),
+                label: const Text('Print Report'),
+              ),
               FilledButton.icon(
-                onPressed: _tab == 0 ? _createPurchaseOrder : _createInvoice,
-                icon: const Icon(Icons.add),
-                label:
-                    Text(_tab == 0 ? 'New Purchase Order' : 'Record Invoice'),
+                onPressed: () => _recordPayment(
+                  suppliers: suppliers,
+                  invoices: outstandingInvoices,
+                ),
+                icon: const Icon(Icons.payments),
+                label: const Text('Record Payment'),
               ),
             ],
             children: [
               _ResponsiveGrid(children: [
-                _MetricCard('Purchase Orders', '${pos.length}',
+                _MetricCard('Branch Suppliers', '${suppliers.length}',
+                    Icons.storefront, Colors.blueGrey),
+                _MetricCard('Open PO Value', _money(openPoAmount),
                     Icons.shopping_cart, Colors.blue),
                 _MetricCard('Supplier Invoices', '${invoices.length}',
                     Icons.receipt_long, Colors.orange),
-                _MetricCard('Supplier Payments', '${payments.length}',
+                _MetricCard('Outstanding Payables', _money(invoiceOutstanding),
+                    Icons.warning_amber, Colors.red),
+                _MetricCard('Supplier Payments', _money(paidTotal),
                     Icons.payments, Colors.green),
+                _MetricCard('Overdue Invoices', '$overdueCount',
+                    Icons.event_busy, Colors.deepPurple),
               ]),
+              _SectionCard(
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 360,
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          labelText: 'Search supplier, PO, invoice, reference',
+                        ),
+                        onChanged: (v) => setState(() => _search = v),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 190,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _status,
+                        decoration: const InputDecoration(labelText: 'Status'),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('All')),
+                          DropdownMenuItem(
+                              value: 'draft', child: Text('Draft')),
+                          DropdownMenuItem(
+                              value: 'pending', child: Text('Pending')),
+                          DropdownMenuItem(
+                              value: 'approved', child: Text('Approved')),
+                          DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                          DropdownMenuItem(
+                              value: 'partially_paid',
+                              child: Text('Partially paid')),
+                          DropdownMenuItem(
+                              value: 'overdue', child: Text('Overdue')),
+                        ],
+                        onChanged: (v) => setState(() => _status = v ?? 'all'),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 260,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedSupplierId,
+                        isExpanded: true,
+                        decoration:
+                            const InputDecoration(labelText: 'Ledger supplier'),
+                        items: [
+                          const DropdownMenuItem<String>(
+                              value: null, child: Text('Select supplier')),
+                          ...suppliers.map((s) => DropdownMenuItem(
+                                value: _text(s, ['id']),
+                                child: Text(_supplierName(s),
+                                    overflow: TextOverflow.ellipsis),
+                              )),
+                        ],
+                        onChanged: (v) {
+                          setState(() {
+                            _selectedSupplierId = v;
+                            _tab = v == null
+                                ? _tab
+                                : _tab == 6
+                                    ? 6
+                                    : 5;
+                            _future = _load();
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               SegmentedButton<int>(
                 segments: const [
-                  ButtonSegment(value: 0, label: Text('Orders')),
-                  ButtonSegment(value: 1, label: Text('Invoices')),
+                  ButtonSegment(value: 0, label: Text('Overview')),
+                  ButtonSegment(value: 1, label: Text('Suppliers')),
+                  ButtonSegment(value: 2, label: Text('Orders')),
+                  ButtonSegment(value: 3, label: Text('Invoices')),
+                  ButtonSegment(value: 4, label: Text('Payments')),
+                  ButtonSegment(value: 5, label: Text('Ledger')),
+                  ButtonSegment(value: 6, label: Text('Folio')),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (v) => setState(() => _tab = v.first),
               ),
               if (_tab == 0)
                 _SectionCard(
+                  title: 'Supplier Finance Position',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SimpleTable(
+                        columns: const [
+                          'Supplier',
+                          'Open POs',
+                          'Invoice Balance',
+                          'Paid',
+                          'Overdue',
+                          'Action'
+                        ],
+                        rows: filteredSuppliers.map((supplier) {
+                          final supplierId = _text(supplier, ['id']);
+                          final supplierPos = pos
+                              .where((e) => _recordSupplierId(e) == supplierId)
+                              .toList();
+                          final supplierInvoices = invoices
+                              .where((e) => _recordSupplierId(e) == supplierId)
+                              .toList();
+                          final supplierPayments = payments
+                              .where((e) => _recordSupplierId(e) == supplierId)
+                              .toList();
+                          return [
+                            _supplierName(supplier),
+                            _money(supplierPos.fold<num>(
+                                0,
+                                (sum, e) =>
+                                    sum +
+                                    _num(e['total_amount'] ?? e['total']))),
+                            _money(supplierInvoices.fold<num>(
+                                0,
+                                (sum, e) =>
+                                    sum +
+                                    _num(e['balance_due'] ??
+                                        e['outstanding_amount'] ??
+                                        e['total_amount']))),
+                            _money(supplierPayments.fold<num>(
+                                0,
+                                (sum, e) =>
+                                    sum +
+                                    _num(e['payment_amount'] ?? e['amount']))),
+                            supplierInvoices.where(_isOverdue).length,
+                            Wrap(spacing: 6, runSpacing: 4, children: [
+                              _CompactAction(
+                                label: 'PO',
+                                icon: Icons.add_shopping_cart,
+                                onPressed: () => _createPurchaseOrder(
+                                    supplierId: supplierId),
+                              ),
+                              _CompactAction(
+                                label: 'History',
+                                icon: Icons.history,
+                                onPressed: () => _openPoHistory(
+                                  supplierId,
+                                  _supplierName(supplier),
+                                ),
+                              ),
+                              _CompactAction(
+                                label: 'Folio',
+                                icon: Icons.article,
+                                onPressed: () => _openFolio(supplierId),
+                              ),
+                              _CompactAction(
+                                label: 'Ledger',
+                                icon: Icons.account_balance,
+                                onPressed: () => _openLedger(supplierId),
+                              ),
+                              _CompactAction(
+                                label: 'Pay',
+                                icon: Icons.payments,
+                                filled: true,
+                                onPressed: () => _recordPayment(
+                                  suppliers: suppliers,
+                                  invoices: outstandingInvoices,
+                                  supplier: supplier,
+                                ),
+                              ),
+                            ]),
+                          ];
+                        }).toList(),
+                      ),
+                      if (agingRows.isNotEmpty) ...[
+                        const SizedBox(height: 18),
+                        const Text('Aging Snapshot',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 8),
+                        _SimpleTable(
+                          columns: const [
+                            'Supplier',
+                            'Current',
+                            '1-30',
+                            '31-60',
+                            '61-90',
+                            '90+',
+                            'Total'
+                          ],
+                          rows: agingRows
+                              .where((e) => filteredSuppliers.any((s) =>
+                                  _text(s, ['id']) == _recordSupplierId(e)))
+                              .map((e) => [
+                                    _supplierName(e),
+                                    _money(_num(e['current'])),
+                                    _money(_num(e['days_1_30'] ?? e['d30'])),
+                                    _money(_num(e['days_31_60'] ?? e['d60'])),
+                                    _money(_num(e['days_61_90'] ?? e['d90'])),
+                                    _money(
+                                        _num(e['days_90_plus'] ?? e['d90p'])),
+                                    _money(_num(e['total_balance'] ??
+                                        e['balance'] ??
+                                        e['outstanding_amount'])),
+                                  ])
+                              .toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              if (_tab == 1)
+                _SectionCard(
+                  title: 'Branch Suppliers',
+                  child: _SimpleTable(
+                    columns: const [
+                      'Supplier',
+                      'Code',
+                      'Contact',
+                      'Phone',
+                      'Terms',
+                      'Status',
+                      'Actions'
+                    ],
+                    rows: filteredSuppliers
+                        .map((e) => [
+                              _supplierName(e),
+                              _text(e, ['supplier_code', 'code']),
+                              _text(e, ['contact_person', 'contact_name']),
+                              _text(e, ['phone', 'contact_phone']),
+                              _text(e, ['payment_terms', 'terms']),
+                              _StatusPill(_text(e, ['status', 'is_active'])),
+                              Wrap(spacing: 6, runSpacing: 4, children: [
+                                _CompactAction(
+                                  label: 'New PO',
+                                  icon: Icons.add_shopping_cart,
+                                  onPressed: () => _createPurchaseOrder(
+                                    supplierId: _text(e, ['id']),
+                                  ),
+                                ),
+                                _CompactAction(
+                                  label: 'POs',
+                                  icon: Icons.history,
+                                  onPressed: () => _openPoHistory(
+                                    _text(e, ['id']),
+                                    _supplierName(e),
+                                  ),
+                                ),
+                                _CompactAction(
+                                  label: 'Folio',
+                                  icon: Icons.article,
+                                  onPressed: () => _openFolio(_text(e, ['id'])),
+                                ),
+                                _CompactAction(
+                                  label: 'Ledger',
+                                  icon: Icons.account_balance,
+                                  onPressed: () =>
+                                      _openLedger(_text(e, ['id'])),
+                                ),
+                                _CompactAction(
+                                  label: 'Pay',
+                                  icon: Icons.payments,
+                                  filled: true,
+                                  onPressed: () => _recordPayment(
+                                    suppliers: suppliers,
+                                    invoices: outstandingInvoices,
+                                    supplier: e,
+                                  ),
+                                ),
+                              ]),
+                            ])
+                        .toList(),
+                  ),
+                ),
+              if (_tab == 2)
+                _SectionCard(
                   title: 'Purchase Orders',
                   child: _SimpleTable(
                     columns: const [
                       'PO',
                       'Supplier',
+                      'Items',
                       'Total',
                       'Status',
-                      'Date',
+                      'Expected',
                       'Actions'
                     ],
-                    rows: pos
+                    rows: filteredPos
                         .map((e) => [
                               _text(e,
                                   ['po_number', 'purchase_order_number', 'id']),
-                              _text(e, ['supplier_name']).isEmpty
-                                  ? _text(_map(e['supplier']), ['name'])
-                                  : _text(e, ['supplier_name']),
+                              _recordSupplierName(e),
+                              '${_list(e['items']).length}',
                               _money(_num(e['total_amount'])),
                               _StatusPill(_text(e, ['status'])),
-                              _text(e, ['created_at', 'order_date']),
+                              _text(e, [
+                                'expected_delivery_date',
+                                'delivery_date',
+                                'created_at'
+                              ]),
                               Wrap(spacing: 6, children: [
                                 TextButton(
-                                    onPressed: () => _showRecord(context, e),
+                                    onPressed: () =>
+                                        _showPurchaseOrderDetail(e),
                                     child: const Text('View')),
                                 IconButton(
-                                  tooltip: 'Download PDF',
+                                  tooltip: 'Print PO',
+                                  icon: const Icon(Icons.print, size: 18),
+                                  onPressed: () => _printPoPdf(e),
+                                ),
+                                IconButton(
+                                  tooltip: 'Download PO PDF',
                                   icon: const Icon(Icons.download, size: 18),
                                   onPressed: () => _downloadPoPdf(e),
                                 ),
@@ -6247,7 +8177,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                         .toList(),
                   ),
                 ),
-              if (_tab == 1)
+              if (_tab == 3)
                 _SectionCard(
                   title: 'Supplier Invoices',
                   child: _SimpleTable(
@@ -6255,21 +8185,34 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                       'Invoice',
                       'Supplier',
                       'Total',
+                      'Paid',
+                      'Balance',
                       'Status',
-                      'Date',
+                      'Due',
                       'Actions'
                     ],
-                    rows: invoices
+                    rows: filteredInvoices
                         .map((e) => [
                               _text(e, ['invoice_number', 'id']),
-                              _text(e, ['supplier_name']),
+                              _recordSupplierName(e),
                               _money(_num(e['total_amount'])),
+                              _money(_num(e['paid_amount'])),
+                              _money(_num(e['balance_due'] ??
+                                  e['outstanding_amount'] ??
+                                  e['total_amount'])),
                               _StatusPill(_text(e, ['status'])),
-                              _text(e, ['invoice_date', 'created_at']),
+                              _text(e, ['due_date', 'invoice_date']),
                               Wrap(spacing: 6, children: [
                                 TextButton(
                                     onPressed: () => _viewInvoice(e),
                                     child: const Text('View')),
+                                TextButton(
+                                    onPressed: () => _recordPayment(
+                                          suppliers: suppliers,
+                                          invoices: outstandingInvoices,
+                                          invoice: e,
+                                        ),
+                                    child: const Text('Pay')),
                                 IconButton(
                                   tooltip: 'Download PDF',
                                   icon: const Icon(Icons.download, size: 18),
@@ -6280,6 +8223,113 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                         .toList(),
                   ),
                 ),
+              if (_tab == 4)
+                _SectionCard(
+                  title: 'Supplier Payments',
+                  child: _SimpleTable(
+                    columns: const [
+                      'Payment',
+                      'Supplier',
+                      'Method',
+                      'Reference',
+                      'Amount',
+                      'Status',
+                      'Date'
+                    ],
+                    rows: filteredPayments
+                        .map((e) => [
+                              _text(e, ['payment_number', 'id']),
+                              _recordSupplierName(e),
+                              _title(_text(e, ['payment_method', 'method'])),
+                              _text(e, ['reference_number', 'reference']),
+                              _money(_num(e['payment_amount'] ?? e['amount'])),
+                              _StatusPill(_text(e, ['status'])),
+                              _text(e, ['payment_date', 'created_at']),
+                            ])
+                        .toList(),
+                  ),
+                ),
+              if (_tab == 5)
+                _SectionCard(
+                  title: _selectedSupplierId == null
+                      ? 'Supplier Ledger'
+                      : 'Supplier Ledger - ${_supplierNameById(suppliers, _selectedSupplierId!)}',
+                  child: _selectedSupplierId == null
+                      ? const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('Select a supplier to load the ledger.',
+                              style:
+                                  TextStyle(color: AppColors.kTextSecondary)),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(spacing: 8, runSpacing: 8, children: [
+                              OutlinedButton.icon(
+                                onPressed: () => _downloadSupplierLedgerPdf(
+                                  supplier: _supplierById(
+                                      suppliers, _selectedSupplierId!),
+                                  ledger: ledger,
+                                ),
+                                icon:
+                                    const Icon(Icons.picture_as_pdf, size: 18),
+                                label: const Text('Print Ledger'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    _openFolio(_selectedSupplierId!),
+                                icon: const Icon(Icons.article, size: 18),
+                                label: const Text('Open Folio'),
+                              ),
+                            ]),
+                            const SizedBox(height: 12),
+                            _SimpleTable(
+                              columns: const [
+                                'Date',
+                                'Type',
+                                'Reference',
+                                'Debit',
+                                'Credit',
+                                'Balance',
+                                'Narration'
+                              ],
+                              rows: ledger
+                                  .map((e) => [
+                                        _text(e,
+                                            ['transaction_date', 'created_at']),
+                                        _title(_text(e, [
+                                          'transaction_type',
+                                          'entry_type',
+                                          'type'
+                                        ])),
+                                        _text(e, [
+                                          'reference_number',
+                                          'invoice_number',
+                                          'payment_number'
+                                        ]),
+                                        _money(_num(
+                                            e['debit_amount'] ?? e['debit'])),
+                                        _money(_num(
+                                            e['credit_amount'] ?? e['credit'])),
+                                        _money(_num(e['balance_after'] ??
+                                            e['running_balance'] ??
+                                            e['balance'])),
+                                        _text(e, ['description', 'notes']),
+                                      ])
+                                  .toList(),
+                            ),
+                          ],
+                        ),
+                ),
+              if (_tab == 6)
+                _buildSupplierFolio(
+                  suppliers: suppliers,
+                  pos: pos,
+                  invoices: invoices,
+                  payments: payments,
+                  ledger: ledger,
+                  outstandingInvoices: outstandingInvoices,
+                ),
             ],
           );
         },
@@ -6287,14 +8337,1081 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     );
   }
 
-  Future<void> _createPurchaseOrder() async {
+  List<Map<String, dynamic>> _agingRows(dynamic value) {
+    final map = _map(value);
+    if (map.isNotEmpty) {
+      for (final key in ['aging', 'balances', 'suppliers', 'rows', 'data']) {
+        final rows = _list(map[key]);
+        if (rows.isNotEmpty) return rows;
+      }
+    }
+    return _list(value);
+  }
+
+  List<Map<String, dynamic>> _filterSuppliers(
+      List<Map<String, dynamic>> suppliers) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return suppliers;
+    return suppliers.where((e) {
+      return [
+        _supplierName(e),
+        _text(e, ['supplier_code', 'code']),
+        _text(e, ['contact_person', 'phone', 'email'])
+      ].join(' ').toLowerCase().contains(q);
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _filterRecords(List<Map<String, dynamic>> records,
+      {required String type}) {
+    final q = _search.trim().toLowerCase();
+    final status = _status.toLowerCase();
+    return records.where((e) {
+      final currentStatus = _text(e, ['status']).toLowerCase();
+      final matchesStatus = status == 'all' ||
+          currentStatus == status ||
+          (status == 'overdue' && _isOverdue(e));
+      if (!matchesStatus) return false;
+      if (q.isEmpty) return true;
+      final haystack = [
+        _recordSupplierName(e),
+        _text(e, ['po_number', 'purchase_order_number']),
+        _text(e, ['invoice_number']),
+        _text(e, ['payment_number']),
+        _text(e, ['reference_number', 'id']),
+      ].join(' ').toLowerCase();
+      return haystack.contains(q);
+    }).toList();
+  }
+
+  bool _isOverdue(Map<String, dynamic> e) {
+    final status = _text(e, ['status']).toLowerCase();
+    if (status == 'paid' || status == 'cancelled') return false;
+    final due = DateTime.tryParse(_text(e, ['due_date']));
+    return due != null && due.isBefore(DateTime.now());
+  }
+
+  String _supplierName(Map<String, dynamic> supplier) {
+    final direct = _text(supplier, ['name', 'supplier_name']);
+    if (direct.isNotEmpty) return direct;
+    return _text(_map(supplier['supplier']), ['name', 'supplier_name']);
+  }
+
+  String _recordSupplierName(Map<String, dynamic> record) {
+    final direct = _text(record, ['supplier_name', 'other_supplier_name']);
+    if (direct.isNotEmpty) return direct;
+    return _supplierName(_map(record['supplier']));
+  }
+
+  String _recordSupplierId(Map<String, dynamic> record) {
+    final direct = _text(record, ['supplier_id']);
+    if (direct.isNotEmpty) return direct;
+    return _text(_map(record['supplier']), ['id']);
+  }
+
+  String _supplierNameById(
+      List<Map<String, dynamic>> suppliers, String supplierId) {
+    final found = suppliers.firstWhere(
+      (e) => _text(e, ['id']) == supplierId,
+      orElse: () => {},
+    );
+    return found.isEmpty ? supplierId : _supplierName(found);
+  }
+
+  Map<String, dynamic> _supplierById(
+      List<Map<String, dynamic>> suppliers, String supplierId) {
+    return suppliers.firstWhere(
+      (e) => _text(e, ['id']) == supplierId,
+      orElse: () => {'id': supplierId, 'name': supplierId},
+    );
+  }
+
+  void _openLedger(String supplierId) {
+    if (supplierId.isEmpty) return;
+    setState(() {
+      _selectedSupplierId = supplierId;
+      _tab = 5;
+      _future = _load();
+    });
+  }
+
+  void _openFolio(String supplierId) {
+    if (supplierId.isEmpty) return;
+    setState(() {
+      _selectedSupplierId = supplierId;
+      _tab = 6;
+      _future = _load();
+    });
+  }
+
+  Widget _buildSupplierFolio({
+    required List<Map<String, dynamic>> suppliers,
+    required List<Map<String, dynamic>> pos,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> payments,
+    required List<Map<String, dynamic>> ledger,
+    required List<Map<String, dynamic>> outstandingInvoices,
+  }) {
+    final supplierId = _selectedSupplierId;
+    if (supplierId == null || supplierId.isEmpty) {
+      return const _SectionCard(
+        title: 'Supplier Folio',
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Select a supplier to open the detailed supplier folio.',
+            style: TextStyle(color: AppColors.kTextSecondary),
+          ),
+        ),
+      );
+    }
+
+    final supplier = _supplierById(suppliers, supplierId);
+    final supplierName = _supplierName(supplier);
+    final supplierPos =
+        pos.where((row) => _recordSupplierId(row) == supplierId).toList();
+    final supplierInvoices =
+        invoices.where((row) => _recordSupplierId(row) == supplierId).toList();
+    final supplierPayments =
+        payments.where((row) => _recordSupplierId(row) == supplierId).toList();
+    final openPoValue = supplierPos
+        .where((e) => !['received', 'closed', 'cancelled']
+            .contains(_text(e, ['status']).toLowerCase()))
+        .fold<num>(0, (sum, e) => sum + _num(e['total_amount'] ?? e['total']));
+    final invoiceBalance = supplierInvoices.fold<num>(
+      0,
+      (sum, e) =>
+          sum +
+          _num(
+              e['balance_due'] ?? e['outstanding_amount'] ?? e['total_amount']),
+    );
+    final paid = supplierPayments.fold<num>(
+      0,
+      (sum, e) => sum + _num(e['payment_amount'] ?? e['amount']),
+    );
+    final overdue = supplierInvoices.where(_isOverdue).length;
+    final lastActivity = _supplierLastActivity(
+      pos: supplierPos,
+      invoices: supplierInvoices,
+      payments: supplierPayments,
+      ledger: ledger,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionCard(
+          title: 'Supplier Folio - $supplierName',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _downloadSupplierFolioPdf(
+                      supplier: supplier,
+                      pos: supplierPos,
+                      invoices: supplierInvoices,
+                      payments: supplierPayments,
+                      ledger: ledger,
+                    ),
+                    icon: const Icon(Icons.print, size: 18),
+                    label: const Text('Print Folio'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _downloadSupplierLedgerPdf(
+                      supplier: supplier,
+                      ledger: ledger,
+                    ),
+                    icon: const Icon(Icons.account_balance, size: 18),
+                    label: const Text('Print Ledger'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _createPurchaseOrder(supplierId: supplierId),
+                    icon: const Icon(Icons.add_shopping_cart, size: 18),
+                    label: const Text('New PO'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => _recordPayment(
+                      suppliers: suppliers,
+                      invoices: outstandingInvoices,
+                      supplier: supplier,
+                    ),
+                    icon: const Icon(Icons.payments, size: 18),
+                    label: const Text('Record Payment'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _ResponsiveGrid(children: [
+                _MetricCard('All Purchase Orders', '${supplierPos.length}',
+                    Icons.shopping_cart, Colors.blue),
+                _MetricCard('Open PO Value', _money(openPoValue),
+                    Icons.pending_actions, Colors.orange),
+                _MetricCard('Invoices', '${supplierInvoices.length}',
+                    Icons.receipt_long, Colors.deepPurple),
+                _MetricCard('Outstanding Payable', _money(invoiceBalance),
+                    Icons.warning_amber, Colors.red),
+                _MetricCard('Payments Made', _money(paid), Icons.payments,
+                    Colors.green),
+                _MetricCard(
+                    'Last Activity',
+                    lastActivity.isEmpty ? '-' : lastActivity,
+                    Icons.history,
+                    Colors.blueGrey),
+              ]),
+              const SizedBox(height: 14),
+              _TwoColumn(
+                left: _BreakdownCard(
+                  title: 'Supplier Profile',
+                  values: {
+                    'Supplier': supplierName,
+                    'Supplier Code': _text(supplier, ['supplier_code', 'code']),
+                    'Contact':
+                        _text(supplier, ['contact_person', 'contact_name']),
+                    'Phone': _text(supplier, ['phone', 'contact_phone']),
+                    'Email': _text(supplier, ['email']),
+                    'KRA PIN / Tax ID': _text(
+                        supplier, ['tax_id', 'kra_pin', 'pin', 'vat_number']),
+                    'Payment Terms':
+                        _text(supplier, ['payment_terms', 'terms']),
+                    'Status': _text(supplier, ['status', 'is_active']),
+                  },
+                ),
+                right: _BreakdownCard(
+                  title: 'Account Position',
+                  values: {
+                    'Open PO Value': openPoValue,
+                    'Invoice Balance': invoiceBalance,
+                    'Total Paid': paid,
+                    'Overdue Invoices': overdue,
+                    'Ledger Entries': ledger.length,
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        _SectionCard(
+          title: 'Complete Supply History',
+          child: _SimpleTable(
+            columns: const [
+              'Date',
+              'Document',
+              'Reference',
+              'Status',
+              'Amount',
+              'Due / Method',
+              'Details'
+            ],
+            rows: _supplierFolioRows(
+              pos: supplierPos,
+              invoices: supplierInvoices,
+              payments: supplierPayments,
+            ),
+          ),
+        ),
+        _SectionCard(
+          title: 'Purchase Orders Supplied',
+          child: _SimpleTable(
+            columns: const [
+              'PO',
+              'Date',
+              'Expected',
+              'Items',
+              'Total',
+              'Status',
+              'Action'
+            ],
+            rows: supplierPos
+                .map((po) => [
+                      _text(po, ['po_number', 'purchase_order_number', 'id']),
+                      _text(po, ['created_at', 'order_date', 'po_date']),
+                      _text(po, ['expected_delivery_date', 'delivery_date']),
+                      _poItemsSummary(po),
+                      _money(_num(po['total_amount'] ?? po['total'])),
+                      _StatusPill(_text(po, ['status'])),
+                      Wrap(spacing: 6, runSpacing: 4, children: [
+                        TextButton(
+                            onPressed: () => _showPurchaseOrderDetail(po),
+                            child: const Text('View')),
+                        IconButton(
+                          tooltip: 'Print PO',
+                          icon: const Icon(Icons.print, size: 18),
+                          onPressed: () => _printPoPdf(po),
+                        ),
+                      ]),
+                    ])
+                .toList(),
+          ),
+        ),
+        _TwoColumn(
+          left: _SectionCard(
+            title: 'Supplier Invoices',
+            child: _SimpleTable(
+              columns: const [
+                'Invoice',
+                'Date',
+                'Due',
+                'Total',
+                'Paid',
+                'Balance',
+                'Status'
+              ],
+              rows: supplierInvoices
+                  .map((invoice) => [
+                        _text(invoice, ['invoice_number', 'id']),
+                        _text(invoice, ['invoice_date', 'created_at']),
+                        _text(invoice, ['due_date']),
+                        _money(_num(invoice['total_amount'])),
+                        _money(_num(invoice['paid_amount'])),
+                        _money(_num(invoice['balance_due'] ??
+                            invoice['outstanding_amount'] ??
+                            invoice['total_amount'])),
+                        _StatusPill(_text(invoice, ['status'])),
+                      ])
+                  .toList(),
+            ),
+          ),
+          right: _SectionCard(
+            title: 'Supplier Payments',
+            child: _SimpleTable(
+              columns: const [
+                'Date',
+                'Method',
+                'Reference',
+                'Amount',
+                'Status'
+              ],
+              rows: supplierPayments
+                  .map((payment) => [
+                        _text(payment, ['payment_date', 'created_at']),
+                        _title(_text(payment, ['payment_method', 'method'])),
+                        _text(payment,
+                            ['reference_number', 'payment_number', 'id']),
+                        _money(_num(
+                            payment['payment_amount'] ?? payment['amount'])),
+                        _StatusPill(_text(payment, ['status'])),
+                      ])
+                  .toList(),
+            ),
+          ),
+        ),
+        _SectionCard(
+          title: 'Ledger Trail',
+          child: _SimpleTable(
+            columns: const [
+              'Date',
+              'Type',
+              'Reference',
+              'Debit',
+              'Credit',
+              'Balance',
+              'Narration'
+            ],
+            rows: ledger
+                .map((entry) => [
+                      _text(entry, ['transaction_date', 'created_at']),
+                      _title(_text(
+                          entry, ['transaction_type', 'entry_type', 'type'])),
+                      _text(entry, [
+                        'reference_number',
+                        'invoice_number',
+                        'payment_number'
+                      ]),
+                      _money(_num(entry['debit_amount'] ?? entry['debit'])),
+                      _money(_num(entry['credit_amount'] ?? entry['credit'])),
+                      _money(_num(entry['balance_after'] ??
+                          entry['running_balance'] ??
+                          entry['balance'])),
+                      _text(entry, ['description', 'notes']),
+                    ])
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _supplierLastActivity({
+    required List<Map<String, dynamic>> pos,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> payments,
+    required List<Map<String, dynamic>> ledger,
+  }) {
+    final dates = <String>[
+      ...pos.map((e) => _text(e, ['created_at', 'order_date', 'po_date'])),
+      ...invoices.map((e) => _text(e, ['invoice_date', 'created_at'])),
+      ...payments.map((e) => _text(e, ['payment_date', 'created_at'])),
+      ...ledger.map((e) => _text(e, ['transaction_date', 'created_at'])),
+    ].where((date) => date.isNotEmpty).toList();
+    dates.sort((a, b) {
+      final ad = DateTime.tryParse(a);
+      final bd = DateTime.tryParse(b);
+      if (ad == null && bd == null) return b.compareTo(a);
+      if (ad == null) return 1;
+      if (bd == null) return -1;
+      return bd.compareTo(ad);
+    });
+    if (dates.isEmpty) return '';
+    final parsed = DateTime.tryParse(dates.first);
+    return parsed == null
+        ? dates.first
+        : DateFormat('yyyy-MM-dd').format(parsed);
+  }
+
+  List<List<Object>> _supplierFolioRows({
+    required List<Map<String, dynamic>> pos,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> payments,
+  }) {
+    final rows = <Map<String, String>>[
+      ...pos.map((e) => {
+            'date': _text(e, ['created_at', 'order_date', 'po_date']),
+            'document': 'Purchase Order',
+            'reference': _text(e, ['po_number', 'purchase_order_number', 'id']),
+            'status': _text(e, ['status']),
+            'amount': _money(_num(e['total_amount'] ?? e['total'])),
+            'due': _text(e, ['expected_delivery_date', 'delivery_date']),
+            'details': _poItemsSummary(e),
+          }),
+      ...invoices.map((e) => {
+            'date': _text(e, ['invoice_date', 'created_at']),
+            'document': 'Invoice',
+            'reference': _text(e, ['invoice_number', 'id']),
+            'status': _text(e, ['status']),
+            'amount': _money(_num(e['balance_due'] ??
+                e['outstanding_amount'] ??
+                e['total_amount'])),
+            'due': _text(e, ['due_date']),
+            'details': _text(e, ['notes', 'description']),
+          }),
+      ...payments.map((e) => {
+            'date': _text(e, ['payment_date', 'created_at']),
+            'document': 'Payment',
+            'reference': _text(e, ['payment_number', 'reference_number', 'id']),
+            'status': _text(e, ['status']),
+            'amount': _money(_num(e['payment_amount'] ?? e['amount'])),
+            'due': _title(_text(e, ['payment_method', 'method'])),
+            'details': _text(e, ['notes', 'description']),
+          }),
+    ];
+    rows.sort((a, b) {
+      final ad = DateTime.tryParse(a['date'] ?? '');
+      final bd = DateTime.tryParse(b['date'] ?? '');
+      if (ad == null && bd == null) {
+        return (b['date'] ?? '').compareTo(a['date'] ?? '');
+      }
+      if (ad == null) return 1;
+      if (bd == null) return -1;
+      return bd.compareTo(ad);
+    });
+    return rows
+        .map((row) => [
+              row['date'] ?? '',
+              row['document'] ?? '',
+              row['reference'] ?? '',
+              row['status'] ?? '',
+              row['amount'] ?? '',
+              row['due'] ?? '',
+              row['details'] ?? '',
+            ])
+        .toList();
+  }
+
+  String _poItemsSummary(Map<String, dynamic> po) {
+    final items = _list(po['items']);
+    if (items.isEmpty) return '-';
+    return items
+        .map((item) {
+          final name = _text(item, ['item_name', 'description']);
+          final nestedName = _text(_map(item['item']), ['name', 'item_name']);
+          final label = name.isEmpty ? nestedName : name;
+          final qty = _num(item['quantity']);
+          return label.isEmpty ? '${qty}x item' : '${qty}x $label';
+        })
+        .where((item) => item.trim().isNotEmpty)
+        .join(', ');
+  }
+
+  void _showPurchaseOrderDetail(Map<String, dynamic> po) {
+    final items = _list(po['items']);
+    final poNumber = _text(po, ['po_number', 'purchase_order_number', 'id']);
+    final supplierName = _recordSupplierName(po);
+    final status = _text(po, ['status']);
+    final total = _num(po['total_amount'] ?? po['total']);
+    final subTotal = _num(po['subtotal'] ?? po['sub_total']);
+    final taxAmount = _num(po['tax_amount'] ?? po['vat_amount']);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
+        title: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.kPrimary.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.receipt_long, color: AppColors.kPrimary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Purchase Order $poNumber',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text(
+                    supplierName.isEmpty
+                        ? 'Supplier not specified'
+                        : supplierName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.kTextSecondary),
+                  ),
+                ],
+              ),
+            ),
+            _StatusPill(status),
+          ],
+        ),
+        content: SizedBox(
+          width: 900,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ResponsiveGrid(children: [
+                  _MetricCard(
+                      'PO Total', _money(total), Icons.payments, Colors.green),
+                  _MetricCard('Items', '${items.length}',
+                      Icons.inventory_2_outlined, Colors.blue),
+                  _MetricCard(
+                      'Expected Delivery',
+                      _cleanDate(_text(
+                          po, ['expected_delivery_date', 'delivery_date'])),
+                      Icons.event_available,
+                      Colors.orange),
+                  _MetricCard(
+                      'Payment Terms',
+                      _title(_text(po, ['payment_terms', 'terms'])),
+                      Icons.schedule,
+                      Colors.blueGrey),
+                ]),
+                const SizedBox(height: 12),
+                _TwoColumn(
+                  left: _BreakdownCard(
+                    title: 'Order Details',
+                    values: {
+                      'PO Number': poNumber,
+                      'Status': status,
+                      'Created': _cleanDate(
+                          _text(po, ['created_at', 'order_date', 'po_date'])),
+                      'Expected Delivery': _cleanDate(_text(
+                          po, ['expected_delivery_date', 'delivery_date'])),
+                      'Sent To Supplier': _yesNo(po['sent_to_supplier']),
+                      'Requires GRN': _yesNo(po['requires_grn']),
+                    },
+                  ),
+                  right: _BreakdownCard(
+                    title: 'Amount Summary',
+                    values: {
+                      'Subtotal': subTotal == 0 ? total : subTotal,
+                      'Tax Rate': '${_num(po['tax_rate'] ?? po['vat_rate'])}%',
+                      'Tax Amount': taxAmount,
+                      'Discount': _num(po['discount_amount']),
+                      'Shipping': _num(po['shipping_cost']),
+                      'Other Charges': _num(po['other_charges']),
+                      'Total': total,
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _SectionCard(
+                  title: 'Items Ordered',
+                  child: _SimpleTable(
+                    columns: const [
+                      'Item',
+                      'SKU',
+                      'Qty Ordered',
+                      'Qty Received',
+                      'Unit Price',
+                      'VAT',
+                      'Total'
+                    ],
+                    rows: items.map(_poItemDetailRow).toList(),
+                  ),
+                ),
+                if (_text(po, ['special_instructions', 'notes']).isNotEmpty)
+                  _SectionCard(
+                    title: 'Notes & Instructions',
+                    child: Text(_text(po, ['special_instructions', 'notes'])),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _downloadPoPdf(po),
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('Download PDF'),
+          ),
+          FilledButton.icon(
+            onPressed: () => _printPoPdf(po),
+            icon: const Icon(Icons.print, size: 18),
+            label: const Text('Print PO'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Object> _poItemDetailRow(Map<String, dynamic> item) {
+    final nested = _map(item['item']);
+    final name = _text(item, ['item_name', 'description']).isEmpty
+        ? _text(nested, ['name', 'item_name'])
+        : _text(item, ['item_name', 'description']);
+    final sku = _text(item, ['sku', 'item_code']).isEmpty
+        ? _text(nested, ['sku', 'item_code', 'code'])
+        : _text(item, ['sku', 'item_code']);
+    return [
+      name.isEmpty ? '-' : name,
+      sku.isEmpty ? '-' : sku,
+      '${_num(item['quantity_ordered'] ?? item['quantity'])}',
+      '${_num(item['quantity_received'])}',
+      _money(_num(item['unit_price'])),
+      _money(_num(item['tax_amount'] ?? item['vat_amount'])),
+      _money(_num(item['total_price'] ?? item['total'])),
+    ];
+  }
+
+  String _cleanDate(String value) {
+    if (value.isEmpty) return '-';
+    final parsed = DateTime.tryParse(value);
+    return parsed == null ? value : DateFormat('yyyy-MM-dd').format(parsed);
+  }
+
+  String _yesNo(dynamic value) {
+    if (value is bool) return value ? 'Yes' : 'No';
+    final text = '$value'.toLowerCase().trim();
+    if (text == 'true' || text == 'yes' || text == '1') return 'Yes';
+    if (text == 'false' || text == 'no' || text == '0' || text == 'null') {
+      return 'No';
+    }
+    return text.isEmpty ? '-' : _title(text);
+  }
+
+  void _openPoHistory(String supplierId, String supplierName) {
+    if (supplierId.isEmpty && supplierName.isEmpty) return;
+    setState(() {
+      _selectedSupplierId =
+          supplierId.isEmpty ? _selectedSupplierId : supplierId;
+      _search = supplierName.isEmpty ? supplierId : supplierName;
+      _searchCtrl.text = _search;
+      _status = 'all';
+      _tab = 2;
+    });
+  }
+
+  Future<void> _createSupplier() async {
+    final nameCtrl = TextEditingController();
+    final codeCtrl = TextEditingController();
+    final contactCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final termsCtrl = TextEditingController(text: '30');
+    final pinCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    var saving = false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('New Branch Supplier'),
+          content: SizedBox(
+            width: 620,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Supplier name *'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: codeCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Supplier code'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: pinCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'KRA PIN / Tax ID'),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: contactCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Contact person'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: termsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Payment terms (days)'),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: phoneCtrl,
+                        decoration: const InputDecoration(labelText: 'Phone'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: notesCtrl,
+                    decoration: const InputDecoration(labelText: 'Notes'),
+                    minLines: 1,
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (nameCtrl.text.trim().isEmpty) {
+                        _notify(context, 'Supplier name is required');
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      try {
+                        await ref
+                            .read(branchAccountantRepositoryProvider)
+                            .createStoreSupplier({
+                          'name': nameCtrl.text.trim(),
+                          if (codeCtrl.text.trim().isNotEmpty)
+                            'supplier_code': codeCtrl.text.trim(),
+                          if (contactCtrl.text.trim().isNotEmpty)
+                            'contact_person': contactCtrl.text.trim(),
+                          if (phoneCtrl.text.trim().isNotEmpty)
+                            'phone': phoneCtrl.text.trim(),
+                          if (emailCtrl.text.trim().isNotEmpty)
+                            'email': emailCtrl.text.trim(),
+                          if (pinCtrl.text.trim().isNotEmpty)
+                            'tax_id': pinCtrl.text.trim(),
+                          if (termsCtrl.text.trim().isNotEmpty)
+                            'payment_terms':
+                                int.tryParse(termsCtrl.text.trim()) ??
+                                    termsCtrl.text.trim(),
+                          if (notesCtrl.text.trim().isNotEmpty)
+                            'notes': notesCtrl.text.trim(),
+                        });
+                        if (context.mounted) Navigator.pop(context, true);
+                      } catch (e) {
+                        setDialogState(() => saving = false);
+                        if (context.mounted) _notify(context, 'Failed: $e');
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameCtrl.dispose();
+    codeCtrl.dispose();
+    contactCtrl.dispose();
+    phoneCtrl.dispose();
+    emailCtrl.dispose();
+    termsCtrl.dispose();
+    pinCtrl.dispose();
+    notesCtrl.dispose();
+    if (result == true && mounted) {
+      _notify(context, 'Supplier created');
+      _refresh();
+    }
+  }
+
+  Future<void> _recordPayment({
+    required List<Map<String, dynamic>> suppliers,
+    required List<Map<String, dynamic>> invoices,
+    Map<String, dynamic>? supplier,
+    Map<String, dynamic>? invoice,
+  }) async {
+    String? supplierId = supplier == null
+        ? _recordSupplierId(invoice ?? {})
+        : _text(supplier, ['id']);
+    if (supplierId.isEmpty) supplierId = null;
+    String? invoiceId = invoice == null ? null : _text(invoice, ['id']);
+    final amountCtrl = TextEditingController(
+      text: invoice == null
+          ? ''
+          : '${_num(invoice['balance_due'] ?? invoice['outstanding_amount'] ?? invoice['total_amount'])}',
+    );
+    final referenceCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    var method = 'cash';
+    var saving = false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final supplierInvoices = supplierId == null
+              ? <Map<String, dynamic>>[]
+              : invoices
+                  .where((e) => _recordSupplierId(e) == supplierId)
+                  .toList();
+          return AlertDialog(
+            title: const Text('Record Supplier Payment'),
+            content: SizedBox(
+              width: 640,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: supplierId,
+                      isExpanded: true,
+                      decoration:
+                          const InputDecoration(labelText: 'Supplier *'),
+                      items: suppliers
+                          .map((s) => DropdownMenuItem(
+                                value: _text(s, ['id']),
+                                child: Text(_supplierName(s),
+                                    overflow: TextOverflow.ellipsis),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        setDialogState(() {
+                          supplierId = v;
+                          invoiceId = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: invoiceId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                          labelText: 'Invoice allocation (optional)'),
+                      items: [
+                        const DropdownMenuItem<String>(
+                            value: null, child: Text('Unallocated payment')),
+                        ...supplierInvoices.map((inv) {
+                          final balance = _num(inv['balance_due'] ??
+                              inv['outstanding_amount'] ??
+                              inv['total_amount']);
+                          return DropdownMenuItem(
+                            value: _text(inv, ['id']),
+                            child: Text(
+                              '${_text(inv, [
+                                    'invoice_number',
+                                    'id'
+                                  ])} - ${_money(balance)}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }),
+                      ],
+                      onChanged: (v) {
+                        setDialogState(() {
+                          invoiceId = v;
+                          final selected = supplierInvoices.firstWhere(
+                            (e) => _text(e, ['id']) == v,
+                            orElse: () => {},
+                          );
+                          if (selected.isNotEmpty) {
+                            amountCtrl.text =
+                                '${_num(selected['balance_due'] ?? selected['outstanding_amount'] ?? selected['total_amount'])}';
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(
+                        child: TextField(
+                          controller: amountCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Amount *'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: method,
+                          decoration:
+                              const InputDecoration(labelText: 'Method *'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'cash', child: Text('Cash')),
+                            DropdownMenuItem(
+                                value: 'mobile_money', child: Text('M-Pesa')),
+                            DropdownMenuItem(
+                                value: 'bank_transfer',
+                                child: Text('Bank transfer')),
+                            DropdownMenuItem(
+                                value: 'card', child: Text('Card')),
+                            DropdownMenuItem(
+                                value: 'cheque', child: Text('Cheque')),
+                          ],
+                          onChanged: (v) =>
+                              setDialogState(() => method = v ?? 'cash'),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: referenceCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Reference / evidence code'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: notesCtrl,
+                      decoration: const InputDecoration(labelText: 'Notes'),
+                      minLines: 1,
+                      maxLines: 3,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final amount =
+                            num.tryParse(amountCtrl.text.trim()) ?? 0;
+                        if (supplierId == null || supplierId!.isEmpty) {
+                          _notify(context, 'Select a supplier');
+                          return;
+                        }
+                        if (amount <= 0) {
+                          _notify(context, 'Enter a valid payment amount');
+                          return;
+                        }
+                        setDialogState(() => saving = true);
+                        try {
+                          await ref
+                              .read(branchAccountantRepositoryProvider)
+                              .createSupplierPayment({
+                            'supplier_id': supplierId,
+                            'payment_date': _today(),
+                            'payment_method': method,
+                            'payment_amount': amount,
+                            if (referenceCtrl.text.trim().isNotEmpty)
+                              'reference_number': referenceCtrl.text.trim(),
+                            if (notesCtrl.text.trim().isNotEmpty)
+                              'notes': notesCtrl.text.trim(),
+                            if (invoiceId != null && invoiceId!.isNotEmpty)
+                              'allocations': [
+                                {'invoice_id': invoiceId, 'amount': amount}
+                              ],
+                          });
+                          if (context.mounted) Navigator.pop(context, true);
+                        } catch (e) {
+                          setDialogState(() => saving = false);
+                          if (context.mounted) _notify(context, 'Failed: $e');
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Record Payment'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    amountCtrl.dispose();
+    referenceCtrl.dispose();
+    notesCtrl.dispose();
+    if (result == true && mounted) {
+      _notify(context, 'Supplier payment recorded');
+      _refresh();
+    }
+  }
+
+  Future<void> _createPurchaseOrder({String? supplierId}) async {
     final repo = ref.read(branchAccountantRepositoryProvider);
     final suppliers = await repo.getSuppliers();
     final items = await repo.getStoreItems();
     if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => _PurchaseOrderDialog(suppliers: suppliers, items: items),
+      builder: (_) => _PurchaseOrderDialog(
+        suppliers: suppliers,
+        items: items,
+        initialSupplierId: supplierId,
+      ),
     );
     if (result == true && mounted) {
       _notify(context, 'Purchase order created');
@@ -6329,35 +9446,321 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
 
   Future<void> _downloadPoPdf(Map<String, dynamic> po) async {
     try {
-      final lineItems = _list(po['items']);
-      final file = await _exportPdf(
-        filename: 'PO_${_text(po, ['po_number', 'id'])}.pdf',
-        title: 'PURCHASE ORDER',
-        subtitle: _text(po, ['po_number', 'id']),
-        metrics: {
-          'Supplier': _text(po, ['supplier_name']).isEmpty
-              ? _text(_map(po['supplier']), ['name'])
-              : _text(po, ['supplier_name']),
-          'Status': _text(po, ['status']),
-          'Date': _text(po, ['created_at', 'order_date']),
-          'Total': _money(_num(po['total_amount'])),
-        },
-        tableHeaders: const ['Item', 'Qty', 'Unit Price', 'Total'],
-        tableRows: lineItems
-            .map((it) => [
-                  _text(it, ['item_name']).isEmpty
-                      ? _text(_map(it['item']), ['name'])
-                      : _text(it, ['item_name']),
-                  '${_num(it['quantity'])}',
-                  _money(_num(it['unit_price'])),
-                  _money(_num(it['total_price'] ?? it['total'])),
-                ])
-            .toList(),
-      );
+      final file = await _buildPoPdf(po);
       if (mounted) _notify(context, 'PO PDF saved to ${file.path}');
     } catch (e) {
       if (mounted) _notify(context, 'Failed to generate PDF: $e');
     }
+  }
+
+  Future<void> _printPoPdf(Map<String, dynamic> po) async {
+    final file = await _buildPoPdf(po);
+    await _printFile(file);
+  }
+
+  Future<File> _buildPoPdf(Map<String, dynamic> po) async {
+    return _exportPurchaseOrderPdf(po);
+  }
+
+  Future<File> _exportPurchaseOrderPdf(Map<String, dynamic> po) async {
+    final doc = pw.Document();
+    final logo = await _loadPdfLogo();
+    final poNumber = _text(po, ['po_number', 'purchase_order_number', 'id']);
+    final supplier = _map(po['supplier']);
+    final branch = _map(po['branch']);
+    final supplierName = _recordSupplierName(po).isEmpty
+        ? _text(supplier, ['name', 'supplier_name'])
+        : _recordSupplierName(po);
+    final createdAt =
+        _cleanDate(_text(po, ['created_at', 'order_date', 'po_date']));
+    final expectedDelivery = _cleanDate(_text(
+        po, ['expected_delivery', 'expected_delivery_date', 'delivery_date']));
+    final notes = _text(po, ['notes', 'special_instructions']);
+    final items = _list(po['items']);
+    final total = _num(po['total_amount'] ?? po['total']);
+    final subtotal = _num(po['subtotal'] ?? po['sub_total']);
+    final tax = _num(po['tax_amount'] ?? po['vat_amount']);
+    const primary = PdfColor.fromInt(0xFF2C3E50);
+    const muted = PdfColor.fromInt(0xFF666666);
+    const border = PdfColor.fromInt(0xFFC8C8C8);
+    const lightRow = PdfColor.fromInt(0xFFF6F7F8);
+
+    pw.Widget totalLine(String label, String value,
+        {bool grand = false, double top = 0}) {
+      return pw.Padding(
+        padding: pw.EdgeInsets.only(top: top),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(label,
+                style: pw.TextStyle(
+                    fontSize: grand ? 13 : 10,
+                    fontWeight:
+                        grand ? pw.FontWeight.bold : pw.FontWeight.normal)),
+            pw.Text(value,
+                style: pw.TextStyle(
+                    fontSize: grand ? 13 : 10,
+                    fontWeight:
+                        grand ? pw.FontWeight.bold : pw.FontWeight.normal)),
+          ],
+        ),
+      );
+    }
+
+    final tableRows = items.map((item) {
+      final nested = _map(item['item']);
+      final qty = _num(item['quantity_ordered'] ?? item['quantity']);
+      final price = _num(item['unit_price']);
+      final lineTotal = _num(item['total_price'] ?? item['total']);
+      final itemName = _text(item, ['item_name', 'description']).isEmpty
+          ? _text(nested, ['name', 'item_name'])
+          : _text(item, ['item_name', 'description']);
+      return [
+        itemName.isEmpty ? 'Item #${_text(item, ['item_id', 'id'])}' : itemName,
+        _formatQty(qty),
+        _poMoney(price),
+        _poMoney(lineTotal == 0 ? qty * price : lineTotal),
+      ];
+    }).toList();
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(42, 40, 42, 42),
+        build: (context) => [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (logo != null)
+                pw.Image(logo, width: 86, height: 86, fit: pw.BoxFit.contain)
+              else
+                pw.Container(
+                  width: 86,
+                  height: 86,
+                  alignment: pw.Alignment.center,
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: border),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Text('FG',
+                      style: pw.TextStyle(
+                          fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                ),
+              pw.Spacer(),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('PURCHASE ORDER',
+                      style: pw.TextStyle(
+                          fontSize: 20,
+                          color: primary,
+                          fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 12),
+                  pw.Text(
+                    _text(branch, ['name']).isEmpty
+                        ? 'FamousGate Hotels'
+                        : _text(branch, ['name']),
+                    style: const pw.TextStyle(fontSize: 10, color: muted),
+                  ),
+                  pw.Text(
+                    _text(branch, ['address']).isEmpty
+                        ? 'Bomet, Kenya'
+                        : _text(branch, ['address']),
+                    style: const pw.TextStyle(fontSize: 10, color: muted),
+                  ),
+                  pw.Text(
+                    _text(branch, ['phone']).isEmpty
+                        ? '0706782828'
+                        : _text(branch, ['phone']),
+                    style: const pw.TextStyle(fontSize: 10, color: muted),
+                  ),
+                  pw.Text(
+                    _text(branch, ['email']).isEmpty
+                        ? 'famousgatesbmt@gmail.com'
+                        : _text(branch, ['email']),
+                    style: const pw.TextStyle(fontSize: 10, color: muted),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 18),
+          pw.Container(height: 1, color: border),
+          pw.SizedBox(height: 18),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('VENDOR / SUPPLIER:',
+                        style: pw.TextStyle(
+                            fontSize: 12,
+                            color: primary,
+                            fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 8),
+                    pw.Text(
+                        supplierName.isEmpty ? 'Local Supplier' : supplierName,
+                        style: const pw.TextStyle(fontSize: 10)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(_text(supplier, ['contact_person', 'contact_name']),
+                        style: const pw.TextStyle(fontSize: 10)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(_text(supplier, ['phone', 'contact_phone']),
+                        style: const pw.TextStyle(fontSize: 10)),
+                    if (_text(supplier, ['address', 'address_line1'])
+                        .isNotEmpty) ...[
+                      pw.SizedBox(height: 4),
+                      pw.Text(_text(supplier, ['address', 'address_line1']),
+                          style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 36),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('PO DETAILS:',
+                        style: pw.TextStyle(
+                            fontSize: 12,
+                            color: primary,
+                            fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 8),
+                    pw.Text('PO Number: $poNumber',
+                        style: const pw.TextStyle(fontSize: 10)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Date: $createdAt',
+                        style: const pw.TextStyle(fontSize: 10)),
+                    if (expectedDelivery != '-') ...[
+                      pw.SizedBox(height: 4),
+                      pw.Text('Expected Delivery: $expectedDelivery',
+                          style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 24),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Item Description', 'Qty', 'Unit Price', 'Total'],
+            data: tableRows,
+            headerStyle: pw.TextStyle(
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 9),
+            headerDecoration: const pw.BoxDecoration(color: primary),
+            oddRowDecoration: const pw.BoxDecoration(color: lightRow),
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(4.5),
+              1: const pw.FlexColumnWidth(1),
+              2: const pw.FlexColumnWidth(1.5),
+              3: const pw.FlexColumnWidth(1.5),
+            },
+            cellAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerRight,
+              2: pw.Alignment.centerRight,
+              3: pw.Alignment.centerRight,
+            },
+          ),
+          pw.SizedBox(height: 18),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Container(
+              width: 240,
+              child: pw.Column(
+                children: [
+                  totalLine(
+                      'Subtotal:', _poMoney(subtotal == 0 ? total : subtotal)),
+                  totalLine('Tax:', _poMoney(tax), top: 10),
+                  totalLine('GRAND TOTAL:', _poMoney(total),
+                      grand: true, top: 14),
+                ],
+              ),
+            ),
+          ),
+          if (notes.isNotEmpty) ...[
+            pw.SizedBox(height: 22),
+            pw.Text('Notes:',
+                style:
+                    pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 5),
+            pw.Text(notes,
+                style: const pw.TextStyle(fontSize: 10, color: muted),
+                maxLines: 5),
+          ],
+          pw.SizedBox(height: 24),
+          pw.Text('Issued by: FamousGate Hotels',
+              style: pw.TextStyle(
+                  fontSize: 9, color: muted, fontStyle: pw.FontStyle.italic)),
+          pw.SizedBox(height: 34),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              _poSignatureBlock('Prepared By / Branch Accountant'),
+              _poSignatureBlock('Authorized By / Internal Auditor'),
+            ],
+          ),
+        ],
+        footer: (context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Expanded(
+              child: pw.Text('FamousGate Hotels - Procurement System',
+                  textAlign: pw.TextAlign.center,
+                  style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.grey600)),
+            ),
+            pw.Text('Page ${context.pageNumber} of ${context.pagesCount}',
+                style:
+                    const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+          ],
+        ),
+      ),
+    );
+
+    final directory = await getDownloadsDirectory() ??
+        await getApplicationDocumentsDirectory();
+    final safeName =
+        'PO_$poNumber.pdf'.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final file = File('${directory.path}/$safeName');
+    await file.writeAsBytes(await doc.save(), flush: true);
+    return file;
+  }
+
+  pw.Widget _poSignatureBlock(String label) {
+    return pw.Container(
+      width: 190,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(height: 1, color: PdfColors.black),
+          pw.SizedBox(height: 6),
+          pw.Text(label, style: const pw.TextStyle(fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  String _poMoney(num value) {
+    final formatted = NumberFormat.currency(
+      locale: 'en_KE',
+      symbol: 'Ksh ',
+      decimalDigits: 0,
+    ).format(value);
+    return formatted.replaceAll('.00', '');
+  }
+
+  String _formatQty(num value) {
+    if (value % 1 == 0) return value.toInt().toString();
+    return value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
   Future<void> _downloadInvoicePdf(Map<String, dynamic> inv) async {
@@ -6405,13 +9808,273 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
       if (mounted) _notify(context, 'Failed to generate PDF: $e');
     }
   }
+
+  Future<void> _downloadSupplierLedgerPdf({
+    required Map<String, dynamic> supplier,
+    required List<Map<String, dynamic>> ledger,
+  }) async {
+    try {
+      final file = await _buildSupplierLedgerPdf(
+        supplier: supplier,
+        ledger: ledger,
+      );
+      await _printFile(file);
+      if (mounted) _notify(context, 'Ledger PDF prepared: ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to generate ledger: $e');
+    }
+  }
+
+  Future<File> _buildSupplierLedgerPdf({
+    required Map<String, dynamic> supplier,
+    required List<Map<String, dynamic>> ledger,
+  }) {
+    final supplierName = _supplierName(supplier);
+    return _exportPdf(
+      filename: 'Supplier_Ledger_$supplierName.pdf',
+      title: 'SUPPLIER LEDGER',
+      subtitle: supplierName,
+      metrics: {
+        'Supplier': supplierName,
+        'Supplier Code': _text(supplier, ['supplier_code', 'code']),
+        'Contact': _text(supplier, ['contact_person', 'contact_name']),
+        'Phone': _text(supplier, ['phone', 'contact_phone']),
+        'Entries': '${ledger.length}',
+        'Closing Balance': ledger.isEmpty
+            ? _money(0)
+            : _money(_num(ledger.last['balance_after'] ??
+                ledger.last['running_balance'] ??
+                ledger.last['balance'])),
+      },
+      tableHeaders: const [
+        'Date',
+        'Type',
+        'Reference',
+        'Debit',
+        'Credit',
+        'Balance',
+        'Narration'
+      ],
+      tableRows: ledger
+          .map((e) => [
+                _text(e, ['transaction_date', 'created_at']),
+                _title(_text(e, ['transaction_type', 'entry_type', 'type'])),
+                _text(e,
+                    ['reference_number', 'invoice_number', 'payment_number']),
+                _money(_num(e['debit_amount'] ?? e['debit'])),
+                _money(_num(e['credit_amount'] ?? e['credit'])),
+                _money(_num(e['balance_after'] ??
+                    e['running_balance'] ??
+                    e['balance'])),
+                _text(e, ['description', 'notes']),
+              ])
+          .toList(),
+    );
+  }
+
+  Future<void> _downloadSupplierFolioPdf({
+    required Map<String, dynamic> supplier,
+    required List<Map<String, dynamic>> pos,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> payments,
+    List<Map<String, dynamic>> ledger = const [],
+  }) async {
+    try {
+      final file = await _buildSupplierFolioPdf(
+        supplier: supplier,
+        pos: pos,
+        invoices: invoices,
+        payments: payments,
+        ledger: ledger,
+      );
+      await _printFile(file);
+      if (mounted) _notify(context, 'Supplier folio prepared: ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to generate supplier folio: $e');
+    }
+  }
+
+  Future<File> _buildSupplierFolioPdf({
+    required Map<String, dynamic> supplier,
+    required List<Map<String, dynamic>> pos,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> payments,
+    List<Map<String, dynamic>> ledger = const [],
+  }) {
+    final supplierName = _supplierName(supplier);
+    final openPoValue = pos
+        .where((e) => !['received', 'closed', 'cancelled']
+            .contains(_text(e, ['status']).toLowerCase()))
+        .fold<num>(0, (sum, e) => sum + _num(e['total_amount'] ?? e['total']));
+    final invoiceBalance = invoices.fold<num>(
+      0,
+      (sum, e) =>
+          sum +
+          _num(
+              e['balance_due'] ?? e['outstanding_amount'] ?? e['total_amount']),
+    );
+    final paid = payments.fold<num>(
+      0,
+      (sum, e) => sum + _num(e['payment_amount'] ?? e['amount']),
+    );
+    final overdue = invoices.where(_isOverdue).length;
+    final rows = <List<String>>[
+      ...pos.map((e) => [
+            _text(e, ['created_at', 'order_date', 'po_date']),
+            'PO',
+            _text(e, ['po_number', 'purchase_order_number', 'id']),
+            _text(e, ['status']),
+            _money(_num(e['total_amount'] ?? e['total'])),
+            _text(e, ['expected_delivery_date', 'delivery_date']),
+          ]),
+      ...invoices.map((e) => [
+            _text(e, ['invoice_date', 'created_at']),
+            'Invoice',
+            _text(e, ['invoice_number', 'id']),
+            _text(e, ['status']),
+            _money(_num(e['balance_due'] ??
+                e['outstanding_amount'] ??
+                e['total_amount'])),
+            _text(e, ['due_date']),
+          ]),
+      ...payments.map((e) => [
+            _text(e, ['payment_date', 'created_at']),
+            'Payment',
+            _text(e, ['payment_number', 'reference_number', 'id']),
+            _text(e, ['status']),
+            _money(_num(e['payment_amount'] ?? e['amount'])),
+            _title(_text(e, ['payment_method', 'method'])),
+          ]),
+    ];
+    return _exportPdf(
+      filename: 'Supplier_Folio_$supplierName.pdf',
+      title: 'SUPPLIER FOLIO',
+      subtitle: supplierName,
+      metrics: {
+        'Supplier': supplierName,
+        'Supplier Code': _text(supplier, ['supplier_code', 'code']),
+        'Open PO Value': _money(openPoValue),
+        'Invoice Balance': _money(invoiceBalance),
+        'Payments': _money(paid),
+        'Overdue Invoices': '$overdue',
+        'Ledger Entries': '${ledger.length}',
+      },
+      sections: {
+        'Supplier Details': {
+          'Contact': _text(supplier, ['contact_person', 'contact_name']),
+          'Phone': _text(supplier, ['phone', 'contact_phone']),
+          'Email': _text(supplier, ['email']),
+          'Payment Terms': _text(supplier, ['payment_terms', 'terms']),
+          'Status': _text(supplier, ['status', 'is_active']),
+        },
+      },
+      tableHeaders: const [
+        'Date',
+        'Document',
+        'Reference',
+        'Status',
+        'Amount',
+        'Due/Method'
+      ],
+      tableRows: rows,
+    );
+  }
+
+  Future<void> _downloadSupplierFinanceReportPdf({
+    required List<Map<String, dynamic>> suppliers,
+    required List<Map<String, dynamic>> pos,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> payments,
+  }) async {
+    try {
+      final openPoValue = pos.fold<num>(
+          0, (sum, e) => sum + _num(e['total_amount'] ?? e['total']));
+      final invoiceBalance = invoices.fold<num>(
+        0,
+        (sum, e) =>
+            sum +
+            _num(e['balance_due'] ??
+                e['outstanding_amount'] ??
+                e['total_amount']),
+      );
+      final paid = payments.fold<num>(
+          0, (sum, e) => sum + _num(e['payment_amount'] ?? e['amount']));
+      final file = await _exportPdf(
+        filename: 'Supplier_Finance_Report_${_today()}.pdf',
+        title: 'SUPPLIER FINANCE REPORT',
+        subtitle:
+            'Branch supplier purchase orders, invoices, payments, and balances',
+        metrics: {
+          'Suppliers': '${suppliers.length}',
+          'Purchase Orders': '${pos.length}',
+          'Open PO Value': _money(openPoValue),
+          'Invoices': '${invoices.length}',
+          'Outstanding': _money(invoiceBalance),
+          'Payments': _money(paid),
+        },
+        tableHeaders: const [
+          'Supplier',
+          'Open PO Value',
+          'Invoice Balance',
+          'Paid',
+          'Overdue'
+        ],
+        tableRows: suppliers.map((supplier) {
+          final id = _text(supplier, ['id']);
+          final supplierPos =
+              pos.where((e) => _recordSupplierId(e) == id).toList();
+          final supplierInvoices =
+              invoices.where((e) => _recordSupplierId(e) == id).toList();
+          final supplierPayments =
+              payments.where((e) => _recordSupplierId(e) == id).toList();
+          return [
+            _supplierName(supplier),
+            _money(supplierPos.fold<num>(
+                0, (sum, e) => sum + _num(e['total_amount'] ?? e['total']))),
+            _money(supplierInvoices.fold<num>(
+              0,
+              (sum, e) =>
+                  sum +
+                  _num(e['balance_due'] ??
+                      e['outstanding_amount'] ??
+                      e['total_amount']),
+            )),
+            _money(supplierPayments.fold<num>(
+                0, (sum, e) => sum + _num(e['payment_amount'] ?? e['amount']))),
+            '${supplierInvoices.where(_isOverdue).length}',
+          ];
+        }).toList(),
+      );
+      await _printFile(file);
+      if (mounted) {
+        _notify(context, 'Supplier finance report prepared: ${file.path}');
+      }
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to generate supplier report: $e');
+    }
+  }
+
+  Future<void> _printFile(File file) async {
+    final bytes = await file.readAsBytes();
+    await Printing.layoutPdf(
+      name: file.uri.pathSegments.isEmpty
+          ? 'document.pdf'
+          : file.uri.pathSegments.last,
+      onLayout: (_) async => bytes,
+    );
+  }
 }
 
 // ── Purchase Order create dialog ──────────────────────────────────────────────
 class _PurchaseOrderDialog extends ConsumerStatefulWidget {
-  const _PurchaseOrderDialog({required this.suppliers, required this.items});
+  const _PurchaseOrderDialog({
+    required this.suppliers,
+    required this.items,
+    this.initialSupplierId,
+  });
   final List<Map<String, dynamic>> suppliers;
   final List<Map<String, dynamic>> items;
+  final String? initialSupplierId;
 
   @override
   ConsumerState<_PurchaseOrderDialog> createState() =>
@@ -6428,16 +10091,22 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
   bool _saving = false;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.initialSupplierId != null &&
+        widget.initialSupplierId!.isNotEmpty) {
+      _supplierId = widget.initialSupplierId;
+    }
+  }
+
+  @override
   void dispose() {
     _deliveryCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
 
-  String _itemId(Map<String, dynamic> it) =>
-      _text(it, ['id', 'sku', 'item_code']);
-  String _itemName(Map<String, dynamic> it) =>
-      _text(it, ['name', 'description', 'item_name']);
+  String _itemId(Map<String, dynamic> it) => _purchaseOrderItemId(it);
 
   num get _total => _lines.fold<num>(0, (sum, l) {
         final q = _num(l['quantity']);
@@ -6552,30 +10221,25 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
                   child: Row(children: [
                     Expanded(
                       flex: 4,
-                      child: DropdownButtonFormField<String>(
-                        initialValue: line['item_id'] as String?,
-                        isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'Item'),
-                        items: widget.items
-                            .map((it) => DropdownMenuItem(
-                                  value: _itemId(it),
-                                  child: Text(_itemName(it),
-                                      overflow: TextOverflow.ellipsis),
-                                ))
-                            .toList(),
-                        onChanged: (v) {
+                      child: _PurchaseOrderItemSearchField(
+                        items: widget.items,
+                        selectedItemId: line['item_id'] as String?,
+                        onSelected: (item) {
                           setState(() {
-                            line['item_id'] = v;
-                            final found = widget.items.firstWhere(
-                                (it) => _itemId(it) == v,
-                                orElse: () => {});
-                            final cost = _num(found['cost_price'] ??
-                                found['retail_price'] ??
-                                found['unit_price']);
+                            line['item_id'] = _itemId(item);
+                            final cost = _num(item['last_purchase_price'] ??
+                                item['average_cost'] ??
+                                item['cost_price'] ??
+                                item['unit_cost'] ??
+                                item['retail_price'] ??
+                                item['unit_price']);
                             if (cost > 0 && _num(line['unit_price']) == 0) {
                               line['unit_price'] = cost;
                             }
                           });
+                        },
+                        onCleared: () {
+                          setState(() => line['item_id'] = null);
                         },
                       ),
                     ),
@@ -6639,6 +10303,199 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
     );
   }
 }
+
+class _PurchaseOrderItemSearchField extends StatefulWidget {
+  const _PurchaseOrderItemSearchField({
+    required this.items,
+    required this.selectedItemId,
+    required this.onSelected,
+    required this.onCleared,
+  });
+
+  final List<Map<String, dynamic>> items;
+  final String? selectedItemId;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+  final VoidCallback onCleared;
+
+  @override
+  State<_PurchaseOrderItemSearchField> createState() =>
+      _PurchaseOrderItemSearchFieldState();
+}
+
+class _PurchaseOrderItemSearchFieldState
+    extends State<_PurchaseOrderItemSearchField> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _syncSelectedText();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PurchaseOrderItemSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedItemId != widget.selectedItemId ||
+        oldWidget.items.length != widget.items.length) {
+      _syncSelectedText();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic>? get _selectedItem {
+    final selectedId = widget.selectedItemId;
+    if (selectedId == null || selectedId.isEmpty) return null;
+    for (final item in widget.items) {
+      if (_purchaseOrderItemId(item) == selectedId) return item;
+    }
+    return null;
+  }
+
+  void _syncSelectedText() {
+    final item = _selectedItem;
+    final next = item == null ? '' : _itemSearchLabel(item);
+    if (_controller.text != next) {
+      _controller.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: next.length),
+      );
+    }
+  }
+
+  Iterable<Map<String, dynamic>> _optionsFor(TextEditingValue value) {
+    final query = value.text.trim().toLowerCase();
+    final source =
+        widget.items.where((item) => _purchaseOrderItemId(item).isNotEmpty);
+    if (query.isEmpty) return source.take(30);
+    return source.where((item) {
+      final haystack = [
+        _itemSearchLabel(item),
+        _text(item, ['sku', 'item_code', 'code']),
+        _text(item, ['category', 'category_name']),
+        _text(item, ['unit', 'unit_of_measure']),
+      ].join(' ').toLowerCase();
+      return haystack.contains(query);
+    }).take(40);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Map<String, dynamic>>(
+      textEditingController: _controller,
+      focusNode: _focusNode,
+      displayStringForOption: _itemSearchLabel,
+      optionsBuilder: _optionsFor,
+      onSelected: (item) {
+        _controller.text = _itemSearchLabel(item);
+        widget.onSelected(item);
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Search item *',
+            hintText: widget.items.isEmpty
+                ? 'No branch items available'
+                : 'Type item name, SKU, code, or category',
+            prefixIcon: const Icon(Icons.search, size: 18),
+            suffixIcon: widget.selectedItemId == null
+                ? null
+                : IconButton(
+                    tooltip: 'Clear item',
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () {
+                      controller.clear();
+                      widget.onCleared();
+                      focusNode.requestFocus();
+                    },
+                  ),
+          ),
+          onChanged: (_) {
+            if (widget.selectedItemId != null) widget.onCleared();
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        final rows = options.toList(growable: false);
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 8,
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 460),
+              child: rows.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Text('No matching item found'),
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: rows.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = rows[index];
+                        final name = _purchaseOrderItemName(item);
+                        final sku = _text(item, ['sku', 'item_code', 'code']);
+                        final category =
+                            _text(item, ['category', 'category_name']);
+                        final price = _num(item['last_purchase_price'] ??
+                            item['average_cost'] ??
+                            item['cost_price'] ??
+                            item['unit_cost'] ??
+                            item['retail_price'] ??
+                            item['unit_price']);
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            name.isEmpty ? 'Unnamed item' : name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            [
+                              if (sku.isNotEmpty) sku,
+                              if (category.isNotEmpty) category,
+                              if (price > 0) _money(price),
+                            ].join('  |  '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () => onSelected(item),
+                        );
+                      },
+                    ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _itemSearchLabel(Map<String, dynamic> item) {
+  final name = _purchaseOrderItemName(item);
+  final sku = _text(item, ['sku', 'item_code', 'code']);
+  if (name.isEmpty) return sku;
+  if (sku.isEmpty) return name;
+  return '$name ($sku)';
+}
+
+String _purchaseOrderItemId(Map<String, dynamic> item) =>
+    _text(item, ['id', 'sku', 'item_code']);
+
+String _purchaseOrderItemName(Map<String, dynamic> item) =>
+    _text(item, ['name', 'description', 'item_name']);
 
 // ── Supplier Invoice create dialog ────────────────────────────────────────────
 class _SupplierInvoiceDialog extends ConsumerStatefulWidget {
@@ -9154,24 +13011,23 @@ class _CompactAction extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     this.filled = false,
-    this.outlined = false,
   });
 
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
   final bool filled;
-  final bool outlined;
 
   @override
   Widget build(BuildContext context) {
-    const padding = EdgeInsets.symmetric(horizontal: 10, vertical: 6);
-    final style = ButtonStyle(
-      padding: WidgetStatePropertyAll(padding),
-      minimumSize: const WidgetStatePropertyAll(Size(0, 34)),
+    const style = ButtonStyle(
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+      minimumSize: WidgetStatePropertyAll(Size(0, 34)),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
-      textStyle: const WidgetStatePropertyAll(
+      textStyle: WidgetStatePropertyAll(
           TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
     );
     final child = Row(mainAxisSize: MainAxisSize.min, children: [
@@ -9181,9 +13037,6 @@ class _CompactAction extends StatelessWidget {
     ]);
     if (filled) {
       return FilledButton(onPressed: onPressed, style: style, child: child);
-    }
-    if (outlined) {
-      return OutlinedButton(onPressed: onPressed, style: style, child: child);
     }
     return TextButton(onPressed: onPressed, style: style, child: child);
   }
@@ -9536,6 +13389,44 @@ num _firstNumFrom(Map<String, dynamic> row, List<String> keys) {
   return 0;
 }
 
+num _firstNonZeroNum(Iterable<dynamic> values) {
+  for (final value in values) {
+    final parsed = _num(value);
+    if (parsed != 0) return parsed;
+  }
+  return 0;
+}
+
+bool _isPendingClearance(Map<String, dynamic> row) {
+  final status = _text(row, ['status', 'clearance_status']).toLowerCase();
+  return status.isEmpty ||
+      status.contains('pending') ||
+      status.contains('open') ||
+      status.contains('review') ||
+      status.contains('submitted');
+}
+
+bool _isOpenDiscrepancy(Map<String, dynamic> row) {
+  final status = _text(row, [
+    'status',
+    'resolution_status',
+    'approval_status',
+    'audit_status',
+  ]).toLowerCase();
+  if (status.isEmpty) return true;
+  const closedStatuses = {
+    'approved',
+    'closed',
+    'cleared',
+    'completed',
+    'rejected',
+    'resolved',
+    'reviewed',
+    'voided',
+  };
+  return !closedStatuses.contains(status);
+}
+
 IconData _icon(BranchAccountantSection section) =>
     _navItems.firstWhere((item) => item.section == section).icon;
 
@@ -9564,6 +13455,8 @@ String _shortLabel(BranchAccountantSection section) {
       return 'Variance';
     case BranchAccountantSection.shiftPnl:
       return 'P&L';
+    case BranchAccountantSection.supplierFinance:
+      return 'Suppliers';
     case BranchAccountantSection.budgets:
       return 'Budgets';
     default:
@@ -9633,6 +13526,104 @@ num _num(dynamic value) {
 
 num _sum(List<Map<String, dynamic>> items, String key) =>
     items.fold<num>(0, (sum, item) => sum + _num(item[key]));
+
+num _staffOutstandingCreditBills(Map<String, dynamic> row) {
+  final explicit = row['outstanding_credit_bills'];
+  if (explicit != null) return _num(explicit);
+  return _num(row['total_credit_bills']);
+}
+
+num _staffOutstandingAdvances(Map<String, dynamic> row) {
+  final explicit = row['outstanding_advances'];
+  if (explicit != null) return _num(explicit);
+  return _num(row['total_advances']);
+}
+
+num _staffOutstandingLoans(Map<String, dynamic> row) {
+  final explicit = row['outstanding_loans'];
+  if (explicit != null) return _num(explicit);
+  return _num(row['total_loans']);
+}
+
+num _staffSalary(Map<String, dynamic> row) {
+  for (final key in const [
+    'salary',
+    'basic_salary',
+    'base_salary',
+    'monthly_salary',
+    'gross_salary',
+    'gross_pay',
+    'payroll_basic_salary',
+    'net_pay',
+    'net_salary',
+  ]) {
+    final value = _num(row[key]);
+    if (value > 0) return value;
+  }
+  final staff = row['staff'];
+  if (staff is Map) {
+    return _staffSalary(Map<String, dynamic>.from(staff));
+  }
+  final original = row['original_record'];
+  if (original is Map) {
+    return _staffSalary(Map<String, dynamic>.from(original));
+  }
+  return 0;
+}
+
+String _staffNationalId(Map<String, dynamic> row) {
+  final direct = _text(row, const [
+    'national_id',
+    'staff_national_id',
+    'id_number',
+    'identity_number',
+    'nationalId',
+  ]);
+  if (direct.isNotEmpty && direct.toLowerCase() != 'pending') return direct;
+  final staff = row['staff'];
+  if (staff is Map) {
+    final nested = _staffNationalId(Map<String, dynamic>.from(staff));
+    if (nested.isNotEmpty) return nested;
+  }
+  final original = row['original_record'];
+  if (original is Map) {
+    final nested = _staffNationalId(Map<String, dynamic>.from(original));
+    if (nested.isNotEmpty) return nested;
+  }
+  return direct;
+}
+
+String _staffEmployeeId(Map<String, dynamic> row) {
+  final direct = _text(row, const [
+    'employee_id',
+    'staff_code',
+    'employee_code',
+    'id_number',
+    'staff_id_number',
+  ]);
+  if (direct.isNotEmpty) return direct;
+  final staff = row['staff'];
+  if (staff is Map) {
+    return _staffEmployeeId(Map<String, dynamic>.from(staff));
+  }
+  final original = row['original_record'];
+  if (original is Map) {
+    return _staffEmployeeId(Map<String, dynamic>.from(original));
+  }
+  return '';
+}
+
+num _staffNetPayable(Map<String, dynamic> row) {
+  final explicit = row['net_payable'];
+  if (explicit != null) return _num(explicit);
+  final deductions = _num(row['outstanding_balance']) > 0
+      ? _num(row['outstanding_balance'])
+      : _staffOutstandingCreditBills(row) +
+          _staffOutstandingAdvances(row) +
+          _staffOutstandingLoans(row) +
+          _num(row['total_unpaid_bills']);
+  return (_staffSalary(row) - deductions).clamp(0, double.infinity);
+}
 
 String _money(num value) => NumberFormat.currency(
       locale: 'en_KE',
@@ -9722,65 +13713,121 @@ Future<File> _exportPdf({
 }) async {
   final doc = pw.Document();
   final generated = DateFormat('MMM d, yyyy HH:mm').format(DateTime.now());
+  final logo = await _loadPdfLogo();
+  const primary = PdfColor.fromInt(0xFF1A1A1A);
+  const secondary = PdfColor.fromInt(0xFF555555);
+  const border = PdfColor.fromInt(0xFFE0E0E0);
+  const rowBg = PdfColor.fromInt(0xFFF9F9F9);
+  const headerBg = PdfColor.fromInt(0xFF333333);
+  const gold = PdfColor.fromInt(0xFFC8A84B);
 
   doc.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.all(24),
+      margin: const pw.EdgeInsets.fromLTRB(32, 28, 32, 30),
       build: (context) => [
         pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('FAMOUS GATES HOTELS',
-                    style: pw.TextStyle(
-                        fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 4),
-                pw.Text('Bomet, Kenya | 0706782828'),
-              ],
+            pw.Container(
+              width: 58,
+              height: 58,
+              alignment: pw.Alignment.center,
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: border),
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: logo == null
+                  ? pw.Text(
+                      'FG',
+                      style: pw.TextStyle(
+                        color: primary,
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    )
+                  : pw.Image(logo, fit: pw.BoxFit.contain),
             ),
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
-              children: [
-                pw.Text(title,
+            pw.SizedBox(width: 14),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'FamousGateHotels',
                     style: pw.TextStyle(
-                        fontSize: 22, fontWeight: pw.FontWeight.bold)),
-                pw.SizedBox(height: 4),
-                pw.Text(subtitle),
-                pw.Text('Generated: $generated'),
-              ],
+                      color: primary,
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Bomet, Kenya',
+                      style: const pw.TextStyle(color: secondary, fontSize: 9)),
+                  pw.Text('Email: famousgateshotelsbmt@gmail.com',
+                      style: const pw.TextStyle(color: secondary, fontSize: 9)),
+                  pw.Text('Tel: 0706 782 828',
+                      style: const pw.TextStyle(color: secondary, fontSize: 9)),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 18),
+            pw.Container(
+              width: 310,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    title,
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(
+                      color: primary,
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                  pw.Text(subtitle,
+                      textAlign: pw.TextAlign.right,
+                      style: const pw.TextStyle(color: secondary, fontSize: 9)),
+                  pw.Text('Generated: $generated',
+                      style: const pw.TextStyle(color: secondary, fontSize: 8)),
+                ],
+              ),
             ),
           ],
         ),
-        pw.SizedBox(height: 16),
-        pw.Divider(),
+        pw.SizedBox(height: 12),
+        pw.Container(height: 1, color: border),
+        pw.Container(height: 3, color: gold),
         if (metrics.isNotEmpty) ...[
-          pw.SizedBox(height: 10),
+          pw.SizedBox(height: 12),
           pw.Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 10,
+            runSpacing: 10,
             children: metrics.entries
                 .map(
                   (entry) => pw.Container(
                     width: 170,
-                    padding: const pw.EdgeInsets.all(8),
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 9, vertical: 8),
                     decoration: pw.BoxDecoration(
-                      color: PdfColors.grey100,
-                      border: pw.Border.all(color: PdfColors.grey300),
+                      color: PdfColors.white,
+                      border: pw.Border.all(color: border),
+                      borderRadius: pw.BorderRadius.circular(4),
                     ),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(entry.key,
                             style: const pw.TextStyle(
-                                fontSize: 9, color: PdfColors.grey700)),
+                                fontSize: 8, color: secondary)),
                         pw.SizedBox(height: 3),
                         pw.Text(entry.value,
                             style: pw.TextStyle(
-                                fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                                color: primary,
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -9791,8 +13838,10 @@ Future<File> _exportPdf({
         for (final section in sections.entries) ...[
           pw.SizedBox(height: 16),
           pw.Text(section.key,
-              style:
-                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              style: pw.TextStyle(
+                  color: primary,
+                  fontSize: 13,
+                  fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 6),
           pw.TableHelper.fromTextArray(
             headers: const ['Item', 'Value'],
@@ -9804,9 +13853,17 @@ Future<File> _exportPdf({
                           : '${entry.value}'
                     ])
                 .toList(),
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            cellStyle: const pw.TextStyle(fontSize: 9),
+            headerStyle: pw.TextStyle(
+                color: PdfColors.white,
+                fontSize: 8,
+                fontWeight: pw.FontWeight.bold),
+            headerDecoration: const pw.BoxDecoration(color: headerBg),
+            oddRowDecoration: const pw.BoxDecoration(color: rowBg),
+            cellStyle: const pw.TextStyle(fontSize: 8.5, color: primary),
+            border: const pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: border, width: .35),
+              bottom: pw.BorderSide(color: border, width: .5),
+            ),
           ),
         ],
         if (tableHeaders.isNotEmpty) ...[
@@ -9814,21 +13871,39 @@ Future<File> _exportPdf({
           pw.TableHelper.fromTextArray(
             headers: tableHeaders,
             data: tableRows,
-            headerStyle:
-                pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            cellStyle: const pw.TextStyle(fontSize: 8),
+            headerStyle: pw.TextStyle(
+                color: PdfColors.white,
+                fontSize: 7.5,
+                fontWeight: pw.FontWeight.bold),
+            headerDecoration: const pw.BoxDecoration(color: headerBg),
+            oddRowDecoration: const pw.BoxDecoration(color: rowBg),
+            cellStyle: const pw.TextStyle(fontSize: 7.5, color: primary),
             cellAlignment: pw.Alignment.centerLeft,
+            border: const pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: border, width: .3),
+              bottom: pw.BorderSide(color: border, width: .5),
+            ),
           ),
         ],
       ],
-      footer: (context) => pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      footer: (context) => pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
         children: [
-          pw.Text('Famous Gates Hotels - Branch Accountant',
-              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-          pw.Text('Page ${context.pageNumber} of ${context.pagesCount}',
-              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+          pw.Container(height: .5, color: border),
+          pw.SizedBox(height: 6),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'Generated: $generated | FamousGateHotels - Confidential',
+                style: const pw.TextStyle(fontSize: 7.5, color: secondary),
+              ),
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: const pw.TextStyle(fontSize: 7.5, color: secondary),
+              ),
+            ],
+          ),
         ],
       ),
     ),
@@ -9840,6 +13915,15 @@ Future<File> _exportPdf({
   final file = File('${directory.path}/$safeName');
   await file.writeAsBytes(await doc.save(), flush: true);
   return file;
+}
+
+Future<pw.MemoryImage?> _loadPdfLogo() async {
+  try {
+    final data = await rootBundle.load('assets/frontend_public/fglogo.png');
+    return pw.MemoryImage(data.buffer.asUint8List());
+  } catch (_) {
+    return null;
+  }
 }
 
 void _notify(BuildContext context, String message) {

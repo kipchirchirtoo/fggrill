@@ -89,7 +89,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         error: (_, __) => '/terminal',
         data: (user) {
           if (user == null) return '/terminal';
-          if (user.role == 'super_admin' || user.roles.contains('super_admin')) {
+          if (user.role == 'super_admin' ||
+              user.roles.contains('super_admin')) {
             return null;
           }
           final allowedRoles = _rolesForLocation(location);
@@ -232,8 +233,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           }),
       GoRoute(
           path: '/cashier/barcode-scan',
+          // Barcode scanning now lives inside the Station tab.
           builder: (context, state) =>
-              const CashierDashboard(initialTab: CashierTab.barcode)),
+              const CashierDashboard(initialTab: CashierTab.station)),
       GoRoute(
           path: '/branch-manager',
           builder: (context, state) => AppPlatform.isMobile
@@ -1319,6 +1321,8 @@ const _branchAccountantSectionRouteSpecs =
   MapEntry('/branch-accountant/analytics', BranchAccountantSection.analytics),
   MapEntry('/branch-accountant/financial-workspace',
       BranchAccountantSection.financialWorkspace),
+  MapEntry('/branch-accountant/supplier-finance',
+      BranchAccountantSection.supplierFinance),
   MapEntry('/branch-accountant/discrepancies',
       BranchAccountantSection.discrepancies),
   MapEntry('/branch-accountant/reports/profit-loss',
