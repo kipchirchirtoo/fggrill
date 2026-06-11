@@ -186,7 +186,11 @@ router.route('/payments')
 router.route('/payments/:id')
     .get(authorize(allProcurementStaff), getPayment);
 
-router.put('/payments/:id/process', authorize(auditorRoles), processPayment);
+router.put(
+    '/payments/:id/process',
+    authorize([...auditorRoles, UserRole.BRANCH_ACCOUNTANT]),
+    processPayment
+);
 
 // =====================================================
 // REPORTS & COMPLIANCE

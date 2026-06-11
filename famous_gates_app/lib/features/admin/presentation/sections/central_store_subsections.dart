@@ -34,6 +34,20 @@ double _num(Map<String, dynamic> row, List<String> keys) {
   return 0;
 }
 
+List<Map<String, dynamic>> _list(dynamic value) {
+  final raw = value is Map
+      ? value['data'] ?? value['items'] ?? value['rows'] ?? value['results']
+      : value;
+  if (raw is List) {
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+  if (raw is Map) return [Map<String, dynamic>.from(raw)];
+  return <Map<String, dynamic>>[];
+}
+
 String _date(dynamic value) {
   final parsed = DateTime.tryParse('$value');
   if (parsed == null) return '—';
@@ -623,7 +637,8 @@ Future<void> _showMapDetails(
 }) async {
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
-      builder: (_) => _RecordDetailPage(title: title, row: row, actions: actions),
+      builder: (_) =>
+          _RecordDetailPage(title: title, row: row, actions: actions),
     ),
   );
 }
@@ -684,7 +699,8 @@ class _RecordDetailPage extends StatelessWidget {
       backgroundColor: AppColors.kSurface,
       appBar: AppBar(
         title: Text(title, overflow: TextOverflow.ellipsis),
-        actions: actions.isEmpty ? null : [...actions, const SizedBox(width: 8)],
+        actions:
+            actions.isEmpty ? null : [...actions, const SizedBox(width: 8)],
       ),
       body: SafeArea(
         child: Center(
@@ -797,9 +813,8 @@ class _RecordDetailPage extends StatelessWidget {
         key.contains('cost') ||
         key.contains('price') ||
         key.contains('total');
-    final s = v == v.roundToDouble()
-        ? v.toStringAsFixed(0)
-        : v.toStringAsFixed(2);
+    final s =
+        v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
     return isMoney ? 'KES $s' : s;
   }
 
@@ -816,8 +831,7 @@ class _RecordDetailPage extends StatelessWidget {
             const SizedBox(height: 3),
             SelectableText(
               _detailValue(row, key, value),
-              style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -855,7 +869,8 @@ class _MetricTile extends StatelessWidget {
           Text(value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
           Text(label.toUpperCase(),
               style: const TextStyle(
@@ -875,7 +890,9 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = status.toLowerCase();
     Color c = Colors.blueGrey;
-    if (s.contains('pending') || s.contains('draft')) c = const Color(0xFFB45309);
+    if (s.contains('pending') || s.contains('draft')) {
+      c = const Color(0xFFB45309);
+    }
     if (s.contains('approv') ||
         s.contains('complete') ||
         s.contains('receiv') ||
@@ -893,8 +910,8 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(status.toUpperCase(),
-          style: TextStyle(
-              color: c, fontSize: 11, fontWeight: FontWeight.w800)),
+          style:
+              TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w800)),
     );
   }
 }
@@ -4405,18 +4422,35 @@ class DriversSection extends ConsumerWidget {
   }
 }
 
-class CentralStockTakesSection extends ConsumerWidget {
+class CentralStockTakesSection extends ConsumerStatefulWidget {
   const CentralStockTakesSection({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => _LiveSection(
+  ConsumerState<CentralStockTakesSection> createState() =>
+      _CentralStockTakesSectionState();
+}
+
+class _CentralStockTakesSectionState
+    extends ConsumerState<CentralStockTakesSection> {
+  String? _selectedId;
+  Map<String, dynamic>? _detail;
+  bool _loadingDetail = false;
+
+  bool get _canEdit {
+    final status = _text(_detail ?? {}, ['status'], '').toLowerCase();
+    return status == 'in_progress' || status == 'draft';
+  }
+
+  @override
+  Widget build(BuildContext context) => _LiveSection(
         title: 'Central Store Stock Takes',
         subtitle:
-            'Foodstuffs and bar-store stock counts, variances and exports',
+            'Download worksheets, record physical counts, and submit variances to auditor review',
         icon: PhosphorIcons.clipboardText(),
         child: _LiveRows(
           value: ref.watch(centralStockTakesProvider),
           data: (rows) {
+            if (_selectedId != null) return _detailView(ref);
             final open = rows
                 .where((row) =>
                     _text(row, ['status']).toLowerCase().contains('progress'))
@@ -4456,53 +4490,283 @@ class CentralStockTakesSection extends ConsumerWidget {
                 trailing: ElevatedButton.icon(
                   onPressed: () => _startStockTake(context, ref),
                   icon: const Icon(Icons.add, size: 14),
-                  label: const Text('New Stock Take'),
+                  label: const Text('Start Stock Take'),
                 ),
                 builder: (row) {
-                  final status = _text(row, ['status'], 'in_progress');
-                  return _rowTile(
-                    icon: PhosphorIcons.clipboardText(),
-                    title: _text(
-                        row, ['session_number', 'stock_take_number', 'id']),
-                    subtitle:
-                        '${_text(row, ['store_type'], 'all')} • Counted ${_text(row, [
-                              'counted_items',
-                              'items_counted'
-                            ], '0')} • ${_date(row['created_at'])}',
-                    trailing: Wrap(spacing: 6, children: [
-                      _statusChip(status),
-                      OutlinedButton(
-                          onPressed: () => _showMapDetails(
-                              context,
-                              'Stock Take ${_text(row, [
-                                    'session_number',
-                                    'id'
-                                  ])}',
-                              row),
-                          child: const Text('View')),
-                      if (status.toLowerCase().contains('progress'))
-                        ElevatedButton(
-                            onPressed: () =>
-                                _submitStockTake(context, ref, row),
-                            child: const Text('Submit')),
-                      if (status.toLowerCase().contains('submitted')) ...[
-                        TextButton(
-                            onPressed: () =>
-                                _rejectStockTake(context, ref, row),
-                            child: const Text('Reject')),
-                        ElevatedButton(
-                            onPressed: () =>
-                                _approveStockTake(context, ref, row),
-                            child: const Text('Approve')),
-                      ],
-                    ]),
-                  );
+                  return _stockTakeSessionTile(context, ref, row);
                 },
               ),
             ]);
           },
         ),
       );
+
+  Widget _stockTakeSessionTile(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> row) {
+    final status = _text(row, ['status'], 'in_progress');
+    final normalizedStatus = status.toLowerCase();
+    final canSubmit =
+        normalizedStatus.contains('progress') || normalizedStatus == 'draft';
+    final isSubmitted = normalizedStatus.contains('submitted');
+    final compactOutlinedStyle = OutlinedButton.styleFrom(
+      minimumSize: const Size(0, 34),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
+    final compactFilledStyle = FilledButton.styleFrom(
+      minimumSize: const Size(0, 34),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.kDivider.withValues(alpha: 0.35),
+          ),
+        ),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        CircleAvatar(
+          backgroundColor: AppColors.kPrimary.withValues(alpha: 0.08),
+          child: Icon(
+            PhosphorIcons.clipboardText(),
+            color: AppColors.kPrimary,
+            size: 18,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              _text(row, ['session_number', 'stock_take_number', 'id']),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '${_text(row, ['store_type'], 'all')} • Counted ${_text(row, [
+                    'counted_items',
+                    'total_items_counted',
+                    'items_counted'
+                  ], '0')} • ${_date(row['created_at'])}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.kTextSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(width: 16),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              _statusChip(status),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                style: compactOutlinedStyle,
+                onPressed: () => _openStockTake(ref, _id(row)),
+                child: const Text('Open'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                style: compactOutlinedStyle,
+                onPressed: () => _downloadWorksheet(context, ref, row),
+                icon: const Icon(Icons.download, size: 14),
+                label: const Text('Worksheet'),
+              ),
+              if (canSubmit) ...[
+                const SizedBox(width: 8),
+                FilledButton(
+                  style: compactFilledStyle,
+                  onPressed: () => _submitStockTake(context, ref, row),
+                  child: const Text('Submit'),
+                ),
+              ],
+              if (isSubmitted) ...[
+                const SizedBox(width: 8),
+                const Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text(
+                    'AWAITING AUDITOR',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                ),
+              ],
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _detailView(WidgetRef ref) {
+    final detail = _detail;
+    if (_loadingDetail || detail == null) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final items = _list(detail['items']);
+    final counted = items
+        .where((item) =>
+            item['counted_quantity'] != null || item['actual_quantity'] != null)
+        .length;
+    final variances = items.where((item) => _stockVariance(item) != 0).length;
+    final varianceValue = items.fold<double>(
+        0, (sum, item) => sum + _num(item, ['variance_value']));
+    final status = _text(detail, ['status'], 'in_progress');
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        OutlinedButton.icon(
+          onPressed: () => setState(() {
+            _selectedId = null;
+            _detail = null;
+          }),
+          icon: const Icon(Icons.arrow_back, size: 16),
+          label: const Text('Back to sessions'),
+        ),
+        const Spacer(),
+        _statusChip(status),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: () => _downloadWorksheet(context, ref, detail),
+          icon: const Icon(Icons.download, size: 16),
+          label: const Text('Download Worksheet'),
+        ),
+        const SizedBox(width: 8),
+        if (_canEdit)
+          ElevatedButton.icon(
+            onPressed: () => _submitStockTake(context, ref, detail),
+            icon: const Icon(Icons.send, size: 16),
+            label: const Text('Submit to Auditor'),
+          ),
+      ]),
+      const SizedBox(height: 16),
+      Row(children: [
+        Expanded(
+            child: _StatCard(
+                label: 'Worksheet Items',
+                value: '${items.length}',
+                icon: PhosphorIcons.package(),
+                color: AppColors.kPrimary)),
+        const SizedBox(width: 12),
+        Expanded(
+            child: _StatCard(
+                label: 'Counted',
+                value: '$counted',
+                icon: PhosphorIcons.checkCircle(),
+                color: Colors.green)),
+        const SizedBox(width: 12),
+        Expanded(
+            child: _StatCard(
+                label: 'Variances',
+                value: '$variances',
+                icon: PhosphorIcons.warning(),
+                color: Colors.orange)),
+        const SizedBox(width: 12),
+        Expanded(
+            child: _StatCard(
+                label: 'Variance Value',
+                value: _money(varianceValue),
+                icon: PhosphorIcons.coins(),
+                color: varianceValue == 0 ? Colors.green : Colors.red)),
+      ]),
+      const SizedBox(height: 16),
+      _RowsCard(
+        title: 'Count Worksheet - ${_text(detail, ['session_number', 'id'])}',
+        rows: items,
+        emptyMessage: 'No worksheet items found',
+        builder: (item) {
+          final system = _num(item, ['system_quantity']);
+          final actual = _stockActual(item);
+          final variance = _stockVariance(item);
+          return _rowTile(
+            icon: PhosphorIcons.package(),
+            title: _text(item, ['item_name', 'item_sku', 'sku']),
+            subtitle: '${_text(item, [
+                  'item_sku',
+                  'sku'
+                ])} • System ${_plainNum(system)} • Actual ${actual == null ? '—' : _plainNum(actual)} • Variance ${actual == null ? '—' : _plainNum(variance)}',
+            trailing: Wrap(spacing: 6, children: [
+              if (variance != 0)
+                _statusChip('VARIANCE')
+              else if (actual != null)
+                _statusChip('COUNTED')
+              else
+                _statusChip('PENDING'),
+              if (_canEdit)
+                OutlinedButton(
+                    onPressed: () => _editCount(ref, item),
+                    child: const Text('Count'))
+              else
+                OutlinedButton(
+                    onPressed: () => _showMapDetails(context,
+                        'Stock Item ${_text(item, ['item_sku', 'id'])}', item),
+                    child: const Text('View')),
+            ]),
+          );
+        },
+      ),
+      if (_text(detail, ['notes'], '').isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _RowsCard(
+          title: 'Auditor / Review Notes',
+          rows: [detail],
+          emptyMessage: '',
+          builder: (row) => Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(_text(row, ['notes'], '')),
+          ),
+        ),
+      ],
+    ]);
+  }
+
+  double? _stockActual(Map<String, dynamic> item) {
+    final value = item['counted_quantity'] ?? item['actual_quantity'];
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value');
+  }
+
+  double _stockVariance(Map<String, dynamic> item) {
+    final actual = _stockActual(item);
+    if (actual == null) return 0;
+    return actual - _num(item, ['system_quantity']);
+  }
+
+  Future<void> _openStockTake(WidgetRef ref, String id) async {
+    if (id.isEmpty) return;
+    setState(() {
+      _selectedId = id;
+      _loadingDetail = true;
+    });
+    try {
+      final detail =
+          await ref.read(adminRepositoryProvider).getCentralStockTake(id);
+      if (!mounted) return;
+      setState(() {
+        _detail = detail;
+        _loadingDetail = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingDetail = false);
+      _snack(context, 'Failed to load stock take: $error');
+    }
+  }
 
   Future<void> _startStockTake(BuildContext context, WidgetRef ref) async {
     String storeType = 'foodstuffs';
@@ -4534,14 +4798,96 @@ class CentralStockTakesSection extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref
+      final session = await ref
           .read(adminRepositoryProvider)
           .createCentralStockTake({'store_type': storeType});
       if (!context.mounted) return;
       _refreshCentralStore(ref);
-      _snack(context, 'Stock take started');
+      await _openStockTake(ref, _id(session));
+      if (!context.mounted) return;
+      _snack(context, 'Stock take worksheet started');
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
+    }
+  }
+
+  Future<void> _downloadWorksheet(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> row,
+  ) async {
+    try {
+      final file = await ref
+          .read(adminRepositoryProvider)
+          .downloadCentralStockTakeWorksheet(_id(row));
+      if (context.mounted) _snack(context, 'Worksheet saved to ${file.path}');
+    } catch (error) {
+      if (context.mounted) _snack(context, 'Download failed: $error');
+    }
+  }
+
+  Future<void> _editCount(WidgetRef ref, Map<String, dynamic> item) async {
+    final actualCtrl = TextEditingController(
+        text: _stockActual(item)?.toString() ??
+            _num(item, ['system_quantity']).toString());
+    final reasonCtrl = TextEditingController(
+        text: _text(item, ['variance_reason', 'reason', 'notes'], ''));
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Count ${_text(item, ['item_name', 'item_sku'])}'),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _field(actualCtrl, 'Actual counted',
+                required: true, keyboardType: TextInputType.number),
+            const SizedBox(height: 12),
+            _field(reasonCtrl, 'Variance reason / notes', maxLines: 3),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save Count')),
+        ],
+      ),
+    );
+    if (saved != true) {
+      actualCtrl.dispose();
+      reasonCtrl.dispose();
+      return;
+    }
+    final actual = double.tryParse(actualCtrl.text.trim()) ?? 0;
+    final variance = actual - _num(item, ['system_quantity']);
+    final reason = reasonCtrl.text.trim();
+    actualCtrl.dispose();
+    reasonCtrl.dispose();
+    if (!mounted) return;
+    if (variance != 0 && reason.isEmpty) {
+      _snack(context, 'Variance reason is required');
+      return;
+    }
+    try {
+      await ref.read(adminRepositoryProvider).updateCentralStockTake(
+        _selectedId!,
+        {
+          'items': [
+            {
+              'id': _id(item),
+              'counted_quantity': actual,
+              if (reason.isNotEmpty) 'variance_reason': reason,
+              if (reason.isNotEmpty) 'notes': reason,
+            }
+          ]
+        },
+      );
+      await _openStockTake(ref, _selectedId!);
+      if (mounted) _snack(context, 'Count saved');
+    } catch (error) {
+      if (mounted) _snack(context, 'Save failed: $error');
     }
   }
 
@@ -4556,54 +4902,9 @@ class CentralStockTakesSection extends ConsumerWidget {
       await ref.read(adminRepositoryProvider).submitCentralStockTake(_id(row));
       if (!context.mounted) return;
       _refreshCentralStore(ref);
-      _snack(context, 'Stock take submitted');
-    } catch (error) {
-      if (context.mounted) _snack(context, 'Failed: $error');
-    }
-  }
-
-  Future<void> _approveStockTake(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    if (!await _confirm(context,
-        title: 'Approve Stock Take', message: 'Approve this count?')) {
-      return;
-    }
-    try {
-      await ref.read(adminRepositoryProvider).approveCentralStockTake(_id(row));
+      if (_selectedId != null) await _openStockTake(ref, _selectedId!);
       if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Stock take approved');
-    } catch (error) {
-      if (context.mounted) _snack(context, 'Failed: $error');
-    }
-  }
-
-  Future<void> _rejectStockTake(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    final reasonCtrl = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Stock Take'),
-        content: _field(reasonCtrl, 'Reason', maxLines: 3),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-              child: const Text('Reject')),
-        ],
-      ),
-    );
-    reasonCtrl.dispose();
-    if (reason == null) return;
-    try {
-      await ref
-          .read(adminRepositoryProvider)
-          .rejectCentralStockTake(_id(row), reason);
-      if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Stock take rejected');
+      _snack(context, 'Stock take submitted to auditor');
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
@@ -4698,72 +4999,237 @@ class CentralSpoilageSection extends ConsumerWidget {
     final items =
         await ref.read(adminRepositoryProvider).getCentralSpoilageItems();
     if (!context.mounted) return;
-    String? itemId = items.isNotEmpty ? _id(items.first) : null;
+    Map<String, dynamic>? selectedItem = items.isNotEmpty ? items.first : null;
+    var filteredItems = List<Map<String, dynamic>>.from(items);
+    final searchCtrl = TextEditingController();
     final qtyCtrl = TextEditingController(text: '1');
+    final detailsCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
     String reason = 'DAMAGED';
     final body = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Record Central Store Spoilage'),
-          content: SizedBox(
-            width: 520,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DropdownButtonFormField<String>(
-                initialValue: itemId,
-                decoration: const InputDecoration(labelText: 'Item'),
-                items: items
-                    .map((item) => DropdownMenuItem(
-                          value: _id(item),
-                          child: Text(_text(item, ['item_name', 'name'])),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => itemId = value),
+        builder: (ctx, setState) {
+          void filterItems(String query) {
+            final q = query.trim().toLowerCase();
+            setState(() {
+              filteredItems = q.isEmpty
+                  ? List<Map<String, dynamic>>.from(items)
+                  : items.where((item) {
+                      final haystack = [
+                        _text(item, ['name', 'item_name'], ''),
+                        _text(item, ['sku', 'id'], ''),
+                        _text(item, ['category'], ''),
+                        _text(item, ['store_type'], ''),
+                      ].join(' ').toLowerCase();
+                      return haystack.contains(q);
+                    }).toList();
+            });
+          }
+
+          final stock = selectedItem == null
+              ? 0
+              : _num(selectedItem!, ['stock', 'quantity']);
+          final unit = selectedItem == null
+              ? 'pcs'
+              : _text(selectedItem!, ['unit'], 'pcs');
+          final cost = selectedItem == null ? 0 : _num(selectedItem!, ['cost']);
+          return AlertDialog(
+            titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
+            contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
+            title: Row(children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(PhosphorIcons.trash(), color: Colors.red),
               ),
-              const SizedBox(height: 12),
-              _field(qtyCtrl, 'Quantity',
-                  required: true, keyboardType: TextInputType.number),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: reason,
-                decoration: const InputDecoration(labelText: 'Reason'),
-                items: const [
-                  DropdownMenuItem(value: 'EXPIRED', child: Text('Expired')),
-                  DropdownMenuItem(value: 'DAMAGED', child: Text('Damaged')),
-                  DropdownMenuItem(value: 'SPOILED', child: Text('Spoiled')),
-                  DropdownMenuItem(value: 'BREAKAGE', child: Text('Breakage')),
-                  DropdownMenuItem(value: 'OTHER', child: Text('Other')),
-                ],
-                onChanged: (value) => setState(() => reason = value ?? reason),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('Record Central Store Spoilage',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               ),
-              const SizedBox(height: 12),
-              _field(notesCtrl, 'Notes', maxLines: 3),
             ]),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: () {
-                  if (itemId == null) return;
-                  Navigator.pop(ctx, {
-                    'item_id': itemId,
-                    'quantity': double.tryParse(qtyCtrl.text.trim()) ?? 0,
-                    'reason': reason,
-                    'notes': notesCtrl.text.trim(),
-                    'spoilage_date':
-                        DateTime.now().toIso8601String().split('T').first,
-                    'disposal_method': 'DISPOSED',
-                  });
-                },
-                child: const Text('Record Spoilage')),
-          ],
-        ),
+            content: SizedBox(
+              width: 640,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                    controller: searchCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Search item by name, SKU, category',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: filterItems,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 190),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.kDivider),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: filteredItems.isEmpty
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(18),
+                              child: Text('No matching stock items found',
+                                  style: TextStyle(
+                                      color: AppColors.kTextSecondary)),
+                            ),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: filteredItems.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (ctx, index) {
+                              final item = filteredItems[index];
+                              final selected =
+                                  _id(selectedItem ?? {}) == _id(item);
+                              return ListTile(
+                                dense: true,
+                                selected: selected,
+                                selectedTileColor:
+                                    AppColors.kPrimary.withValues(alpha: .08),
+                                title: Text(
+                                  _text(item, ['name', 'item_name']),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                subtitle: Text(
+                                  '${_text(item, [
+                                        'sku',
+                                        'id'
+                                      ])} • ${_text(item, [
+                                        'store_type'
+                                      ], 'store')} • Stock ${_plainNum(_num(item, [
+                                        'stock',
+                                        'quantity'
+                                      ]))} ${_text(item, ['unit'], 'pcs')}',
+                                ),
+                                trailing: selected
+                                    ? const Icon(Icons.check_circle,
+                                        color: AppColors.kPrimary)
+                                    : null,
+                                onTap: () => setState(() {
+                                  selectedItem = item;
+                                }),
+                              );
+                            },
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (selectedItem != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.kSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.kDivider),
+                      ),
+                      child: Row(children: [
+                        Expanded(
+                            child: _MiniFact(
+                                label: 'Available',
+                                value: '${_plainNum(stock)} $unit')),
+                        Expanded(
+                            child: _MiniFact(
+                                label: 'Unit Cost', value: _money(cost))),
+                        Expanded(
+                            child: _MiniFact(
+                                label: 'Loss Value',
+                                value: _money(
+                                    (double.tryParse(qtyCtrl.text.trim()) ??
+                                            0) *
+                                        cost))),
+                      ]),
+                    ),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(
+                      child: _field(qtyCtrl, 'Quantity *',
+                          required: true, keyboardType: TextInputType.number),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: reason,
+                        isExpanded: true,
+                        decoration:
+                            const InputDecoration(labelText: 'Reason *'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'EXPIRED', child: Text('Expired')),
+                          DropdownMenuItem(
+                              value: 'DAMAGED', child: Text('Damaged')),
+                          DropdownMenuItem(
+                              value: 'SPOILED', child: Text('Spoiled')),
+                          DropdownMenuItem(
+                              value: 'QUALITY_ISSUE',
+                              child: Text('Quality issue')),
+                          DropdownMenuItem(
+                              value: 'BREAKAGE', child: Text('Breakage')),
+                          DropdownMenuItem(
+                              value: 'CONTAMINATION',
+                              child: Text('Contamination')),
+                          DropdownMenuItem(
+                              value: 'THEFT', child: Text('Theft')),
+                          DropdownMenuItem(
+                              value: 'OTHER', child: Text('Other')),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => reason = value ?? reason),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  _field(detailsCtrl, 'Reason details', maxLines: 2),
+                  const SizedBox(height: 12),
+                  _field(notesCtrl, 'Notes for auditor', maxLines: 3),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                  onPressed: () {
+                    final selected = selectedItem;
+                    final quantity = double.tryParse(qtyCtrl.text.trim()) ?? 0;
+                    if (selected == null) return;
+                    if (quantity <= 0) return;
+                    if (quantity > stock) return;
+                    Navigator.pop(ctx, {
+                      'item_sku': _text(selected, ['sku', 'id'], ''),
+                      'quantity': quantity,
+                      'unit': unit,
+                      'reason': reason,
+                      if (detailsCtrl.text.trim().isNotEmpty)
+                        'reason_details': detailsCtrl.text.trim(),
+                      if (notesCtrl.text.trim().isNotEmpty)
+                        'notes': notesCtrl.text.trim(),
+                      'spoilage_date': _isoDate(DateTime.now()),
+                      'disposal_method': 'DISPOSED',
+                    });
+                  },
+                  child: const Text('Record Spoilage')),
+            ],
+          );
+        },
       ),
     );
+    searchCtrl.dispose();
     qtyCtrl.dispose();
+    detailsCtrl.dispose();
     notesCtrl.dispose();
     if (body == null) return;
     try {
@@ -4774,6 +5240,29 @@ class CentralSpoilageSection extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
+  }
+}
+
+class _MiniFact extends StatelessWidget {
+  const _MiniFact({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label,
+          style: const TextStyle(
+              color: AppColors.kTextSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600)),
+      const SizedBox(height: 3),
+      Text(value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w800)),
+    ]);
   }
 }
 

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../data/admin_repository.dart';
 
 // ─── Shared ────────────────────────────────────────────────────────────────
 
@@ -83,6 +85,78 @@ Widget _t(String title) => Card(
                     style: TextStyle(color: AppColors.kTextSecondary)))),
       ]),
     );
+
+String _bsText(Map<String, dynamic> row, List<String> keys,
+    [String fallback = '—']) {
+  for (final key in keys) {
+    final value = row[key];
+    if (value != null && '$value'.trim().isNotEmpty && '$value' != 'null') {
+      return '$value';
+    }
+  }
+  return fallback;
+}
+
+double _bsNum(Map<String, dynamic> row, List<String> keys) {
+  for (final key in keys) {
+    final value = row[key];
+    if (value is num) return value.toDouble();
+    final parsed = double.tryParse('$value');
+    if (parsed != null) return parsed;
+  }
+  return 0;
+}
+
+List<Map<String, dynamic>> _bsList(dynamic value) {
+  final raw = value is Map
+      ? value['data'] ?? value['items'] ?? value['rows'] ?? value['results']
+      : value;
+  if (raw is List) {
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+  if (raw is Map) return [Map<String, dynamic>.from(raw)];
+  return <Map<String, dynamic>>[];
+}
+
+String _bsId(Map<String, dynamic> row) => _bsText(row, ['id', 'sku'], '');
+
+String _bsDate(dynamic value) {
+  final parsed = DateTime.tryParse('$value');
+  if (parsed == null) return '—';
+  return '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+}
+
+String _bsPlain(num value) =>
+    value.round() == value ? value.toInt().toString() : value.toString();
+
+String _bsMoney(num value) => 'KES ${value.toStringAsFixed(0)}';
+
+Widget _bsStatus(String status) {
+  final normalized = status.toLowerCase();
+  final color =
+      normalized.contains('approved') || normalized.contains('counted')
+          ? Colors.green
+          : normalized.contains('submitted')
+              ? Colors.orange
+              : normalized.contains('reject') || normalized.contains('variance')
+                  ? Colors.red
+                  : AppColors.kPrimary;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .10),
+      border: Border.all(color: color.withValues(alpha: .28)),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      status.toUpperCase(),
+      style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 10),
+    ),
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // BRANCH STORE OPS
@@ -284,83 +358,609 @@ class BranchSuppliersSection extends StatelessWidget {
       ]);
 }
 
-class BranchStockTakesSection extends StatelessWidget {
+class BranchStockTakesSection extends ConsumerStatefulWidget {
   const BranchStockTakesSection({super.key});
+
+  @override
+  ConsumerState<BranchStockTakesSection> createState() =>
+      _BranchStockTakesSectionState();
+}
+
+class _BranchStockTakesSectionState
+    extends ConsumerState<BranchStockTakesSection> {
+  late Future<List<Map<String, dynamic>>> _future = _load();
+  String? _selectedId;
+  Map<String, dynamic>? _detail;
+  bool _loadingDetail = false;
+
+  Future<List<Map<String, dynamic>>> _load() {
+    return ref.read(adminRepositoryProvider).getBranchStockTakes();
+  }
+
+  void _refresh() {
+    setState(() => _future = _load());
+  }
+
+  bool get _canEdit {
+    final status = _bsText(_detail ?? {}, ['status'], '').toLowerCase();
+    return status == 'draft' || status == 'in_progress';
+  }
+
   @override
   Widget build(BuildContext context) => Column(children: [
         _header('Stock Takes', PhosphorIcons.clipboardText(),
-            subtitle: 'Branch inventory stock counts and reconciliation'),
+            subtitle:
+                'Download worksheets, record actual counts, explain variances, and submit for audit'),
         Expanded(
-            child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(children: [
-                  Row(children: [
-                    Expanded(
-                        child: _S(
-                            label: 'Last Stock Take',
-                            value: '—',
-                            icon: PhosphorIcons.calendar(),
-                            color: AppColors.kPrimary)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _S(
-                            label: 'Variances',
-                            value: '—',
-                            icon: PhosphorIcons.warning(),
-                            color: Colors.orange)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _S(
-                            label: 'Items Counted',
-                            value: '—',
-                            icon: PhosphorIcons.package(),
-                            color: Colors.green)),
-                  ]),
-                  const SizedBox(height: 20),
-                  Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Stock Take History',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 14)),
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Start Stock Take'),
-                                content: const Text(
-                                    'This will begin a new stock count. All items will need to be verified.'),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(ctx, false),
-                                      child: const Text('Cancel')),
-                                  ElevatedButton(
-                                      onPressed: () => Navigator.pop(ctx, true),
-                                      child: const Text('Start')),
-                                ],
-                              ),
-                            );
-                            if (confirm == true && context.mounted) {
-                              AppNotifier.showSnackBar(
-                                  context,
-                                  const SnackBar(
-                                      content: Text('Stock take started')));
-                            }
-                          },
-                          icon: Icon(PhosphorIcons.plus(), size: 14),
-                          label: const Text('New Stock Take'),
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.kPrimary,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(0, 36)),
-                        ),
-                      ]),
-                  const SizedBox(height: 12),
-                  _t('Stock Take Records'),
-                ]))),
+            child: _selectedId == null
+                ? FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _future,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                              'Failed to load stock takes: ${snapshot.error}'),
+                        );
+                      }
+                      final rows = snapshot.data ?? const [];
+                      return _historyView(rows);
+                    },
+                  )
+                : _detailView()),
       ]);
+
+  Widget _historyView(List<Map<String, dynamic>> rows) {
+    final open = rows
+        .where((row) => ['draft', 'in_progress']
+            .contains(_bsText(row, ['status']).toLowerCase()))
+        .length;
+    final submitted = rows
+        .where((row) =>
+            _bsText(row, ['status']).toLowerCase().contains('submitted'))
+        .length;
+    final lastDate = rows.isEmpty
+        ? '—'
+        : _bsDate(rows.first['count_date'] ?? rows.first['created_at']);
+    return RefreshIndicator(
+      onRefresh: () async => _refresh(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(children: [
+          Row(children: [
+            Expanded(
+                child: _S(
+                    label: 'Last Stock Take',
+                    value: lastDate,
+                    icon: PhosphorIcons.calendar(),
+                    color: AppColors.kPrimary)),
+            const SizedBox(width: 12),
+            Expanded(
+                child: _S(
+                    label: 'Open Worksheets',
+                    value: '$open',
+                    icon: PhosphorIcons.clipboardText(),
+                    color: Colors.orange)),
+            const SizedBox(width: 12),
+            Expanded(
+                child: _S(
+                    label: 'Submitted for Audit',
+                    value: '$submitted',
+                    icon: PhosphorIcons.paperPlaneTilt(),
+                    color: Colors.green)),
+          ]),
+          const SizedBox(height: 20),
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: AppColors.kDivider.withValues(alpha: .7)),
+            ),
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Row(children: [
+                  const Expanded(
+                    child: Text('Stock Take History',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 15)),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Refresh'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _startStockTake,
+                    icon: Icon(PhosphorIcons.plus(), size: 14),
+                    label: const Text('Stock Take'),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.kPrimary,
+                        foregroundColor: Colors.white),
+                  ),
+                ]),
+              ),
+              const Divider(height: 1),
+              if (rows.isEmpty)
+                const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('No stock take sessions found',
+                        style: TextStyle(color: AppColors.kTextSecondary)))
+              else
+                ...rows.map((row) => _stockTakeTile(row)),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _stockTakeTile(Map<String, dynamic> row) {
+    final status = _bsText(row, ['status'], 'draft');
+    return Column(children: [
+      ListTile(
+        leading: CircleAvatar(
+          backgroundColor: AppColors.kPrimary.withValues(alpha: .10),
+          child: Icon(PhosphorIcons.clipboardText(), color: AppColors.kPrimary),
+        ),
+        title: Text(_bsText(row, ['count_number', 'take_number', 'id']),
+            style: const TextStyle(fontWeight: FontWeight.w800)),
+        subtitle: Text(
+          '${_bsText(row, ['store_type'], 'foodstuffs')} • ${_bsText(row, [
+                'count_type',
+                'take_type'
+              ], 'daily')} • ${_bsDate(row['count_date'] ?? row['created_at'])}',
+        ),
+        trailing: Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _bsStatus(status),
+              OutlinedButton(
+                onPressed: () => _openStockTake(_bsId(row)),
+                child: const Text('Open'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _downloadWorksheet(row),
+                icon: const Icon(Icons.download, size: 14),
+                label: const Text('Worksheet'),
+              ),
+            ]),
+      ),
+      const Divider(height: 1),
+    ]);
+  }
+
+  Widget _detailView() {
+    if (_loadingDetail || _detail == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final detail = _detail!;
+    final items = _bsList(detail['items']);
+    final counted = items
+        .where((item) =>
+            item['counted_quantity'] != null ||
+            item['physical_quantity'] != null ||
+            item['actual_quantity'] != null)
+        .length;
+    final variances = items.where((item) => _variance(item) != 0).length;
+    final varianceValue = items.fold<double>(
+        0, (sum, item) => sum + _bsNum(item, ['variance_value']));
+    final status = _bsText(detail, ['status'], 'draft');
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          OutlinedButton.icon(
+            onPressed: () => setState(() {
+              _selectedId = null;
+              _detail = null;
+            }),
+            icon: const Icon(Icons.arrow_back, size: 16),
+            label: const Text('Back to list'),
+          ),
+          const Spacer(),
+          _bsStatus(status),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: () => _downloadWorksheet(detail),
+            icon: const Icon(Icons.download, size: 16),
+            label: const Text('Download Worksheet'),
+          ),
+          const SizedBox(width: 8),
+          if (_canEdit)
+            ElevatedButton.icon(
+              onPressed: () => _submitStockTake(detail),
+              icon: const Icon(Icons.send, size: 16),
+              label: const Text('Submit to Auditor'),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.kPrimary,
+                  foregroundColor: Colors.white),
+            ),
+        ]),
+        const SizedBox(height: 18),
+        Row(children: [
+          Expanded(
+              child: _S(
+                  label: 'Worksheet Items',
+                  value: '${items.length}',
+                  icon: PhosphorIcons.package(),
+                  color: AppColors.kPrimary)),
+          const SizedBox(width: 12),
+          Expanded(
+              child: _S(
+                  label: 'Counted',
+                  value: '$counted',
+                  icon: PhosphorIcons.checkCircle(),
+                  color: Colors.green)),
+          const SizedBox(width: 12),
+          Expanded(
+              child: _S(
+                  label: 'Variances',
+                  value: '$variances',
+                  icon: PhosphorIcons.warning(),
+                  color: Colors.orange)),
+          const SizedBox(width: 12),
+          Expanded(
+              child: _S(
+                  label: 'Variance Value',
+                  value: _bsMoney(varianceValue),
+                  icon: PhosphorIcons.coins(),
+                  color: varianceValue == 0 ? Colors.green : Colors.red)),
+        ]),
+        const SizedBox(height: 18),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side:
+                  BorderSide(color: AppColors.kDivider.withValues(alpha: .7))),
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    'Stock Worksheet - ${_bsText(detail, [
+                          'count_number',
+                          'take_number',
+                          'id'
+                        ])}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ),
+                Text('$counted / ${items.length} counted',
+                    style: const TextStyle(color: AppColors.kTextSecondary)),
+              ]),
+            ),
+            const Divider(height: 1),
+            if (items.isEmpty)
+              const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('No worksheet items found',
+                      style: TextStyle(color: AppColors.kTextSecondary)))
+            else
+              ...items.map((item) => _worksheetTile(item)),
+          ]),
+        ),
+        if (_bsText(detail, ['notes'], '').isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                    color: AppColors.kDivider.withValues(alpha: .7))),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Auditor / Review Notes',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(_bsText(detail, ['notes'], '')),
+                  ]),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _worksheetTile(Map<String, dynamic> item) {
+    final system = _bsNum(item, ['system_closing_stock', 'system_quantity']);
+    final actual = _actual(item);
+    final variance = _variance(item);
+    final status = actual == null
+        ? 'pending'
+        : variance == 0
+            ? 'counted'
+            : 'variance';
+    return Column(children: [
+      ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.blueGrey.withValues(alpha: .10),
+          child: Icon(PhosphorIcons.package(), color: Colors.blueGrey),
+        ),
+        title: Text(_bsText(item, ['item_name', 'name', 'item_sku']),
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(
+          '${_bsText(item, [
+                'item_sku',
+                'sku'
+              ])} • System ${_bsPlain(system)} • Actual ${actual == null ? '—' : _bsPlain(actual)} • Variance ${actual == null ? '—' : _bsPlain(variance)}',
+        ),
+        trailing: Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _bsStatus(status),
+              if (_canEdit)
+                OutlinedButton(
+                  onPressed: () => _editCount(item),
+                  child: const Text('Count'),
+                ),
+            ]),
+      ),
+      const Divider(height: 1),
+    ]);
+  }
+
+  double? _actual(Map<String, dynamic> item) {
+    final value = item['counted_quantity'] ??
+        item['physical_quantity'] ??
+        item['actual_quantity'];
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value');
+  }
+
+  double _variance(Map<String, dynamic> item) {
+    final actual = _actual(item);
+    if (actual == null) return 0;
+    return actual - _bsNum(item, ['system_closing_stock', 'system_quantity']);
+  }
+
+  Future<void> _startStockTake() async {
+    String storeType = 'foodstuffs';
+    String outletCode = 'main_bar';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Start Branch Stock Take'),
+          content: SizedBox(
+            width: 420,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<String>(
+                initialValue: storeType,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Stock area'),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'foodstuffs', child: Text('Foodstuffs')),
+                  DropdownMenuItem(
+                      value: 'bar_store', child: Text('Bar Store')),
+                  DropdownMenuItem(
+                      value: 'store_items', child: Text('All Store Items')),
+                ],
+                onChanged: (value) =>
+                    setDialogState(() => storeType = value ?? storeType),
+              ),
+              if (storeType == 'bar_store') ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: outletCode,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Outlet'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'main_bar', child: Text('Main Bar')),
+                    DropdownMenuItem(
+                        value: 'sports_bar', child: Text('Sports Bar')),
+                    DropdownMenuItem(
+                        value: 'executive_bar', child: Text('Executive Bar')),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => outletCode = value ?? outletCode),
+                ),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Start Worksheet')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final session =
+          await ref.read(adminRepositoryProvider).createBranchStockTake(
+                storeType: storeType,
+                outletCode: storeType == 'bar_store' ? outletCode : null,
+              );
+      _refresh();
+      await _openStockTake(_bsId(session));
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Stock worksheet started')));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Failed: $error')));
+      }
+    }
+  }
+
+  Future<void> _openStockTake(String id) async {
+    if (id.isEmpty) return;
+    setState(() {
+      _selectedId = id;
+      _loadingDetail = true;
+    });
+    try {
+      final detail =
+          await ref.read(adminRepositoryProvider).getBranchStockTake(id);
+      if (!mounted) return;
+      setState(() {
+        _detail = detail;
+        _loadingDetail = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingDetail = false);
+      AppNotifier.showSnackBar(
+          context, SnackBar(content: Text('Failed to load: $error')));
+    }
+  }
+
+  Future<void> _downloadWorksheet(Map<String, dynamic> row) async {
+    try {
+      final file = await ref
+          .read(adminRepositoryProvider)
+          .downloadBranchStockTakeWorksheet(_bsId(row));
+      if (mounted) {
+        AppNotifier.showSnackBar(context,
+            SnackBar(content: Text('Worksheet saved to ${file.path}')));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Download failed: $error')));
+      }
+    }
+  }
+
+  Future<void> _editCount(Map<String, dynamic> item) async {
+    final countCtrl = TextEditingController(
+        text: _actual(item)?.toString() ??
+            _bsNum(item, ['system_closing_stock', 'system_quantity'])
+                .toString());
+    final reasonCtrl = TextEditingController(
+        text: _bsText(item, ['variance_reason', 'reason', 'notes'], ''));
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Count ${_bsText(item, ['item_name', 'item_sku'])}'),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: countCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Actual counted *'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              minLines: 1,
+              maxLines: 3,
+              decoration:
+                  const InputDecoration(labelText: 'Variance reason / notes'),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save Count')),
+        ],
+      ),
+    );
+    if (saved != true) {
+      countCtrl.dispose();
+      reasonCtrl.dispose();
+      return;
+    }
+    final actual = double.tryParse(countCtrl.text.trim()) ?? 0;
+    final variance =
+        actual - _bsNum(item, ['system_closing_stock', 'system_quantity']);
+    final reason = reasonCtrl.text.trim();
+    countCtrl.dispose();
+    reasonCtrl.dispose();
+    if (!mounted) return;
+    if (variance != 0 && reason.isEmpty) {
+      AppNotifier.showSnackBar(context,
+          const SnackBar(content: Text('Variance reason is required')));
+      return;
+    }
+    try {
+      await ref.read(adminRepositoryProvider).updateBranchStockTake(
+        _selectedId!,
+        [
+          {
+            'id': _bsId(item),
+            'item_sku': _bsText(item, ['item_sku', 'sku'], ''),
+            'counted_quantity': actual,
+            if (reason.isNotEmpty) 'variance_reason': reason,
+            if (reason.isNotEmpty) 'notes': reason,
+          }
+        ],
+      );
+      await _openStockTake(_selectedId!);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Count saved')));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Save failed: $error')));
+      }
+    }
+  }
+
+  Future<void> _submitStockTake(Map<String, dynamic> detail) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Submit Stock Take'),
+        content: const Text(
+            'Submit this completed worksheet to auditor for verification and notes?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Submit')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(adminRepositoryProvider).submitBranchStockTake(
+          _bsId(detail),
+          notes: 'Submitted from Flutter app');
+      await _openStockTake(_bsId(detail));
+      _refresh();
+      if (mounted) {
+        AppNotifier.showSnackBar(context,
+            const SnackBar(content: Text('Stock take submitted to auditor')));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Submit failed: $error')));
+      }
+    }
+  }
 }
 
 class BranchPurchaseOrdersSection extends StatelessWidget {

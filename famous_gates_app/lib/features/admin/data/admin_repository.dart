@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../core/network/dio_client.dart';
 import 'models/admin_dashboard.dart';
 import 'models/branch.dart';
@@ -31,6 +34,31 @@ class AdminRepository {
     }
     return Map<String, dynamic>.from(data ?? {});
   }
+
+  Future<File> _downloadGet(
+    String endpoint, {
+    required String filename,
+    Map<String, dynamic> queryParameters = const {},
+  }) async {
+    final response = await _dio.get<List<int>>(
+      endpoint,
+      queryParameters: queryParameters,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(response.data ?? const <int>[], filename);
+  }
+
+  Future<File> _saveBytes(List<int> bytes, String filename) async {
+    if (bytes.isEmpty) throw StateError('Downloaded file was empty');
+    final directory = await getDownloadsDirectory() ??
+        await getApplicationDocumentsDirectory();
+    final safeName = filename.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final file = File('${directory.path}/$safeName');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  String _today() => DateTime.now().toIso8601String().split('T').first;
 
   List<T> _parseList<T>(
       dynamic data, T Function(Map<String, dynamic>) fromJson) {
@@ -789,6 +817,13 @@ class AdminRepository {
     return _parseMap(response.data);
   }
 
+  Future<File> downloadCentralStockTakeWorksheet(String id) {
+    return _downloadGet(
+      '/store/central-stock-takes/$id/worksheet-pdf',
+      filename: 'CentralStockTakeWorksheet_${id}_${_today()}.pdf',
+    );
+  }
+
   Future<void> updateCentralStockTake(
       String id, Map<String, dynamic> data) async {
     await _dio.put('/store/central-stock-takes/$id', data: data);
@@ -808,6 +843,54 @@ class AdminRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getBranchStockTakes({
+    String? storeType,
+    String? status,
+  }) async {
+    final response = await _dio.get('/stock-takes', queryParameters: {
+      if (storeType != null && storeType != 'all') 'store_type': storeType,
+      if (status != null && status != 'all') 'status': status,
+    });
+    return _parseMapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createBranchStockTake({
+    String countType = 'daily',
+    String storeType = 'foodstuffs',
+    String? outletCode,
+  }) async {
+    final response = await _dio.post('/stock-takes', data: {
+      'count_type': countType,
+      'store_type': storeType,
+      if (outletCode != null && outletCode.isNotEmpty)
+        'outlet_code': outletCode,
+    });
+    return _parseMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> getBranchStockTake(String id) async {
+    final response = await _dio.get('/stock-takes/$id');
+    return _parseMap(response.data);
+  }
+
+  Future<void> updateBranchStockTake(
+      String id, List<Map<String, dynamic>> items) async {
+    await _dio.put('/stock-takes/$id', data: {'items': items});
+  }
+
+  Future<void> submitBranchStockTake(String id, {String? notes}) async {
+    await _dio.post('/stock-takes/$id/submit', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<File> downloadBranchStockTakeWorksheet(String id) {
+    return _downloadGet(
+      '/stock-takes/$id/worksheet',
+      filename: 'BranchStockTakeWorksheet_${id}_${_today()}.pdf',
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getCentralSpoilageRecords({
     String? storeType,
     String? status,
@@ -820,8 +903,16 @@ class AdminRepository {
     return _parseMapList(response.data);
   }
 
-  Future<List<Map<String, dynamic>>> getCentralSpoilageItems() async {
-    final response = await _dio.get('/store/central-spoilage/items');
+  Future<List<Map<String, dynamic>>> getCentralSpoilageItems({
+    String? search,
+    String? storeType,
+  }) async {
+    final response =
+        await _dio.get('/store/central-spoilage/items', queryParameters: {
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (storeType != null && storeType.trim().isNotEmpty)
+        'store_type': storeType.trim(),
+    });
     return _parseMapList(response.data);
   }
 
@@ -943,6 +1034,10 @@ class AdminRepository {
       Map<String, dynamic> data) async {
     final response = await _dio.post('/procurement/invoices', data: data);
     return _parseMap(response.data);
+  }
+
+  Future<void> submitSupplierInvoice(String id) async {
+    await _dio.put('/procurement/invoices/$id/submit');
   }
 
   Future<void> approveSupplierInvoice(String id) async {

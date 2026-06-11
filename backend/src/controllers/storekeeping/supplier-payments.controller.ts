@@ -48,6 +48,8 @@ const toNumber = (value: any): number => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const payableInvoiceStatuses = new Set(['approved', 'open', 'partially_paid', 'overdue']);
+
 const getLedgerPaymentFallback = async (
     req: Request,
     scopedSupplierIds: string[] | null,
@@ -216,6 +218,47 @@ export const createPayment = async (
             throw new AppError('Supplier, amount, and method are required', 400);
         }
 
+        if (!Array.isArray(allocations) || allocations.length === 0) {
+            throw new AppError('Supplier payments must be allocated to at least one approved/open invoice', 400);
+        }
+
+        const allocationTotal = allocations.reduce(
+            (sum: number, alloc: any) => sum + toNumber(alloc.amount ?? alloc.allocated_amount),
+            0
+        );
+        if (allocationTotal <= 0 || Math.abs(allocationTotal - toNumber(payment_amount)) > 0.01) {
+            throw new AppError('Payment amount must match the total allocated invoice amount', 400);
+        }
+
+        const invoiceIds = [...new Set(allocations.map((alloc: any) => alloc.invoice_id).filter(Boolean))];
+        if (invoiceIds.length !== allocations.length) {
+            throw new AppError('Every allocation must reference a unique invoice', 400);
+        }
+
+        const { data: invoices, error: invoiceError } = await supabase
+            .from('store_supplier_invoices')
+            .select('id, supplier_id, status, total_amount, balance_due')
+            .in('id', invoiceIds);
+
+        if (invoiceError) throw invoiceError;
+
+        const invoiceById = new Map((invoices || []).map((invoice: any) => [invoice.id, invoice]));
+        for (const alloc of allocations) {
+            const invoice = invoiceById.get(alloc.invoice_id);
+            const amount = toNumber(alloc.amount ?? alloc.allocated_amount);
+            if (!invoice) throw new AppError('Allocated invoice was not found', 400);
+            if (invoice.supplier_id !== supplier_id) {
+                throw new AppError('Allocated invoice does not belong to this supplier', 400);
+            }
+            if (!payableInvoiceStatuses.has(String(invoice.status || '').toLowerCase())) {
+                throw new AppError('Only approved/open supplier invoices can be paid', 400);
+            }
+            const balance = toNumber(invoice.balance_due ?? invoice.total_amount);
+            if (amount <= 0 || amount > balance) {
+                throw new AppError('Allocation amount must be greater than zero and not exceed invoice balance', 400);
+            }
+        }
+
         // Generate payment number
         const { data: payment_number, error: numberError } = await supabase
             .rpc('generate_payment_number');
@@ -246,7 +289,7 @@ export const createPayment = async (
             const payAllocations = allocations.map((alloc: any) => ({
                 payment_id: newPayment.id,
                 invoice_id: alloc.invoice_id,
-                allocated_amount: alloc.amount,
+                allocated_amount: alloc.amount ?? alloc.allocated_amount,
                 notes: alloc.notes
             }));
 
@@ -282,6 +325,55 @@ export const processPayment = async (
         const { id } = req.params;
         const userId = req.user?.id;
 
+        const { data: currentPayment, error: currentPaymentError } = await supabase
+            .from('store_supplier_payments')
+            .select('id, status')
+            .eq('id', id)
+            .single();
+
+        if (currentPaymentError || !currentPayment) {
+            throw new AppError('Payment not found', 404);
+        }
+
+        if (String(currentPayment.status || '').toLowerCase() === 'processed') {
+            res.status(200).json({
+                success: true,
+                message: 'Payment already processed',
+                data: currentPayment
+            });
+            return;
+        }
+
+        const { data: allocations, error: allocationsError } = await supabase
+            .from('store_payment_invoice_allocations')
+            .select(`
+                invoice_id,
+                allocated_amount,
+                invoice:store_supplier_invoices(id, total_amount, balance_due, status)
+            `)
+            .eq('payment_id', id);
+
+        if (allocationsError) throw allocationsError;
+
+        if (!allocations || allocations.length === 0) {
+            throw new AppError('Cannot process an unallocated supplier payment', 400);
+        }
+
+        for (const allocation of allocations) {
+            const invoice = Array.isArray((allocation as any).invoice)
+                ? (allocation as any).invoice[0]
+                : (allocation as any).invoice;
+            if (!invoice) throw new AppError('Allocated invoice was not found', 400);
+            if (!payableInvoiceStatuses.has(String(invoice.status || '').toLowerCase())) {
+                throw new AppError('Only approved/open supplier invoices can be paid', 400);
+            }
+            const amount = toNumber((allocation as any).allocated_amount);
+            const balance = toNumber(invoice.balance_due ?? invoice.total_amount);
+            if (amount <= 0 || amount > balance) {
+                throw new AppError('Allocation amount must be greater than zero and not exceed invoice balance', 400);
+            }
+        }
+
         // Update status to processed
         // This will trigger create_payment_journal_entry and post_payment_to_ledger
         const { data: payment, error } = await supabase
@@ -297,6 +389,26 @@ export const processPayment = async (
             .single();
 
         if (error) throw error;
+
+        for (const allocation of allocations) {
+            const invoice = Array.isArray((allocation as any).invoice)
+                ? (allocation as any).invoice[0]
+                : (allocation as any).invoice;
+            const amount = toNumber((allocation as any).allocated_amount);
+            const balance = toNumber(invoice.balance_due ?? invoice.total_amount);
+            const newBalance = Math.max(balance - amount, 0);
+            const nextStatus = newBalance <= 0.01 ? 'paid' : 'partially_paid';
+            const { error: invoiceUpdateError } = await supabase
+                .from('store_supplier_invoices')
+                .update({
+                    balance_due: newBalance,
+                    status: nextStatus,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', (allocation as any).invoice_id);
+
+            if (invoiceUpdateError) throw invoiceUpdateError;
+        }
 
         res.status(200).json({
             success: true,

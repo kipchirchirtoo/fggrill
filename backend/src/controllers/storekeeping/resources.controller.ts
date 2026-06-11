@@ -1653,21 +1653,14 @@ export const completeStockTake = async (req: Request, res: Response) => {
 
     await recalculateStockCountTotals(id);
 
-    const isAccountant = user?.role === UserRole.BRANCH_ACCOUNTANT || user?.role === UserRole.ACCOUNTANT;
-    const nextStatus = isAccountant ? 'submitted' : 'submitted_to_accountant';
+    const nextStatus = 'submitted';
     const updatePayload: any = {
       status: nextStatus,
       counted_by: userId,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      accountant_submitted_by: userId,
+      accountant_submitted_at: new Date().toISOString()
     };
-
-    if (isAccountant) {
-      updatePayload.accountant_submitted_by = userId;
-      updatePayload.accountant_submitted_at = new Date().toISOString();
-    } else {
-      updatePayload.submitted_to_accountant_by = userId;
-      updatePayload.submitted_to_accountant_at = new Date().toISOString();
-    }
 
     const { data: updatedCounts, error: updateError } = await supabase
       .from('stock_counts')
@@ -1684,10 +1677,8 @@ export const completeStockTake = async (req: Request, res: Response) => {
       status: 'pending',
       branch_id: count.branch_id,
       requested_by: userId,
-      description: isAccountant
-        ? `Auditor review required for ${count.store_type || 'branch'} stock take: ${count.count_number || id}`
-        : `Branch accountant review required for ${count.store_type || 'branch'} stock take: ${count.count_number || id}`,
-      metadata: { stock_count_id: id, review_stage: isAccountant ? 'auditor' : 'branch_accountant' }
+      description: `Auditor review required for ${count.store_type || 'branch'} stock take: ${count.count_number || id}`,
+      metadata: { stock_count_id: id, review_stage: 'auditor' }
     });
 
     if (error) {
@@ -1700,25 +1691,22 @@ export const completeStockTake = async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: isAccountant
-        ? 'Stock take submitted to auditor'
-        : 'Stock take submitted to branch accountant',
+      message: 'Stock take submitted to auditor',
       data: updatedCount
     });
 
     logger.info(`Stock count ${id} submitted with status ${nextStatus} by ${userId}`);
 
-    const notifyRole = isAccountant ? 'auditor' : 'branch_accountant';
     notificationService.notifyRole(
-      notifyRole,
-      isAccountant ? 'Stock Take Ready for Audit' : 'Stock Take Ready for Accounting Review',
+      'auditor',
+      'Stock Take Ready for Audit',
       `A ${count.store_type || 'branch'} stock take (${count.count_number || id}) has been submitted.`,
       {
         type: 'warning',
         category: 'audit',
         priority: 'medium',
         actionUrl: `/dashboard/branch-store/stock-takes/${id}`,
-        metadata: { stock_count_id: id, type: 'stock_take', review_stage: isAccountant ? 'auditor' : 'branch_accountant' }
+        metadata: { stock_count_id: id, type: 'stock_take', review_stage: 'auditor' }
       }
     ).catch(e => logger.error('Failed to notify stock take reviewer', e));
   } catch (error: any) {

@@ -321,7 +321,7 @@ export const submitCentralStockTake = async (req: Request, res: Response) => {
 
     const totals = computeTotals(items || []);
 
-    const { error: sessionError } = await supabase
+    const { data: updatedSession, error: sessionError } = await supabase
       .from('central_stock_take_sessions')
       .update({
         status: 'submitted',
@@ -331,9 +331,28 @@ export const submitCentralStockTake = async (req: Request, res: Response) => {
         items_with_variance: totals.itemsWithVariance,
         total_variance_value: totals.totalVarianceValue
       })
-      .eq('id', id);
+      .eq('id', id)
+      .select()
+      .single();
 
     if (sessionError) throw sessionError;
+
+    const { error: approvalError } = await supabase
+      .from('approval_requests')
+      .insert({
+        request_type: 'stock_take',
+        status: 'pending',
+        requested_by: userId,
+        description: `Auditor review required for central ${updatedSession?.store_type || 'store'} stock take: ${updatedSession?.session_number || id}`,
+        metadata: {
+          central_stock_take_id: id,
+          review_stage: 'auditor',
+          scope: 'central_store',
+          store_type: updatedSession?.store_type || null
+        }
+      });
+
+    if (approvalError) throw approvalError;
 
     res.status(200).json({ success: true, message: 'Central stock take submitted for review' });
   } catch (error: any) {

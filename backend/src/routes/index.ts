@@ -98,6 +98,7 @@ import linaRoutes from './lina.routes';
 import documentTemplateRoutes from './document-template.routes';
 import menuPricingRoutes from './menu-pricing.routes';
 import branchSearchRoutes from './branch-search.routes';
+import branchPaymentRoutes from './branch-payments.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
@@ -219,6 +220,7 @@ router.use('/lina', linaRoutes);
 router.use('/document-templates', documentTemplateRoutes);
 router.use('/menu-pricing', menuPricingRoutes);
 router.use('/branch-search', branchSearchRoutes);
+router.use('/branch-payments', branchPaymentRoutes);
 
 // Food Control System routes
 router.use('/buffet', buffetRoutes);

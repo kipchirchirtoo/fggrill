@@ -39,6 +39,7 @@ enum BranchAccountantSection {
   voidApprovals,
   banking,
   payments,
+  outboundPayments,
   creditBills,
   foodVariance,
   shiftPnl,
@@ -149,6 +150,8 @@ class _BranchAccountantDashboardState
         return const _BankingSection();
       case BranchAccountantSection.payments:
         return const _PaymentsInvoicesSection();
+      case BranchAccountantSection.outboundPayments:
+        return const _OutboundPaymentsSection();
       case BranchAccountantSection.creditBills:
         return const _CreditBillsSection();
       case BranchAccountantSection.foodVariance:
@@ -207,6 +210,8 @@ const _navItems = [
       BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
   _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
       Icons.receipt_long),
+  _NavItem(BranchAccountantSection.outboundPayments, 'Outbound Payments',
+      Icons.payments),
   _NavItem(BranchAccountantSection.salesPayments, 'Sales & Payments',
       Icons.point_of_sale),
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
@@ -9470,11 +9475,8 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
           final filteredPos = _filterRecords(pos, type: 'po');
           final filteredInvoices = _filterRecords(invoices, type: 'invoice');
           final filteredPayments = _filterRecords(payments, type: 'payment');
-          final outstandingInvoices = invoices
-              .where((e) =>
-                  _num(e['balance_due'] ?? e['outstanding_amount']) > 0 ||
-                  _text(e, ['status']).toLowerCase() != 'paid')
-              .toList();
+          final payableInvoices =
+              invoices.where(_isPayableSupplierInvoice).toList();
           final openPoAmount = pos
               .where((e) => !['received', 'closed', 'cancelled']
                   .contains(_text(e, ['status']).toLowerCase()))
@@ -9524,10 +9526,10 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
               FilledButton.icon(
                 onPressed: () => _recordPayment(
                   suppliers: suppliers,
-                  invoices: outstandingInvoices,
+                  invoices: payableInvoices,
                 ),
                 icon: const Icon(Icons.payments),
-                label: const Text('Record Payment'),
+                label: const Text('Make Payment'),
               ),
             ],
             children: [
@@ -9707,7 +9709,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                                 filled: true,
                                 onPressed: () => _recordPayment(
                                   suppliers: suppliers,
-                                  invoices: outstandingInvoices,
+                                  invoices: payableInvoices,
                                   supplier: supplier,
                                 ),
                               ),
@@ -9805,7 +9807,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                                   filled: true,
                                   onPressed: () => _recordPayment(
                                     suppliers: suppliers,
-                                    invoices: outstandingInvoices,
+                                    invoices: payableInvoices,
                                     supplier: e,
                                   ),
                                 ),
@@ -9889,13 +9891,14 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                                 TextButton(
                                     onPressed: () => _viewInvoice(e),
                                     child: const Text('View')),
-                                TextButton(
-                                    onPressed: () => _recordPayment(
-                                          suppliers: suppliers,
-                                          invoices: outstandingInvoices,
-                                          invoice: e,
-                                        ),
-                                    child: const Text('Pay')),
+                                if (_isPayableSupplierInvoice(e))
+                                  TextButton(
+                                      onPressed: () => _recordPayment(
+                                            suppliers: suppliers,
+                                            invoices: payableInvoices,
+                                            invoice: e,
+                                          ),
+                                      child: const Text('Pay')),
                                 IconButton(
                                   tooltip: 'Download PDF',
                                   icon: const Icon(Icons.download, size: 18),
@@ -10011,7 +10014,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                   invoices: invoices,
                   payments: payments,
                   ledger: ledger,
-                  outstandingInvoices: outstandingInvoices,
+                  outstandingInvoices: payableInvoices,
                 ),
             ],
           );
@@ -10071,6 +10074,15 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     if (status == 'paid' || status == 'cancelled') return false;
     final due = DateTime.tryParse(_text(e, ['due_date']));
     return due != null && due.isBefore(DateTime.now());
+  }
+
+  bool _isPayableSupplierInvoice(Map<String, dynamic> e) {
+    final status = _text(e, ['status']).toLowerCase();
+    final balance =
+        _num(e['balance_due'] ?? e['outstanding_amount'] ?? e['total_amount']);
+    return balance > 0 &&
+        const {'approved', 'open', 'partially_paid', 'overdue'}
+            .contains(status);
   }
 
   String _supplierName(Map<String, dynamic> supplier) {
@@ -10223,7 +10235,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                       supplier: supplier,
                     ),
                     icon: const Icon(Icons.payments, size: 18),
-                    label: const Text('Record Payment'),
+                    label: const Text('Make Payment'),
                   ),
                 ],
               ),
@@ -10902,8 +10914,17 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
               : invoices
                   .where((e) => _recordSupplierId(e) == supplierId)
                   .toList();
+          final selectedInvoice = supplierInvoices.firstWhere(
+            (e) => _text(e, ['id']) == invoiceId,
+            orElse: () => {},
+          );
+          final selectedBalance = selectedInvoice.isEmpty
+              ? 0
+              : _num(selectedInvoice['balance_due'] ??
+                  selectedInvoice['outstanding_amount'] ??
+                  selectedInvoice['total_amount']);
           return AlertDialog(
-            title: const Text('Record Supplier Payment'),
+            title: const Text('Make Supplier Payment'),
             content: SizedBox(
               width: 640,
               child: SingleChildScrollView(
@@ -10934,26 +10955,22 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                       initialValue: invoiceId,
                       isExpanded: true,
                       decoration: const InputDecoration(
-                          labelText: 'Invoice allocation (optional)'),
-                      items: [
-                        const DropdownMenuItem<String>(
-                            value: null, child: Text('Unallocated payment')),
-                        ...supplierInvoices.map((inv) {
-                          final balance = _num(inv['balance_due'] ??
-                              inv['outstanding_amount'] ??
-                              inv['total_amount']);
-                          return DropdownMenuItem(
-                            value: _text(inv, ['id']),
-                            child: Text(
-                              '${_text(inv, [
-                                    'invoice_number',
-                                    'id'
-                                  ])} - ${_money(balance)}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        }),
-                      ],
+                          labelText: 'Approved invoice allocation *'),
+                      items: supplierInvoices.map((inv) {
+                        final balance = _num(inv['balance_due'] ??
+                            inv['outstanding_amount'] ??
+                            inv['total_amount']);
+                        return DropdownMenuItem(
+                          value: _text(inv, ['id']),
+                          child: Text(
+                            '${_text(inv, [
+                                  'invoice_number',
+                                  'id'
+                                ])} - ${_money(balance)}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
                       onChanged: (v) {
                         setDialogState(() {
                           invoiceId = v;
@@ -10968,6 +10985,18 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                         });
                       },
                     ),
+                    if (supplierId != null && supplierInvoices.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'No auditor-approved/open invoices for this supplier.',
+                            style: TextStyle(
+                                color: AppColors.kTextSecondary, fontSize: 12),
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 10),
                     Row(children: [
                       Expanded(
@@ -11038,11 +11067,21 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                           _notify(context, 'Enter a valid payment amount');
                           return;
                         }
+                        if (invoiceId == null || invoiceId!.isEmpty) {
+                          _notify(context,
+                              'Select an approved invoice to allocate payment');
+                          return;
+                        }
+                        if (selectedBalance > 0 && amount > selectedBalance) {
+                          _notify(context,
+                              'Payment cannot exceed invoice balance ${_money(selectedBalance)}');
+                          return;
+                        }
                         setDialogState(() => saving = true);
                         try {
-                          await ref
-                              .read(branchAccountantRepositoryProvider)
-                              .createSupplierPayment({
+                          final repo =
+                              ref.read(branchAccountantRepositoryProvider);
+                          final payment = await repo.createSupplierPayment({
                             'supplier_id': supplierId,
                             'payment_date': _today(),
                             'payment_method': method,
@@ -11051,11 +11090,14 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                               'reference_number': referenceCtrl.text.trim(),
                             if (notesCtrl.text.trim().isNotEmpty)
                               'notes': notesCtrl.text.trim(),
-                            if (invoiceId != null && invoiceId!.isNotEmpty)
-                              'allocations': [
-                                {'invoice_id': invoiceId, 'amount': amount}
-                              ],
+                            'allocations': [
+                              {'invoice_id': invoiceId, 'amount': amount}
+                            ],
                           });
+                          final paymentId = _text(payment, ['id']);
+                          if (paymentId.isNotEmpty) {
+                            await repo.processSupplierPayment(paymentId);
+                          }
                           if (context.mounted) Navigator.pop(context, true);
                         } catch (e) {
                           setDialogState(() => saving = false);
@@ -11067,7 +11109,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Record Payment'),
+                    : const Text('Post Payment'),
               ),
             ],
           );
@@ -11078,7 +11120,7 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     referenceCtrl.dispose();
     notesCtrl.dispose();
     if (result == true && mounted) {
-      _notify(context, 'Supplier payment recorded');
+      _notify(context, 'Supplier payment posted');
       _refresh();
     }
   }
@@ -15929,4 +15971,456 @@ void _notify(BuildContext context, String message) {
 
 void _toast(String message) {
   Clipboard.setData(ClipboardData(text: message));
+}
+
+// ── Outbound branch payments (essentials / vendors / payouts) ────────────────
+const _payCategories = {
+  'vendor': 'Vendor / Supplier',
+  'petty_cash': 'Petty Cash',
+  'inter_branch': 'Inter-Branch Transfer',
+  'staff_payout': 'Staff Payout',
+  'utility': 'Utilities',
+  'other': 'Other',
+};
+const _payMethods = {
+  'eft': 'EFT',
+  'rtgs': 'RTGS',
+  'cheque': 'Cheque',
+  'mpesa': 'M-Pesa',
+  'bank': 'Bank Transfer',
+  'cash': 'Cash',
+  'wallet': 'Digital Wallet',
+};
+
+class _OutboundPaymentsSection extends ConsumerStatefulWidget {
+  const _OutboundPaymentsSection();
+  @override
+  ConsumerState<_OutboundPaymentsSection> createState() =>
+      _OutboundPaymentsSectionState();
+}
+
+class _OutboundPaymentsSectionState
+    extends ConsumerState<_OutboundPaymentsSection> {
+  String _status = 'all';
+  late Future<Map<String, dynamic>> _future = _load();
+
+  Future<Map<String, dynamic>> _load() =>
+      ref.read(branchAccountantRepositoryProvider).getOutboundPayments(status: _status);
+  void _refresh() => setState(() => _future = _load());
+
+  String get _role =>
+      (ref.read(authNotifierProvider).valueOrNull?.role ?? '').toLowerCase();
+  String get _uid => ref.read(authNotifierProvider).valueOrNull?.id ?? '';
+  bool get _canApprove => const [
+        'branch_manager',
+        'general_manager',
+        'finance_manager',
+        'director',
+        'super_admin'
+      ].contains(_role);
+  bool get _canDirector => const ['director', 'super_admin'].contains(_role);
+  bool get _canRelease => const [
+        'finance_manager',
+        'director',
+        'general_manager',
+        'super_admin'
+      ].contains(_role);
+  bool get _canInitiate =>
+      const ['branch_accountant', 'accountant', 'super_admin'].contains(_role);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (data) {
+          final summary = _map(data['summary']);
+          final payments = _list(data['data']);
+          return _Page(
+            title: 'Outbound Payments',
+            subtitle:
+                'Pay vendors, essentials and payouts — initiate, approve and release with a full audit trail.',
+            actions: [
+              _Dropdown(
+                value: _status,
+                values: const [
+                  'all',
+                  'pending',
+                  'manager_approved',
+                  'director_approved',
+                  'released',
+                  'rejected'
+                ],
+                labels: const {
+                  'all': 'All',
+                  'pending': 'Pending',
+                  'manager_approved': 'Manager Approved',
+                  'director_approved': 'Director Approved',
+                  'released': 'Released',
+                  'rejected': 'Rejected',
+                },
+                onChanged: (v) => setState(() {
+                  _status = v;
+                  _future = _load();
+                }),
+              ),
+              _RefreshButton(onPressed: _refresh),
+              if (_canInitiate)
+                FilledButton.icon(
+                  onPressed: _newPayment,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('New Payment'),
+                ),
+            ],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Total Outflow', _money(_num(summary['total_outflow'])),
+                    Icons.trending_down, Colors.red),
+                _MetricCard('Pending Value', _money(_num(summary['pending_value'])),
+                    Icons.hourglass_top, Colors.orange),
+                _MetricCard('Pending', '${_num(summary['pending']).toInt()}',
+                    Icons.pending_actions, Colors.blueGrey),
+                _MetricCard(
+                    'Awaiting Director',
+                    '${_num(summary['awaiting_director']).toInt()}',
+                    Icons.verified_user,
+                    Colors.purple),
+              ]),
+              _SectionCard(
+                title: 'Payments',
+                child: payments.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No outbound payments yet.'))
+                    : Column(
+                        children: payments
+                            .map((p) => _paymentRow(Map<String, dynamic>.from(p)))
+                            .toList(),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _paymentRow(Map<String, dynamic> p) {
+    final status = _text(p, ['status'], 'pending');
+    final amount = _num(p['amount']);
+    final requiresDirector = p['requires_director'] == true;
+    final isCreator = _text(p, ['created_by']) == _uid;
+    final created = _text(p, ['created_at']);
+    final when = DateTime.tryParse(created);
+
+    final actions = <Widget>[];
+    final isFinal = status == 'released' || status == 'rejected';
+    if (!isFinal && !isCreator) {
+      if (status == 'pending' && _canApprove) {
+        actions.add(_act('Approve', Colors.green,
+            () => _do(() => ref.read(branchAccountantRepositoryProvider)
+                .approveBranchPayment('${p['id']}'))));
+      }
+      if (status == 'manager_approved' && requiresDirector && _canDirector) {
+        actions.add(_act('Director sign-off', Colors.purple,
+            () => _do(() => ref.read(branchAccountantRepositoryProvider)
+                .approveBranchPayment('${p['id']}', asDirector: true))));
+      }
+      final readyToRelease = requiresDirector
+          ? status == 'director_approved'
+          : status == 'manager_approved';
+      if (readyToRelease && _canRelease) {
+        actions.add(_act('Release', AppColors.kPrimary,
+            () => _do(() => ref.read(branchAccountantRepositoryProvider)
+                .releaseBranchPayment('${p['id']}'))));
+      }
+      if (_canApprove) {
+        actions.add(_act('Reject', Colors.red, () => _reject('${p['id']}'),
+            outlined: true));
+      }
+    }
+
+    return InkWell(
+      onTap: () => _showRecord(context, p, title: _text(p, ['payment_number'], 'Payment')),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+              child: const Icon(Icons.payments, size: 18, color: AppColors.kPrimary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_text(p, ['payee_name'], 'Payee'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(
+                    '${_payCategories[_text(p, ['category'])] ?? _text(p, ['category'])}'
+                    ' · ${_payMethods[_text(p, ['payment_method'])] ?? _text(p, ['payment_method'])}'
+                    '${when != null ? ' · ${DateFormat('MMM d').format(when)}' : ''}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(_money(amount),
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                _PayStatusPill(status: status),
+              ],
+            ),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(width: 10),
+              Wrap(spacing: 6, children: actions),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _act(String label, Color color, VoidCallback onTap,
+          {bool outlined = false}) =>
+      outlined
+          ? OutlinedButton(
+              onPressed: onTap,
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: color, visualDensity: VisualDensity.compact),
+              child: Text(label))
+          : FilledButton(
+              onPressed: onTap,
+              style: FilledButton.styleFrom(
+                  backgroundColor: color, visualDensity: VisualDensity.compact),
+              child: Text(label));
+
+  Future<void> _do(Future<void> Function() action) async {
+    try {
+      await action();
+      if (mounted) {
+        _notify(context, 'Payment updated');
+        _refresh();
+      }
+    } catch (e) {
+      if (mounted) _notify(context, 'Action failed: $e');
+    }
+  }
+
+  Future<void> _reject(String id) async {
+    final ctrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject payment'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'Reason'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('Reject')),
+        ],
+      ),
+    );
+    if (reason == null) return;
+    await _do(() =>
+        ref.read(branchAccountantRepositoryProvider).rejectBranchPayment(id, reason));
+  }
+
+  Future<void> _newPayment() async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _NewPaymentDialog(),
+    );
+    if (saved == true) _refresh();
+  }
+}
+
+class _NewPaymentDialog extends ConsumerStatefulWidget {
+  const _NewPaymentDialog();
+  @override
+  ConsumerState<_NewPaymentDialog> createState() => _NewPaymentDialogState();
+}
+
+class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
+  final _payee = TextEditingController();
+  final _account = TextEditingController();
+  final _amount = TextEditingController();
+  final _desc = TextEditingController();
+  final _ref = TextEditingController();
+  final _receipt = TextEditingController();
+  String _category = 'vendor';
+  String _method = 'eft';
+  String _currency = 'KES';
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _payee.dispose();
+    _account.dispose();
+    _amount.dispose();
+    _desc.dispose();
+    _ref.dispose();
+    _receipt.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final amt = num.tryParse(_amount.text.trim()) ?? 0;
+    if (_payee.text.trim().isEmpty || amt <= 0) {
+      _toast('Enter a payee and a valid amount');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(branchAccountantRepositoryProvider).createBranchPayment({
+        'category': _category,
+        'payment_method': _method,
+        'payee_name': _payee.text.trim(),
+        if (_account.text.trim().isNotEmpty) 'payee_account': _account.text.trim(),
+        'amount': amt,
+        'currency': _currency,
+        if (_desc.text.trim().isNotEmpty) 'description': _desc.text.trim(),
+        if (_ref.text.trim().isNotEmpty) 'reference': _ref.text.trim(),
+        if (_receipt.text.trim().isNotEmpty) 'receipt_url': _receipt.text.trim(),
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _toast('Could not create payment: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New Outbound Payment'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: _payee,
+                decoration: const InputDecoration(labelText: 'Payee / Vendor name')),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _category,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: _payCategories.entries
+                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _category = v!),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _method,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Method'),
+                  items: _payMethods.entries
+                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _method = v!),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _amount,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _currency,
+                  decoration: const InputDecoration(labelText: 'Currency'),
+                  items: const ['KES', 'USD', 'EUR', 'GBP']
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _currency = v!),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            TextField(
+                controller: _account,
+                decoration: const InputDecoration(
+                    labelText: 'Payee account / phone (optional)')),
+            const SizedBox(height: 10),
+            TextField(
+                controller: _ref,
+                decoration:
+                    const InputDecoration(labelText: 'Reference (optional)')),
+            const SizedBox(height: 10),
+            TextField(
+                controller: _receipt,
+                decoration: const InputDecoration(
+                    labelText: 'Receipt / invoice document URL (optional)')),
+            const SizedBox(height: 10),
+            TextField(
+                controller: _desc,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Description')),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child: Text(_saving ? 'Submitting…' : 'Submit for approval'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PayStatusPill extends StatelessWidget {
+  const _PayStatusPill({required this.status});
+  final String status;
+  @override
+  Widget build(BuildContext context) {
+    final s = status.toLowerCase();
+    Color c = Colors.blueGrey;
+    if (s.contains('pending')) c = Colors.orange.shade800;
+    if (s.contains('manager')) c = Colors.blue.shade700;
+    if (s.contains('director')) c = Colors.purple.shade700;
+    if (s.contains('released')) c = Colors.green.shade700;
+    if (s.contains('rejected')) c = Colors.red.shade700;
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(status.replaceAll('_', ' ').toUpperCase(),
+          style: TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
+    );
+  }
 }

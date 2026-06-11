@@ -237,6 +237,41 @@ class BranchAccountantRepository {
     });
   }
 
+  // ── Outbound branch payments (vendors / essentials / payouts) ──────────────
+  Future<Map<String, dynamic>> getOutboundPayments({String status = 'all'}) async {
+    final branchId = await getBranchId();
+    final res = await _dio.get('/branch-payments', queryParameters: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != 'all') 'status': status,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> getBranchPayment(String id) async {
+    return _getMap('/branch-payments/$id');
+  }
+
+  Future<void> createBranchPayment(Map<String, dynamic> body) async {
+    final branchId = await getBranchId();
+    await _dio.post('/branch-payments', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...body,
+    });
+  }
+
+  Future<void> approveBranchPayment(String id, {bool asDirector = false}) async {
+    await _dio.put('/branch-payments/$id/approve',
+        data: {'role': asDirector ? 'director' : 'manager'});
+  }
+
+  Future<void> rejectBranchPayment(String id, String reason) async {
+    await _dio.put('/branch-payments/$id/reject', data: {'reason': reason});
+  }
+
+  Future<void> releaseBranchPayment(String id) async {
+    await _dio.put('/branch-payments/$id/release');
+  }
+
   Future<Map<String, dynamic>> getProfitLoss({
     required String fromDate,
     required String toDate,
@@ -923,6 +958,10 @@ class BranchAccountantRepository {
       Map<String, dynamic> data) async {
     final res = await _dio.post('/procurement/payments', data: data);
     return _asMap(res.data);
+  }
+
+  Future<void> processSupplierPayment(String id) async {
+    await _dio.put('/procurement/payments/$id/process');
   }
 
   Future<Map<String, dynamic>> createStoreSupplier(

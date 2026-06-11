@@ -606,6 +606,10 @@ class AdminSideNavGroup {
               icon: PhosphorIcons.clipboardText(),
               label: 'Goods Receipt (GRN)'),
           AdminSideNavItem(
+              section: AdminSection.centralStockTakes,
+              icon: PhosphorIcons.clipboardText(),
+              label: 'Stock Takes'),
+          AdminSideNavItem(
               section: AdminSection.suppliers,
               icon: PhosphorIcons.users(),
               label: 'Supplier Database'),
