@@ -6,6 +6,7 @@ import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/domain/auth_notifier.dart';
 import '../../features/auth/domain/models.dart';
 import '../network/dio_client.dart';
+import '../state/app_refresh.dart';
 import '../storage/secure_storage_provider.dart';
 import '../theme/app_theme.dart';
 import 'app_update_button.dart';
@@ -89,6 +90,15 @@ class DashboardShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final nav = ref.watch(dashboardNavProvider);
+    // Ctrl+R / F5 bumps this; re-keying the content forces the active tab to
+    // rebuild and reload its data.
+    final tick = ref.watch(globalRefreshTickProvider);
+
+    final content = tabs.length > 1 && currentTab != null
+        ? tabs[currentTab!].content
+        : tabs.isEmpty
+            ? const SizedBox.shrink()
+            : tabs.first.content;
 
     return Scaffold(
       body: Column(
@@ -98,11 +108,10 @@ class DashboardShell extends ConsumerWidget {
             _TabBar(
                 tabs: tabs, currentTab: currentTab, onTabChanged: onTabChanged),
           Expanded(
-            child: tabs.length > 1 && currentTab != null
-                ? tabs[currentTab!].content
-                : tabs.isEmpty
-                    ? const SizedBox.shrink()
-                    : tabs.first.content,
+            child: KeyedSubtree(
+              key: ValueKey('shell_${currentTab ?? 0}_$tick'),
+              child: content,
+            ),
           ),
         ],
       ),

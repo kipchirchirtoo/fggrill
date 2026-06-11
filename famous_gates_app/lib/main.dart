@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:updat/updat.dart';
 import 'package:updat/updat_window_manager.dart';
 
 import 'core/router/app_router.dart';
 import 'core/services/desktop_update_service.dart';
+import 'core/state/app_refresh.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/working_directory_guard.dart';
 
@@ -71,11 +73,27 @@ class FamousGatesApp extends ConsumerWidget {
       builder: (context, child) {
         if (child == null) return const SizedBox.shrink();
 
+        // App-wide keyboard shortcuts. CallbackShortcuts is additive — it does
+        // NOT replace Flutter's default text shortcuts, so copy/paste/cut/
+        // select-all (Ctrl+C/V/X/A) keep working inside fields. Ctrl+R and F5
+        // raise a global refresh signal that screens react to.
+        final Widget wrapped = CallbackShortcuts(
+          bindings: <ShortcutActivator, VoidCallback>{
+            const SingleActivator(LogicalKeyboardKey.keyR, control: true): () =>
+                ref.read(globalRefreshTickProvider.notifier).state++,
+            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): () =>
+                ref.read(globalRefreshTickProvider.notifier).state++,
+            const SingleActivator(LogicalKeyboardKey.f5): () =>
+                ref.read(globalRefreshTickProvider.notifier).state++,
+          },
+          child: Focus(autofocus: true, child: child),
+        );
+
         return FutureBuilder<String>(
           future: currentDesktopVersionFuture,
           builder: (context, snapshot) {
             final currentVersion = snapshot.data;
-            if (currentVersion == null) return child;
+            if (currentVersion == null) return wrapped;
 
             return UpdatWindowManager(
               appName: 'Famous Gates Hotels',
@@ -99,7 +117,7 @@ class FamousGatesApp extends ConsumerWidget {
                   );
                 }
               },
-              child: child,
+              child: wrapped,
             );
           },
         );

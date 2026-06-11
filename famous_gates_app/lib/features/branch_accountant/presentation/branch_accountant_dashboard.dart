@@ -13,6 +13,7 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:famous_gates_app/core/widgets/branch_sales_payments_view.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../../core/state/app_refresh.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
 import '../../auth/domain/auth_notifier.dart';
@@ -69,6 +70,8 @@ class _BranchAccountantDashboardState
     final width = MediaQuery.of(context).size.width;
     final isMobile = width < 768;
     final isTablet = width >= 768 && width < 1024;
+    // Ctrl+R / F5 → rebuild the active section so it reloads its data.
+    final tick = ref.watch(globalRefreshTickProvider);
 
     return Scaffold(
       backgroundColor: AppColors.kSurface,
@@ -88,7 +91,12 @@ class _BranchAccountantDashboardState
                   section: _section,
                   onMenuTap: isMobile ? () => _showMobileNav(context) : null,
                 ),
-                Expanded(child: _buildSection()),
+                Expanded(
+                  child: KeyedSubtree(
+                    key: ValueKey('ba_${_section}_$tick'),
+                    child: _buildSection(),
+                  ),
+                ),
               ],
             ),
           ),
@@ -522,16 +530,13 @@ class _OverviewSection extends ConsumerWidget {
             discrepancies.where(_isOpenDiscrepancy).toList();
         final budget = _map(payload['budget_summary']);
 
-        final dailyRevenue = dailyRecords.fold<num>(
+        final postedRevenue = dailyRecords.fold<num>(
             0, (sum, e) => sum + _num(e['total_revenue']));
-        final dailyExpenses = dailyRecords.fold<num>(
+        final postedExpenses = dailyRecords.fold<num>(
             0, (sum, e) => sum + _num(e['total_expenses']));
-        final dailyNetProfit =
+        final postedNetProfit =
             dailyRecords.fold<num>(0, (sum, e) => sum + _num(e['net_profit']));
-        final hasDailyFinancialTotals = dailyRecords.any((record) =>
-            _num(record['total_revenue']).abs() > 0 ||
-            _num(record['total_expenses']).abs() > 0 ||
-            _num(record['net_profit']).abs() > 0);
+        final hasDailyFinancialRecords = dailyRecords.isNotEmpty;
 
         final analyticsRevenue = _firstNonZeroNum([
           salesSummary['total_sales'],
@@ -557,33 +562,18 @@ class _OverviewSection extends ConsumerWidget {
           financials['totalExpenses'],
           financials['expenses'],
         ]);
-
-        final totalRevenue = _firstNonZeroNum([
-          analyticsRevenue,
-          if (hasDailyFinancialTotals) dailyRevenue,
-          profileRevenue,
-        ]);
-        num netProfit = _num(finSummary['netProfit'] ??
+        final profileNetProfit = _num(finSummary['netProfit'] ??
             finSummary['net_profit'] ??
             finSummary['net_income'] ??
             financials['net_profit'] ??
             financials['netProfit'] ??
             financials['net_income']);
-        if (netProfit == 0 && hasDailyFinancialTotals) {
-          netProfit = dailyNetProfit;
-        }
-        if (netProfit == 0 && totalRevenue != 0) {
-          netProfit = totalRevenue - profileExpenses;
-        }
-        final finRevenue = _firstNonZeroNum([
-          totalRevenue,
-          if (hasDailyFinancialTotals) dailyRevenue,
-          profileRevenue,
-        ]);
-        final finExpenses = _firstNonZeroNum([
-          profileExpenses,
-          if (hasDailyFinancialTotals) dailyExpenses,
-        ]);
+        final accountedRevenue = hasDailyFinancialRecords ? postedRevenue : 0;
+        final accountedExpenses = hasDailyFinancialRecords ? postedExpenses : 0;
+        final netProfit = hasDailyFinancialRecords ? postedNetProfit : 0;
+        final unpostedSales = analyticsRevenue > accountedRevenue
+            ? analyticsRevenue - accountedRevenue
+            : 0;
         num receivables =
             _num(financials['receivables'] ?? finSummary['receivables']);
         num payables = _num(financials['payables'] ?? finSummary['payables']);
@@ -600,11 +590,15 @@ class _OverviewSection extends ConsumerWidget {
           variance = clearanceItems.fold<num>(
               0, (sum, c) => sum + _num(c['variance']));
         }
+        final budgetBalance = _num(budget['remaining_budget'] ??
+            budget['total_remaining'] ??
+            budget['balance']);
+        final postedDays = dailyRecords.length;
+        final hasUnpostedSales = unpostedSales.abs() > 0;
 
         return _Page(
           title: 'Branch Accountant Overview',
-          subtitle:
-              'Cashier clearance, branch sales, discrepancies, budgets, and daily finance status.',
+          subtitle: 'Month-to-date branch accounting control center.',
           actions: [
             _RefreshButton(onPressed: () {
               ref.invalidate(branchAccountantOverviewProvider);
@@ -618,9 +612,33 @@ class _OverviewSection extends ConsumerWidget {
                   : _DirectorTasks(items: items),
               orElse: () => const SizedBox.shrink(),
             ),
+            _OverviewControlBand(
+              periodLabel: _overviewPeriodLabel(),
+              postedDays: postedDays,
+              hasPostedRecords: hasDailyFinancialRecords,
+              accountedRevenue: accountedRevenue,
+              capturedSales: analyticsRevenue,
+              unpostedSales: unpostedSales,
+              onOpenWorkspace: () =>
+                  onNavigate(BranchAccountantSection.financialWorkspace),
+            ),
             _ResponsiveGrid(children: [
-              _MetricCard('Total Revenue', _money(totalRevenue),
-                  Icons.trending_up, Colors.green),
+              _MetricCard('Posted Revenue', _money(accountedRevenue),
+                  Icons.fact_check, Colors.green),
+              _MetricCard('POS Sales Captured', _money(analyticsRevenue),
+                  Icons.point_of_sale, Colors.blue),
+              _MetricCard('Posted Expenses', _money(accountedExpenses),
+                  Icons.receipt_long, Colors.orange),
+              _MetricCard(
+                  'Net Position',
+                  _money(netProfit),
+                  Icons.account_balance_wallet,
+                  netProfit >= 0 ? Colors.teal : Colors.red),
+              _MetricCard(
+                  'Unposted Sales',
+                  _money(unpostedSales),
+                  Icons.pending_actions,
+                  hasUnpostedSales ? Colors.red : Colors.green),
               _MetricCard(
                   'Cashier Variance',
                   _money(variance),
@@ -630,8 +648,6 @@ class _OverviewSection extends ConsumerWidget {
                   Icons.hourglass_bottom, Colors.orange),
               _MetricCard('Open Discrepancies', '${openDiscrepancies.length}',
                   Icons.warning, Colors.red),
-              _MetricCard('Net Profit', _money(netProfit),
-                  Icons.account_balance_wallet, Colors.blue),
               _MetricCard(
                   'Budget Utilization',
                   '${budgetUtil.toStringAsFixed(1)}%',
@@ -641,21 +657,221 @@ class _OverviewSection extends ConsumerWidget {
             const SizedBox(height: 8),
             _QuickActions(onNavigate: onNavigate),
             const SizedBox(height: 8),
-            _SectionCard(
-              title: 'Recent Financial Position',
-              child: _KeyValueList({
-                'Revenue': _money(finRevenue),
-                'Expenses': _money(finExpenses),
-                'Receivables': _money(receivables),
-                'Payables': _money(payables),
-                'Budget Balance': _money(_num(budget['remaining_budget'] ??
-                    budget['total_remaining'] ??
-                    budget['balance'])),
-              }),
+            _TwoColumn(
+              left: _SectionCard(
+                title: 'Posted Financial Position',
+                child: _KeyValueList({
+                  'Accounting Source': hasDailyFinancialRecords
+                      ? 'Daily financial workspace'
+                      : 'No daily finance records posted',
+                  'Posted Days': postedDays,
+                  'Posted Revenue': _money(accountedRevenue),
+                  'Posted Expenses': _money(accountedExpenses),
+                  'Posted Net Position': _money(netProfit),
+                  'Receivables': _money(receivables),
+                  'Payables': _money(payables),
+                  'Budget Balance': _money(budgetBalance),
+                }),
+              ),
+              right: _SectionCard(
+                title: 'Sales Reconciliation',
+                child: _KeyValueList({
+                  'POS Sales Captured': _money(analyticsRevenue),
+                  'Posted Revenue': _money(accountedRevenue),
+                  'Unposted Sales Difference': _money(unpostedSales),
+                  'Profile Revenue Reference': _money(profileRevenue),
+                  'Profile Expenses Reference': _money(profileExpenses),
+                  'Profile Net Reference': _money(profileNetProfit),
+                }),
+              ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+String _overviewPeriodLabel() {
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month, 1);
+  return '${DateFormat('MMM d').format(start)} - ${DateFormat('MMM d, yyyy').format(now)}';
+}
+
+class _OverviewControlBand extends StatelessWidget {
+  const _OverviewControlBand({
+    required this.periodLabel,
+    required this.postedDays,
+    required this.hasPostedRecords,
+    required this.accountedRevenue,
+    required this.capturedSales,
+    required this.unpostedSales,
+    required this.onOpenWorkspace,
+  });
+
+  final String periodLabel;
+  final int postedDays;
+  final bool hasPostedRecords;
+  final num accountedRevenue;
+  final num capturedSales;
+  final num unpostedSales;
+  final VoidCallback onOpenWorkspace;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasGap = unpostedSales.abs() > 0;
+    final statusColor = !hasPostedRecords
+        ? Colors.red
+        : hasGap
+            ? Colors.orange
+            : Colors.green;
+    final statusText = !hasPostedRecords
+        ? 'No posted daily records'
+        : hasGap
+            ? 'Sales pending posting'
+            : 'Posted revenue reconciled';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final summary = Wrap(
+          spacing: 18,
+          runSpacing: 12,
+          children: [
+            _OverviewBandMetric(
+              label: 'Period',
+              value: periodLabel,
+              icon: Icons.date_range,
+              color: AppColors.kPrimary,
+            ),
+            _OverviewBandMetric(
+              label: 'Posted Days',
+              value: '$postedDays',
+              icon: Icons.fact_check,
+              color: Colors.green,
+            ),
+            _OverviewBandMetric(
+              label: 'Posted Revenue',
+              value: _money(accountedRevenue),
+              icon: Icons.account_balance_wallet,
+              color: Colors.teal,
+            ),
+            _OverviewBandMetric(
+              label: 'Captured POS Sales',
+              value: _money(capturedSales),
+              icon: Icons.point_of_sale,
+              color: Colors.blue,
+            ),
+          ],
+        );
+        final status = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: .1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: statusColor.withValues(alpha: .22)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.circle, size: 10, color: statusColor),
+              const SizedBox(width: 8),
+              Text(
+                statusText,
+                style:
+                    TextStyle(color: statusColor, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        );
+        final action = FilledButton.icon(
+          onPressed: onOpenWorkspace,
+          icon: const Icon(Icons.calendar_month),
+          label: const Text('Open Daily Workspace'),
+        );
+        if (constraints.maxWidth < 980) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              summary,
+              const SizedBox(height: 14),
+              Wrap(spacing: 10, runSpacing: 10, children: [status, action]),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: summary),
+            const SizedBox(width: 14),
+            status,
+            const SizedBox(width: 10),
+            action,
+          ],
+        );
+      }),
+    );
+  }
+}
+
+class _OverviewBandMetric extends StatelessWidget {
+  const _OverviewBandMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 190,
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 19),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.kTextSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
