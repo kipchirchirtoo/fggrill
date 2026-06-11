@@ -16,6 +16,14 @@ const num = (v: any): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// True when the error is "table not found" (migration not yet applied).
+const isMissingTable = (err: any): boolean => {
+  const msg = `${err?.message || ''}`.toLowerCase();
+  return err?.code === 'PGRST205' ||
+    err?.code === '42P01' ||
+    (msg.includes('could not find the table') && msg.includes('branch_payment'));
+};
+
 const resolveBranchId = (req: Request): number | null => {
   const role = (req as any).user?.role;
   const userBranch = (req as any).user?.branch_id;
@@ -135,7 +143,18 @@ export const listPayments = async (req: Request, res: Response, next: NextFuncti
       query = query.eq('status', req.query.status);
     }
     const { data, error } = await query.limit(300);
-    if (error) throw error;
+    if (error) {
+      if (isMissingTable(error)) {
+        res.status(200).json({
+          success: true,
+          data: [],
+          summary: { total: 0, pending: 0, awaiting_director: 0, released: 0, total_outflow: 0, pending_value: 0 },
+          notice: 'Branch payments not initialised yet — run the branch_payments migration.',
+        });
+        return;
+      }
+      throw error;
+    }
 
     const list = (data || []) as Array<Record<string, any>>;
     const summary = {
