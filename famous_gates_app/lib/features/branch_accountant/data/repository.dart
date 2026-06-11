@@ -42,8 +42,9 @@ class BranchAccountantRepository {
     String? status,
   }) async {
     final branchId = await getBranchId();
+    if (branchId.isEmpty) return {};
     return _getMap('/cashier/clearances', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      'branch_id': branchId,
       if (date != null && date.isNotEmpty) 'date': date,
       if (status != null && status != 'all') 'status': status,
     });
@@ -72,8 +73,9 @@ class BranchAccountantRepository {
     Map<String, dynamic> filters = const {},
   }) async {
     final branchId = await getBranchId();
+    if (branchId.isEmpty) return {};
     final res = await _dio.post('/analytics/branch-sales', data: {
-      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      'branch_id': int.tryParse(branchId) ?? branchId,
       'start_date': startDate,
       'end_date': endDate,
       'filters': filters,
@@ -124,9 +126,10 @@ class BranchAccountantRepository {
     required String endDate,
   }) async {
     final branchId = await getBranchId();
+    if (branchId.isEmpty) return [];
     try {
       return await _getList('/finance/workspace/daily', query: {
-        if (branchId.isNotEmpty) 'branch_id': branchId,
+        'branch_id': branchId,
         'start_date': startDate,
         'end_date': endDate,
       });
@@ -217,9 +220,10 @@ class BranchAccountantRepository {
 
   Future<List<Map<String, dynamic>>> getDiscrepancies() async {
     final branchId = await getBranchId();
+    if (branchId.isEmpty) return [];
     try {
       return await _getList('/finance/discrepancies', query: {
-        if (branchId.isNotEmpty) 'branch_id': branchId,
+        'branch_id': branchId,
       });
     } on DioException catch (e) {
       if (_isRecoverableBranchEndpointError(e)) return [];
@@ -988,8 +992,9 @@ class BranchAccountantRepository {
 
   Future<Map<String, dynamic>> getBudgetSummary() async {
     final branchId = await getBranchId();
+    if (branchId.isEmpty) return {};
     return _getMap('/branch-operations/finances/budget-summary', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      'branch_id': branchId,
     });
   }
 

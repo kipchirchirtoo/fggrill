@@ -71,12 +71,25 @@ export const CreatePOSchema = z.object({
 // Update PO schema
 export const UpdatePOSchema = z.object({
     supplier_id: z.string().uuid().optional(),
+    po_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     expected_delivery_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    items: z.array(POItemSchema).min(1, 'At least one item is required'),
     payment_terms: PaymentTermsEnum.optional(),
     delivery_terms: z.string().optional(),
     special_instructions: z.string().optional(),
     status: POStatusEnum.optional()
-});
+}).refine(
+    (data) => {
+        if (data.expected_delivery_date && data.po_date) {
+            return new Date(data.expected_delivery_date) >= new Date(data.po_date);
+        }
+        return true;
+    },
+    {
+        message: 'Expected delivery date cannot be before PO date',
+        path: ['expected_delivery_date']
+    }
+);
 
 // Query PO schema
 export const QueryPOSchema = z.object({

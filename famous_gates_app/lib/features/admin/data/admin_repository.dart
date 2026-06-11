@@ -874,6 +874,15 @@ class AdminRepository {
     return _parseMap(response.data);
   }
 
+  Future<Map<String, dynamic>> updatePurchaseOrder(
+      String id, Map<String, dynamic> data) async {
+    final response = await _dio.put('/procurement/purchase-orders/$id', data: {
+      ...data,
+      'source_module': 'central_store',
+    });
+    return _parseMap(response.data);
+  }
+
   Future<void> approvePurchaseOrder(String id) async {
     await _dio.put('/procurement/purchase-orders/$id/approve',
         queryParameters: {'source_module': 'central_store'});

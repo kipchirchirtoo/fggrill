@@ -51,6 +51,24 @@ final receivingRecordsProvider =
   return ref.read(storeRepositoryProvider).getReceivingRecords();
 });
 
+/// Goods Received Notes register (the GRN cards).
+final grnListProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(storeRepositoryProvider).getGrns();
+});
+
+/// Purchase orders available to receive against (for the Record Receipt flow).
+final receivablePurchaseOrdersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, status) async {
+  return ref.read(storeRepositoryProvider).getPurchaseOrders(status: status);
+});
+
+/// Full PO detail (supplier + items) for prefilling a GRN.
+final purchaseOrderDetailProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, id) async {
+  return ref.read(storeRepositoryProvider).getPurchaseOrder(id);
+});
+
 final spoilageRecordsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.read(storeRepositoryProvider).getSpoilageRecords();

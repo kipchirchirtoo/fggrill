@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:printing/printing.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -37,6 +41,69 @@ String _date(dynamic value) {
 }
 
 String _money(num value) => 'KES ${value.toStringAsFixed(0)}';
+
+String _isoDate(DateTime value) => value.toIso8601String().split('T').first;
+
+String _plainNum(num value) =>
+    value.round() == value ? value.toInt().toString() : '$value';
+
+String _normalizePoItemName(String value) => value
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
+const _poValidUnits = {
+  'PC',
+  'PCS',
+  'PACK',
+  'PACKS',
+  'BAG',
+  'BAGS',
+  'KG',
+  'G',
+  'L',
+  'LTR',
+  'ML',
+  'BTL',
+  'BOTTLE',
+  'BOTTLES',
+  'CTN',
+  'CARTON',
+  'CARTONS',
+  'CASE',
+  'CASES',
+  'BOX',
+  'BOXES',
+  'TIN',
+  'TINS',
+  'ROLL',
+  'ROLLS',
+  'DOZEN',
+  'DZ',
+};
+
+class _ParsedPurchaseOrderItem {
+  _ParsedPurchaseOrderItem({
+    required this.key,
+    required this.sourceLine,
+    required this.itemName,
+    required this.quantity,
+    required this.unit,
+    this.error,
+  });
+
+  final String key;
+  final String sourceLine;
+  String itemName;
+  num quantity;
+  String unit;
+  num unitCost = 0;
+  String? sku;
+  String? error;
+
+  num get total => quantity * unitCost;
+}
 
 final _uuidPattern = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
@@ -1727,27 +1794,156 @@ class DispatchNotesSection extends ConsumerWidget {
   }
 }
 
-class PurchaseOrdersSection extends ConsumerWidget {
+class PurchaseOrdersSection extends ConsumerStatefulWidget {
   const PurchaseOrdersSection({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => _LiveSection(
+  ConsumerState<PurchaseOrdersSection> createState() =>
+      _PurchaseOrdersSectionState();
+}
+
+class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
+  bool _creating = false;
+  bool _saving = false;
+  bool _printingPdf = false;
+  String _search = '';
+  String _statusFilter = 'all';
+  String? _listSupplierId;
+  String? _editingPoId;
+  String? _editingPoNumber;
+  String? _supplierId;
+  String? _branchId;
+  String _outlet = 'Central Store';
+  String _paymentTerms = 'credit_30_days';
+  DateTime _poDate = DateTime.now();
+  DateTime? _expectedDate;
+  final _bulkController = TextEditingController();
+  final _deliveryController = TextEditingController(text: 'Central Store');
+  final _notesController = TextEditingController();
+  final List<_ParsedPurchaseOrderItem> _parsedItems = [];
+
+  @override
+  void dispose() {
+    _bulkController.dispose();
+    _deliveryController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _LiveSection(
         title: 'Purchase Orders',
-        subtitle: 'Central-store supplier purchase orders',
+        subtitle: _creating
+            ? _editingPoId == null
+                ? 'Create supplier purchase orders with bulk item paste'
+                : 'Edit draft purchase order with bulk item correction'
+            : 'Central-store supplier purchase orders',
         icon: PhosphorIcons.fileText(),
         child: _LiveRows(
           value: ref.watch(centralPurchaseOrdersProvider),
           data: (rows) {
+            final suppliers = ref.watch(centralStoreSuppliersProvider);
+            final branches = ref.watch(centralStoreBranchesProvider);
+            final items = ref.watch(centralStoreItemsProvider);
+            if (_creating) {
+              return _createView(
+                suppliers.valueOrNull ?? const [],
+                branches.valueOrNull ?? const [],
+                items.valueOrNull ?? const [],
+              );
+            }
             final pending = rows
                 .where((row) =>
                     _text(row, ['status']).toLowerCase().contains('pending'))
                 .length;
+            final filtered = rows.where((row) {
+              final q = _search.trim().toLowerCase();
+              final status = _text(row, ['status'], 'draft').toLowerCase();
+              final supplier = _text(row, ['supplier_name']).toLowerCase();
+              final poNumber = _text(row, ['po_number', 'id']).toLowerCase();
+              final branch = _text(row, ['branch_name']).toLowerCase();
+              final matchesSearch = q.isEmpty ||
+                  poNumber.contains(q) ||
+                  supplier.contains(q) ||
+                  branch.contains(q);
+              final matchesStatus =
+                  _statusFilter == 'all' || status == _statusFilter;
+              final matchesSupplier = _listSupplierId == null ||
+                  _text(row, ['supplier_id'], '') == _listSupplierId;
+              return matchesSearch && matchesStatus && matchesSupplier;
+            }).toList();
             return Column(children: [
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Search PO, supplier, branch',
+                      prefixIcon: Icon(Icons.search),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (value) => setState(() => _search = value),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 180,
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _statusFilter,
+                    decoration: const InputDecoration(labelText: 'Status'),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('All')),
+                      DropdownMenuItem(value: 'draft', child: Text('Draft')),
+                      DropdownMenuItem(
+                          value: 'pending', child: Text('Pending')),
+                      DropdownMenuItem(
+                          value: 'approved', child: Text('Approved')),
+                      DropdownMenuItem(value: 'sent', child: Text('Sent')),
+                      DropdownMenuItem(
+                          value: 'received', child: Text('Received')),
+                      DropdownMenuItem(
+                          value: 'cancelled', child: Text('Cancelled')),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _statusFilter = value ?? 'all'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _listSupplierId,
+                    decoration: const InputDecoration(labelText: 'Supplier'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                          value: null, child: Text('All suppliers')),
+                      ...((suppliers.valueOrNull ?? const [])
+                          .map((supplier) => DropdownMenuItem<String?>(
+                                value: _id(supplier),
+                                child: Text(
+                                  _text(supplier, ['name', 'supplier_name']),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _listSupplierId = value),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: () => setState(() => _creating = true),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Create PO'),
+                ),
+              ]),
+              const SizedBox(height: 16),
               Row(children: [
                 Expanded(
                     child: _StatCard(
                         label: 'Open POs',
-                        value: '${rows.length}',
+                        value: '${filtered.length}',
                         icon: PhosphorIcons.fileText(),
                         color: AppColors.kPrimary)),
                 const SizedBox(width: 12),
@@ -1761,7 +1957,7 @@ class PurchaseOrdersSection extends ConsumerWidget {
                 Expanded(
                     child: _StatCard(
                         label: 'Total Value',
-                        value: _money(rows.fold<double>(
+                        value: _money(filtered.fold<double>(
                             0,
                             (sum, row) =>
                                 sum + _num(row, ['total_amount', 'total']))),
@@ -1771,7 +1967,7 @@ class PurchaseOrdersSection extends ConsumerWidget {
               const SizedBox(height: 20),
               _RowsCard(
                 title: 'Purchase Orders',
-                rows: rows,
+                rows: filtered,
                 emptyMessage: 'No purchase orders found',
                 builder: (row) {
                   final status = _text(row, ['status'], 'draft');
@@ -1787,6 +1983,10 @@ class PurchaseOrdersSection extends ConsumerWidget {
                           onPressed: () => _showMapDetails(context,
                               'PO ${_text(row, ['po_number', 'id'])}', row),
                           child: const Text('View')),
+                      if (status.toLowerCase() == 'draft')
+                        OutlinedButton(
+                            onPressed: () => _editDraftPurchaseOrder(row),
+                            child: const Text('Edit')),
                       if (status.toLowerCase().contains('pending') ||
                           status.toLowerCase() == 'draft')
                         ElevatedButton(
@@ -1812,6 +2012,1103 @@ class PurchaseOrdersSection extends ConsumerWidget {
         ),
       );
 
+  Widget _createView(
+    List<Map<String, dynamic>> suppliers,
+    List<Map<String, dynamic>> branches,
+    List<Map<String, dynamic>> inventory,
+  ) {
+    final validItems =
+        _parsedItems.where((item) => item.error == null).toList();
+    final total = validItems.fold<num>(0, (sum, item) => sum + item.total);
+    final hasErrors = _parsedItems.any((item) => item.error != null);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        OutlinedButton.icon(
+          onPressed: _saving
+              ? null
+              : () => setState(() {
+                    _creating = false;
+                    _resetCreateForm();
+                  }),
+          icon: const Icon(Icons.arrow_back, size: 16),
+          label: const Text('Back to PO list'),
+        ),
+        const Spacer(),
+        Text(
+          '${validItems.length} valid lines · ${_money(total)}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ]),
+      const SizedBox(height: 12),
+      Text(
+        _editingPoId == null
+            ? 'New Purchase Order'
+            : 'Editing Draft ${_editingPoNumber ?? _editingPoId}',
+        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+      ),
+      const SizedBox(height: 16),
+      Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: LayoutBuilder(builder: (context, constraints) {
+            final width = constraints.maxWidth < 760
+                ? constraints.maxWidth
+                : (constraints.maxWidth - 24) / 3;
+            return Wrap(spacing: 12, runSpacing: 12, children: [
+              SizedBox(
+                width: width,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: _supplierId,
+                  decoration: const InputDecoration(labelText: 'Supplier'),
+                  items: suppliers
+                      .map((supplier) => DropdownMenuItem(
+                            value: _id(supplier),
+                            child: Text(
+                              _text(supplier, ['name', 'supplier_name']),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => _supplierId = value),
+                ),
+              ),
+              SizedBox(
+                width: width,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: _branchId,
+                  decoration: const InputDecoration(labelText: 'Branch'),
+                  items: branches
+                      .map((branch) => DropdownMenuItem(
+                            value: _id(branch),
+                            child: Text(
+                              _text(branch, ['name', 'branch_name']),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => _branchId = value),
+                ),
+              ),
+              SizedBox(
+                width: width,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: _outlet,
+                  decoration:
+                      const InputDecoration(labelText: 'Outlet / Destination'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'Central Store', child: Text('Central Store')),
+                    DropdownMenuItem(
+                        value: 'Restaurant POS', child: Text('Restaurant POS')),
+                    DropdownMenuItem(value: 'Bar POS', child: Text('Bar POS')),
+                    DropdownMenuItem(
+                        value: 'Coffee Shop POS',
+                        child: Text('Coffee Shop POS')),
+                    DropdownMenuItem(
+                        value: 'Bakery POS', child: Text('Bakery POS')),
+                    DropdownMenuItem(
+                        value: 'Fast Food POS', child: Text('Fast Food POS')),
+                    DropdownMenuItem(
+                        value: 'Room Service POS',
+                        child: Text('Room Service POS')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _outlet = value ?? _outlet),
+                ),
+              ),
+              SizedBox(
+                width: width,
+                child: _PoDateField(
+                  label: 'PO Date',
+                  value: _poDate,
+                  onPicked: (date) => setState(() {
+                    _poDate = date;
+                    if (_expectedDate != null &&
+                        _expectedDate!.isBefore(_poDate)) {
+                      _expectedDate = _poDate;
+                    }
+                  }),
+                ),
+              ),
+              SizedBox(
+                width: width,
+                child: _PoDateField(
+                  label: 'Expected Delivery',
+                  value: _expectedDate,
+                  firstDate: _poDate,
+                  onPicked: (date) => setState(() => _expectedDate = date),
+                ),
+              ),
+              SizedBox(
+                width: width,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: _paymentTerms,
+                  decoration: const InputDecoration(labelText: 'Payment Terms'),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                    DropdownMenuItem(
+                        value: 'credit_7_days', child: Text('Credit 7 days')),
+                    DropdownMenuItem(
+                        value: 'credit_15_days', child: Text('Credit 15 days')),
+                    DropdownMenuItem(
+                        value: 'credit_30_days', child: Text('Credit 30 days')),
+                    DropdownMenuItem(
+                        value: 'credit_45_days', child: Text('Credit 45 days')),
+                    DropdownMenuItem(
+                        value: 'credit_60_days', child: Text('Credit 60 days')),
+                    DropdownMenuItem(
+                        value: 'credit_90_days', child: Text('Credit 90 days')),
+                    DropdownMenuItem(
+                        value: 'advance_payment',
+                        child: Text('Advance payment')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _paymentTerms = value ?? _paymentTerms),
+                ),
+              ),
+              SizedBox(
+                width: constraints.maxWidth,
+                child: TextField(
+                  controller: _deliveryController,
+                  decoration:
+                      const InputDecoration(labelText: 'Delivery Location'),
+                ),
+              ),
+              SizedBox(
+                width: constraints.maxWidth,
+                child: TextField(
+                  controller: _notesController,
+                  minLines: 2,
+                  maxLines: 3,
+                  decoration:
+                      const InputDecoration(labelText: 'Remarks / Notes'),
+                ),
+              ),
+            ]);
+          }),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              const Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Bulk Item Entry',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 15)),
+                      Text(
+                        'Paste lines like "KC PINEAPPLE 750ML, 120, PCS" or "FANTA ORANGE 500ML 50 PCS".',
+                        style: TextStyle(
+                            color: AppColors.kTextSecondary, fontSize: 12),
+                      ),
+                    ]),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _parseBulkItems(inventory),
+                icon: const Icon(Icons.auto_fix_high, size: 16),
+                label: const Text('Parse Items'),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _bulkController,
+              minLines: 6,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                alignLabelWithHint: true,
+                labelText: 'Paste items',
+                hintText:
+                    'KC PINEAPPLE 750ML, 120, PCS\nFANTA ORANGE 500ML 50 PCS\nMILK 1L - 80 - PACKS\nSUGAR 2KG | 30 | BAGS',
+              ),
+            ),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              const Expanded(
+                  child: Text('Parsed Items',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 15))),
+              Text(
+                hasErrors
+                    ? 'Fix invalid rows before saving'
+                    : '${validItems.length} rows ready',
+                style: TextStyle(
+                  color: hasErrors ? Colors.red : Colors.green,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            if (_parsedItems.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(
+                    child: Text('No parsed items yet',
+                        style: TextStyle(color: AppColors.kTextSecondary))),
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Item')),
+                    DataColumn(label: Text('SKU')),
+                    DataColumn(label: Text('Qty')),
+                    DataColumn(label: Text('Unit')),
+                    DataColumn(label: Text('Unit Cost')),
+                    DataColumn(label: Text('Total')),
+                    DataColumn(label: Text('Validation')),
+                    DataColumn(label: Text('')),
+                  ],
+                  rows: _parsedItems
+                      .map((item) => _parsedItemRow(item, inventory))
+                      .toList(),
+                ),
+              ),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(children: [
+            Text('Grand Total: ${_money(total)}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            const Spacer(),
+            OutlinedButton(
+                onPressed: (_saving || _printingPdf)
+                    ? null
+                    : () => setState(_resetCreateForm),
+                child: const Text('Clear')),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: (_saving || _printingPdf)
+                  ? null
+                  : () => _savePurchaseOrder(false),
+              icon: const Icon(Icons.save, size: 16),
+              label: Text(_printingPdf
+                  ? 'Opening PDF...'
+                  : _saving
+                      ? 'Saving...'
+                      : _editingPoId == null
+                          ? 'Save Draft'
+                          : 'Update Draft'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: (_saving || _printingPdf)
+                  ? null
+                  : () => _savePurchaseOrder(true),
+              icon: const Icon(Icons.check_circle_outline, size: 16),
+              label: Text(_printingPdf
+                  ? 'Opening PDF...'
+                  : _saving
+                      ? 'Submitting...'
+                      : 'Submit / Approve'),
+            ),
+          ]),
+        ),
+      ),
+    ]);
+  }
+
+  DataRow _parsedItemRow(
+      _ParsedPurchaseOrderItem item, List<Map<String, dynamic>> inventory) {
+    final hasError = item.error != null;
+    return DataRow(
+      color: WidgetStateProperty.resolveWith(
+          (_) => hasError ? Colors.red.withValues(alpha: .06) : null),
+      cells: [
+        DataCell(SizedBox(
+          width: 240,
+          child: TextFormField(
+            key: ValueKey('${item.key}-name'),
+            initialValue: item.itemName,
+            decoration: const InputDecoration(border: InputBorder.none),
+            onChanged: (value) => setState(() {
+              item.itemName = value;
+              _resolveItem(item, inventory);
+              _validateItems();
+            }),
+          ),
+        )),
+        DataCell(SizedBox(
+          width: 190,
+          child: item.sku == null
+              ? _suggestionButton(item, inventory, compact: true)
+              : Text(item.sku!, overflow: TextOverflow.ellipsis),
+        )),
+        DataCell(SizedBox(
+          width: 80,
+          child: TextFormField(
+            key: ValueKey('${item.key}-qty'),
+            initialValue: item.quantity == 0 ? '' : _plainNum(item.quantity),
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(border: InputBorder.none),
+            onChanged: (value) => setState(() {
+              item.quantity = num.tryParse(value) ?? 0;
+              _validateItems();
+            }),
+          ),
+        )),
+        DataCell(SizedBox(
+          width: 86,
+          child: TextFormField(
+            key: ValueKey('${item.key}-unit'),
+            initialValue: item.unit,
+            decoration: const InputDecoration(border: InputBorder.none),
+            onChanged: (value) => setState(() {
+              item.unit = value.toUpperCase();
+              _validateItems();
+            }),
+          ),
+        )),
+        DataCell(SizedBox(
+          width: 100,
+          child: TextFormField(
+            key: ValueKey('${item.key}-cost'),
+            initialValue: item.unitCost == 0 ? '' : _plainNum(item.unitCost),
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(border: InputBorder.none),
+            onChanged: (value) => setState(() {
+              item.unitCost = num.tryParse(value) ?? 0;
+              _validateItems();
+            }),
+          ),
+        )),
+        DataCell(Text(_money(item.total))),
+        DataCell(_validationCell(item, inventory)),
+        DataCell(IconButton(
+          tooltip: 'Remove row',
+          icon: const Icon(Icons.close, size: 18),
+          onPressed: () => setState(() {
+            _parsedItems.remove(item);
+            _validateItems();
+          }),
+        )),
+      ],
+    );
+  }
+
+  Widget _validationCell(
+      _ParsedPurchaseOrderItem item, List<Map<String, dynamic>> inventory) {
+    final hasError = item.error != null;
+    return SizedBox(
+      width: 260,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Flexible(
+          child: Text(
+            item.error ?? 'Ready',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: hasError ? Colors.red : Colors.green,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        if (hasError &&
+            (item.error == 'No matching inventory SKU' ||
+                item.error == 'Unit is required' ||
+                item.error == 'Invalid unit')) ...[
+          const SizedBox(width: 8),
+          _suggestionButton(item, inventory),
+        ],
+      ]),
+    );
+  }
+
+  Widget _suggestionButton(
+    _ParsedPurchaseOrderItem item,
+    List<Map<String, dynamic>> inventory, {
+    bool compact = false,
+  }) {
+    final suggestions = _inventorySuggestions(item.itemName, inventory);
+    if (suggestions.isEmpty) {
+      return Text(
+        compact ? 'Search match' : 'No suggestion',
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: AppColors.kTextSecondary,
+          fontSize: 12,
+        ),
+      );
+    }
+    return PopupMenuButton<String>(
+      tooltip: 'Choose matching inventory item',
+      onSelected: (sku) {
+        final match = suggestions.firstWhere(
+          (row) => _itemSku(row) == sku,
+          orElse: () => suggestions.first,
+        );
+        setState(() {
+          _applyInventorySuggestion(item, match);
+          _validateItems();
+        });
+      },
+      itemBuilder: (context) => suggestions
+          .map((row) => PopupMenuItem<String>(
+                value: _itemSku(row),
+                child: SizedBox(
+                  width: 320,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_itemName(row),
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text(
+                        '${_itemSku(row)} • ${_itemUnit(row).isEmpty ? 'No unit' : _itemUnit(row)}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.kTextSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ))
+          .toList(),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.search, size: compact ? 15 : 16, color: AppColors.kPrimary),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            compact ? 'Find SKU' : 'Did you mean?',
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.kPrimary,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  List<Map<String, dynamic>> _inventorySuggestions(
+      String query, List<Map<String, dynamic>> inventory) {
+    final normalized = _normalizePoItemName(query);
+    if (normalized.isEmpty) return inventory.take(8).toList();
+    final scored = <({Map<String, dynamic> row, int score})>[];
+    final queryTokens = normalized.split(' ').where((part) => part.length > 1);
+    for (final row in inventory) {
+      final sku = _itemSku(row).toLowerCase();
+      final name = _normalizePoItemName(_itemName(row));
+      var score = 0;
+      if (sku == query.toLowerCase().trim()) score += 100;
+      if (name == normalized) score += 90;
+      if (sku.contains(normalized)) score += 60;
+      if (name.contains(normalized) || normalized.contains(name)) score += 50;
+      for (final token in queryTokens) {
+        if (name.split(' ').contains(token)) score += 12;
+        if (name.contains(token)) score += 5;
+      }
+      if (score > 0) scored.add((row: row, score: score));
+    }
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return scored.map((entry) => entry.row).take(8).toList();
+  }
+
+  void _applyInventorySuggestion(
+      _ParsedPurchaseOrderItem item, Map<String, dynamic> match) {
+    item.sku = _itemSku(match);
+    item.itemName = _itemName(match);
+    final unit = _itemUnit(match);
+    if (unit.isNotEmpty) item.unit = unit;
+  }
+
+  String _itemSku(Map<String, dynamic> row) =>
+      _text(row, ['sku', 'item_sku', 'id'], '');
+
+  String _itemName(Map<String, dynamic> row) =>
+      _text(row, ['item_name', 'name', 'description'], '');
+
+  String _itemUnit(Map<String, dynamic> row) =>
+      _text(row, ['unit_of_measure', 'unit'], '').toUpperCase();
+
+  void _parseBulkItems(List<Map<String, dynamic>> inventory) {
+    final lines = _bulkController.text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) {
+      _snack(context, 'Paste at least one item line');
+      return;
+    }
+    setState(() {
+      _parsedItems
+        ..clear()
+        ..addAll(lines.indexed.map((entry) {
+          final item = _parseLine(entry.$2, entry.$1);
+          _resolveItem(item, inventory);
+          return item;
+        }));
+      _validateItems();
+    });
+  }
+
+  _ParsedPurchaseOrderItem _parseLine(String line, int index) {
+    final clean = line.replaceAll(RegExp(r'\s+'), ' ').trim();
+    List<String> parts = const [];
+    if (clean.contains(',')) {
+      parts = clean.split(',').map((part) => part.trim()).toList();
+    } else if (clean.contains('|')) {
+      parts = clean.split('|').map((part) => part.trim()).toList();
+    } else if (clean.contains(' - ')) {
+      parts =
+          clean.split(RegExp(r'\s+-\s+')).map((part) => part.trim()).toList();
+    }
+
+    if (parts.length >= 2) {
+      return _ParsedPurchaseOrderItem(
+        key: '${DateTime.now().microsecondsSinceEpoch}-$index',
+        sourceLine: line,
+        itemName: parts.first,
+        quantity: num.tryParse(parts[1]) ?? 0,
+        unit: parts.length > 2 ? parts[2].toUpperCase() : '',
+      );
+    }
+
+    final match =
+        RegExp(r'^(.+?)\s+(\d+(?:\.\d+)?)\s*([A-Za-z][A-Za-z0-9/_-]*)?$')
+            .firstMatch(clean);
+    if (match != null) {
+      return _ParsedPurchaseOrderItem(
+        key: '${DateTime.now().microsecondsSinceEpoch}-$index',
+        sourceLine: line,
+        itemName: match.group(1)?.trim() ?? '',
+        quantity: num.tryParse(match.group(2) ?? '') ?? 0,
+        unit: (match.group(3) ?? '').toUpperCase(),
+      );
+    }
+
+    return _ParsedPurchaseOrderItem(
+      key: '${DateTime.now().microsecondsSinceEpoch}-$index',
+      sourceLine: line,
+      itemName: clean,
+      quantity: 0,
+      unit: '',
+      error: 'Could not read quantity',
+    );
+  }
+
+  void _resolveItem(
+      _ParsedPurchaseOrderItem parsed, List<Map<String, dynamic>> inventory) {
+    final match = _findInventoryItem(parsed.itemName, inventory);
+    parsed.sku = match == null ? null : _text(match, ['sku', 'item_sku', 'id']);
+    if (match != null) {
+      parsed.itemName = _text(match, ['item_name', 'name', 'description']);
+      if (parsed.unit.trim().isEmpty) {
+        parsed.unit =
+            _text(match, ['unit_of_measure', 'unit'], '').toUpperCase();
+      }
+    }
+  }
+
+  Map<String, dynamic>? _findInventoryItem(
+      String value, List<Map<String, dynamic>> inventory) {
+    final normalized = _normalizePoItemName(value);
+    for (final item in inventory) {
+      if (_text(item, ['sku', 'item_sku'], '').toLowerCase() ==
+          value.toLowerCase()) {
+        return item;
+      }
+      if (_normalizePoItemName(
+              _text(item, ['item_name', 'name', 'description'])) ==
+          normalized) {
+        return item;
+      }
+    }
+    for (final item in inventory) {
+      final itemName = _normalizePoItemName(
+          _text(item, ['item_name', 'name', 'description']));
+      if (itemName.contains(normalized) || normalized.contains(itemName)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  void _validateItems() {
+    final seen = <String>{};
+    for (final item in _parsedItems) {
+      String? error;
+      if (item.error == 'Could not read quantity' && item.quantity <= 0) {
+        error = item.error;
+      } else if (item.itemName.trim().isEmpty) {
+        error = 'Item name is required';
+      } else if (item.quantity <= 0) {
+        error = 'Quantity must be greater than zero';
+      } else if (item.sku == null || item.sku!.trim().isEmpty) {
+        error = 'No matching inventory SKU';
+      } else if (item.unit.trim().isEmpty) {
+        error = 'Unit is required';
+      } else if (!_poValidUnits.contains(item.unit.trim().toUpperCase())) {
+        error = 'Invalid unit';
+      } else if (item.unitCost < 0) {
+        error = 'Unit cost cannot be negative';
+      }
+      final duplicateKey =
+          '${item.sku ?? _normalizePoItemName(item.itemName)}:${item.unit.toUpperCase()}';
+      if (error == null && seen.contains(duplicateKey)) {
+        error = 'Duplicate item/unit row';
+      }
+      seen.add(duplicateKey);
+      item.error = error;
+    }
+  }
+
+  Future<void> _savePurchaseOrder(bool approveNow) async {
+    _validateItems();
+    if (_supplierId == null || _supplierId!.isEmpty) {
+      _snack(context, 'Select a supplier');
+      return;
+    }
+    if (_branchId == null || _branchId!.isEmpty) {
+      _snack(context, 'Select a branch');
+      return;
+    }
+    if (_expectedDate != null && _expectedDate!.isBefore(_poDate)) {
+      _snack(context, 'Expected delivery cannot be before PO date');
+      return;
+    }
+    if (_parsedItems.isEmpty ||
+        _parsedItems.any((item) => item.error != null)) {
+      _snack(context, 'Fix invalid item rows before saving');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final Map<String, dynamic> payload = {
+        'supplier_id': _supplierId,
+        'branch_id': int.tryParse(_branchId!),
+        'po_date': _isoDate(_poDate),
+        if (_expectedDate != null)
+          'expected_delivery_date': _isoDate(_expectedDate!),
+        'payment_terms': _paymentTerms,
+        'delivery_terms': [
+          if (_deliveryController.text.trim().isNotEmpty)
+            _deliveryController.text.trim(),
+          'Outlet: $_outlet',
+        ].join(' | '),
+        if (_notesController.text.trim().isNotEmpty)
+          'special_instructions': _notesController.text.trim(),
+        'auto_approve': approveNow,
+        'items': _parsedItems
+            .map((item) => {
+                  'item_id': item.sku,
+                  'quantity': item.quantity,
+                  'unit_price': item.unitCost,
+                  'tax_amount': 0,
+                  'total_price': item.total,
+                })
+            .toList(),
+      };
+      final repo = ref.read(adminRepositoryProvider);
+      final savedPo = _editingPoId == null
+          ? await repo.createPurchaseOrder({
+              ...payload,
+              'auto_approve': approveNow,
+            })
+          : await repo.updatePurchaseOrder(_editingPoId!, payload);
+      if (_editingPoId != null && approveNow) {
+        await repo.approvePurchaseOrder(_editingPoId!);
+      }
+      if (!mounted) return;
+      _refreshCentralStore(ref);
+      await _printPurchaseOrderPdf(_poForPdf(savedPo));
+      if (!mounted) return;
+      _snack(
+          context,
+          approveNow
+              ? 'PO submitted and PDF opened'
+              : 'Draft PO saved and PDF opened');
+      setState(() {
+        _creating = false;
+        _resetCreateForm();
+      });
+    } catch (error) {
+      if (mounted) _snack(context, 'Failed: $error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _resetCreateForm() {
+    _editingPoId = null;
+    _editingPoNumber = null;
+    _supplierId = null;
+    _branchId = null;
+    _outlet = 'Central Store';
+    _paymentTerms = 'credit_30_days';
+    _poDate = DateTime.now();
+    _expectedDate = null;
+    _bulkController.clear();
+    _deliveryController.text = 'Central Store';
+    _notesController.clear();
+    _parsedItems.clear();
+  }
+
+  Future<void> _editDraftPurchaseOrder(Map<String, dynamic> row) async {
+    try {
+      final detail =
+          await ref.read(adminRepositoryProvider).getPurchaseOrder(_id(row));
+      final items =
+          (detail['items'] is List ? detail['items'] as List : const [])
+              .whereType<Map>()
+              .map((item) => item.cast<String, dynamic>())
+              .toList();
+      setState(() {
+        _editingPoId = _id(detail).isEmpty ? _id(row) : _id(detail);
+        _editingPoNumber = _text(detail, ['po_number', 'id']);
+        _supplierId = _text(detail, ['supplier_id'], '');
+        if (_supplierId!.isEmpty) _supplierId = null;
+        final branch = detail['branch_id'];
+        _branchId = branch == null ? null : '$branch';
+        _poDate =
+            DateTime.tryParse(_text(detail, ['po_date'], '')) ?? DateTime.now();
+        _expectedDate =
+            DateTime.tryParse(_text(detail, ['expected_delivery_date'], ''));
+        _paymentTerms = _text(detail, ['payment_terms'], 'credit_30_days');
+        final deliveryTerms = _text(detail, ['delivery_terms'], '');
+        _outlet = deliveryTerms.contains('Outlet:')
+            ? deliveryTerms.split('Outlet:').last.trim()
+            : 'Central Store';
+        _deliveryController.text = deliveryTerms
+                .split('|')
+                .first
+                .replaceAll('Outlet:', '')
+                .trim()
+                .isEmpty
+            ? 'Central Store'
+            : deliveryTerms.split('|').first.trim();
+        _notesController.text = _text(detail, ['special_instructions'], '');
+        _bulkController.clear();
+        _parsedItems
+          ..clear()
+          ..addAll(items.indexed.map((entry) {
+            final item = entry.$2;
+            final parsed = _ParsedPurchaseOrderItem(
+              key: 'edit-${DateTime.now().microsecondsSinceEpoch}-${entry.$1}',
+              sourceLine: _text(item, ['item_name', 'item_id']),
+              itemName: _text(item, ['item_name', 'description', 'item_id']),
+              quantity: _num(item, ['quantity_ordered', 'quantity']),
+              unit: _text(item, ['unit_of_measure', 'unit'], '').toUpperCase(),
+            );
+            parsed.sku = _text(item, ['item_id', 'sku'], '');
+            parsed.unitCost = _num(item, ['unit_price']);
+            return parsed;
+          }));
+        _creating = true;
+        _validateItems();
+      });
+    } catch (error) {
+      if (mounted) _snack(context, 'Failed to load draft PO: $error');
+    }
+  }
+
+  Map<String, dynamic> _poForPdf(Map<String, dynamic> savedPo) {
+    final suppliers = ref.read(centralStoreSuppliersProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final branches = ref.read(centralStoreBranchesProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final supplier = suppliers.firstWhere(
+      (row) => _id(row) == _supplierId,
+      orElse: () => const <String, dynamic>{},
+    );
+    final branch = branches.firstWhere(
+      (row) => _id(row) == _branchId,
+      orElse: () => const <String, dynamic>{},
+    );
+    final total = _parsedItems.fold<num>(0, (sum, item) => sum + item.total);
+    return {
+      ...savedPo,
+      'po_number': _text(savedPo, ['po_number', 'purchase_order_number'],
+          _editingPoNumber ?? ''),
+      'po_date': _isoDate(_poDate),
+      'expected_delivery_date':
+          _expectedDate == null ? null : _isoDate(_expectedDate!),
+      'supplier': supplier,
+      'supplier_name': _text(supplier, ['name', 'supplier_name']),
+      'branch': branch,
+      'total_amount': total,
+      'subtotal': total,
+      'tax_amount': 0,
+      'special_instructions': _notesController.text.trim(),
+      'items': _parsedItems
+          .map((item) => {
+                'item_id': item.sku,
+                'item_name': item.itemName,
+                'quantity_ordered': item.quantity,
+                'unit_of_measure': item.unit,
+                'unit_price': item.unitCost,
+                'total_price': item.total,
+              })
+          .toList(),
+    };
+  }
+
+  Future<void> _printPurchaseOrderPdf(Map<String, dynamic> po) async {
+    setState(() => _printingPdf = true);
+    try {
+      final bytes = await _buildPurchaseOrderPdfBytes(po);
+      await Printing.layoutPdf(
+        name: '${_text(po, ['po_number', 'id'], 'purchase_order')}.pdf',
+        onLayout: (_) async => bytes,
+      );
+    } finally {
+      if (mounted) setState(() => _printingPdf = false);
+    }
+  }
+
+  Future<Uint8List> _buildPurchaseOrderPdfBytes(Map<String, dynamic> po) async {
+    final doc = pw.Document();
+    final logo = await _loadPoPdfLogo();
+    final supplier = po['supplier'] is Map
+        ? (po['supplier'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final branch = po['branch'] is Map
+        ? (po['branch'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final items = (po['items'] is List ? po['items'] as List : const [])
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList();
+    final poNumber = _text(po, ['po_number', 'id'], 'DRAFT');
+    final supplierName = _text(po, ['supplier_name'], '').isNotEmpty
+        ? _text(po, ['supplier_name'])
+        : _text(supplier, ['name', 'supplier_name'], 'Supplier');
+    const primary = PdfColor.fromInt(0xFF2C3E50);
+    const muted = PdfColor.fromInt(0xFF666666);
+    const border = PdfColor.fromInt(0xFFD6D6D6);
+    const lightRow = PdfColor.fromInt(0xFFF3F3F3);
+
+    final tableRows = items.map((item) {
+      final qty = _num(item, ['quantity_ordered', 'quantity']);
+      final price = _num(item, ['unit_price']);
+      final total = _num(item, ['total_price', 'total']);
+      return [
+        _text(item, ['item_name', 'description', 'item_id'], 'Item'),
+        _plainNum(qty),
+        _pdfMoney(price),
+        _pdfMoney(total == 0 ? qty * price : total),
+      ];
+    }).toList();
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(42, 40, 42, 42),
+        footer: (context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Expanded(
+              child: pw.Text(
+                'FamousGate Hotels - Procurement System',
+                textAlign: pw.TextAlign.center,
+                style:
+                    const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              ),
+            ),
+            pw.Text(
+              'Page ${context.pageNumber} of ${context.pagesCount}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+          ],
+        ),
+        build: (context) => [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (logo != null)
+                pw.Image(logo, width: 86, height: 86, fit: pw.BoxFit.contain)
+              else
+                pw.Container(
+                  width: 86,
+                  height: 86,
+                  alignment: pw.Alignment.center,
+                  decoration:
+                      pw.BoxDecoration(border: pw.Border.all(color: border)),
+                  child: pw.Text('FG',
+                      style: pw.TextStyle(
+                          fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                ),
+              pw.Spacer(),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    'PURCHASE ORDER',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      color: primary,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 12),
+                  pw.Text('FamousGate Hotels',
+                      style: const pw.TextStyle(fontSize: 10, color: muted)),
+                  pw.Text(
+                      _text(branch, ['name', 'branch_name'], 'Bomet, Kenya'),
+                      style: const pw.TextStyle(fontSize: 10, color: muted)),
+                  pw.Text(_text(branch, ['phone'], '0706782828'),
+                      style: const pw.TextStyle(fontSize: 10, color: muted)),
+                  pw.Text(_text(branch, ['email'], 'famousgatesbmt@gmail.com'),
+                      style: const pw.TextStyle(fontSize: 10, color: muted)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 18),
+          pw.Container(height: 1, color: border),
+          pw.SizedBox(height: 18),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('VENDOR / SUPPLIER:',
+                        style: pw.TextStyle(
+                            fontSize: 12,
+                            color: primary,
+                            fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 8),
+                    pw.Text(supplierName,
+                        style: const pw.TextStyle(fontSize: 10)),
+                    if (_text(supplier, ['contact_person', 'contact_name'], '')
+                        .isNotEmpty)
+                      pw.Text(
+                          _text(supplier, ['contact_person', 'contact_name']),
+                          style: const pw.TextStyle(fontSize: 10)),
+                    if (_text(supplier, ['phone', 'contact_phone'], '')
+                        .isNotEmpty)
+                      pw.Text(_text(supplier, ['phone', 'contact_phone']),
+                          style: const pw.TextStyle(fontSize: 10)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 36),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('PO DETAILS:',
+                        style: pw.TextStyle(
+                            fontSize: 12,
+                            color: primary,
+                            fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 8),
+                    pw.Text('PO Number: $poNumber',
+                        style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text('Date: ${_date(po['po_date'])}',
+                        style: const pw.TextStyle(fontSize: 10)),
+                    if (po['expected_delivery_date'] != null)
+                      pw.Text(
+                          'Expected: ${_date(po['expected_delivery_date'])}',
+                          style: const pw.TextStyle(fontSize: 10)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 24),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Item Description', 'Qty', 'Unit Price', 'Total'],
+            data: tableRows,
+            headerStyle: pw.TextStyle(
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 9),
+            headerDecoration: const pw.BoxDecoration(color: primary),
+            oddRowDecoration: const pw.BoxDecoration(color: lightRow),
+            cellStyle: const pw.TextStyle(fontSize: 9, color: muted),
+            cellPadding:
+                const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(4.8),
+              1: const pw.FlexColumnWidth(.8),
+              2: const pw.FlexColumnWidth(1.4),
+              3: const pw.FlexColumnWidth(1.4),
+            },
+            cellAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerRight,
+              2: pw.Alignment.centerRight,
+              3: pw.Alignment.centerRight,
+            },
+          ),
+          if (_text(po, ['special_instructions'], '').isNotEmpty) ...[
+            pw.SizedBox(height: 18),
+            pw.Text('Notes:',
+                style:
+                    pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 5),
+            pw.Text(_text(po, ['special_instructions']),
+                style: const pw.TextStyle(fontSize: 10, color: muted)),
+          ],
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
+  Future<pw.MemoryImage?> _loadPoPdfLogo() async {
+    try {
+      final data = await rootBundle.load('assets/frontend_public/fglogo.png');
+      return pw.MemoryImage(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _pdfMoney(num value) => 'Ksh ${value.toStringAsFixed(2)}';
+
   Future<void> _poAction(BuildContext context, WidgetRef ref,
       Map<String, dynamic> row, String action) async {
     final confirmed = await _confirm(
@@ -1835,6 +3132,43 @@ class PurchaseOrdersSection extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
+  }
+}
+
+class _PoDateField extends StatelessWidget {
+  const _PoDateField({
+    required this.label,
+    required this.value,
+    required this.onPicked,
+    this.firstDate,
+  });
+
+  final String label;
+  final DateTime? value;
+  final ValueChanged<DateTime> onPicked;
+  final DateTime? firstDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      readOnly: true,
+      controller:
+          TextEditingController(text: value == null ? '' : _isoDate(value!)),
+      decoration: InputDecoration(
+        labelText: label,
+        suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+      ),
+      onTap: () async {
+        final now = DateTime.now();
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value ?? firstDate ?? now,
+          firstDate: firstDate ?? DateTime(now.year - 1),
+          lastDate: DateTime(now.year + 3),
+        );
+        if (picked != null) onPicked(picked);
+      },
+    );
   }
 }
 

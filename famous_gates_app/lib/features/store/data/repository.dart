@@ -289,16 +289,76 @@ class StoreRepository {
   }
 
   /// List purchase orders (for selecting which PO to GRN against).
-  Future<List<Map<String, dynamic>>> getPurchaseOrders({String? status}) async {
+  Future<List<Map<String, dynamic>>> getPurchaseOrders({
+    String? status,
+    String? supplierId,
+    String? fromDate,
+    String? toDate,
+  }) async {
     final response =
         await _dio.get('/procurement/purchase-orders', queryParameters: {
-      if (status != null) 'status': status,
+      if (status != null && status.isNotEmpty && status != 'all')
+        'status': status,
+      if (supplierId != null && supplierId.isNotEmpty)
+        'supplier_id': supplierId,
+      if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+      if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+      'source_module': 'central_store',
+      'limit': 100,
+    });
+    return _parseList(response.data, (j) => j);
+  }
+
+  Future<Map<String, dynamic>> getPurchaseOrder(String id) async {
+    final response = await _dio.get('/procurement/purchase-orders/$id',
+        queryParameters: {'source_module': 'central_store'});
+    return _unwrap(response.data);
+  }
+
+  Future<Map<String, dynamic>> createPurchaseOrder(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/procurement/purchase-orders', data: {
+      ...data,
+      'source_module': 'central_store',
+    });
+    return _unwrap(response.data);
+  }
+
+  Future<Map<String, dynamic>> updatePurchaseOrder(
+      String id, Map<String, dynamic> data) async {
+    final response = await _dio.put('/procurement/purchase-orders/$id', data: {
+      ...data,
+      'source_module': 'central_store',
+    });
+    return _unwrap(response.data);
+  }
+
+  Future<void> approvePurchaseOrder(String id) async {
+    await _dio.put('/procurement/purchase-orders/$id/approve',
+        queryParameters: {'source_module': 'central_store'});
+  }
+
+  Future<void> cancelPurchaseOrder(String id) async {
+    await _dio.put('/procurement/purchase-orders/$id/cancel',
+        queryParameters: {'source_module': 'central_store'});
+  }
+
+  Future<void> sendPurchaseOrder(String id) async {
+    await _dio.post('/procurement/purchase-orders/$id/send',
+        queryParameters: {'source_module': 'central_store'});
+  }
+
+  /// List Goods Received Notes (for the GRN register cards).
+  Future<List<Map<String, dynamic>>> getGrns({String? status}) async {
+    final response = await _dio.get('/procurement/grn', queryParameters: {
+      if (status != null && status.isNotEmpty && status != 'all')
+        'status': status,
     });
     return _parseList(response.data, (j) => j);
   }
 
   /// Submit a new Goods Receipt Note.
-  /// [data] must contain: po_id, invoice_number, items[].
+  /// [data] must contain: po_id, supplier_id, items[].
   Future<Map<String, dynamic>> submitGrn(Map<String, dynamic> data) async {
     final response = await _dio.post('/procurement/grn', data: data);
     return _unwrap(response.data);

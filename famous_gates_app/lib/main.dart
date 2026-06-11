@@ -78,12 +78,6 @@ class FamousGatesApp extends ConsumerWidget {
         // select-all (Ctrl+C/V/X/A) keep working inside fields. Ctrl+R and F5
         // raise a global refresh signal that screens react to.
         //
-        // SelectionArea makes ALL plain Text selectable so users can drag-select
-        // and copy any label/value across the system (TextFields manage their
-        // own selection and are unaffected).
-        // SelectionArea needs an Overlay ancestor (for selection handles/menu).
-        // The builder sits above the app's Navigator/Overlay, so we provide a
-        // dedicated Overlay here for the SelectionArea to attach to.
         final Widget wrapped = CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
             const SingleActivator(LogicalKeyboardKey.keyR, control: true): () =>
@@ -95,13 +89,7 @@ class FamousGatesApp extends ConsumerWidget {
           },
           child: Focus(
             autofocus: true,
-            child: Overlay(
-              initialEntries: [
-                OverlayEntry(
-                  builder: (_) => SelectionArea(child: child),
-                ),
-              ],
-            ),
+            child: child,
           ),
         );
 
