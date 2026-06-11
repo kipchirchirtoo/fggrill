@@ -77,6 +77,10 @@ class FamousGatesApp extends ConsumerWidget {
         // NOT replace Flutter's default text shortcuts, so copy/paste/cut/
         // select-all (Ctrl+C/V/X/A) keep working inside fields. Ctrl+R and F5
         // raise a global refresh signal that screens react to.
+        //
+        // SelectionArea makes ALL plain Text selectable so users can drag-select
+        // and copy any label/value across the system (TextFields manage their
+        // own selection and are unaffected).
         final Widget wrapped = CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
             const SingleActivator(LogicalKeyboardKey.keyR, control: true): () =>
@@ -86,7 +90,10 @@ class FamousGatesApp extends ConsumerWidget {
             const SingleActivator(LogicalKeyboardKey.f5): () =>
                 ref.read(globalRefreshTickProvider.notifier).state++,
           },
-          child: Focus(autofocus: true, child: child),
+          child: Focus(
+            autofocus: true,
+            child: SelectionArea(child: child),
+          ),
         );
 
         return FutureBuilder<String>(
