@@ -613,59 +613,290 @@ Widget _detailPill(String label, String value) => Container(
       ),
     );
 
+/// Open a full-screen, well-structured detail page for a record (replaces the
+/// old cramped key/value dialog). Used by every "View" across the central store.
 Future<void> _showMapDetails(
   BuildContext context,
   String title,
   Map<String, dynamic> row, {
   List<Widget> actions = const [],
 }) async {
-  await showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: row.entries
-                .where((entry) => _shouldShowDetailEntry(row, entry))
-                .take(40)
-                .map((entry) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 160,
-                            child: Text(
-                              _detailLabel(entry.key).toUpperCase(),
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.kTextSecondary),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              _detailValue(row, entry.key, entry.value),
-                            ),
-                          ),
-                        ],
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => _RecordDetailPage(title: title, row: row, actions: actions),
+    ),
+  );
+}
+
+// Numeric fields worth surfacing as headline metrics (detailed analysis strip).
+const _metricKeyHints = [
+  'total_loss',
+  'total_value',
+  'total_amount',
+  'grand_total',
+  'amount',
+  'quantity',
+  'quantity_received',
+  'unit_cost',
+  'unit_price',
+  'current_stock',
+  'balance',
+  'total_quantity',
+];
+
+class _RecordDetailPage extends StatelessWidget {
+  const _RecordDetailPage({
+    required this.title,
+    required this.row,
+    this.actions = const [],
+  });
+
+  final String title;
+  final Map<String, dynamic> row;
+  final List<Widget> actions;
+
+  num? _asNum(dynamic v) {
+    if (v is num) return v;
+    return num.tryParse('${v ?? ''}'.replaceAll(',', '').trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = row.entries
+        .where((entry) => _shouldShowDetailEntry(row, entry))
+        .take(60)
+        .toList();
+
+    final status = _text(row, ['status', 'approval_status'], '');
+
+    // Build a small "headline metrics" strip from notable numeric fields.
+    final metrics = <MapEntry<String, num>>[];
+    for (final key in _metricKeyHints) {
+      if (metrics.length >= 4) break;
+      if (!row.containsKey(key)) continue;
+      final n = _asNum(row[key]);
+      if (n == null) continue;
+      if (metrics.any((m) => m.key == key)) continue;
+      metrics.add(MapEntry(key, n));
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.kSurface,
+      appBar: AppBar(
+        title: Text(title, overflow: TextOverflow.ellipsis),
+        actions: actions.isEmpty ? null : [...actions, const SizedBox(width: 8)],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 980),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                // Header
+                _card(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.kPrimary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(PhosphorIcons.fileText(),
+                            color: AppColors.kPrimary),
                       ),
-                    ))
-                .toList(),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title,
+                                style: const TextStyle(
+                                    fontSize: 18, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            const Text('Record details & analysis',
+                                style: TextStyle(
+                                    color: AppColors.kTextSecondary,
+                                    fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      if (status.isNotEmpty) _StatusBadge(status: status),
+                    ],
+                  ),
+                ),
+                if (metrics.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: metrics
+                        .map((m) => _MetricTile(
+                              label: _detailLabel(m.key),
+                              value: _formatMetric(m.key, m.value),
+                            ))
+                        .toList(),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                _card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Details',
+                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      const Divider(height: 1),
+                      const SizedBox(height: 6),
+                      LayoutBuilder(builder: (context, c) {
+                        final twoCol = c.maxWidth > 640;
+                        if (!twoCol) {
+                          return Column(
+                            children: entries
+                                .map((e) => _detailRow(e.key, e.value))
+                                .toList(),
+                          );
+                        }
+                        final rows = <Widget>[];
+                        for (var i = 0; i < entries.length; i += 2) {
+                          final left = entries[i];
+                          final hasRight = i + 1 < entries.length;
+                          rows.add(Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _detailRow(left.key, left.value)),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                child: hasRight
+                                    ? _detailRow(entries[i + 1].key,
+                                        entries[i + 1].value)
+                                    : const SizedBox.shrink(),
+                              ),
+                            ],
+                          ));
+                        }
+                        return Column(children: rows);
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ...actions,
-      ],
-    ),
-  );
+    );
+  }
+
+  String _formatMetric(String key, num v) {
+    final isMoney = key.contains('value') ||
+        key.contains('loss') ||
+        key.contains('amount') ||
+        key.contains('cost') ||
+        key.contains('price') ||
+        key.contains('total');
+    final s = v == v.roundToDouble()
+        ? v.toStringAsFixed(0)
+        : v.toStringAsFixed(2);
+    return isMoney ? 'KES $s' : s;
+  }
+
+  Widget _detailRow(String key, dynamic value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_detailLabel(key).toUpperCase(),
+                style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.kTextSecondary)),
+            const SizedBox(height: 3),
+            SelectableText(
+              _detailValue(row, key, value),
+              style: const TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      );
+
+  Widget _card({required Widget child}) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.5)),
+        ),
+        child: child,
+      );
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 200,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text(label.toUpperCase(),
+              style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.kTextSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.status});
+  final String status;
+  @override
+  Widget build(BuildContext context) {
+    final s = status.toLowerCase();
+    Color c = Colors.blueGrey;
+    if (s.contains('pending') || s.contains('draft')) c = const Color(0xFFB45309);
+    if (s.contains('approv') ||
+        s.contains('complete') ||
+        s.contains('receiv') ||
+        s.contains('paid') ||
+        s.contains('confirm')) {
+      c = const Color(0xFF15803D);
+    }
+    if (s.contains('reject') || s.contains('cancel') || s.contains('damaged')) {
+      c = Colors.red;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(status.toUpperCase(),
+          style: TextStyle(
+              color: c, fontSize: 11, fontWeight: FontWeight.w800)),
+    );
+  }
 }
 
 class GoodsReceivingSection extends ConsumerStatefulWidget {
@@ -739,8 +970,10 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(PhosphorIcons.fileText()),
                     title: Text(_text(p, ['po_number', 'id'], 'PO')),
-                    subtitle: Text(
-                        '${_text(p, ['supplier_name', 'supplier'], 'Supplier')} • ${_text(p, ['status'])}'),
+                    subtitle: Text('${_text(p, [
+                          'supplier_name',
+                          'supplier'
+                        ], 'Supplier')} • ${_text(p, ['status'])}'),
                   ),
                 ))
             .toList(),
@@ -1074,13 +1307,12 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
                 onDeleted: () => setState(() {
                   _poId = null;
                   _poNumber = null;
-                })
-                ,
+                }),
               )
             else
               const Text("Auto-load a PO's supplier & items into this GRN",
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.kTextSecondary)),
+                  style:
+                      TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
           ]),
           const SizedBox(height: 16),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3574,6 +3806,26 @@ class _SupplierSearchFieldState extends State<_SupplierSearchField> {
 String _supplierLabel(Map<String, dynamic> supplier) =>
     _text(supplier, ['name', 'supplier_name'], 'Supplier');
 
+String _recordSupplierId(Map<String, dynamic> record) {
+  final direct = _text(record, ['supplier_id'], '');
+  if (direct.isNotEmpty) return direct;
+  final supplier = record['supplier'];
+  if (supplier is Map) {
+    return _text(supplier.cast<String, dynamic>(), ['id'], '');
+  }
+  return '';
+}
+
+String _recordSupplierName(Map<String, dynamic> record) {
+  final direct = _text(record, ['supplier_name', 'other_supplier_name'], '');
+  if (direct.isNotEmpty) return direct;
+  final supplier = record['supplier'];
+  if (supplier is Map) {
+    return _supplierLabel(supplier.cast<String, dynamic>());
+  }
+  return 'Supplier';
+}
+
 Widget _supplierWorkflowTabs(WidgetRef ref, AdminSection active) {
   final tabs = [
     (AdminSection.suppliers, 'Suppliers'),
@@ -4364,7 +4616,7 @@ class CentralSpoilageSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => _LiveSection(
         title: 'Spoilage Log',
-        subtitle: 'Central-store loss records, disposal reasons and approvals',
+        subtitle: 'Central-store loss records for auditor audit and notes',
         icon: PhosphorIcons.trash(),
         child: _LiveRows(
           value: ref.watch(centralSpoilageProvider),
@@ -4386,7 +4638,7 @@ class CentralSpoilageSection extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                     child: _StatCard(
-                        label: 'Pending Approval',
+                        label: 'Pending Auditor Audit',
                         value: '$pending',
                         icon: PhosphorIcons.clock(),
                         color: Colors.orange)),
@@ -4433,16 +4685,6 @@ class CentralSpoilageSection extends ConsumerWidget {
                                   ])}',
                               row),
                           child: const Text('View')),
-                      if (status.toUpperCase() == 'PENDING') ...[
-                        TextButton(
-                            onPressed: () =>
-                                _updateStatus(context, ref, row, 'REJECTED'),
-                            child: const Text('Reject')),
-                        ElevatedButton(
-                            onPressed: () =>
-                                _updateStatus(context, ref, row, 'APPROVED'),
-                            child: const Text('Approve')),
-                      ],
                     ]),
                   );
                 },
@@ -4528,29 +4770,7 @@ class CentralSpoilageSection extends ConsumerWidget {
       await ref.read(adminRepositoryProvider).createCentralSpoilageRecord(body);
       if (!context.mounted) return;
       _refreshCentralStore(ref);
-      _snack(context, 'Spoilage recorded');
-    } catch (error) {
-      if (context.mounted) _snack(context, 'Failed: $error');
-    }
-  }
-
-  Future<void> _updateStatus(BuildContext context, WidgetRef ref,
-      Map<String, dynamic> row, String status) async {
-    if (!await _confirm(
-      context,
-      title: '${status == 'APPROVED' ? 'Approve' : 'Reject'} Spoilage',
-      message: '${status == 'APPROVED' ? 'Approve' : 'Reject'} this record?',
-      confirmLabel: status == 'APPROVED' ? 'Approve' : 'Reject',
-    )) {
-      return;
-    }
-    try {
-      await ref
-          .read(adminRepositoryProvider)
-          .updateCentralSpoilageStatus(_id(row), status, null);
-      if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Spoilage ${status.toLowerCase()}');
+      _snack(context, 'Spoilage recorded for auditor audit');
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
@@ -4563,7 +4783,8 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => _LiveSection(
         title: 'Supplier Invoices',
-        subtitle: 'Supplier AP invoice capture, review and payment handoff',
+        subtitle:
+            'Capture AP invoices and submit them for auditor three-way review',
         icon: PhosphorIcons.receipt(),
         child: _LiveRows(
           value: ref.watch(centralSupplierInvoicesProvider),
@@ -4584,9 +4805,11 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
                 return _rowTile(
                   icon: PhosphorIcons.receipt(),
                   title: _text(row, ['invoice_number', 'id']),
-                  subtitle: '${_text(row, [
-                        'supplier_name'
-                      ])} • ${_date(row['invoice_date'])}',
+                  subtitle:
+                      '${_recordSupplierName(row)} • ${_date(row['invoice_date'])} • Balance ${_money(_num(row, [
+                        'balance_due',
+                        'total_amount'
+                      ]))}',
                   trailing: Wrap(spacing: 6, children: [
                     _statusChip(status),
                     OutlinedButton(
@@ -4595,20 +4818,22 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
                             'Invoice ${_text(row, ['invoice_number', 'id'])}',
                             row),
                         child: const Text('View')),
-                    if (!status.toLowerCase().contains('approved')) ...[
-                      TextButton(
-                          onPressed: () => _rejectInvoice(context, ref, row),
-                          child: const Text('Reject')),
+                    if (status.toLowerCase() == 'draft' ||
+                        status.toLowerCase() == 'rejected')
                       ElevatedButton(
-                          onPressed: () => _approveInvoice(context, ref, row),
-                          child: const Text('Approve')),
-                    ],
-                    if (status.toLowerCase().contains('approved'))
-                      OutlinedButton(
-                          onPressed: () => ref
-                              .read(adminSectionProvider.notifier)
-                              .state = AdminSection.procurementPayments,
-                          child: const Text('Pay')),
+                          onPressed: () => _submitInvoice(context, ref, row),
+                          child: const Text('Submit to Auditor')),
+                    if (status.toLowerCase() == 'submitted')
+                      const Chip(
+                        label: Text('AWAITING AUDIT',
+                            style: TextStyle(fontSize: 10)),
+                      ),
+                    if (status.toLowerCase().contains('approved') ||
+                        status.toLowerCase() == 'open')
+                      const Chip(
+                        label: Text('READY FOR ACCOUNTANT PAYMENT',
+                            style: TextStyle(fontSize: 10)),
+                      ),
                   ]),
                 );
               },
@@ -4751,7 +4976,6 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
                       if (description.isEmpty || quantity <= 0) return;
                       setState(() {
                         invoiceItems.add({
-                          'item_id': 'manual',
                           'description': description,
                           'item_name': description,
                           'quantity': quantity,
@@ -4849,57 +5073,37 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
     notesCtrl.dispose();
     if (body == null) return;
     try {
-      await ref.read(adminRepositoryProvider).createSupplierInvoice(body);
+      final saved =
+          await ref.read(adminRepositoryProvider).createSupplierInvoice(body);
+      final invoiceId = _id(saved);
+      if (invoiceId.isNotEmpty) {
+        await ref
+            .read(adminRepositoryProvider)
+            .submitSupplierInvoice(invoiceId);
+      }
       if (!context.mounted) return;
       _refreshCentralStore(ref);
-      _snack(context, 'Invoice recorded');
+      _snack(context, 'Invoice recorded and submitted for auditor review');
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
   }
 
-  Future<void> _approveInvoice(
+  Future<void> _submitInvoice(
       BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
     if (!await _confirm(context,
-        title: 'Approve Invoice', message: 'Approve this invoice?')) {
+        title: 'Submit Invoice',
+        message: 'Submit ${_text(row, [
+              'invoice_number',
+              'id'
+            ])} for auditor three-way review?')) {
       return;
     }
     try {
-      await ref.read(adminRepositoryProvider).approveSupplierInvoice(_id(row));
+      await ref.read(adminRepositoryProvider).submitSupplierInvoice(_id(row));
       if (!context.mounted) return;
       _refreshCentralStore(ref);
-      _snack(context, 'Invoice approved');
-    } catch (error) {
-      if (context.mounted) _snack(context, 'Failed: $error');
-    }
-  }
-
-  Future<void> _rejectInvoice(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    final reasonCtrl = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Invoice'),
-        content: _field(reasonCtrl, 'Reason', maxLines: 3),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-              child: const Text('Reject')),
-        ],
-      ),
-    );
-    reasonCtrl.dispose();
-    if (reason == null) return;
-    try {
-      await ref
-          .read(adminRepositoryProvider)
-          .rejectSupplierInvoice(_id(row), reason);
-      if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Invoice rejected');
+      _snack(context, 'Invoice submitted for auditor review');
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
@@ -4912,7 +5116,8 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => _LiveSection(
         title: 'Supplier Payments',
-        subtitle: 'Supplier payment initiation, processing and ledger review',
+        subtitle:
+            'Read-only supplier payment register posted by branch accounting',
         icon: PhosphorIcons.creditCard(),
         child: _LiveRows(
           value: ref.watch(centralSupplierPaymentsProvider),
@@ -4920,20 +5125,16 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
             _supplierWorkflowTabs(ref, AdminSection.procurementPayments),
             const SizedBox(height: 16),
             _RowsCard(
-              title: 'Payments',
+              title: 'Payment Register',
               rows: rows,
-              emptyMessage: 'No payments found',
-              trailing: ElevatedButton.icon(
-                onPressed: () => _recordPayment(context, ref),
-                icon: const Icon(Icons.add, size: 14),
-                label: const Text('Record Payment'),
-              ),
+              emptyMessage:
+                  'No supplier payments posted by branch accountant yet',
               builder: (row) {
                 final status = _text(row, ['status'], 'draft');
                 return _rowTile(
                   icon: PhosphorIcons.creditCard(),
                   title: _text(row, ['payment_number', 'id']),
-                  subtitle: '${_text(row, ['supplier_name'])} • ${_text(row, [
+                  subtitle: '${_recordSupplierName(row)} • ${_text(row, [
                         'payment_method'
                       ], 'method')} • ${_text(row, ['reference_number'], 'no ref')}',
                   trailing: Wrap(spacing: 6, children: [
@@ -4944,16 +5145,11 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
                             'Payment ${_text(row, ['payment_number', 'id'])}',
                             row),
                         child: const Text('View')),
-                    if (_text(row, ['supplier_id'], '').isNotEmpty)
+                    if (_recordSupplierId(row).isNotEmpty)
                       OutlinedButton(
                           onPressed: () => _showSupplierLedger(
-                              context, ref, _text(row, ['supplier_id'])),
+                              context, ref, _recordSupplierId(row)),
                           child: const Text('Ledger')),
-                    if (!status.toLowerCase().contains('processed') &&
-                        !status.toLowerCase().contains('paid'))
-                      ElevatedButton(
-                          onPressed: () => _processPayment(context, ref, row),
-                          child: const Text('Process')),
                   ]),
                 );
               },
@@ -4961,191 +5157,6 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
           ]),
         ),
       );
-
-  Future<void> _recordPayment(BuildContext context, WidgetRef ref) async {
-    final suppliers = await ref
-        .read(adminRepositoryProvider)
-        .getStoreSuppliers(scope: 'global');
-    if (!context.mounted) return;
-    final repo = ref.read(adminRepositoryProvider);
-    String? supplierId;
-    String? invoiceId;
-    List<Map<String, dynamic>> supplierInvoices = [];
-    final amountCtrl = TextEditingController();
-    final refCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-    String method = 'bank_transfer';
-    Future<void> loadSupplierInvoices(
-      String? selectedSupplierId,
-      void Function(void Function()) setState,
-    ) async {
-      invoiceId = null;
-      supplierInvoices = [];
-      amountCtrl.clear();
-      if (selectedSupplierId == null || selectedSupplierId.isEmpty) return;
-      final invoices = await repo.getSupplierInvoices(
-        supplierId: selectedSupplierId,
-        status: 'approved',
-      );
-      setState(() {
-        supplierInvoices = invoices
-            .where(
-                (invoice) => _num(invoice, ['balance_due', 'total_amount']) > 0)
-            .toList();
-      });
-    }
-
-    final body = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Record Supplier Payment'),
-          content: SizedBox(
-            width: 560,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                _SupplierSearchField(
-                  suppliers: suppliers,
-                  selectedSupplierId: supplierId,
-                  onSelected: (supplier) async {
-                    supplierId = _id(supplier);
-                    setState(() {});
-                    await loadSupplierInvoices(supplierId, setState);
-                  },
-                  onCleared: () => setState(() {
-                    supplierId = null;
-                    invoiceId = null;
-                    supplierInvoices = [];
-                    amountCtrl.clear();
-                  }),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String?>(
-                  isExpanded: true,
-                  initialValue: invoiceId,
-                  decoration:
-                      const InputDecoration(labelText: 'Allocate to Invoice'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                        value: null, child: Text('No invoice allocation')),
-                    ...supplierInvoices.map((invoice) {
-                      final due =
-                          _num(invoice, ['balance_due', 'total_amount']);
-                      return DropdownMenuItem<String?>(
-                        value: _id(invoice),
-                        child: Text(
-                          '${_text(invoice, [
-                                'invoice_number',
-                                'id'
-                              ])} • Due ${_money(due)}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: (value) => setState(() {
-                    invoiceId = value;
-                    if (value != null) {
-                      final invoice = supplierInvoices.firstWhere(
-                        (row) => _id(row) == value,
-                        orElse: () => const <String, dynamic>{},
-                      );
-                      amountCtrl.text = _plainNum(
-                          _num(invoice, ['balance_due', 'total_amount']));
-                    }
-                  }),
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                    child: _field(amountCtrl, 'Amount',
-                        keyboardType: TextInputType.number, required: true),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: method,
-                      decoration:
-                          const InputDecoration(labelText: 'Payment Method'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'bank_transfer',
-                            child: Text('Bank Transfer')),
-                        DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                        DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-                        DropdownMenuItem(
-                            value: 'cheque', child: Text('Cheque')),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => method = value ?? method),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                _field(refCtrl, 'Reference Number'),
-                const SizedBox(height: 12),
-                _field(notesCtrl, 'Notes'),
-              ]),
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: () {
-                  if (supplierId == null) return;
-                  final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                  if (amount <= 0) return;
-                  Navigator.pop(ctx, {
-                    'supplier_id': supplierId,
-                    'payment_amount': amount,
-                    'payment_method': method,
-                    'reference_number': refCtrl.text.trim(),
-                    if (notesCtrl.text.trim().isNotEmpty)
-                      'notes': notesCtrl.text.trim(),
-                    'payment_date':
-                        DateTime.now().toIso8601String().split('T').first,
-                    if (invoiceId != null)
-                      'allocations': [
-                        {'invoice_id': invoiceId, 'amount': amount}
-                      ],
-                  });
-                },
-                child: const Text('Record Payment')),
-          ],
-        ),
-      ),
-    );
-    amountCtrl.dispose();
-    refCtrl.dispose();
-    notesCtrl.dispose();
-    if (body == null) return;
-    try {
-      await ref.read(adminRepositoryProvider).createSupplierPayment(body);
-      if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Payment recorded');
-    } catch (error) {
-      if (context.mounted) _snack(context, 'Failed: $error');
-    }
-  }
-
-  Future<void> _processPayment(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    if (!await _confirm(context,
-        title: 'Process Payment', message: 'Process this payment?')) {
-      return;
-    }
-    try {
-      await ref.read(adminRepositoryProvider).processSupplierPayment(_id(row));
-      if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Payment processed');
-    } catch (error) {
-      if (context.mounted) _snack(context, 'Failed: $error');
-    }
-  }
 
   Future<void> _showSupplierLedger(
       BuildContext context, WidgetRef ref, String supplierId) async {
