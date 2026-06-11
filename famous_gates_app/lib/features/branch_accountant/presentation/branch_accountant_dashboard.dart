@@ -15974,6 +15974,11 @@ void _toast(String message) {
 }
 
 // ── Outbound branch payments (essentials / vendors / payouts) ────────────────
+String _txt(Map<String, dynamic> m, List<String> keys, [String fallback = '']) {
+  final v = _text(m, keys);
+  return v.isEmpty ? fallback : v;
+}
+
 const _payCategories = {
   'vendor': 'Vendor / Supplier',
   'petty_cash': 'Petty Cash',
@@ -16108,11 +16113,11 @@ class _OutboundPaymentsSectionState
   }
 
   Widget _paymentRow(Map<String, dynamic> p) {
-    final status = _text(p, ['status'], 'pending');
+    final status = _txt(p, ['status'], 'pending');
     final amount = _num(p['amount']);
     final requiresDirector = p['requires_director'] == true;
-    final isCreator = _text(p, ['created_by']) == _uid;
-    final created = _text(p, ['created_at']);
+    final isCreator = _txt(p, ['created_by']) == _uid;
+    final created = _txt(p, ['created_at']);
     final when = DateTime.tryParse(created);
 
     final actions = <Widget>[];
@@ -16143,7 +16148,7 @@ class _OutboundPaymentsSectionState
     }
 
     return InkWell(
-      onTap: () => _showRecord(context, p, title: _text(p, ['payment_number'], 'Payment')),
+      onTap: () => _showRecord(context, p, title: _txt(p, ['payment_number'], 'Payment')),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
@@ -16158,11 +16163,11 @@ class _OutboundPaymentsSectionState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_text(p, ['payee_name'], 'Payee'),
+                  Text(_txt(p, ['payee_name'], 'Payee'),
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   Text(
-                    '${_payCategories[_text(p, ['category'])] ?? _text(p, ['category'])}'
-                    ' · ${_payMethods[_text(p, ['payment_method'])] ?? _text(p, ['payment_method'])}'
+                    '${_payCategories[_txt(p, ['category'])] ?? _txt(p, ['category'])}'
+                    ' · ${_payMethods[_txt(p, ['payment_method'])] ?? _txt(p, ['payment_method'])}'
                     '${when != null ? ' · ${DateFormat('MMM d').format(when)}' : ''}',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
