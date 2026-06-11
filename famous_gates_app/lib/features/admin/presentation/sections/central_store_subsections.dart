@@ -583,6 +583,36 @@ Widget _statusChip(String status) {
   );
 }
 
+Widget _detailPill(String label, String value) => Container(
+      width: 170,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.kDivider.withValues(alpha: .7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.kTextSecondary,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+
 Future<void> _showMapDetails(
   BuildContext context,
   String title,
@@ -654,10 +684,120 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
   final _scannerFocus = FocusNode();
 
   String? _supplierId;
+  String? _poId;
+  String? _poNumber;
+  bool _loadingPo = false;
   bool _scannerMode = true;
   bool _isSubmitting = false;
   List<Map<String, dynamic>> _manualResults = [];
   final List<Map<String, dynamic>> _scanned = [];
+
+  num _gnum(dynamic v) => v is num ? v : num.tryParse('${v ?? 0}') ?? 0;
+
+  /// Automation: pick an approved PO; its supplier + line items load straight
+  /// into the receiving session, prefilled with ordered quantity and unit cost.
+  Future<void> _loadFromPo() async {
+    setState(() => _loadingPo = true);
+    List<Map<String, dynamic>> pos;
+    try {
+      pos = await ref
+          .read(adminRepositoryProvider)
+          .getPurchaseOrders(supplierId: _supplierId);
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Could not load POs: $e')));
+      }
+      if (mounted) setState(() => _loadingPo = false);
+      return;
+    }
+    final selectable = pos.where((p) {
+      final s = _text(p, ['status'], '').toLowerCase();
+      return !s.contains('cancel') &&
+          !s.contains('closed') &&
+          !s.contains('fully');
+    }).toList();
+    if (!mounted) {
+      setState(() => _loadingPo = false);
+      return;
+    }
+    setState(() => _loadingPo = false);
+    if (selectable.isEmpty) {
+      AppNotifier.showSnackBar(context,
+          const SnackBar(content: Text('No open purchase orders to receive')));
+      return;
+    }
+    final chosen = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Receive against Purchase Order'),
+        children: selectable
+            .map((p) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(ctx, p),
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(PhosphorIcons.fileText()),
+                    title: Text(_text(p, ['po_number', 'id'], 'PO')),
+                    subtitle: Text(
+                        '${_text(p, ['supplier_name', 'supplier'], 'Supplier')} • ${_text(p, ['status'])}'),
+                  ),
+                ))
+            .toList(),
+      ),
+    );
+    if (chosen == null) return;
+    await _applyPo(_text(chosen, ['id']));
+  }
+
+  Future<void> _applyPo(String poId) async {
+    if (poId.isEmpty) return;
+    setState(() => _loadingPo = true);
+    try {
+      final po = await ref.read(adminRepositoryProvider).getPurchaseOrder(poId);
+      final items = (po['items'] as List?) ?? const [];
+      final rows = items.whereType<Map>().map((raw) {
+        final m = Map<String, dynamic>.from(raw);
+        final ordered = _gnum(m['quantity_ordered']);
+        final pending = _gnum(m['quantity_pending']);
+        final outstanding = pending > 0 ? pending : ordered;
+        return <String, dynamic>{
+          'item_id': _text(m, ['item_id', 'sku', 'id']),
+          'item_name': _text(m, ['item_name', 'name'], 'Item'),
+          'sku': _text(m, ['item_id', 'sku']),
+          'unit_of_measure': _text(m, ['unit_of_measure', 'unit'], 'units'),
+          'quantity_received': outstanding,
+          'quantity_ordered': ordered,
+          'po_item_id': _text(m, ['id']),
+          'unit_price': _gnum(m['unit_price']),
+          'barcode': '',
+          'added_via': 'po',
+        };
+      }).toList();
+      if (!mounted) return;
+      setState(() {
+        _poId = poId;
+        _poNumber = _text(po, ['po_number', 'id']);
+        _supplierId = _text(po, ['supplier_id'], _supplierId ?? '');
+        _scanned
+          ..clear()
+          ..addAll(rows);
+      });
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(
+            content: Text(
+                'Loaded ${rows.length} item(s) from ${_poNumber ?? 'PO'} — review and Post GRN')),
+      );
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Could not load PO: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingPo = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -829,15 +969,19 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
     try {
       await ref.read(adminRepositoryProvider).createGRN({
         'supplier_id': _supplierId,
+        if (_poId != null) 'po_id': _poId,
         'grn_date': DateTime.now().toIso8601String().split('T').first,
         'delivery_note_number': _deliveryNoteCtrl.text.trim(),
         'invoice_number': _invoiceCtrl.text.trim(),
         'items': _scanned
             .map((item) => {
                   'item_id': item['item_id'],
+                  if (item['po_item_id'] != null &&
+                      '${item['po_item_id']}'.isNotEmpty)
+                    'po_item_id': item['po_item_id'],
                   'quantity_received': item['quantity_received'],
                   'quantity_accepted': item['quantity_received'],
-                  'quantity_ordered': 0,
+                  'quantity_ordered': item['quantity_ordered'] ?? 0,
                   'unit_price': item['unit_price'],
                   'unit_of_measure': item['unit_of_measure'],
                   'quality_status': 'accepted',
@@ -853,6 +997,8 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
         _scanned.clear();
         _invoiceCtrl.clear();
         _deliveryNoteCtrl.clear();
+        _poId = null;
+        _poNumber = null;
       });
       if (mounted) {
         AppNotifier.showSnackBar(
@@ -885,16 +1031,12 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
           Row(children: [
             Expanded(
               flex: 2,
-              child: DropdownButtonFormField<String>(
-                initialValue: _supplierId,
-                decoration: const InputDecoration(labelText: 'Supplier'),
-                items: suppliers
-                    .map((supplier) => DropdownMenuItem(
-                          value: _text(supplier, ['id']),
-                          child: Text(_text(supplier, ['name'])),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => _supplierId = value),
+              child: _SupplierSearchField(
+                suppliers: suppliers,
+                selectedSupplierId: _supplierId,
+                onSelected: (supplier) =>
+                    setState(() => _supplierId = _id(supplier)),
+                onCleared: () => setState(() => _supplierId = null),
               ),
             ),
             const SizedBox(width: 12),
@@ -912,7 +1054,35 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
               ),
             ),
           ]),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          Row(children: [
+            OutlinedButton.icon(
+              onPressed: _loadingPo ? null : _loadFromPo,
+              icon: _loadingPo
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(PhosphorIcons.fileText(), size: 16),
+              label: Text(_loadingPo ? 'Loading…' : 'Load from PO'),
+            ),
+            const SizedBox(width: 10),
+            if (_poId != null)
+              Chip(
+                avatar: const Icon(Icons.link, size: 16),
+                label: Text('Linked: ${_poNumber ?? _poId}'),
+                onDeleted: () => setState(() {
+                  _poId = null;
+                  _poNumber = null;
+                })
+                ,
+              )
+            else
+              const Text("Auto-load a PO's supplier & items into this GRN",
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.kTextSecondary)),
+          ]),
+          const SizedBox(height: 16),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: Card(
@@ -1812,20 +1982,16 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
   String? _editingPoId;
   String? _editingPoNumber;
   String? _supplierId;
-  String? _branchId;
-  String _outlet = 'Central Store';
   String _paymentTerms = 'credit_30_days';
   DateTime _poDate = DateTime.now();
   DateTime? _expectedDate;
   final _bulkController = TextEditingController();
-  final _deliveryController = TextEditingController(text: 'Central Store');
   final _notesController = TextEditingController();
   final List<_ParsedPurchaseOrderItem> _parsedItems = [];
 
   @override
   void dispose() {
     _bulkController.dispose();
-    _deliveryController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -1843,14 +2009,16 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           value: ref.watch(centralPurchaseOrdersProvider),
           data: (rows) {
             final suppliers = ref.watch(centralStoreSuppliersProvider);
-            final branches = ref.watch(centralStoreBranchesProvider);
             final items = ref.watch(centralStoreItemsProvider);
             if (_creating) {
-              return _createView(
-                suppliers.valueOrNull ?? const [],
-                branches.valueOrNull ?? const [],
-                items.valueOrNull ?? const [],
-              );
+              return Column(children: [
+                _supplierWorkflowTabs(ref, AdminSection.purchaseOrders),
+                const SizedBox(height: 16),
+                _createView(
+                  suppliers.valueOrNull ?? const [],
+                  items.valueOrNull ?? const [],
+                ),
+              ]);
             }
             final pending = rows
                 .where((row) =>
@@ -1873,6 +2041,8 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
               return matchesSearch && matchesStatus && matchesSupplier;
             }).toList();
             return Column(children: [
+              _supplierWorkflowTabs(ref, AdminSection.purchaseOrders),
+              const SizedBox(height: 16),
               Row(children: [
                 Expanded(
                   child: TextField(
@@ -1980,9 +2150,24 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                     trailing: Wrap(spacing: 6, children: [
                       _statusChip(status),
                       OutlinedButton(
-                          onPressed: () => _showMapDetails(context,
-                              'PO ${_text(row, ['po_number', 'id'])}', row),
+                          onPressed: () =>
+                              _showPurchaseOrderDetails(context, row),
                           child: const Text('View')),
+                      OutlinedButton(
+                          onPressed: () async {
+                            try {
+                              final detail = await ref
+                                  .read(adminRepositoryProvider)
+                                  .getPurchaseOrder(_id(row));
+                              if (mounted) await _printPurchaseOrderPdf(detail);
+                            } catch (error) {
+                              if (mounted) {
+                                _snack(
+                                    this.context, 'Failed to print PO: $error');
+                              }
+                            }
+                          },
+                          child: const Text('Print')),
                       if (status.toLowerCase() == 'draft')
                         OutlinedButton(
                             onPressed: () => _editDraftPurchaseOrder(row),
@@ -2003,6 +2188,12 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                             onPressed: () =>
                                 _poAction(context, ref, row, 'send'),
                             child: const Text('Send')),
+                      if (status.toLowerCase().contains('approved'))
+                        OutlinedButton(
+                            onPressed: () => ref
+                                .read(adminSectionProvider.notifier)
+                                .state = AdminSection.goodsReceiving,
+                            child: const Text('Receive')),
                     ]),
                   );
                 },
@@ -2014,7 +2205,6 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
 
   Widget _createView(
     List<Map<String, dynamic>> suppliers,
-    List<Map<String, dynamic>> branches,
     List<Map<String, dynamic>> inventory,
   ) {
     final validItems =
@@ -2058,70 +2248,16 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           child: LayoutBuilder(builder: (context, constraints) {
             final width = constraints.maxWidth < 760
                 ? constraints.maxWidth
-                : (constraints.maxWidth - 24) / 3;
+                : (constraints.maxWidth - 12) / 2;
             return Wrap(spacing: 12, runSpacing: 12, children: [
               SizedBox(
                 width: width,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: _supplierId,
-                  decoration: const InputDecoration(labelText: 'Supplier'),
-                  items: suppliers
-                      .map((supplier) => DropdownMenuItem(
-                            value: _id(supplier),
-                            child: Text(
-                              _text(supplier, ['name', 'supplier_name']),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (value) => setState(() => _supplierId = value),
-                ),
-              ),
-              SizedBox(
-                width: width,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: _branchId,
-                  decoration: const InputDecoration(labelText: 'Branch'),
-                  items: branches
-                      .map((branch) => DropdownMenuItem(
-                            value: _id(branch),
-                            child: Text(
-                              _text(branch, ['name', 'branch_name']),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (value) => setState(() => _branchId = value),
-                ),
-              ),
-              SizedBox(
-                width: width,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: _outlet,
-                  decoration:
-                      const InputDecoration(labelText: 'Outlet / Destination'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'Central Store', child: Text('Central Store')),
-                    DropdownMenuItem(
-                        value: 'Restaurant POS', child: Text('Restaurant POS')),
-                    DropdownMenuItem(value: 'Bar POS', child: Text('Bar POS')),
-                    DropdownMenuItem(
-                        value: 'Coffee Shop POS',
-                        child: Text('Coffee Shop POS')),
-                    DropdownMenuItem(
-                        value: 'Bakery POS', child: Text('Bakery POS')),
-                    DropdownMenuItem(
-                        value: 'Fast Food POS', child: Text('Fast Food POS')),
-                    DropdownMenuItem(
-                        value: 'Room Service POS',
-                        child: Text('Room Service POS')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _outlet = value ?? _outlet),
+                child: _SupplierSearchField(
+                  suppliers: suppliers,
+                  selectedSupplierId: _supplierId,
+                  onSelected: (supplier) =>
+                      setState(() => _supplierId = _id(supplier)),
+                  onCleared: () => setState(() => _supplierId = null),
                 ),
               ),
               SizedBox(
@@ -2173,14 +2309,6 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                   ],
                   onChanged: (value) =>
                       setState(() => _paymentTerms = value ?? _paymentTerms),
-                ),
-              ),
-              SizedBox(
-                width: constraints.maxWidth,
-                child: TextField(
-                  controller: _deliveryController,
-                  decoration:
-                      const InputDecoration(labelText: 'Delivery Location'),
                 ),
               ),
               SizedBox(
@@ -2707,10 +2835,6 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
       _snack(context, 'Select a supplier');
       return;
     }
-    if (_branchId == null || _branchId!.isEmpty) {
-      _snack(context, 'Select a branch');
-      return;
-    }
     if (_expectedDate != null && _expectedDate!.isBefore(_poDate)) {
       _snack(context, 'Expected delivery cannot be before PO date');
       return;
@@ -2725,16 +2849,11 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
     try {
       final Map<String, dynamic> payload = {
         'supplier_id': _supplierId,
-        'branch_id': int.tryParse(_branchId!),
         'po_date': _isoDate(_poDate),
         if (_expectedDate != null)
           'expected_delivery_date': _isoDate(_expectedDate!),
         'payment_terms': _paymentTerms,
-        'delivery_terms': [
-          if (_deliveryController.text.trim().isNotEmpty)
-            _deliveryController.text.trim(),
-          'Outlet: $_outlet',
-        ].join(' | '),
+        'delivery_terms': 'Central Store',
         if (_notesController.text.trim().isNotEmpty)
           'special_instructions': _notesController.text.trim(),
         'auto_approve': approveNow,
@@ -2782,13 +2901,10 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
     _editingPoId = null;
     _editingPoNumber = null;
     _supplierId = null;
-    _branchId = null;
-    _outlet = 'Central Store';
     _paymentTerms = 'credit_30_days';
     _poDate = DateTime.now();
     _expectedDate = null;
     _bulkController.clear();
-    _deliveryController.text = 'Central Store';
     _notesController.clear();
     _parsedItems.clear();
   }
@@ -2807,25 +2923,11 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
         _editingPoNumber = _text(detail, ['po_number', 'id']);
         _supplierId = _text(detail, ['supplier_id'], '');
         if (_supplierId!.isEmpty) _supplierId = null;
-        final branch = detail['branch_id'];
-        _branchId = branch == null ? null : '$branch';
         _poDate =
             DateTime.tryParse(_text(detail, ['po_date'], '')) ?? DateTime.now();
         _expectedDate =
             DateTime.tryParse(_text(detail, ['expected_delivery_date'], ''));
         _paymentTerms = _text(detail, ['payment_terms'], 'credit_30_days');
-        final deliveryTerms = _text(detail, ['delivery_terms'], '');
-        _outlet = deliveryTerms.contains('Outlet:')
-            ? deliveryTerms.split('Outlet:').last.trim()
-            : 'Central Store';
-        _deliveryController.text = deliveryTerms
-                .split('|')
-                .first
-                .replaceAll('Outlet:', '')
-                .trim()
-                .isEmpty
-            ? 'Central Store'
-            : deliveryTerms.split('|').first.trim();
         _notesController.text = _text(detail, ['special_instructions'], '');
         _bulkController.clear();
         _parsedItems
@@ -2854,14 +2956,8 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
   Map<String, dynamic> _poForPdf(Map<String, dynamic> savedPo) {
     final suppliers = ref.read(centralStoreSuppliersProvider).valueOrNull ??
         const <Map<String, dynamic>>[];
-    final branches = ref.read(centralStoreBranchesProvider).valueOrNull ??
-        const <Map<String, dynamic>>[];
     final supplier = suppliers.firstWhere(
       (row) => _id(row) == _supplierId,
-      orElse: () => const <String, dynamic>{},
-    );
-    final branch = branches.firstWhere(
-      (row) => _id(row) == _branchId,
       orElse: () => const <String, dynamic>{},
     );
     final total = _parsedItems.fold<num>(0, (sum, item) => sum + item.total);
@@ -2874,7 +2970,7 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           _expectedDate == null ? null : _isoDate(_expectedDate!),
       'supplier': supplier,
       'supplier_name': _text(supplier, ['name', 'supplier_name']),
-      'branch': branch,
+      'branch': const <String, dynamic>{},
       'total_amount': total,
       'subtotal': total,
       'tax_amount': 0,
@@ -3133,6 +3229,152 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
   }
+
+  Future<void> _showPurchaseOrderDetails(
+    BuildContext context,
+    Map<String, dynamic> row,
+  ) async {
+    try {
+      final detail =
+          await ref.read(adminRepositoryProvider).getPurchaseOrder(_id(row));
+      if (!mounted || !context.mounted) return;
+      final status = _text(detail, ['status'], _text(row, ['status'], 'draft'));
+      final items =
+          (detail['items'] is List ? detail['items'] as List : const [])
+              .whereType<Map>()
+              .map((item) => item.cast<String, dynamic>())
+              .toList();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('PO ${_text(detail, ['po_number', 'id'])}'),
+          content: SizedBox(
+            width: 780,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _detailPill(
+                        'Supplier',
+                        _text(detail, ['supplier_name'], 'Supplier'),
+                      ),
+                      _detailPill('Status', status.replaceAll('_', ' ')),
+                      _detailPill(
+                        'Expected',
+                        _date(detail['expected_delivery_date']),
+                      ),
+                      _detailPill(
+                        'Total',
+                        _money(_num(detail, ['total_amount', 'total'])),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  if (items.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(
+                          child: Text('No PO items found',
+                              style:
+                                  TextStyle(color: AppColors.kTextSecondary))),
+                    )
+                  else
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('Item')),
+                          DataColumn(label: Text('Qty')),
+                          DataColumn(label: Text('Unit')),
+                          DataColumn(label: Text('Unit Price')),
+                          DataColumn(label: Text('Total')),
+                        ],
+                        rows: items.map((item) {
+                          final qty =
+                              _num(item, ['quantity_ordered', 'quantity']);
+                          final price = _num(item, ['unit_price']);
+                          final total = _num(item, ['total_price', 'total']);
+                          return DataRow(cells: [
+                            DataCell(SizedBox(
+                              width: 280,
+                              child: Text(
+                                _text(item,
+                                    ['item_name', 'description', 'item_id']),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            )),
+                            DataCell(Text(_plainNum(qty))),
+                            DataCell(Text(
+                                _text(item, ['unit_of_measure', 'unit'], ''))),
+                            DataCell(Text(_money(price))),
+                            DataCell(
+                                Text(_money(total == 0 ? qty * price : total))),
+                          ]);
+                        }).toList(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close')),
+            OutlinedButton(
+                onPressed: () async => _printPurchaseOrderPdf(detail),
+                child: const Text('Print')),
+            if (status.toLowerCase() == 'draft')
+              OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _editDraftPurchaseOrder(detail);
+                  },
+                  child: const Text('Edit Draft')),
+            if (status.toLowerCase().contains('pending') ||
+                status.toLowerCase() == 'draft')
+              ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _poAction(context, ref, detail, 'approve');
+                  },
+                  child: const Text('Approve')),
+            if (!status.toLowerCase().contains('cancel'))
+              TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _poAction(context, ref, detail, 'cancel');
+                  },
+                  child: const Text('Reject')),
+            if (status.toLowerCase().contains('approved'))
+              OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _poAction(context, ref, detail, 'send');
+                  },
+                  child: const Text('Send')),
+            if (status.toLowerCase().contains('approved'))
+              ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ref.read(adminSectionProvider.notifier).state =
+                        AdminSection.goodsReceiving;
+                  },
+                  child: const Text('Receive Goods')),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted && context.mounted) {
+        _snack(context, 'Failed to load PO details: $error');
+      }
+    }
+  }
 }
 
 class _PoDateField extends StatelessWidget {
@@ -3172,6 +3414,194 @@ class _PoDateField extends StatelessWidget {
   }
 }
 
+class _SupplierSearchField extends StatefulWidget {
+  const _SupplierSearchField({
+    required this.suppliers,
+    required this.selectedSupplierId,
+    required this.onSelected,
+    required this.onCleared,
+  });
+
+  final List<Map<String, dynamic>> suppliers;
+  final String? selectedSupplierId;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+  final VoidCallback onCleared;
+
+  @override
+  State<_SupplierSearchField> createState() => _SupplierSearchFieldState();
+}
+
+class _SupplierSearchFieldState extends State<_SupplierSearchField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _selectedSupplierLabel());
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SupplierSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedSupplierId != widget.selectedSupplierId ||
+        oldWidget.suppliers != widget.suppliers) {
+      final next = _selectedSupplierLabel();
+      if (_controller.text != next) {
+        _controller.value = TextEditingValue(
+          text: next,
+          selection: TextSelection.collapsed(offset: next.length),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  String _selectedSupplierLabel() {
+    final selected = widget.suppliers.where(
+      (supplier) => _id(supplier) == widget.selectedSupplierId,
+    );
+    if (selected.isEmpty) return '';
+    return _supplierLabel(selected.first);
+  }
+
+  Iterable<Map<String, dynamic>> _optionsFor(TextEditingValue value) {
+    final query = value.text.trim().toLowerCase();
+    if (query.isEmpty) return widget.suppliers.take(30);
+    return widget.suppliers.where((supplier) {
+      final haystack = [
+        _supplierLabel(supplier),
+        _text(supplier, ['supplier_code', 'code']),
+        _text(supplier, ['phone', 'contact_phone']),
+        _text(supplier, ['email', 'contact_email']),
+      ].join(' ').toLowerCase();
+      return haystack.contains(query);
+    }).take(40);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Map<String, dynamic>>(
+      textEditingController: _controller,
+      focusNode: _focusNode,
+      displayStringForOption: _supplierLabel,
+      optionsBuilder: _optionsFor,
+      onSelected: (supplier) {
+        _controller.text = _supplierLabel(supplier);
+        widget.onSelected(supplier);
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Supplier',
+            hintText: widget.suppliers.isEmpty
+                ? 'No suppliers available'
+                : 'Search supplier name, code, phone, or email',
+            prefixIcon: const Icon(Icons.search, size: 18),
+            suffixIcon: widget.selectedSupplierId == null
+                ? null
+                : IconButton(
+                    tooltip: 'Clear supplier',
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () {
+                      controller.clear();
+                      widget.onCleared();
+                      focusNode.requestFocus();
+                    },
+                  ),
+          ),
+          onChanged: (_) {
+            if (widget.selectedSupplierId != null) widget.onCleared();
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        final rows = options.toList(growable: false);
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 8,
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 520),
+              child: rows.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Text('No matching supplier found'),
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: rows.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final supplier = rows[index];
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            _supplierLabel(supplier),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            [
+                              _text(supplier, ['supplier_code', 'code'], ''),
+                              _text(supplier, ['phone', 'contact_phone'], ''),
+                            ].where((part) => part.isNotEmpty).join(' • '),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () => onSelected(supplier),
+                        );
+                      },
+                    ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _supplierLabel(Map<String, dynamic> supplier) =>
+    _text(supplier, ['name', 'supplier_name'], 'Supplier');
+
+Widget _supplierWorkflowTabs(WidgetRef ref, AdminSection active) {
+  final tabs = [
+    (AdminSection.suppliers, 'Suppliers'),
+    (AdminSection.purchaseOrders, 'POs'),
+    (AdminSection.goodsReceiptGRN, 'GRN'),
+    (AdminSection.supplierInvoices, 'Invoices'),
+    (AdminSection.procurementPayments, 'Payments'),
+    (AdminSection.centralReports, 'Reports'),
+  ];
+  return Align(
+    alignment: Alignment.centerLeft,
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: tabs.map((tab) {
+        final selected = tab.$1 == active;
+        final child = Text(tab.$2);
+        final onPressed = selected
+            ? null
+            : () => ref.read(adminSectionProvider.notifier).state = tab.$1;
+        return selected
+            ? ElevatedButton(onPressed: () {}, child: child)
+            : OutlinedButton(onPressed: onPressed, child: child);
+      }).toList(),
+    ),
+  );
+}
+
 class GoodsReceiptGRNSection extends ConsumerWidget {
   const GoodsReceiptGRNSection({super.key});
 
@@ -3182,38 +3612,42 @@ class GoodsReceiptGRNSection extends ConsumerWidget {
         icon: PhosphorIcons.clipboardText(),
         child: _LiveRows(
           value: ref.watch(centralGrnsProvider),
-          data: (rows) => _RowsCard(
-            title: 'GRN Register',
-            rows: rows,
-            emptyMessage: 'No GRNs found',
-            trailing: ElevatedButton.icon(
-              onPressed: () => ref.read(adminSectionProvider.notifier).state =
-                  AdminSection.goodsReceiving,
-              icon: const Icon(Icons.add, size: 14),
-              label: const Text('Record Receipt'),
+          data: (rows) => Column(children: [
+            _supplierWorkflowTabs(ref, AdminSection.goodsReceiptGRN),
+            const SizedBox(height: 16),
+            _RowsCard(
+              title: 'GRN Register',
+              rows: rows,
+              emptyMessage: 'No GRNs found',
+              trailing: ElevatedButton.icon(
+                onPressed: () => ref.read(adminSectionProvider.notifier).state =
+                    AdminSection.goodsReceiving,
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Record Receipt'),
+              ),
+              builder: (row) {
+                final status = _text(row, ['status'], 'pending_review');
+                return _rowTile(
+                  icon: PhosphorIcons.clipboardText(),
+                  title: _text(row, ['grn_number', 'id']),
+                  subtitle: '${_text(row, ['supplier_name'])} • ${_text(row, [
+                        'po_number'
+                      ], 'Direct Receipt')}',
+                  trailing: Wrap(spacing: 6, children: [
+                    _statusChip(status),
+                    OutlinedButton(
+                        onPressed: () => _showMapDetails(context,
+                            'GRN ${_text(row, ['grn_number', 'id'])}', row),
+                        child: const Text('View')),
+                    if (!status.toLowerCase().contains('approved'))
+                      ElevatedButton(
+                          onPressed: () => _approveGrn(context, ref, row),
+                          child: const Text('Approve')),
+                  ]),
+                );
+              },
             ),
-            builder: (row) {
-              final status = _text(row, ['status'], 'pending_review');
-              return _rowTile(
-                icon: PhosphorIcons.clipboardText(),
-                title: _text(row, ['grn_number', 'id']),
-                subtitle: '${_text(row, ['supplier_name'])} • ${_text(row, [
-                      'po_number'
-                    ], 'Direct Receipt')}',
-                trailing: Wrap(spacing: 6, children: [
-                  _statusChip(status),
-                  OutlinedButton(
-                      onPressed: () => _showMapDetails(context,
-                          'GRN ${_text(row, ['grn_number', 'id'])}', row),
-                      child: const Text('View')),
-                  if (!status.toLowerCase().contains('approved'))
-                    ElevatedButton(
-                        onPressed: () => _approveGrn(context, ref, row),
-                        child: const Text('Approve')),
-                ]),
-              );
-            },
-          ),
+          ]),
         ),
       );
 
@@ -3247,50 +3681,55 @@ class CentralSuppliersSection extends ConsumerWidget {
         icon: PhosphorIcons.buildings(),
         child: _LiveRows(
           value: ref.watch(centralStoreSuppliersProvider),
-          data: (rows) => _RowsCard(
-            title: 'Suppliers',
-            rows: rows,
-            emptyMessage: 'No suppliers found',
-            trailing: ElevatedButton.icon(
-              onPressed: () => _showSupplierDialog(context, ref),
-              icon: const Icon(Icons.add, size: 14),
-              label: const Text('Add Supplier'),
+          data: (rows) => Column(children: [
+            _supplierWorkflowTabs(ref, AdminSection.suppliers),
+            const SizedBox(height: 16),
+            _RowsCard(
+              title: 'Suppliers',
+              rows: rows,
+              emptyMessage: 'No suppliers found',
+              trailing: ElevatedButton.icon(
+                onPressed: () => _showSupplierDialog(context, ref),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Add Supplier'),
+              ),
+              builder: (row) => _rowTile(
+                icon: PhosphorIcons.buildings(),
+                title: _text(row, ['name', 'supplier_name']),
+                subtitle:
+                    '${_text(row, ['supplier_code', 'code'], 'No code')} • ${_text(row, [
+                          'phone',
+                          'phone_number'
+                        ], 'No phone')} • ${_text(row, ['email'], 'No email')}',
+                trailing: Wrap(spacing: 6, children: [
+                  _statusChip(_text(row, ['status'], 'active')),
+                  OutlinedButton(
+                      onPressed: () => _showMapDetails(
+                          context, _text(row, ['name', 'supplier_name']), row),
+                      child: const Text('View')),
+                  IconButton(
+                    tooltip: 'Receive Goods',
+                    onPressed: () => ref
+                        .read(adminSectionProvider.notifier)
+                        .state = AdminSection.goodsReceiving,
+                    icon: const Icon(Icons.inventory_2_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Edit',
+                    onPressed: () =>
+                        _showSupplierDialog(context, ref, row: row),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Delete',
+                    color: Colors.red,
+                    onPressed: () => _deleteSupplier(context, ref, row),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ]),
+              ),
             ),
-            builder: (row) => _rowTile(
-              icon: PhosphorIcons.buildings(),
-              title: _text(row, ['name', 'supplier_name']),
-              subtitle:
-                  '${_text(row, ['supplier_code', 'code'], 'No code')} • ${_text(row, [
-                        'phone',
-                        'phone_number'
-                      ], 'No phone')} • ${_text(row, ['email'], 'No email')}',
-              trailing: Wrap(spacing: 6, children: [
-                _statusChip(_text(row, ['status'], 'active')),
-                OutlinedButton(
-                    onPressed: () => _showMapDetails(
-                        context, _text(row, ['name', 'supplier_name']), row),
-                    child: const Text('View')),
-                IconButton(
-                  tooltip: 'Receive Goods',
-                  onPressed: () => ref
-                      .read(adminSectionProvider.notifier)
-                      .state = AdminSection.goodsReceiving,
-                  icon: const Icon(Icons.inventory_2_outlined),
-                ),
-                IconButton(
-                  tooltip: 'Edit',
-                  onPressed: () => _showSupplierDialog(context, ref, row: row),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-                IconButton(
-                  tooltip: 'Delete',
-                  color: Colors.red,
-                  onPressed: () => _deleteSupplier(context, ref, row),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ]),
-            ),
-          ),
+          ]),
         ),
       );
 
@@ -4128,49 +4567,53 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
         icon: PhosphorIcons.receipt(),
         child: _LiveRows(
           value: ref.watch(centralSupplierInvoicesProvider),
-          data: (rows) => _RowsCard(
-            title: 'Invoices',
-            rows: rows,
-            emptyMessage: 'No invoices found',
-            trailing: ElevatedButton.icon(
-              onPressed: () => _recordInvoice(context, ref),
-              icon: const Icon(Icons.add, size: 14),
-              label: const Text('Record Invoice'),
-            ),
-            builder: (row) {
-              final status = _text(row, ['status'], 'draft');
-              return _rowTile(
-                icon: PhosphorIcons.receipt(),
-                title: _text(row, ['invoice_number', 'id']),
-                subtitle: '${_text(row, [
-                      'supplier_name'
-                    ])} • ${_date(row['invoice_date'])}',
-                trailing: Wrap(spacing: 6, children: [
-                  _statusChip(status),
-                  OutlinedButton(
-                      onPressed: () => _showMapDetails(
-                          context,
-                          'Invoice ${_text(row, ['invoice_number', 'id'])}',
-                          row),
-                      child: const Text('View')),
-                  if (!status.toLowerCase().contains('approved')) ...[
-                    TextButton(
-                        onPressed: () => _rejectInvoice(context, ref, row),
-                        child: const Text('Reject')),
-                    ElevatedButton(
-                        onPressed: () => _approveInvoice(context, ref, row),
-                        child: const Text('Approve')),
-                  ],
-                  if (status.toLowerCase().contains('approved'))
+          data: (rows) => Column(children: [
+            _supplierWorkflowTabs(ref, AdminSection.supplierInvoices),
+            const SizedBox(height: 16),
+            _RowsCard(
+              title: 'Invoices',
+              rows: rows,
+              emptyMessage: 'No invoices found',
+              trailing: ElevatedButton.icon(
+                onPressed: () => _recordInvoice(context, ref),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Record Invoice'),
+              ),
+              builder: (row) {
+                final status = _text(row, ['status'], 'draft');
+                return _rowTile(
+                  icon: PhosphorIcons.receipt(),
+                  title: _text(row, ['invoice_number', 'id']),
+                  subtitle: '${_text(row, [
+                        'supplier_name'
+                      ])} • ${_date(row['invoice_date'])}',
+                  trailing: Wrap(spacing: 6, children: [
+                    _statusChip(status),
                     OutlinedButton(
-                        onPressed: () => ref
-                            .read(adminSectionProvider.notifier)
-                            .state = AdminSection.procurementPayments,
-                        child: const Text('Pay')),
-                ]),
-              );
-            },
-          ),
+                        onPressed: () => _showMapDetails(
+                            context,
+                            'Invoice ${_text(row, ['invoice_number', 'id'])}',
+                            row),
+                        child: const Text('View')),
+                    if (!status.toLowerCase().contains('approved')) ...[
+                      TextButton(
+                          onPressed: () => _rejectInvoice(context, ref, row),
+                          child: const Text('Reject')),
+                      ElevatedButton(
+                          onPressed: () => _approveInvoice(context, ref, row),
+                          child: const Text('Approve')),
+                    ],
+                    if (status.toLowerCase().contains('approved'))
+                      OutlinedButton(
+                          onPressed: () => ref
+                              .read(adminSectionProvider.notifier)
+                              .state = AdminSection.procurementPayments,
+                          child: const Text('Pay')),
+                  ]),
+                );
+              },
+            ),
+          ]),
         ),
       );
 
@@ -4179,34 +4622,197 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
         .read(adminRepositoryProvider)
         .getStoreSuppliers(scope: 'global');
     if (!context.mounted) return;
-    String? supplierId = suppliers.isNotEmpty ? _id(suppliers.first) : null;
+    final repo = ref.read(adminRepositoryProvider);
+    String? supplierId;
+    String? grnId;
+    List<Map<String, dynamic>> supplierGrns = [];
+    final invoiceItems = <Map<String, dynamic>>[];
     final invoiceCtrl = TextEditingController();
-    final amountCtrl = TextEditingController(text: '0');
+    final itemCtrl = TextEditingController();
+    final qtyCtrl = TextEditingController(text: '1');
+    final priceCtrl = TextEditingController(text: '0');
+    final vatCtrl = TextEditingController(text: '16');
+    final notesCtrl = TextEditingController();
+    var invoiceDate = DateTime.now();
+    var dueDate = DateTime.now().add(const Duration(days: 30));
+    Future<void> loadSupplierGrns(
+      String? selectedSupplierId,
+      void Function(void Function()) setState,
+    ) async {
+      grnId = null;
+      supplierGrns = [];
+      invoiceItems.clear();
+      if (selectedSupplierId == null || selectedSupplierId.isEmpty) return;
+      final grns = await repo.getGRNs(
+        supplierId: selectedSupplierId,
+        status: 'approved',
+      );
+      setState(() => supplierGrns = grns);
+    }
+
     final body = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text('Record Supplier Invoice'),
           content: SizedBox(
-            width: 460,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DropdownButtonFormField<String>(
-                initialValue: supplierId,
-                decoration: const InputDecoration(labelText: 'Supplier'),
-                items: suppliers
-                    .map((supplier) => DropdownMenuItem(
-                          value: _id(supplier),
-                          child: Text(_text(supplier, ['name'])),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => supplierId = value),
-              ),
-              const SizedBox(height: 12),
-              _field(invoiceCtrl, 'Invoice Number', required: true),
-              const SizedBox(height: 12),
-              _field(amountCtrl, 'Total Amount',
-                  keyboardType: TextInputType.number, required: true),
-            ]),
+            width: 760,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(children: [
+                  Expanded(
+                    child: _SupplierSearchField(
+                      suppliers: suppliers,
+                      selectedSupplierId: supplierId,
+                      onSelected: (supplier) async {
+                        supplierId = _id(supplier);
+                        setState(() {});
+                        await loadSupplierGrns(supplierId, setState);
+                      },
+                      onCleared: () => setState(() {
+                        supplierId = null;
+                        grnId = null;
+                        supplierGrns = [];
+                        invoiceItems.clear();
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: _field(invoiceCtrl, 'Invoice Number',
+                          required: true)),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: _PoDateField(
+                      label: 'Invoice Date',
+                      value: invoiceDate,
+                      onPicked: (date) => setState(() => invoiceDate = date),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _PoDateField(
+                      label: 'Due Date',
+                      value: dueDate,
+                      firstDate: invoiceDate,
+                      onPicked: (date) => setState(() => dueDate = date),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  isExpanded: true,
+                  initialValue: grnId,
+                  decoration:
+                      const InputDecoration(labelText: 'Approved GRN optional'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                        value: null, child: Text('No GRN linkage')),
+                    ...supplierGrns.map((grn) => DropdownMenuItem<String?>(
+                          value: _id(grn),
+                          child: Text(
+                            '${_text(grn, [
+                                  'grn_number',
+                                  'id'
+                                ])} • ${_date(grn['grn_date'] ?? grn['created_at'])}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )),
+                  ],
+                  onChanged: (value) => setState(() => grnId = value),
+                ),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(flex: 3, child: _field(itemCtrl, 'Item / Service')),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _field(qtyCtrl, 'Qty',
+                          keyboardType: TextInputType.number)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _field(priceCtrl, 'Unit Price',
+                          keyboardType: TextInputType.number)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: _field(vatCtrl, 'VAT %',
+                          keyboardType: TextInputType.number)),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    tooltip: 'Add line',
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      final description = itemCtrl.text.trim();
+                      final quantity =
+                          double.tryParse(qtyCtrl.text.trim()) ?? 0;
+                      final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
+                      final vat = double.tryParse(vatCtrl.text.trim()) ?? 16;
+                      if (description.isEmpty || quantity <= 0) return;
+                      setState(() {
+                        invoiceItems.add({
+                          'item_id': 'manual',
+                          'description': description,
+                          'item_name': description,
+                          'quantity': quantity,
+                          'unit_price': price,
+                          'vat_rate': vat,
+                        });
+                        itemCtrl.clear();
+                        qtyCtrl.text = '1';
+                        priceCtrl.text = '0';
+                      });
+                    },
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                if (invoiceItems.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('Add at least one invoice line item',
+                        style: TextStyle(color: AppColors.kTextSecondary)),
+                  )
+                else
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: 720,
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('Item')),
+                          DataColumn(label: Text('Qty')),
+                          DataColumn(label: Text('Unit')),
+                          DataColumn(label: Text('VAT')),
+                          DataColumn(label: Text('Total')),
+                          DataColumn(label: Text('')),
+                        ],
+                        rows: invoiceItems.indexed.map((entry) {
+                          final index = entry.$1;
+                          final item = entry.$2;
+                          final quantity = _num(item, ['quantity']);
+                          final price = _num(item, ['unit_price']);
+                          final vat = _num(item, ['vat_rate']);
+                          final total = quantity * price * (1 + vat / 100);
+                          return DataRow(cells: [
+                            DataCell(Text(_text(item, ['description']))),
+                            DataCell(Text(_plainNum(quantity))),
+                            DataCell(Text(_money(price))),
+                            DataCell(Text('${_plainNum(vat)}%')),
+                            DataCell(Text(_money(total))),
+                            DataCell(IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () =>
+                                  setState(() => invoiceItems.removeAt(index)),
+                            )),
+                          ]);
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                _field(notesCtrl, 'Notes', maxLines: 2),
+              ]),
+            ),
           ),
           actions: [
             TextButton(
@@ -4214,18 +4820,20 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
                 child: const Text('Cancel')),
             ElevatedButton(
                 onPressed: () {
-                  if (supplierId == null || invoiceCtrl.text.trim().isEmpty) {
+                  if (supplierId == null ||
+                      invoiceCtrl.text.trim().isEmpty ||
+                      invoiceItems.isEmpty) {
                     return;
                   }
-                  final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
                   Navigator.pop(ctx, {
                     'supplier_id': supplierId,
+                    if (grnId != null) 'grn_id': grnId,
                     'invoice_number': invoiceCtrl.text.trim(),
-                    'invoice_date':
-                        DateTime.now().toIso8601String().split('T').first,
-                    'total_amount': amount,
-                    'subtotal': amount,
-                    'items': const [],
+                    'invoice_date': _isoDate(invoiceDate),
+                    'due_date': _isoDate(dueDate),
+                    if (notesCtrl.text.trim().isNotEmpty)
+                      'notes': notesCtrl.text.trim(),
+                    'items': invoiceItems,
                   });
                 },
                 child: const Text('Record Invoice')),
@@ -4234,7 +4842,11 @@ class CentralSupplierInvoicesSection extends ConsumerWidget {
       ),
     );
     invoiceCtrl.dispose();
-    amountCtrl.dispose();
+    itemCtrl.dispose();
+    qtyCtrl.dispose();
+    priceCtrl.dispose();
+    vatCtrl.dispose();
+    notesCtrl.dispose();
     if (body == null) return;
     try {
       await ref.read(adminRepositoryProvider).createSupplierInvoice(body);
@@ -4304,40 +4916,49 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
         icon: PhosphorIcons.creditCard(),
         child: _LiveRows(
           value: ref.watch(centralSupplierPaymentsProvider),
-          data: (rows) => _RowsCard(
-            title: 'Payments',
-            rows: rows,
-            emptyMessage: 'No payments found',
-            trailing: ElevatedButton.icon(
-              onPressed: () => _recordPayment(context, ref),
-              icon: const Icon(Icons.add, size: 14),
-              label: const Text('Record Payment'),
+          data: (rows) => Column(children: [
+            _supplierWorkflowTabs(ref, AdminSection.procurementPayments),
+            const SizedBox(height: 16),
+            _RowsCard(
+              title: 'Payments',
+              rows: rows,
+              emptyMessage: 'No payments found',
+              trailing: ElevatedButton.icon(
+                onPressed: () => _recordPayment(context, ref),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Record Payment'),
+              ),
+              builder: (row) {
+                final status = _text(row, ['status'], 'draft');
+                return _rowTile(
+                  icon: PhosphorIcons.creditCard(),
+                  title: _text(row, ['payment_number', 'id']),
+                  subtitle: '${_text(row, ['supplier_name'])} • ${_text(row, [
+                        'payment_method'
+                      ], 'method')} • ${_text(row, ['reference_number'], 'no ref')}',
+                  trailing: Wrap(spacing: 6, children: [
+                    _statusChip(status),
+                    OutlinedButton(
+                        onPressed: () => _showMapDetails(
+                            context,
+                            'Payment ${_text(row, ['payment_number', 'id'])}',
+                            row),
+                        child: const Text('View')),
+                    if (_text(row, ['supplier_id'], '').isNotEmpty)
+                      OutlinedButton(
+                          onPressed: () => _showSupplierLedger(
+                              context, ref, _text(row, ['supplier_id'])),
+                          child: const Text('Ledger')),
+                    if (!status.toLowerCase().contains('processed') &&
+                        !status.toLowerCase().contains('paid'))
+                      ElevatedButton(
+                          onPressed: () => _processPayment(context, ref, row),
+                          child: const Text('Process')),
+                  ]),
+                );
+              },
             ),
-            builder: (row) {
-              final status = _text(row, ['status'], 'draft');
-              return _rowTile(
-                icon: PhosphorIcons.creditCard(),
-                title: _text(row, ['payment_number', 'id']),
-                subtitle: '${_text(row, ['supplier_name'])} • ${_text(row, [
-                      'payment_method'
-                    ], 'method')} • ${_text(row, ['reference_number'], 'no ref')}',
-                trailing: Wrap(spacing: 6, children: [
-                  _statusChip(status),
-                  OutlinedButton(
-                      onPressed: () => _showMapDetails(
-                          context,
-                          'Payment ${_text(row, ['payment_number', 'id'])}',
-                          row),
-                      child: const Text('View')),
-                  if (!status.toLowerCase().contains('processed') &&
-                      !status.toLowerCase().contains('paid'))
-                    ElevatedButton(
-                        onPressed: () => _processPayment(context, ref, row),
-                        child: const Text('Process')),
-                ]),
-              );
-            },
-          ),
+          ]),
         ),
       );
 
@@ -4346,48 +4967,126 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
         .read(adminRepositoryProvider)
         .getStoreSuppliers(scope: 'global');
     if (!context.mounted) return;
-    String? supplierId = suppliers.isNotEmpty ? _id(suppliers.first) : null;
-    final amountCtrl = TextEditingController(text: '0');
+    final repo = ref.read(adminRepositoryProvider);
+    String? supplierId;
+    String? invoiceId;
+    List<Map<String, dynamic>> supplierInvoices = [];
+    final amountCtrl = TextEditingController();
     final refCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
     String method = 'bank_transfer';
+    Future<void> loadSupplierInvoices(
+      String? selectedSupplierId,
+      void Function(void Function()) setState,
+    ) async {
+      invoiceId = null;
+      supplierInvoices = [];
+      amountCtrl.clear();
+      if (selectedSupplierId == null || selectedSupplierId.isEmpty) return;
+      final invoices = await repo.getSupplierInvoices(
+        supplierId: selectedSupplierId,
+        status: 'approved',
+      );
+      setState(() {
+        supplierInvoices = invoices
+            .where(
+                (invoice) => _num(invoice, ['balance_due', 'total_amount']) > 0)
+            .toList();
+      });
+    }
+
     final body = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text('Record Supplier Payment'),
           content: SizedBox(
-            width: 460,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DropdownButtonFormField<String>(
-                initialValue: supplierId,
-                decoration: const InputDecoration(labelText: 'Supplier'),
-                items: suppliers
-                    .map((supplier) => DropdownMenuItem(
-                          value: _id(supplier),
-                          child: Text(_text(supplier, ['name'])),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => supplierId = value),
-              ),
-              const SizedBox(height: 12),
-              _field(amountCtrl, 'Amount',
-                  keyboardType: TextInputType.number, required: true),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: method,
-                decoration: const InputDecoration(labelText: 'Payment Method'),
-                items: const [
-                  DropdownMenuItem(
-                      value: 'bank_transfer', child: Text('Bank Transfer')),
-                  DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                  DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-                  DropdownMenuItem(value: 'cheque', child: Text('Cheque')),
-                ],
-                onChanged: (value) => setState(() => method = value ?? method),
-              ),
-              const SizedBox(height: 12),
-              _field(refCtrl, 'Reference Number'),
-            ]),
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                _SupplierSearchField(
+                  suppliers: suppliers,
+                  selectedSupplierId: supplierId,
+                  onSelected: (supplier) async {
+                    supplierId = _id(supplier);
+                    setState(() {});
+                    await loadSupplierInvoices(supplierId, setState);
+                  },
+                  onCleared: () => setState(() {
+                    supplierId = null;
+                    invoiceId = null;
+                    supplierInvoices = [];
+                    amountCtrl.clear();
+                  }),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  isExpanded: true,
+                  initialValue: invoiceId,
+                  decoration:
+                      const InputDecoration(labelText: 'Allocate to Invoice'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                        value: null, child: Text('No invoice allocation')),
+                    ...supplierInvoices.map((invoice) {
+                      final due =
+                          _num(invoice, ['balance_due', 'total_amount']);
+                      return DropdownMenuItem<String?>(
+                        value: _id(invoice),
+                        child: Text(
+                          '${_text(invoice, [
+                                'invoice_number',
+                                'id'
+                              ])} • Due ${_money(due)}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) => setState(() {
+                    invoiceId = value;
+                    if (value != null) {
+                      final invoice = supplierInvoices.firstWhere(
+                        (row) => _id(row) == value,
+                        orElse: () => const <String, dynamic>{},
+                      );
+                      amountCtrl.text = _plainNum(
+                          _num(invoice, ['balance_due', 'total_amount']));
+                    }
+                  }),
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: _field(amountCtrl, 'Amount',
+                        keyboardType: TextInputType.number, required: true),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: method,
+                      decoration:
+                          const InputDecoration(labelText: 'Payment Method'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'bank_transfer',
+                            child: Text('Bank Transfer')),
+                        DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                        DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                        DropdownMenuItem(
+                            value: 'cheque', child: Text('Cheque')),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => method = value ?? method),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                _field(refCtrl, 'Reference Number'),
+                const SizedBox(height: 12),
+                _field(notesCtrl, 'Notes'),
+              ]),
+            ),
           ),
           actions: [
             TextButton(
@@ -4396,13 +5095,21 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
             ElevatedButton(
                 onPressed: () {
                   if (supplierId == null) return;
+                  final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                  if (amount <= 0) return;
                   Navigator.pop(ctx, {
                     'supplier_id': supplierId,
-                    'amount': double.tryParse(amountCtrl.text.trim()) ?? 0,
+                    'payment_amount': amount,
                     'payment_method': method,
                     'reference_number': refCtrl.text.trim(),
+                    if (notesCtrl.text.trim().isNotEmpty)
+                      'notes': notesCtrl.text.trim(),
                     'payment_date':
                         DateTime.now().toIso8601String().split('T').first,
+                    if (invoiceId != null)
+                      'allocations': [
+                        {'invoice_id': invoiceId, 'amount': amount}
+                      ],
                   });
                 },
                 child: const Text('Record Payment')),
@@ -4412,6 +5119,7 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
     );
     amountCtrl.dispose();
     refCtrl.dispose();
+    notesCtrl.dispose();
     if (body == null) return;
     try {
       await ref.read(adminRepositoryProvider).createSupplierPayment(body);
@@ -4438,6 +5146,80 @@ class CentralSupplierPaymentsSection extends ConsumerWidget {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
   }
+
+  Future<void> _showSupplierLedger(
+      BuildContext context, WidgetRef ref, String supplierId) async {
+    try {
+      final rows =
+          await ref.read(adminRepositoryProvider).getSupplierLedger(supplierId);
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Supplier Account Ledger'),
+          content: SizedBox(
+            width: 760,
+            child: rows.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('No ledger entries found'),
+                  )
+                : SingleChildScrollView(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('Date')),
+                          DataColumn(label: Text('Type / Ref')),
+                          DataColumn(label: Text('Debit')),
+                          DataColumn(label: Text('Credit')),
+                          DataColumn(label: Text('Balance')),
+                        ],
+                        rows: rows.map((entry) {
+                          return DataRow(cells: [
+                            DataCell(Text(_date(entry['transaction_date'] ??
+                                entry['created_at']))),
+                            DataCell(Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                    _text(entry, ['transaction_type', 'type'])),
+                                Text(
+                                  _text(entry, ['reference_number', 'id']),
+                                  style: const TextStyle(
+                                      color: AppColors.kTextSecondary,
+                                      fontSize: 11),
+                                ),
+                              ],
+                            )),
+                            DataCell(
+                                Text(_money(_num(entry, ['debit_amount'])))),
+                            DataCell(
+                                Text(_money(_num(entry, ['credit_amount'])))),
+                            DataCell(Text(
+                              _money(
+                                  _num(entry, ['running_balance', 'balance'])),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800),
+                            )),
+                          ]);
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close')),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (context.mounted) _snack(context, 'Failed to load ledger: $error');
+    }
+  }
 }
 
 class CentralReportsSection extends ConsumerWidget {
@@ -4459,6 +5241,8 @@ class CentralReportsSection extends ConsumerWidget {
               ? Map<String, dynamic>.from(dashboard['stats'])
               : dashboard;
           return Column(children: [
+            _supplierWorkflowTabs(ref, AdminSection.centralReports),
+            const SizedBox(height: 16),
             Row(children: [
               Expanded(
                   child: _StatCard(
