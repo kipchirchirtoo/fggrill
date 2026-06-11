@@ -802,29 +802,213 @@ class _BranchStorekeeperDashboardState
         ]),
         _SectionCard(
           title: 'Count Sheet',
-          child: _RecordList(
-            emptyText: 'No items in this stock take',
-            children: _stockTakeItems.map((item) {
-              return _RecordTile(
-                icon: PhosphorIcons.package(),
-                title:
-                    '${item['item']?['name'] ?? item['item_name'] ?? item['item_sku']}',
-                subtitle:
-                    'Opening: ${_qtyText(item['opening_stock'])} | Additions: ${_qtyText(item['additions'])} | Issued: ${_qtyText(item['issued_quantity'])} | System closing: ${_qtyText(item['system_closing_stock'] ?? item['system_quantity'])} | Physical: ${item['physical_quantity'] ?? item['counted_quantity'] ?? '-'} | Variance: ${item['variance'] ?? 0} | Cost: ${_money(_num(item['cost_price'] ?? item['unit_cost']))}',
-                trailing: _StatusChip('${item['status'] ?? 'PENDING'}',
-                    success: '${item['status']}' == 'COUNTED'),
-                actions: [
-                  if (editable)
-                    TextButton(
-                      onPressed: () => _showCountItemDialog(item),
-                      child: const Text('Count'),
-                    ),
-                ],
-              );
-            }).toList(),
-          ),
+          child: _stockTakeWorksheetGrid(editable),
         ),
       ],
+    );
+  }
+
+  Widget _stockTakeWorksheetGrid(bool editable) {
+    final counted = _stockTakeItems
+        .where((item) => _actualIncludingDraft(item) != null)
+        .length;
+    if (_stockTakeItems.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: const Center(child: Text('No items in this stock take')),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(
+          child: Text(
+            '$counted / ${_stockTakeItems.length} counted',
+            style: const TextStyle(
+                color: AppColors.kTextSecondary, fontWeight: FontWeight.w700),
+          ),
+        ),
+        if (editable)
+          FilledButton.icon(
+            onPressed: _saveStockTakeWorksheetCounts,
+            icon: const Icon(Icons.save, size: 16),
+            label: const Text('Save Counts'),
+          ),
+      ]),
+      const SizedBox(height: 12),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 1320,
+          child: Column(children: [
+            _stockTakeWorksheetHeader(),
+            ..._stockTakeItems.map(
+              (item) => _stockTakeWorksheetRow(item, editable),
+            ),
+          ]),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _stockTakeWorksheetHeader() {
+    const style = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w900,
+      color: AppColors.kTextSecondary,
+    );
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.kSurface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(children: [
+        SizedBox(width: 280, child: Text('ITEM', style: style)),
+        SizedBox(width: 150, child: Text('SKU', style: style)),
+        SizedBox(
+            width: 82,
+            child: Text('OPENING', textAlign: TextAlign.right, style: style)),
+        SizedBox(
+            width: 82,
+            child: Text('ADDED', textAlign: TextAlign.right, style: style)),
+        SizedBox(
+            width: 82,
+            child: Text('ISSUED', textAlign: TextAlign.right, style: style)),
+        SizedBox(
+            width: 95,
+            child: Text('SYSTEM', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 130, child: Text('PHYSICAL COUNT', style: style)),
+        SizedBox(
+            width: 90,
+            child: Text('VARIANCE', textAlign: TextAlign.right, style: style)),
+        SizedBox(
+            width: 100,
+            child: Text('COST', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 260, child: Text('VARIANCE NOTES', style: style)),
+      ]),
+    );
+  }
+
+  Widget _stockTakeWorksheetRow(Map<String, dynamic> item, bool editable) {
+    final system =
+        _num(item['system_closing_stock'] ?? item['system_quantity']);
+    final actual = _actualIncludingDraft(item);
+    final variance = actual == null ? 0 : actual - system;
+    final needsReason = actual != null && variance != 0;
+    final color = actual == null
+        ? Colors.transparent
+        : variance == 0
+            ? Colors.green.withValues(alpha: .035)
+            : Colors.orange.withValues(alpha: .055);
+    final itemMap = item['item'] is Map ? item['item'] as Map : null;
+    final name = itemMap?['name'] ??
+        itemMap?['item_name'] ??
+        item['item_name'] ??
+        item['name'] ??
+        item['item_sku'];
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 58),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color,
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade200),
+        ),
+      ),
+      child: Row(children: [
+        SizedBox(
+          width: 280,
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$name',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text('${item['category'] ?? itemMap?['category'] ?? ''}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: AppColors.kTextSecondary, fontSize: 11)),
+          ]),
+        ),
+        SizedBox(
+            width: 150,
+            child: Text('${item['item_sku'] ?? item['sku'] ?? '—'}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12))),
+        _worksheetNumberCell(_num(item['opening_stock'])),
+        _worksheetNumberCell(_num(item['additions'])),
+        _worksheetNumberCell(_num(item['issued_quantity'])),
+        SizedBox(
+          width: 95,
+          child: Text(_qtyText(system),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+        ),
+        SizedBox(
+          width: 130,
+          child: _StockTakeInlineInput(
+            key:
+                ValueKey('${item['id'] ?? item['item_sku']}-storekeeper-count'),
+            initialValue: _actual(item) == null ? '' : _qtyText(_actual(item)!),
+            enabled: editable,
+            hintText: 'Count',
+            keyboardType: TextInputType.number,
+            onChanged: (value) => setState(() {
+              item['_draft_counted_quantity'] = value;
+            }),
+          ),
+        ),
+        SizedBox(
+          width: 90,
+          child: Text(
+            actual == null ? '—' : _qtyText(variance),
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: actual == null
+                  ? AppColors.kTextSecondary
+                  : variance == 0
+                      ? AppColors.kSuccess
+                      : AppColors.kWarning,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 100,
+          child: Text(_money(_num(item['cost_price'] ?? item['unit_cost'])),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        SizedBox(
+          width: 260,
+          child: _StockTakeInlineInput(
+            key: ValueKey('${item['id'] ?? item['item_sku']}-storekeeper-note'),
+            initialValue: _reasonIncludingDraft(item),
+            enabled: editable,
+            hintText: needsReason ? 'Required for variance' : 'Optional',
+            onChanged: (value) {
+              item['_draft_variance_reason'] = value;
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _worksheetNumberCell(num value) {
+    return SizedBox(
+      width: 82,
+      child: Text(_qtyText(value),
+          textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
     );
   }
 
@@ -1920,73 +2104,66 @@ class _BranchStorekeeperDashboardState
     _showJsonDetail('Supplier Folio - ${supplier['name']}', supplier);
   }
 
-  void _showCountItemDialog(Map<String, dynamic> item) {
-    final counted = TextEditingController(
-        text:
-            '${item['counted_quantity'] ?? item['system_closing_stock'] ?? item['system_quantity'] ?? 0}');
-    final notes = TextEditingController(
-        text:
-            '${item['variance_reason'] ?? item['reason'] ?? item['notes'] ?? ''}');
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Count ${item['item_sku']}'),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: counted,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Physical Count'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notes,
-                decoration: const InputDecoration(
-                    labelText: 'Variance reason / notes',
-                    helperText:
-                        'Required when physical count differs from system closing stock'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              final physical = num.tryParse(counted.text) ?? 0;
-              final systemClosing =
-                  _num(item['system_closing_stock'] ?? item['system_quantity']);
-              if (physical != systemClosing && notes.text.trim().isEmpty) {
-                _showSnack('Variance reason is required', error: true);
-                return;
-              }
-              Navigator.pop(context);
-              try {
-                await _repo.updateStockTake(_selectedStockTakeId!, [
-                  {
-                    'id': item['id'],
-                    'item_sku': item['item_sku'],
-                    'counted_quantity': physical,
-                    'variance_reason': notes.text,
-                    'notes': notes.text,
-                  }
-                ]);
-                await _loadStockTakeDetail(_selectedStockTakeId!);
-                _showSnack('Count saved');
-              } catch (error) {
-                _showSnack('Count save failed: $error', error: true);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+  num? _actual(Map<String, dynamic> item) {
+    final value = item['physical_quantity'] ??
+        item['counted_quantity'] ??
+        item['actual_quantity'];
+    if (value == null) return null;
+    if (value is num) return value;
+    return num.tryParse('$value');
+  }
+
+  num? _actualIncludingDraft(Map<String, dynamic> item) {
+    final draft = item['_draft_counted_quantity'];
+    if (draft != null && '$draft'.trim().isNotEmpty) {
+      return num.tryParse('$draft');
+    }
+    return _actual(item);
+  }
+
+  String _reasonIncludingDraft(Map<String, dynamic> item) {
+    final draft = '${item['_draft_variance_reason'] ?? ''}'.trim();
+    if (draft.isNotEmpty) return draft;
+    return '${item['variance_reason'] ?? item['reason'] ?? item['notes'] ?? ''}'
+        .trim();
+  }
+
+  Future<void> _saveStockTakeWorksheetCounts() async {
+    final payload = <Map<String, dynamic>>[];
+    for (final item in _stockTakeItems) {
+      final physical = _actualIncludingDraft(item);
+      if (physical == null) continue;
+      final systemClosing =
+          _num(item['system_closing_stock'] ?? item['system_quantity']);
+      final variance = physical - systemClosing;
+      final reason = _reasonIncludingDraft(item);
+      if (variance != 0 && reason.isEmpty) {
+        _showSnack(
+          'Variance reason required for ${item['item']?['name'] ?? item['item_name'] ?? item['item_sku']}',
+          error: true,
+        );
+        return;
+      }
+      payload.add({
+        'id': item['id'],
+        'item_sku': item['item_sku'],
+        'counted_quantity': physical,
+        'physical_quantity': physical,
+        if (reason.isNotEmpty) 'variance_reason': reason,
+        if (reason.isNotEmpty) 'notes': reason,
+      });
+    }
+    if (payload.isEmpty) {
+      _showSnack('Enter at least one physical count', error: true);
+      return;
+    }
+    try {
+      await _repo.updateStockTake(_selectedStockTakeId!, payload);
+      await _loadStockTakeDetail(_selectedStockTakeId!);
+      _showSnack('Worksheet counts saved');
+    } catch (error) {
+      _showSnack('Count save failed: $error', error: true);
+    }
   }
 
   void _showAddManualStockTakeItem() {
@@ -3132,6 +3309,74 @@ class _StatCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StockTakeInlineInput extends StatefulWidget {
+  const _StockTakeInlineInput({
+    super.key,
+    required this.initialValue,
+    required this.enabled,
+    required this.onChanged,
+    required this.hintText,
+    this.keyboardType,
+  });
+
+  final String initialValue;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+  final String hintText;
+  final TextInputType? keyboardType;
+
+  @override
+  State<_StockTakeInlineInput> createState() => _StockTakeInlineInputState();
+}
+
+class _StockTakeInlineInputState extends State<_StockTakeInlineInput> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void didUpdateWidget(covariant _StockTakeInlineInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialValue != widget.initialValue &&
+        _controller.text != widget.initialValue) {
+      _controller.text = widget.initialValue;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: TextField(
+        controller: _controller,
+        enabled: widget.enabled,
+        keyboardType: widget.keyboardType,
+        textAlign: widget.keyboardType == TextInputType.number
+            ? TextAlign.right
+            : TextAlign.left,
+        onChanged: widget.onChanged,
+        decoration: InputDecoration(
+          hintText: widget.hintText,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
     );

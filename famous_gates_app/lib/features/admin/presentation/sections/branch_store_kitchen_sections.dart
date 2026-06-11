@@ -158,6 +158,75 @@ Widget _bsStatus(String status) {
   );
 }
 
+class _BranchInlineStockInput extends StatefulWidget {
+  const _BranchInlineStockInput({
+    super.key,
+    required this.initialValue,
+    required this.enabled,
+    required this.onChanged,
+    required this.hintText,
+    this.keyboardType,
+  });
+
+  final String initialValue;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+  final String hintText;
+  final TextInputType? keyboardType;
+
+  @override
+  State<_BranchInlineStockInput> createState() =>
+      _BranchInlineStockInputState();
+}
+
+class _BranchInlineStockInputState extends State<_BranchInlineStockInput> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void didUpdateWidget(covariant _BranchInlineStockInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialValue != widget.initialValue &&
+        _controller.text != widget.initialValue) {
+      _controller.text = widget.initialValue;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: TextField(
+        controller: _controller,
+        enabled: widget.enabled,
+        keyboardType: widget.keyboardType,
+        textAlign: widget.keyboardType == TextInputType.number
+            ? TextAlign.right
+            : TextAlign.left,
+        onChanged: widget.onChanged,
+        decoration: InputDecoration(
+          hintText: widget.hintText,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // BRANCH STORE OPS
 // ═══════════════════════════════════════════════════════════════════
@@ -541,15 +610,16 @@ class _BranchStockTakesSectionState
     }
     final detail = _detail!;
     final items = _bsList(detail['items']);
-    final counted = items
-        .where((item) =>
-            item['counted_quantity'] != null ||
-            item['physical_quantity'] != null ||
-            item['actual_quantity'] != null)
-        .length;
-    final variances = items.where((item) => _variance(item) != 0).length;
+    final counted =
+        items.where((item) => _actualIncludingDraft(item) != null).length;
+    final variances =
+        items.where((item) => _varianceIncludingDraft(item) != 0).length;
     final varianceValue = items.fold<double>(
-        0, (sum, item) => sum + _bsNum(item, ['variance_value']));
+        0,
+        (sum, item) =>
+            sum +
+            (_varianceIncludingDraft(item) *
+                _bsNum(item, ['unit_cost', 'cost_price', 'cost'])));
     final status = _bsText(detail, ['status'], 'draft');
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -572,6 +642,13 @@ class _BranchStockTakesSectionState
             label: const Text('Download Worksheet'),
           ),
           const SizedBox(width: 8),
+          if (_canEdit)
+            OutlinedButton.icon(
+              onPressed: () => _saveWorksheetCounts(items),
+              icon: const Icon(Icons.save, size: 16),
+              label: const Text('Save Counts'),
+            ),
+          if (_canEdit) const SizedBox(width: 8),
           if (_canEdit)
             ElevatedButton.icon(
               onPressed: () => _submitStockTake(detail),
@@ -613,41 +690,7 @@ class _BranchStockTakesSectionState
                   color: varianceValue == 0 ? Colors.green : Colors.red)),
         ]),
         const SizedBox(height: 18),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side:
-                  BorderSide(color: AppColors.kDivider.withValues(alpha: .7))),
-          child: Column(children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-              child: Row(children: [
-                Expanded(
-                  child: Text(
-                    'Stock Worksheet - ${_bsText(detail, [
-                          'count_number',
-                          'take_number',
-                          'id'
-                        ])}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 15),
-                  ),
-                ),
-                Text('$counted / ${items.length} counted',
-                    style: const TextStyle(color: AppColors.kTextSecondary)),
-              ]),
-            ),
-            const Divider(height: 1),
-            if (items.isEmpty)
-              const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('No worksheet items found',
-                      style: TextStyle(color: AppColors.kTextSecondary)))
-            else
-              ...items.map((item) => _worksheetTile(item)),
-          ]),
-        ),
+        _worksheetInputCard(detail, items, counted),
         if (_bsText(detail, ['notes'], '').isNotEmpty) ...[
           const SizedBox(height: 14),
           Card(
@@ -673,43 +716,193 @@ class _BranchStockTakesSectionState
     );
   }
 
-  Widget _worksheetTile(Map<String, dynamic> item) {
+  Widget _worksheetInputCard(
+    Map<String, dynamic> detail,
+    List<Map<String, dynamic>> items,
+    int counted,
+  ) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.kDivider.withValues(alpha: .7))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          child: Row(children: [
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Stock Worksheet - ${_bsText(detail, [
+                            'count_number',
+                            'take_number',
+                            'id'
+                          ])}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 15),
+                    ),
+                    const SizedBox(height: 3),
+                    const Text(
+                      'Enter counts directly in the sheet and save all rows once.',
+                      style: TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 12),
+                    ),
+                  ]),
+            ),
+            Text('$counted / ${items.length} counted',
+                style: const TextStyle(
+                    color: AppColors.kTextSecondary,
+                    fontWeight: FontWeight.w700)),
+            if (_canEdit) ...[
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () => _saveWorksheetCounts(items),
+                icon: const Icon(Icons.save, size: 16),
+                label: const Text('Save Counts'),
+              ),
+            ],
+          ]),
+        ),
+        const Divider(height: 1),
+        if (items.isEmpty)
+          const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                  child: Text('No worksheet items found',
+                      style: TextStyle(color: AppColors.kTextSecondary))))
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: 1180,
+              child: Column(children: [
+                _worksheetHeaderRow(),
+                ...items.map((item) => _worksheetInputRow(item)),
+              ]),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Widget _worksheetHeaderRow() {
+    const style = TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: AppColors.kTextSecondary);
+    return Container(
+      height: 38,
+      color: AppColors.kSurface,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: const Row(children: [
+        SizedBox(width: 330, child: Text('ITEM', style: style)),
+        SizedBox(width: 180, child: Text('SKU', style: style)),
+        SizedBox(
+            width: 100,
+            child: Text('SYSTEM', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 140, child: Text('ACTUAL COUNT', style: style)),
+        SizedBox(
+            width: 100,
+            child: Text('VARIANCE', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 270, child: Text('VARIANCE NOTES', style: style)),
+      ]),
+    );
+  }
+
+  Widget _worksheetInputRow(Map<String, dynamic> item) {
     final system = _bsNum(item, ['system_closing_stock', 'system_quantity']);
-    final actual = _actual(item);
-    final variance = _variance(item);
-    final status = actual == null
-        ? 'pending'
+    final actual = _actualIncludingDraft(item);
+    final variance = _varianceIncludingDraft(item);
+    final needsReason = actual != null && variance != 0;
+    final rowColor = actual == null
+        ? Colors.transparent
         : variance == 0
-            ? 'counted'
-            : 'variance';
-    return Column(children: [
-      ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blueGrey.withValues(alpha: .10),
-          child: Icon(PhosphorIcons.package(), color: Colors.blueGrey),
+            ? Colors.green.withValues(alpha: .035)
+            : Colors.orange.withValues(alpha: .055);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 56),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      decoration: BoxDecoration(
+        color: rowColor,
+        border: Border(
+          top: BorderSide(color: AppColors.kDivider.withValues(alpha: .7)),
         ),
-        title: Text(_bsText(item, ['item_name', 'name', 'item_sku']),
-            style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(
-          '${_bsText(item, [
-                'item_sku',
-                'sku'
-              ])} • System ${_bsPlain(system)} • Actual ${actual == null ? '—' : _bsPlain(actual)} • Variance ${actual == null ? '—' : _bsPlain(variance)}',
-        ),
-        trailing: Wrap(
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _bsStatus(status),
-              if (_canEdit)
-                OutlinedButton(
-                  onPressed: () => _editCount(item),
-                  child: const Text('Count'),
-                ),
-            ]),
       ),
-      const Divider(height: 1),
-    ]);
+      child: Row(children: [
+        SizedBox(
+          width: 330,
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_bsText(item, ['item_name', 'name', 'item_sku']),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text(
+              _bsText(item, ['category', 'store_type'], ''),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: AppColors.kTextSecondary, fontSize: 11),
+            ),
+          ]),
+        ),
+        SizedBox(
+          width: 180,
+          child: Text(_bsText(item, ['item_sku', 'sku']),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12)),
+        ),
+        SizedBox(
+          width: 100,
+          child: Text(_bsPlain(system),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+        ),
+        SizedBox(
+          width: 140,
+          child: _BranchInlineStockInput(
+            key: ValueKey('${_bsId(item)}-branch-count'),
+            initialValue: _actual(item) == null ? '' : _bsPlain(_actual(item)!),
+            enabled: _canEdit,
+            hintText: 'Count',
+            keyboardType: TextInputType.number,
+            onChanged: (value) => setState(() {
+              item['_draft_counted_quantity'] = value;
+            }),
+          ),
+        ),
+        SizedBox(
+          width: 100,
+          child: Text(
+            actual == null ? '—' : _bsPlain(variance),
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: actual == null
+                  ? AppColors.kTextSecondary
+                  : variance == 0
+                      ? Colors.green
+                      : Colors.deepOrange,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 270,
+          child: _BranchInlineStockInput(
+            key: ValueKey('${_bsId(item)}-branch-note'),
+            initialValue: _reasonIncludingDraft(item),
+            enabled: _canEdit,
+            hintText: needsReason ? 'Required for variance' : 'Optional',
+            onChanged: (value) {
+              item['_draft_variance_reason'] = value;
+            },
+          ),
+        ),
+      ]),
+    );
   }
 
   double? _actual(Map<String, dynamic> item) {
@@ -721,10 +914,72 @@ class _BranchStockTakesSectionState
     return double.tryParse('$value');
   }
 
-  double _variance(Map<String, dynamic> item) {
-    final actual = _actual(item);
+  double? _actualIncludingDraft(Map<String, dynamic> item) {
+    final draft = item['_draft_counted_quantity'];
+    if (draft != null && '$draft'.trim().isNotEmpty) {
+      return double.tryParse('$draft');
+    }
+    return _actual(item);
+  }
+
+  double _varianceIncludingDraft(Map<String, dynamic> item) {
+    final actual = _actualIncludingDraft(item);
     if (actual == null) return 0;
     return actual - _bsNum(item, ['system_closing_stock', 'system_quantity']);
+  }
+
+  String _reasonIncludingDraft(Map<String, dynamic> item) {
+    final draft = '${item['_draft_variance_reason'] ?? ''}'.trim();
+    if (draft.isNotEmpty) return draft;
+    return _bsText(item, ['variance_reason', 'reason', 'notes'], '');
+  }
+
+  Future<void> _saveWorksheetCounts(List<Map<String, dynamic>> items) async {
+    final payload = <Map<String, dynamic>>[];
+    for (final item in items) {
+      final actual = _actualIncludingDraft(item);
+      if (actual == null) continue;
+      final variance =
+          actual - _bsNum(item, ['system_closing_stock', 'system_quantity']);
+      final reason = _reasonIncludingDraft(item);
+      if (variance != 0 && reason.trim().isEmpty) {
+        AppNotifier.showSnackBar(
+            context,
+            SnackBar(
+                content: Text('Variance reason required for ${_bsText(item, [
+                  'item_name',
+                  'item_sku'
+                ])}')));
+        return;
+      }
+      payload.add({
+        'id': _bsId(item),
+        'item_sku': _bsText(item, ['item_sku', 'sku'], ''),
+        'counted_quantity': actual,
+        if (reason.trim().isNotEmpty) 'variance_reason': reason.trim(),
+        if (reason.trim().isNotEmpty) 'notes': reason.trim(),
+      });
+    }
+    if (payload.isEmpty) {
+      AppNotifier.showSnackBar(
+          context, const SnackBar(content: Text('Enter at least one count')));
+      return;
+    }
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .updateBranchStockTake(_selectedId!, payload);
+      await _openStockTake(_selectedId!);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Worksheet counts saved')));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Save failed: $error')));
+      }
+    }
   }
 
   Future<void> _startStockTake() async {
@@ -840,88 +1095,6 @@ class _BranchStockTakesSectionState
       if (mounted) {
         AppNotifier.showSnackBar(
             context, SnackBar(content: Text('Download failed: $error')));
-      }
-    }
-  }
-
-  Future<void> _editCount(Map<String, dynamic> item) async {
-    final countCtrl = TextEditingController(
-        text: _actual(item)?.toString() ??
-            _bsNum(item, ['system_closing_stock', 'system_quantity'])
-                .toString());
-    final reasonCtrl = TextEditingController(
-        text: _bsText(item, ['variance_reason', 'reason', 'notes'], ''));
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Count ${_bsText(item, ['item_name', 'item_sku'])}'),
-        content: SizedBox(
-          width: 420,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: countCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Actual counted *'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonCtrl,
-              minLines: 1,
-              maxLines: 3,
-              decoration:
-                  const InputDecoration(labelText: 'Variance reason / notes'),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save Count')),
-        ],
-      ),
-    );
-    if (saved != true) {
-      countCtrl.dispose();
-      reasonCtrl.dispose();
-      return;
-    }
-    final actual = double.tryParse(countCtrl.text.trim()) ?? 0;
-    final variance =
-        actual - _bsNum(item, ['system_closing_stock', 'system_quantity']);
-    final reason = reasonCtrl.text.trim();
-    countCtrl.dispose();
-    reasonCtrl.dispose();
-    if (!mounted) return;
-    if (variance != 0 && reason.isEmpty) {
-      AppNotifier.showSnackBar(context,
-          const SnackBar(content: Text('Variance reason is required')));
-      return;
-    }
-    try {
-      await ref.read(adminRepositoryProvider).updateBranchStockTake(
-        _selectedId!,
-        [
-          {
-            'id': _bsId(item),
-            'item_sku': _bsText(item, ['item_sku', 'sku'], ''),
-            'counted_quantity': actual,
-            if (reason.isNotEmpty) 'variance_reason': reason,
-            if (reason.isNotEmpty) 'notes': reason,
-          }
-        ],
-      );
-      await _openStockTake(_selectedId!);
-      if (mounted) {
-        AppNotifier.showSnackBar(
-            context, const SnackBar(content: Text('Count saved')));
-      }
-    } catch (error) {
-      if (mounted) {
-        AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('Save failed: $error')));
       }
     }
   }

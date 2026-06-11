@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
+import { recordAuditTrail } from '../../utils/audit';
+import { generateGRNPDF } from '../../services/native-pdf-reports.service';
 
 const generateGRNNumber = async (): Promise<string> => {
     const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, '');
@@ -23,6 +25,170 @@ const generateGRNNumber = async (): Promise<string> => {
     const lastSequence = lastNumber ? Number(lastNumber.slice(prefix.length)) || 0 : 0;
 
     return `${prefix}${String(lastSequence + 1).padStart(4, '0')}`;
+};
+
+const toNumber = (value: any): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeText = (value: any): string | null => {
+    const text = value == null ? '' : `${value}`.trim();
+    return text.length > 0 ? text : null;
+};
+
+const updatePurchaseOrderReceipt = async (
+    poId: string | undefined,
+    grnItems: any[],
+    userId: string | undefined
+) => {
+    if (!poId) return null;
+
+    for (const item of grnItems) {
+        const receivedQty = toNumber(item.quantity_accepted || item.quantity_received);
+        if (receivedQty <= 0) continue;
+
+        let poItemQuery = supabase
+            .from('store_po_items')
+            .select('id, quantity_ordered, quantity_pending')
+            .eq('po_id', poId);
+
+        if (item.po_item_id) {
+            poItemQuery = poItemQuery.eq('id', item.po_item_id);
+        } else {
+            poItemQuery = poItemQuery.eq('item_id', item.item_id);
+        }
+
+        const { data: poItem, error: poItemError } = await poItemQuery.limit(1).maybeSingle();
+        if (poItemError) throw poItemError;
+        if (!poItem) continue;
+
+        const currentPending = poItem.quantity_pending == null
+            ? toNumber(poItem.quantity_ordered)
+            : toNumber(poItem.quantity_pending);
+        const nextPending = Math.max(0, currentPending - receivedQty);
+
+        const { error: updateItemError } = await supabase
+            .from('store_po_items')
+            .update({ quantity_pending: nextPending })
+            .eq('id', poItem.id);
+
+        if (updateItemError) throw updateItemError;
+    }
+
+    const { data: allPoItems, error: allPoItemsError } = await supabase
+        .from('store_po_items')
+        .select('quantity_ordered, quantity_pending')
+        .eq('po_id', poId);
+
+    if (allPoItemsError) throw allPoItemsError;
+
+    const totalOrdered = (allPoItems || []).reduce(
+        (sum: number, item: any) => sum + toNumber(item.quantity_ordered),
+        0
+    );
+    const totalPending = (allPoItems || []).reduce(
+        (sum: number, item: any) => sum + toNumber(item.quantity_pending),
+        0
+    );
+    const totalReceived = Math.max(0, totalOrdered - totalPending);
+
+    const nextStatus = totalPending <= 0.0001 ? 'received' : 'partial_delivery';
+    const updatePayload: any = {
+        status: nextStatus,
+        updated_at: new Date().toISOString()
+    };
+
+    if (totalPending <= 0.0001) {
+        updatePayload.received_by_id = userId || null;
+        updatePayload.received_at = new Date().toISOString();
+    }
+
+    const { data: updatedPo, error: updatePoError } = await supabase
+        .from('store_purchase_orders')
+        .update(updatePayload)
+        .eq('id', poId)
+        .select()
+        .single();
+
+    if (updatePoError) throw updatePoError;
+
+    return {
+        ...updatedPo,
+        total_ordered: totalOrdered,
+        total_received: totalReceived,
+        total_pending: totalPending
+    };
+};
+
+const createSupplierInvoiceFromGRN = async (
+    params: {
+        invoiceNumber: string;
+        supplierId: string;
+        poId?: string;
+        grnId: string;
+        grnNumber: string;
+        grnDate: string;
+        totalValue: number;
+        userId?: string;
+        grnItems: any[];
+        itemDetails: Map<string, any>;
+    }
+) => {
+    const dueDate = new Date(params.grnDate);
+    dueDate.setDate(dueDate.getDate() + 30);
+
+    const { data: invoice, error: invError } = await supabase
+        .from('store_supplier_invoices')
+        .insert({
+            invoice_number: params.invoiceNumber,
+            supplier_id: params.supplierId,
+            grn_id: params.grnId,
+            po_id: params.poId,
+            invoice_date: params.grnDate,
+            due_date: dueDate.toISOString().split('T')[0],
+            subtotal: params.totalValue,
+            vat_rate_type: 'zero',
+            vat_amount: 0,
+            total_amount: params.totalValue,
+            balance_due: params.totalValue,
+            created_by_id: params.userId,
+            status: 'draft',
+            notes: `Automatically generated from GRN ${params.grnNumber}`
+        })
+        .select()
+        .single();
+
+    if (invError) throw invError;
+
+    const invoiceItems = params.grnItems.map((item: any) => {
+        const qty = toNumber(item.quantity_accepted || item.quantity_received);
+        const unitPrice = toNumber(item.unit_price);
+        const detail = params.itemDetails.get(item.item_id);
+        return {
+            invoice_id: invoice.id,
+            item_id: item.item_id,
+            grn_item_id: item.id || null,
+            po_item_id: item.po_item_id || null,
+            description: detail?.item_name || detail?.description || item.item_id,
+            quantity: qty,
+            unit_price: unitPrice,
+            subtotal: qty * unitPrice,
+            vat_rate: 0,
+            vat_amount: 0,
+            total_amount: qty * unitPrice
+        };
+    });
+
+    if (invoiceItems.length > 0) {
+        const { error: invoiceItemsError } = await supabase
+            .from('store_supplier_invoice_items')
+            .insert(invoiceItems);
+
+        if (invoiceItemsError) throw invoiceItemsError;
+    }
+
+    return invoice;
 };
 
 // @desc    Get all Goods Received Notes
@@ -160,6 +326,69 @@ export const getGRN = async (
     }
 };
 
+// @desc    Download/print branded GRN PDF
+// @route   GET /api/storekeeping/grn/:id/pdf
+// @access  Private
+export const printGRN = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        const { data: grn, error: grnError } = await supabase
+            .from('store_grn')
+            .select(`
+                *,
+                supplier:store_suppliers(*),
+                purchase_order:store_purchase_orders(*),
+                received_by:users(id, name, email)
+            `)
+            .eq('id', id)
+            .single();
+
+        if (grnError || !grn) {
+            throw new AppError('GRN not found', 404);
+        }
+
+        const { data: items, error: itemsError } = await supabase
+            .from('store_grn_items')
+            .select('*')
+            .eq('grn_id', id);
+
+        if (itemsError) throw itemsError;
+
+        const skus = [...new Set((items || []).map((item: any) => item.item_id).filter(Boolean))];
+        const { data: itemDetails, error: detailsError } = skus.length
+            ? await supabase
+                .from('simple_items')
+                .select('sku, item_name, description, unit_of_measure, category')
+                .in('sku', skus)
+            : { data: [], error: null } as any;
+
+        if (detailsError) throw detailsError;
+
+        const itemMap = new Map<string, any>(
+            (itemDetails || []).map((item: any) => [item.sku, item] as [string, any])
+        );
+        const enrichedItems = (items || []).map((item: any) => ({
+            ...item,
+            item: itemMap.get(item.item_id) || null
+        }));
+
+        const pdfBuffer = await generateGRNPDF(grn, enrichedItems);
+        const filename = `${grn.grn_number || 'GRN'}.pdf`.replace(/[^A-Za-z0-9._-]/g, '_');
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+        res.send(pdfBuffer);
+    } catch (error) {
+        logger.error('Error generating GRN PDF:', error);
+        next(error);
+    }
+};
+
 // @desc    Create new GRN
 // @route   POST /api/storekeeping/grn
 // @access  Private (Storekeeper)
@@ -189,12 +418,45 @@ export const createGRN = async (
             throw new AppError('Supplier and items are required', 400);
         }
 
+        const normalizedItems = (items || []).map((item: any) => ({
+            ...item,
+            item_id: normalizeText(item.item_id),
+            po_item_id: normalizeText(item.po_item_id),
+            quantity_received: toNumber(item.quantity_received),
+            quantity_accepted: toNumber(item.quantity_accepted ?? item.quantity_received),
+            quantity_ordered: toNumber(item.quantity_ordered),
+            unit_price: toNumber(item.unit_price),
+            unit_of_measure: normalizeText(item.unit_of_measure) || 'units'
+        }));
+
+        const invalidItem = normalizedItems.find((item: any) => !item.item_id || item.quantity_received <= 0);
+        if (invalidItem) {
+            throw new AppError('Every GRN item must have a valid SKU and received quantity above zero', 400);
+        }
+
+        const skus: string[] = [...new Set<string>(normalizedItems.map((item: any) => String(item.item_id)))];
+        const { data: storeItems, error: storeItemsError } = await supabase
+            .from('simple_items')
+            .select('sku, item_name, description, quantity, unit_of_measure, category')
+            .in('sku', skus);
+
+        if (storeItemsError) throw storeItemsError;
+
+        const itemDetails = new Map<string, any>(
+            (storeItems || []).map((item: any) => [item.sku, item] as [string, any])
+        );
+        const missingSkus = skus.filter((sku: string) => !itemDetails.has(sku));
+        if (missingSkus.length > 0) {
+            throw new AppError(`Cannot post GRN. Missing inventory SKU(s): ${missingSkus.join(', ')}`, 400);
+        }
+
         const grn_number = await generateGRNNumber();
+        const resolvedGrnDate = grn_date || new Date().toISOString().split('T')[0];
 
         // Calculate totals
-        const total_items = items.length;
-        const total_quantity = items.reduce((sum: number, item: any) => sum + Number(item.quantity_received), 0);
-        const total_value = items.reduce((sum: number, item: any) => sum + (Number(item.quantity_received) * Number(item.unit_price)), 0);
+        const total_items = normalizedItems.length;
+        const total_quantity = normalizedItems.reduce((sum: number, item: any) => sum + Number(item.quantity_received), 0);
+        const total_value = normalizedItems.reduce((sum: number, item: any) => sum + (Number(item.quantity_received) * Number(item.unit_price)), 0);
 
         // Start transaction (manual handling via separate calls as Supabase JS doesn't support transactions directly)
         // Note: For production, using a PostgreSQL RPC for the whole transaction is safer.
@@ -206,9 +468,9 @@ export const createGRN = async (
                 grn_number,
                 po_id,
                 supplier_id,
-                grn_date: grn_date || new Date().toISOString().split('T')[0],
-                delivery_note_number,
-                invoice_number,
+                grn_date: resolvedGrnDate,
+                delivery_note_number: normalizeText(delivery_note_number),
+                invoice_number: normalizeText(invoice_number),
                 vehicle_number,
                 driver_name,
                 driver_phone,
@@ -226,7 +488,7 @@ export const createGRN = async (
         if (grnError) throw grnError;
 
         // 2. Create GRN items
-        const grnItems = items.map((item: any) => ({
+        const grnItems = normalizedItems.map((item: any) => ({
             grn_id: newGRN.id,
             po_item_id: item.po_item_id,
             item_id: item.item_id,
@@ -243,9 +505,10 @@ export const createGRN = async (
             notes: item.notes
         }));
 
-        const { error: itemsError } = await supabase
+        const { data: savedGrnItems, error: itemsError } = await supabase
             .from('store_grn_items')
-            .insert(grnItems);
+            .insert(grnItems)
+            .select();
 
         if (itemsError) {
             // Cleanup on error (manual rollback)
@@ -261,33 +524,50 @@ export const createGRN = async (
         logger.info(`Auto-approving GRN ${grn_number}...`);
         
         // Update each item's stock in simple_items
-        for (const item of grnItems) {
+        for (const item of (savedGrnItems || grnItems)) {
             const sku = item.item_id;
             const qty = Number(item.quantity_accepted || item.quantity_received);
             
             if (qty > 0) {
                 // Get current stock
-                const { data: currentItem } = await supabase
-                    .from('simple_items')
-                    .select('quantity')
-                    .eq('sku', sku)
-                    .single();
+                const currentItem = itemDetails.get(sku);
                 
                 const currentQty = Number(currentItem?.quantity || 0);
                 const newQty = currentQty + qty;
                 
                 // Update stock
-                await supabase
+                const { error: stockUpdateError } = await supabase
                     .from('simple_items')
                     .update({
                         quantity: newQty,
-                        cost_price: item.unit_price || undefined
+                        cost_price: item.unit_price || currentItem?.cost_price || 0,
+                        last_updated: new Date().toISOString()
                     })
                     .eq('sku', sku);
+
+                if (stockUpdateError) throw stockUpdateError;
+
+                const { error: historyError } = await supabase.from('stock_history').insert({
+                    item_sku: sku,
+                    change_type: 'IN',
+                    quantity_change: qty,
+                    previous_quantity: currentQty,
+                    new_quantity: newQty,
+                    reason: 'GRN',
+                    reference: grn_number,
+                    notes: `Goods received from supplier via GRN ${grn_number}`,
+                    user_id: userId
+                });
+
+                if (historyError) {
+                    logger.warn(`Failed to log stock history for GRN ${grn_number}/${sku}: ${historyError.message}`);
+                }
                 
                 logger.info(`Updated ${sku}: ${currentQty} + ${qty} = ${newQty}`);
             }
         }
+
+        const updatedPurchaseOrder = await updatePurchaseOrderReceipt(po_id, (savedGrnItems || grnItems), userId);
         
         // Mark GRN as approved
         await supabase
@@ -302,44 +582,65 @@ export const createGRN = async (
 
         logger.info(`GRN ${grn_number} auto-approved and stock updated`);
 
+        let supplierInvoice = null;
         // 4. Create a DRAFT Supplier Invoice automatically if invoice_number is provided
-        if (invoice_number) {
+        const resolvedInvoiceNumber = normalizeText(invoice_number);
+        if (resolvedInvoiceNumber) {
             try {
-                logger.info(`Creating draft invoice ${invoice_number} for GRN ${grn_number}...`);
-                const { error: invError } = await supabase
-                    .from('store_supplier_invoices')
-                    .insert({
-                        invoice_number,
-                        supplier_id,
-                        grn_id: newGRN.id,
-                        po_id,
-                        invoice_date: grn_date || new Date().toISOString().split('T')[0],
-                        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default 30 days
-                        subtotal: total_value,
-                        vat_rate_type: 'standard_16',
-                        vat_amount: total_value * 0.16,
-                        total_amount: total_value * 1.16,
-                        balance_due: total_value * 1.16,
-                        created_by_id: userId,
-                        status: 'draft',
-                        notes: `Automatically generated from GRN ${grn_number}`
-                    });
-                
-                if (invError) {
-                    logger.error(`Failed to create automatic invoice for GRN ${grn_number}:`, invError);
-                    // We don't fail the whole GRN if invoice creation fails, just log it
-                } else {
-                    logger.info(`Automatic draft invoice ${invoice_number} created.`);
-                }
+                logger.info(`Creating draft invoice ${resolvedInvoiceNumber} for GRN ${grn_number}...`);
+                supplierInvoice = await createSupplierInvoiceFromGRN({
+                    invoiceNumber: resolvedInvoiceNumber,
+                    supplierId: supplier_id,
+                    poId: po_id,
+                    grnId: newGRN.id,
+                    grnNumber: grn_number,
+                    grnDate: resolvedGrnDate,
+                    totalValue: total_value,
+                    userId,
+                    grnItems: (savedGrnItems || grnItems),
+                    itemDetails
+                });
+                logger.info(`Automatic draft invoice ${resolvedInvoiceNumber} created.`);
             } catch (err) {
                 logger.error('Error in automatic invoice creation:', err);
+                throw err;
             }
+        }
+
+        if (userId) {
+            await recordAuditTrail({
+                userId,
+                action: 'CREATE_GRN',
+                entityType: 'store_grn',
+                entityId: newGRN.id,
+                newValues: {
+                    grn_number,
+                    supplier_id,
+                    po_id,
+                    invoice_number: resolvedInvoiceNumber,
+                    delivery_note_number: normalizeText(delivery_note_number),
+                    total_items,
+                    total_quantity,
+                    total_value,
+                    stock_updated: true,
+                    purchase_order_status: updatedPurchaseOrder?.status,
+                    supplier_invoice_id: supplierInvoice?.id
+                },
+                req
+            });
         }
 
         res.status(201).json({
             success: true,
             message: 'Goods received and stock updated successfully',
-            data: { ...newGRN, grn_approved: true, status: 'completed' }
+            data: {
+                ...newGRN,
+                grn_approved: true,
+                status: 'completed',
+                items: savedGrnItems || grnItems,
+                purchase_order: updatedPurchaseOrder,
+                supplier_invoice: supplierInvoice
+            }
         });
     } catch (error) {
         logger.error('Error creating GRN:', error);

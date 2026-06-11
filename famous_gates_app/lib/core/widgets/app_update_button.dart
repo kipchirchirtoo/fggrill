@@ -24,7 +24,7 @@ class AppUpdateButton extends StatelessWidget {
         if (currentVersion == null) return const SizedBox.shrink();
 
         return UpdatWidget(
-          appName: 'Famous Gates Hotels',
+          appName: 'FamousGate Hotels System',
           currentVersion: currentVersion,
           getLatestVersion: getLatestDesktopVersion,
           getBinaryUrl: getDesktopBinaryUrl,

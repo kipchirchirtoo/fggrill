@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.hirall" "\0"
-            VALUE "FileDescription", "famous_gates_app" "\0"
+            VALUE "CompanyName", "FamousGate Hotels" "\0"
+            VALUE "FileDescription", "FamousGate Hotels System" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "famous_gates_app" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.hirall. All rights reserved." "\0"
-            VALUE "OriginalFilename", "famous_gates_app.exe" "\0"
-            VALUE "ProductName", "famous_gates_app" "\0"
+            VALUE "InternalName", "FamousGate Hotels System" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 FamousGate Hotels. All rights reserved." "\0"
+            VALUE "OriginalFilename", "famousgate_hotels_system.exe" "\0"
+            VALUE "ProductName", "FamousGate Hotels System" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

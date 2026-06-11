@@ -66,7 +66,7 @@ class FamousGatesApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title: 'Famous Gates Hotels',
+      title: 'FamousGate Hotels System',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: router,
@@ -100,7 +100,7 @@ class FamousGatesApp extends ConsumerWidget {
             if (currentVersion == null) return wrapped;
 
             return UpdatWindowManager(
-              appName: 'Famous Gates Hotels',
+              appName: 'FamousGate Hotels System',
               currentVersion: currentVersion,
               getLatestVersion: getLatestDesktopVersion,
               getBinaryUrl: getDesktopBinaryUrl,
@@ -116,7 +116,7 @@ class FamousGatesApp extends ConsumerWidget {
                   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                     const SnackBar(
                       content: Text(
-                          'A new Famous Gates desktop update is available. Use the update button in the top bar to download it.'),
+                          'A new FamousGate Hotels System desktop update is available. Use the update button in the top bar to download it.'),
                     ),
                   );
                 }

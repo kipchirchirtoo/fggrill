@@ -9384,9 +9384,18 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
                           _text(_map(e['branch']), ['name']),
                           _StatusPill(_text(e, ['status'])),
                           '${e['items_count'] ?? e['item_count'] ?? 0}',
-                          TextButton(
-                              onPressed: () => _showRecord(context, e),
-                              child: const Text('Review')),
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            TextButton(
+                                onPressed: () => _showRecord(context, e),
+                                child: const Text('Review')),
+                            if (_isApprovableStockTake(e))
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                    visualDensity: VisualDensity.compact),
+                                onPressed: () => _approveAndPost(e),
+                                child: const Text('Approve & Post'),
+                              ),
+                          ]),
                         ])
                     .toList(),
               ),
@@ -9395,6 +9404,57 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
         ),
       ),
     );
+  }
+
+  bool _isApprovableStockTake(Map<String, dynamic> e) {
+    final status = _text(e, ['status']).toLowerCase();
+    return status.contains('submitted');
+  }
+
+  /// Approve a submitted count: posts Variance = Physical − System to the
+  /// branch ledger (positive → Credit Stock Adjustment, negative → Debit
+  /// Stock Write-off) with unalterable movement entries.
+  Future<void> _approveAndPost(Map<String, dynamic> e) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Approve & Post Variances'),
+        content: const Text(
+            'This will post all counted variances to the branch stock ledger:\n\n'
+            '• Positive variance → Credit Stock Adjustment (stock +)\n'
+            '• Negative variance → Debit Stock Write-off (stock −)\n\n'
+            'Every line writes a permanent stock movement entry. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Approve & Post')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final res = await ref
+          .read(branchAccountantRepositoryProvider)
+          .approveStockTake('${e['id']}');
+      final summary = _map(_map(res['data'])['posting_summary']);
+      if (mounted) {
+        _notify(
+            context,
+            summary.isEmpty
+                ? 'Stock take approved and variances posted'
+                : 'Posted: ${summary['adjustments'] ?? 0} adjustment(s) credited, '
+                    '${summary['write_offs'] ?? 0} write-off(s) debited');
+      }
+      _refresh();
+    } catch (err) {
+      if (mounted) {
+        _notify(context,
+            'Approve failed: ${err is DioException ? (err.response?.data is Map ? (err.response?.data['message'] ?? err.message) : err.message) : err}');
+      }
+    }
   }
 }
 

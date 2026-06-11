@@ -22,7 +22,8 @@ import {
     getGRN,
     createGRN,
     approveGRN,
-    cancelGRN
+    cancelGRN,
+    printGRN
 } from '../controllers/storekeeping/grn.controller';
 
 import {
@@ -159,6 +160,7 @@ router.route('/grn')
 router.route('/grn/:id')
     .get(authorize(allProcurementStaff), getGRN);
 
+router.get('/grn/:id/pdf', authorize(allProcurementStaff), printGRN);
 router.put('/grn/:id/approve', authorize(auditorRoles), approveGRN);
 router.put('/grn/:id/cancel', authorize(storeRoles), cancelGRN);
 

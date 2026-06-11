@@ -865,6 +865,14 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
+  /// Approve a submitted stock take and POST variances to the branch ledger:
+  /// positive variance → STOCK_ADJUSTMENT (credit +), negative → STOCK_WRITE_OFF
+  /// (debit −). Returns the posting summary from the backend.
+  Future<Map<String, dynamic>> approveStockTake(String id) async {
+    final res = await _dio.post('/stock-takes/$id/approve');
+    return _asMap(res.data);
+  }
+
   Future<File> downloadStockTakeWorksheet({String? stockTakeId}) async {
     final branchId = await getBranchId();
     final path = stockTakeId != null

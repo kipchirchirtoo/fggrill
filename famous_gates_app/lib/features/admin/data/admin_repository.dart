@@ -1010,6 +1010,16 @@ class AdminRepository {
     return _parseMap(response.data);
   }
 
+  Future<File> downloadGRNPdf(String id, {String? grnNumber}) {
+    final date = _today();
+    final baseName =
+        (grnNumber == null || grnNumber.isEmpty) ? 'GRN_$date' : grnNumber;
+    return _downloadGet(
+      '/procurement/grn/$id/pdf',
+      filename: '$baseName.pdf',
+    );
+  }
+
   Future<void> approveGRN(String id) async {
     await _dio.put('/procurement/grn/$id/approve');
   }

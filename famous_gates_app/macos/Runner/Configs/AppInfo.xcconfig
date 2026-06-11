@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = famous_gates_app
+PRODUCT_NAME = FamousGate Hotels System
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.hirall.famousGatesApp
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.hirall. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 FamousGate Hotels. All rights reserved.

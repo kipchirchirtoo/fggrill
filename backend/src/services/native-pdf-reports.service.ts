@@ -113,15 +113,22 @@ function drawSummaryBox(doc: PDFKit.PDFDocument, y: number, items: { label: stri
 }
 
 function drawFooter(doc: PDFKit.PDFDocument) {
-  const y = doc.page.height - 52;
+  const previousX = doc.x;
+  const previousY = doc.y;
+  const bottomMargin = doc.page.margins?.bottom ?? 40;
+  const y = doc.page.height - bottomMargin - 18;
+
   doc.strokeColor(BORDER).lineWidth(0.5).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke();
   doc.fillColor(SECONDARY).fontSize(7.5).font('Helvetica')
     .text(`Generated: ${new Date().toLocaleString('en-KE')} | ${COMPANY_NAME} - Confidential`, 40, y + 7, {
       width: doc.page.width - 80,
+      height: 10,
       align: 'center',
       lineBreak: false,
       ellipsis: true
     });
+  doc.x = previousX;
+  doc.y = previousY;
 }
 
 // ── SUPPLIER STATEMENT ────────────────────────────────────────────────────────
@@ -1257,6 +1264,105 @@ export async function generateDocumentationPDF(
     });
     res.on('error', reject);
     doc.removeAllListeners('pageAdded');
+    doc.end();
+  });
+}
+
+export async function generateGRNPDF(grn: any, items: any[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const chunks: Buffer[] = [];
+
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const grnNumber = grn.grn_number || grn.id || 'GRN';
+    const supplier = grn.supplier || {};
+    const po = grn.purchase_order || {};
+    const receivedBy = grn.received_by || {};
+    const subtitle = `GRN: ${grnNumber} | Date: ${fmtDate(grn.grn_date || grn.created_at)}`;
+    let y = drawBrandedHeader(doc, 'GOODS RECEIVED NOTE', subtitle);
+
+    const leftX = 40;
+    const rightX = 330;
+    const blockTop = y;
+
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(SECONDARY).text('SUPPLIER', leftX, blockTop);
+    doc.font('Helvetica').fontSize(9).fillColor(PRIMARY)
+      .text(supplier.name || grn.supplier_name || '—', leftX, blockTop + 16, { width: 240 })
+      .text(supplier.phone || supplier.email || '—', leftX, blockTop + 30, { width: 240 });
+
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(SECONDARY).text('RECEIVING DETAILS', rightX, blockTop);
+    const details = [
+      ['PO Number', po.po_number || grn.po_number || '—'],
+      ['Invoice Number', grn.invoice_number || '—'],
+      ['Delivery Note', grn.delivery_note_number || '—'],
+      ['Received By', receivedBy.name || receivedBy.email || grn.received_by_id || '—'],
+    ];
+
+    details.forEach(([label, value], index) => {
+      const rowY = blockTop + 16 + index * 14;
+      doc.font('Helvetica-Bold').fontSize(8).fillColor(SECONDARY).text(label, rightX, rowY, { width: 95 });
+      doc.font('Helvetica').fontSize(8).fillColor(PRIMARY).text(String(value), rightX + 100, rowY, { width: 125, ellipsis: true });
+    });
+
+    y = blockTop + 88;
+
+    const cols = [
+      { label: '#', x: 42, width: 20 },
+      { label: 'Item Description', x: 66, width: 160 },
+      { label: 'SKU', x: 230, width: 105 },
+      { label: 'Ordered', x: 339, width: 45, align: 'right' },
+      { label: 'Received', x: 388, width: 50, align: 'right' },
+      { label: 'Unit Price', x: 442, width: 60, align: 'right' },
+      { label: 'Total', x: 506, width: 68, align: 'right' },
+    ];
+
+    y = drawTableHeader(doc, y, cols);
+
+    const rowHeight = 18;
+    items.forEach((row, index) => {
+      if (y > doc.page.height - 80) {
+        drawFooter(doc);
+        doc.addPage();
+        y = drawBrandedHeader(doc, 'GOODS RECEIVED NOTE (cont.)', subtitle);
+        y = drawTableHeader(doc, y, cols);
+      }
+
+      const detail = row.item || {};
+      const qtyReceived = Number(row.quantity_received || row.quantity_accepted || 0);
+      const unitPrice = Number(row.unit_price || 0);
+      const lineTotal = Number(row.total_value || (qtyReceived * unitPrice));
+      const itemName = detail.item_name || detail.description || row.item_name || row.item_id || '—';
+
+      if (index % 2 === 0) doc.rect(40, y, doc.page.width - 80, rowHeight).fill(ROW_BG);
+      doc.fillColor(PRIMARY).fontSize(7.8).font('Helvetica');
+      doc.text(String(index + 1), 42, y + 5, { width: 20 });
+      doc.text(itemName, 66, y + 5, { width: 160, ellipsis: true });
+      doc.text(row.item_id || detail.sku || '—', 230, y + 5, { width: 105, ellipsis: true });
+      doc.text(String(row.quantity_ordered || 0), 339, y + 5, { width: 45, align: 'right' });
+      doc.text(String(qtyReceived), 388, y + 5, { width: 50, align: 'right' });
+      doc.text(fmt(unitPrice), 442, y + 5, { width: 60, align: 'right' });
+      doc.text(fmt(lineTotal), 506, y + 5, { width: 68, align: 'right' });
+      doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, y + rowHeight).lineTo(doc.page.width - 40, y + rowHeight).stroke();
+      y += rowHeight;
+    });
+
+    if (!items.length) {
+      doc.fontSize(9).fillColor(SECONDARY).text('No received items recorded on this GRN.', 40, y + 12);
+      y += 34;
+    }
+
+    const totalValue = Number(grn.total_value || items.reduce((sum, item) => sum + Number(item.total_value || 0), 0));
+    y += 14;
+    drawSummaryBox(doc, y, [
+      { label: 'Total Items', value: String(grn.total_items || items.length) },
+      { label: 'Total Quantity', value: String(grn.total_quantity || items.reduce((sum, item) => sum + Number(item.quantity_received || 0), 0)) },
+      { label: 'Total Value', value: fmt(totalValue) },
+    ]);
+
+    drawFooter(doc);
     doc.end();
   });
 }
