@@ -774,6 +774,31 @@ class _BranchStorekeeperDashboardState
               PhosphorIcons.truck(),
               AppColors.kSuccess),
         ]),
+        // ── Dispatch en-route alert ──────────────────────────────────
+        if (inTransit > 0)
+          _AlertBanner(
+            icon: PhosphorIcons.truck(),
+            color: AppColors.kSuccess,
+            title: '$inTransit Dispatch${inTransit == 1 ? '' : 'es'} En Route',
+            subtitle:
+                'Stock has been dispatched from central store and is on its way. Tap to prepare for receiving.',
+            onTap: () => _go(BranchStorekeeperSection.receive),
+          ),
+
+        // ── Recently approved requests alert ────────────────────────
+        if (_stockRequests.any((r) =>
+            '${r['status']}'.toUpperCase() == 'APPROVED' ||
+            '${r['status']}'.toUpperCase() == 'PARTIALLY_APPROVED'))
+          _AlertBanner(
+            icon: PhosphorIcons.checkCircle(),
+            color: AppColors.kPrimary,
+            title:
+                '${_stockRequests.where((r) => '${r['status']}'.toUpperCase() == 'APPROVED' || '${r['status']}'.toUpperCase() == 'PARTIALLY_APPROVED').length} Request${_stockRequests.where((r) => '${r['status']}'.toUpperCase() == 'APPROVED').length == 1 ? '' : 's'} Approved by Auditor',
+            subtitle:
+                'Your stock request has been approved and is being prepared at central store.',
+            onTap: () => _go(BranchStorekeeperSection.requests),
+          ),
+
         _SectionCard(
           title: 'Operational Shortcuts',
           child: Wrap(
@@ -5051,6 +5076,66 @@ class _StockTakeInlineInputState extends State<_StockTakeInlineInput> {
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
+  }
+}
+
+class _AlertBanner extends StatelessWidget {
+  const _AlertBanner({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 13)),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.kTextSecondary)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 13, color: color),
+          ],
         ),
       ),
     );

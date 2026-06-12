@@ -3,6 +3,7 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
+import notificationService from '../../services/notification.service';
 
 const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
 
@@ -368,6 +369,22 @@ export const createDispatchNote = async (
                 success: true,
                 data: dispatch
             });
+
+            // Notify branch storekeeper that their stock is on the way
+            notificationService.notifyRole(
+                'branch_storekeeper',
+                'Stock Dispatched — En Route',
+                `Your approved request has been packed and dispatched from central store (${dispatch?.dispatch_number ?? ''}). Please prepare to receive the goods.`,
+                {
+                    type: 'success',
+                    category: 'dispatch',
+                    priority: 'high',
+                    actionUrl: `/dashboard/branch-store/requests`,
+                    branchId: request?.requesting_branch_id ?? null,
+                    metadata: { request_id: finalRequestId, dispatch_id: dispatch?.id }
+                }
+            ).catch(e => logger.error('Failed to notify branch_storekeeper of dispatch', e));
+
             return;
         }
 
@@ -471,6 +488,22 @@ export const createDispatchNote = async (
                 success: true,
                 data: completeDispatch
             });
+
+            // Notify branch storekeeper at destination branch
+            notificationService.notifyRole(
+                'branch_storekeeper',
+                'Stock Dispatched — En Route',
+                `Stock has been packed and dispatched from central store. Please prepare to receive the goods.`,
+                {
+                    type: 'success',
+                    category: 'dispatch',
+                    priority: 'high',
+                    actionUrl: `/dashboard/branch-store/requests`,
+                    branchId: to_branch_id ?? null,
+                    metadata: { dispatch_id: createdDispatch.id }
+                }
+            ).catch(e => logger.error('Failed to notify branch_storekeeper of dispatch (fallback path)', e));
+
             return;
         }
 
@@ -545,6 +578,21 @@ export const createDispatchNote = async (
             success: true,
             data: completeDispatch
         });
+
+        // Notify branch storekeeper at destination branch
+        notificationService.notifyRole(
+            'branch_storekeeper',
+            'Stock Dispatched — En Route',
+            `Stock dispatch ${dispatch_number} has been created and is en route to your branch. Please prepare to receive the goods.`,
+            {
+                type: 'success',
+                category: 'dispatch',
+                priority: 'high',
+                actionUrl: `/dashboard/branch-store/requests`,
+                branchId: to_branch_id ?? null,
+                metadata: { dispatch_id: createdDispatch2.id }
+            }
+        ).catch(e => logger.error('Failed to notify branch_storekeeper of dispatch (main path)', e));
     } catch (error: any) {
         logger.error('Error creating dispatch note:', {
             error: error.message,

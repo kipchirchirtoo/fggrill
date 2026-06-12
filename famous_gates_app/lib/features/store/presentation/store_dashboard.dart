@@ -26,6 +26,17 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final approvedRequestCount = ref
+        .watch(stockRequestsProvider(null))
+        .maybeWhen(
+          data: (list) => list
+              .where((r) =>
+                  (r.status?.toUpperCase() ?? '') == 'APPROVED' ||
+                  (r.status?.toUpperCase() ?? '') == 'PARTIALLY_APPROVED')
+              .length,
+          orElse: () => 0,
+        );
+
     final centralTabs = [
       DashboardTab(
           label: 'Central Store',
@@ -75,9 +86,10 @@ class _StoreDashboardState extends ConsumerState<StoreDashboard> {
           icon: PhosphorIcons.gitPullRequest(),
           content: const _StockRequestsTab()),
       DashboardTab(
-          label: 'Packing',
+          label: 'Packing Station',
           icon: PhosphorIcons.package(),
-          content: const _PackingTab()),
+          content: const _PackingTab(),
+          badgeCount: approvedRequestCount),
       DashboardTab(
           label: 'Dispatch & Notes',
           icon: PhosphorIcons.truck(),
@@ -500,7 +512,10 @@ class _CentralStoreOverviewTab extends ConsumerWidget {
             vehicles: vehicles,
             drivers: drivers,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          // ── "Ready to Pack" alert banner ───────────────────────────────
+          _ReadyToPackBanner(requests: requests, onNavigate: onNavigate),
+          const SizedBox(height: 8),
           ...sections.map((section) => Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: _CentralStoreActionSection(
@@ -683,6 +698,77 @@ class _CentralStoreMetric extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ReadyToPackBanner extends StatelessWidget {
+  const _ReadyToPackBanner({required this.requests, required this.onNavigate});
+
+  final AsyncValue<List<StockRequest>> requests;
+  final ValueChanged<int> onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final approvedCount = requests.maybeWhen(
+      data: (list) => list
+          .where((r) =>
+              (r.status?.toUpperCase() ?? '') == 'APPROVED' ||
+              (r.status?.toUpperCase() ?? '') == 'PARTIALLY_APPROVED')
+          .length,
+      orElse: () => 0,
+    );
+
+    if (approvedCount == 0) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () => onNavigate(8), // Packing Station tab index
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.kSuccess.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: AppColors.kSuccess.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.kSuccess.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.inventory_outlined,
+                  color: AppColors.kSuccess, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$approvedCount Approved Request${approvedCount == 1 ? '' : 's'} Ready to Pack & Dispatch',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.kTextPrimary),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Tap to open the Packing Station and dispatch goods to branches.',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.kTextSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                size: 14, color: AppColors.kSuccess),
+          ],
+        ),
       ),
     );
   }

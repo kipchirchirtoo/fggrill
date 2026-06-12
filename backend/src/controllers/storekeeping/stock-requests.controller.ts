@@ -392,7 +392,7 @@ export const reviewStockRequest = async (
             // Fetch request details for notification
             const { data: request } = await supabase
                 .from('stock_requests')
-                .select('requested_by, request_number')
+                .select('requested_by, request_number, requesting_branch_id')
                 .eq('id', id)
                 .single();
 
@@ -407,7 +407,7 @@ export const reviewStockRequest = async (
                 notificationService.notifyUser(
                     request.requested_by,
                     'Stock Request Approved',
-                    `Your stock request ${request.request_number} has been approved.`,
+                    `Your stock request ${request.request_number} has been approved by the auditor. It is now queued for packing and dispatch from central store.`,
                     {
                         type: 'success',
                         category: 'stock_request',
@@ -417,6 +417,21 @@ export const reviewStockRequest = async (
                     }
                 ).catch(e => logger.error('Failed to notify requester of stock request approval', e));
             }
+
+            // Notify Central Storekeeper — new item ready to pack and dispatch
+            notificationService.notifyRole(
+                'central_storekeeper',
+                'New Request Ready to Pack',
+                `Stock request ${request?.request_number ?? id} has been auditor-approved and is waiting for packing and dispatch. Open the Packing Station to proceed.`,
+                {
+                    type: 'info',
+                    category: 'stock_request',
+                    priority: 'high',
+                    actionUrl: `/dashboard/central-store/packing`,
+                    metadata: { request_id: id, status: 'APPROVED', branch_id: request?.requesting_branch_id }
+                }
+            ).catch(e => logger.error('Failed to notify central_storekeeper of approved request', e));
+
             return;
         }
 
@@ -520,7 +535,7 @@ export const approveStockRequest = async (
         // Fetch request details for notification
         const { data: request } = await supabase
             .from('stock_requests')
-            .select('requested_by, request_number')
+            .select('requested_by, request_number, requesting_branch_id')
             .eq('id', id)
             .single();
 
@@ -535,7 +550,7 @@ export const approveStockRequest = async (
             notificationService.notifyUser(
                 request.requested_by,
                 'Stock Request Approved',
-                `Your stock request ${request.request_number} has been approved.`,
+                `Your stock request ${request.request_number} has been approved by the auditor. It is now queued for packing and dispatch from central store.`,
                 {
                     type: 'success',
                     category: 'stock_request',
@@ -545,6 +560,20 @@ export const approveStockRequest = async (
                 }
             ).catch(e => logger.error('Failed to notify requester of stock request approval', e));
         }
+
+        // Notify Central Storekeeper — new item ready to pack and dispatch
+        notificationService.notifyRole(
+            'central_storekeeper',
+            'New Request Ready to Pack',
+            `Stock request ${request?.request_number ?? id} has been auditor-approved and is waiting for packing and dispatch. Open the Packing Station to proceed.`,
+            {
+                type: 'info',
+                category: 'stock_request',
+                priority: 'high',
+                actionUrl: `/dashboard/central-store/packing`,
+                metadata: { request_id: id, status: 'APPROVED', branch_id: request?.requesting_branch_id }
+            }
+        ).catch(e => logger.error('Failed to notify central_storekeeper of approved request', e));
     } catch (error) {
         logger.error('Error approving stock request:', error);
         next(error);

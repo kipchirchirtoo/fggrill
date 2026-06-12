@@ -62,6 +62,17 @@ final branchOrdersProvider =
       );
 });
 
+/// Counts PENDING_AUDIT stock requests — used for the tab badge.
+final pendingStockRequestCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final repo = ref.read(auditorRepositoryProvider);
+  try {
+    final orders = await repo.getBranchOrders();
+    return orders.summary.pending;
+  } catch (_) {
+    return 0;
+  }
+});
+
 final auditLogsFilteredProvider =
     FutureProvider.family<List<AuditLogEntry>, Map<String, String?>>(
         (ref, filters) async {

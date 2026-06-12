@@ -21,6 +21,9 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final pendingCount =
+        ref.watch(pendingStockRequestCountProvider).valueOrNull ?? 0;
+
     return DashboardShell(
       title: 'Audit Control',
       currentTab: _tab,
@@ -29,15 +32,16 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
         DashboardTab(
             label: 'Audit Control',
             icon: PhosphorIcons.shieldCheck(),
-            content: const _AuditorOverviewTab()),
+            content: _AuditorOverviewTab(onGoToApprovals: () => setState(() => _tab = 2))),
         DashboardTab(
             label: 'Sales & Payments',
             icon: PhosphorIcons.creditCard(),
             content: const BranchSalesPaymentsView()),
         DashboardTab(
-            label: 'Order Tracking',
-            icon: PhosphorIcons.shoppingCart(),
-            content: const BranchOrdersTab()),
+            label: 'Branch Approvals',
+            icon: PhosphorIcons.clipboardText(),
+            content: const BranchOrdersTab(),
+            badgeCount: pendingCount),
         DashboardTab(
             label: 'Audit Logs',
             icon: PhosphorIcons.listBullets(),
@@ -60,16 +64,76 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
 }
 
 class _AuditorOverviewTab extends ConsumerWidget {
-  const _AuditorOverviewTab();
+  const _AuditorOverviewTab({this.onGoToApprovals});
+  final VoidCallback? onGoToApprovals;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final overviewAsync = ref.watch(auditOverviewProvider);
     final discrepanciesAsync = ref.watch(discrepanciesProvider);
+    final pendingCount =
+        ref.watch(pendingStockRequestCountProvider).valueOrNull ?? 0;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Pending stock approvals banner ─────────────────────────────
+          if (pendingCount > 0)
+            GestureDetector(
+              onTap: onGoToApprovals,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.kWarning.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.kWarning.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.kWarning.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(PhosphorIcons.clipboardText(),
+                          color: AppColors.kWarning, size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$pendingCount Branch Stock Request${pendingCount == 1 ? '' : 's'} Awaiting Approval',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: AppColors.kTextPrimary),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Tap to review and approve or reject branch orders.',
+                            style: TextStyle(
+                                fontSize: 12, color: AppColors.kTextSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded,
+                        size: 14, color: AppColors.kWarning),
+                  ],
+                ),
+              ),
+            ),
+
+          // ── Stat cards ────────────────────────────────────────────────
           overviewAsync.when(
             data: (stats) => Row(
               children: [

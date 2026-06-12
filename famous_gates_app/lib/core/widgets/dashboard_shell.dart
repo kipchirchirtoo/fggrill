@@ -120,11 +120,17 @@ class DashboardShell extends ConsumerWidget {
 }
 
 class DashboardTab {
-  const DashboardTab({required this.label, required this.content, this.icon});
+  const DashboardTab({
+    required this.label,
+    required this.content,
+    this.icon,
+    this.badgeCount = 0,
+  });
 
   final String label;
   final Widget content;
   final IconData? icon;
+  final int badgeCount;
 }
 
 class _TopBar extends StatelessWidget {
@@ -320,6 +326,33 @@ class _TabBar extends StatelessWidget {
                             : AppColors.kTextSecondary,
                       ),
                     ),
+                    if (tab.badgeCount > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        constraints:
+                            const BoxConstraints(minWidth: 18, minHeight: 18),
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.white
+                              : AppColors.kError,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          tab.badgeCount > 99
+                              ? '99+'
+                              : '${tab.badgeCount}',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected
+                                ? AppColors.kError
+                                : Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
