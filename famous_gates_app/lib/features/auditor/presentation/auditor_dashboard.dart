@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/screen_size.dart';
 import '../../../core/widgets/widgets.dart';
 import '../domain/providers.dart';
 import '../domain/models.dart';
@@ -75,7 +76,7 @@ class _AuditorOverviewTab extends ConsumerWidget {
         ref.watch(pendingStockRequestCountProvider).valueOrNull ?? 0;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -182,7 +183,7 @@ class _ExceptionsList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: ScreenSize.p(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -316,7 +317,7 @@ class _AuditLogsTab extends ConsumerWidget {
     final filters = ref.watch(_auditLogFiltersProvider);
     final logsAsync = ref.watch(auditLogsFilteredProvider(filters));
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -401,7 +402,7 @@ class _CashierReportsTab extends ConsumerWidget {
     final clearancesAsync =
         ref.watch(auditorCashierClearancesProvider(filters));
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -518,7 +519,7 @@ class _ReconciliationTab extends ConsumerWidget {
     final filters = ref.watch(_reconciliationFiltersProvider);
     final recoAsync = ref.watch(auditorReconciliationProvider(filters));
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

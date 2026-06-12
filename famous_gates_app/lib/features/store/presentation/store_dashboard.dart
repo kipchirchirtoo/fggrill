@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/screen_size.dart';
 import '../../../core/widgets/widgets.dart' hide DataColumn, DataRow;
 import '../../../core/widgets/permission_guard.dart';
 import '../../../core/widgets/record_detail_screen.dart';
@@ -206,7 +207,7 @@ class _InventoryTab extends ConsumerWidget {
     final lowStockAsync = ref.watch(lowStockItemsProvider);
     final requestsAsync = ref.watch(stockRequestsProvider(null));
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -258,7 +259,7 @@ class _InventoryTab extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: ScreenSize.p(context),
                   child: Row(
                     children: [
                       const Text('Inventory',
@@ -474,7 +475,7 @@ class _CentralStoreOverviewTab extends ConsumerWidget {
     ];
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -941,7 +942,7 @@ class _StoreResourceTabState extends ConsumerState<_StoreResourceTab> {
         : Uri(path: widget.endpoint, queryParameters: query).toString();
     final rowsAsync = ref.watch(storeResourceProvider(resourceKey));
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1344,7 +1345,7 @@ class _PurchaseOrdersTabState extends ConsumerState<_PurchaseOrdersTab> {
     final inventory = inventoryAsync.valueOrNull ?? const <InventoryItem>[];
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1840,8 +1841,8 @@ class _PurchaseOrdersTabState extends ConsumerState<_PurchaseOrdersTab> {
                         ]),
                         const SizedBox(height: 10),
                         if (_parsedItems.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(24),
+                          Padding(
+                            padding: ScreenSize.p(context),
                             child: EmptyState(
                                 message:
                                     'Paste item lines and click Parse Items'),
@@ -2366,7 +2367,7 @@ class _CentralReportsTab extends ConsumerWidget {
     final dispatch = ref.watch(dispatchOrdersProvider(null));
     final suppliers = ref.watch(suppliersProvider);
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(
@@ -2599,7 +2600,7 @@ class _StockRequestsTabState extends ConsumerState<_StockRequestsTab> {
   Widget build(BuildContext context) {
     final requestsAsync = ref.watch(_centralRequestsRawProvider(_statusFilter));
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2727,7 +2728,7 @@ class _SuppliersTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final suppliersAsync = ref.watch(suppliersProvider);
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -4273,8 +4274,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<_ReceiveGoodsScreen> {
                   ),
                 ),
                 if (_loadingPo)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
+                  Padding(
+                    padding: ScreenSize.p(context),
                     child: Center(child: CircularProgressIndicator()),
                   )
                 else if (_po != null) ...[

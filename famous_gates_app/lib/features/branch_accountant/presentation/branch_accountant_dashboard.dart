@@ -16,6 +16,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../core/state/app_refresh.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
+import '../../../core/utils/screen_size.dart';
 import '../../../core/widgets/record_detail_screen.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../branch_search/presentation/branch_search_screen.dart';
@@ -6204,8 +6205,8 @@ class _CashierLogbooksTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
+      return Padding(
+        padding: ScreenSize.p(context),
         child: Center(
           child: Text(
             'No pending cashier logbooks',
@@ -6888,8 +6889,8 @@ class _PosVoidApprovalsSectionState
             _SectionCard(
               title: 'Pending POS Voids',
               child: items.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(24),
+                  ? Padding(
+                      padding: ScreenSize.p(context),
                       child: Center(
                         child: Text(
                           'No pending void approvals',
@@ -8463,8 +8464,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         content: SizedBox(
           width: 780,
           child: rows.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(24),
+              ? Padding(
+                  padding: ScreenSize.p(context),
                   child: Text('No payment history recorded yet'),
                 )
               : _SimpleTable(
@@ -9811,7 +9812,7 @@ class _DepartmentIssueJournalDetailScreen extends StatelessWidget {
       appBar: AppBar(title: Text(title)),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: ScreenSize.p(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -10496,8 +10497,8 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                       ? 'Supplier Ledger'
                       : 'Supplier Ledger - ${_supplierNameById(suppliers, _selectedSupplierId!)}',
                   child: _selectedSupplierId == null
-                      ? const Padding(
-                          padding: EdgeInsets.all(24),
+                      ? Padding(
+                          padding: ScreenSize.p(context),
                           child: Text('Select a supplier to load the ledger.',
                               style:
                                   TextStyle(color: AppColors.kTextSecondary)),
@@ -10703,10 +10704,10 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
   }) {
     final supplierId = _selectedSupplierId;
     if (supplierId == null || supplierId.isEmpty) {
-      return const _SectionCard(
+      return _SectionCard(
         title: 'Supplier Folio',
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: ScreenSize.p(context),
           child: Text(
             'Select a supplier to open the detailed supplier folio.',
             style: TextStyle(color: AppColors.kTextSecondary),
@@ -14967,7 +14968,7 @@ class _Page extends StatelessWidget {
       onRefresh: () async {},
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
+        padding: ScreenSize.p(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -15057,7 +15058,7 @@ class _ErrorPane extends StatelessWidget {
     return Center(
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: ScreenSize.p(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -15330,8 +15331,8 @@ class _SimpleTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
+      return Padding(
+        padding: ScreenSize.p(context),
         child: Center(
           child: Text('No records found',
               style: TextStyle(color: AppColors.kTextSecondary)),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/screen_size.dart';
 import '../../../core/widgets/widgets.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
@@ -29,7 +30,7 @@ class BranchOrdersTab extends ConsumerWidget {
     final selected = ref.watch(_selectedRequestsProvider);
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: ScreenSize.p(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
