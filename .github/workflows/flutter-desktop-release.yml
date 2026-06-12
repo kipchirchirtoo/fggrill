@@ -64,7 +64,7 @@ jobs:
 
           cp -a build/linux/x64/release/bundle/. "${PACKAGE_ROOT}/opt/famous-gates/"
           cp assets/frontend_public/fglogo.png "${PACKAGE_ROOT}/usr/share/icons/hicolor/256x256/apps/famous-gates.png"
-          ln -s /opt/famous-gates/famous_gates_app "${PACKAGE_ROOT}/usr/bin/famous-gates"
+          ln -s /opt/famous-gates/famousgate_hotels_system "${PACKAGE_ROOT}/usr/bin/famous-gates"
 
           cat > "${PACKAGE_ROOT}/DEBIAN/control" <<EOF
           Package: famous-gates
@@ -83,14 +83,14 @@ jobs:
           Type=Application
           Name=Famous Gates
           Comment=Famous Gates Hotels Management System
-          Exec=/opt/famous-gates/famous_gates_app
+          Exec=/opt/famous-gates/famousgate_hotels_system
           Path=/opt/famous-gates
           Icon=famous-gates
           Terminal=false
           Categories=Office;Finance;
           EOF
 
-          chmod 755 "${PACKAGE_ROOT}/opt/famous-gates/famous_gates_app"
+          chmod 755 "${PACKAGE_ROOT}/opt/famous-gates/famousgate_hotels_system"
           dpkg-deb --build --root-owner-group "${PACKAGE_ROOT}" "dist/FamousGates-${VERSION}-linux-x64.deb"
           tar -czf "dist/FamousGates-${VERSION}-linux-x64.tar.gz" -C build/linux/x64/release/bundle .
 
