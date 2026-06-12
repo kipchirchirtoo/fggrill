@@ -81,20 +81,25 @@ class Booking {
   }
 
   double get balance => (totalAmount ?? 0) - (amountPaid ?? 0);
-  
+
   // Convenience getters for additional properties from raw
   int get adults => _int(raw['adults']) ?? 1;
   int get children => _int(raw['children']) ?? 0;
   int get infants => _int(raw['infants']) ?? 0;
   String? get mealPlan => _string(raw['meal_plan'] ?? raw['mealPlan']);
-  String? get bookingSource => _string(raw['booking_source'] ?? raw['bookingSource']);
-  String? get internalNotes => _string(raw['internal_notes'] ?? raw['internalNotes']);
-  double? get depositAmount => _double(raw['deposit_amount'] ?? raw['depositAmount']);
-  String? get paymentMethod => _string(raw['payment_method'] ?? raw['paymentMethod']);
+  String? get bookingSource =>
+      _string(raw['booking_source'] ?? raw['bookingSource']);
+  String? get internalNotes =>
+      _string(raw['internal_notes'] ?? raw['internalNotes']);
+  double? get depositAmount =>
+      _double(raw['deposit_amount'] ?? raw['depositAmount']);
+  String? get paymentMethod =>
+      _string(raw['payment_method'] ?? raw['paymentMethod']);
   double? get roomRate => _double(raw['room_rate'] ?? raw['roomRate']);
   double? get subtotal => _double(raw['subtotal']);
   double? get taxAmount => _double(raw['tax_amount'] ?? raw['taxAmount']);
-  double? get serviceCharge => _double(raw['service_charge'] ?? raw['serviceCharge']);
+  double? get serviceCharge =>
+      _double(raw['service_charge'] ?? raw['serviceCharge']);
 
   String get statusLabel {
     switch (status) {
@@ -153,7 +158,7 @@ class Room {
       raw: json,
     );
   }
-  
+
   // Convenience getters
   int? get maxOccupancy => _int(raw['max_occupancy'] ?? raw['maxOccupancy']);
   bool? get isClean => raw['is_clean'] == true || raw['clean'] == true;
@@ -168,7 +173,9 @@ class Guest {
     this.lastName,
     this.email,
     this.phone,
+    this.idType,
     this.idNumber,
+    this.carNumberPlate,
     this.isVip = false,
     this.totalVisits,
     this.createdAt,
@@ -181,7 +188,9 @@ class Guest {
   final String? lastName;
   final String? email;
   final String? phone;
+  final String? idType;
   final String? idNumber;
+  final String? carNumberPlate;
   final bool isVip;
   final int? totalVisits;
   final DateTime? createdAt;
@@ -200,22 +209,28 @@ class Guest {
       lastName: last,
       email: _string(json['email']),
       phone: _string(json['phone']),
+      idType: _string(json['id_type'] ?? json['idType']),
       idNumber: _string(json['id_number'] ?? json['idNumber']),
+      carNumberPlate: _string(json['car_number_plate'] ??
+          json['carNumberPlate'] ??
+          json['vehicle_plate'] ??
+          json['vehiclePlate']),
       isVip: json['is_vip'] == true || json['vip'] == true,
       totalVisits: _int(json['total_visits'] ?? json['visits']),
       createdAt: _tryDate(json['created_at'] ?? json['createdAt']),
       raw: json,
     );
   }
-  
+
   // Convenience getters
-  String? get idType => _string(raw['id_type'] ?? raw['idType']);
   String? get address => _string(raw['address']);
   String? get nationality => _string(raw['nationality']);
   String? get vipTier => _string(raw['vip_tier'] ?? raw['vipTier']);
   int? get loyaltyPoints => _int(raw['loyalty_points'] ?? raw['loyaltyPoints']);
-  bool get blacklistStatus => raw['blacklist_status'] == true || raw['blacklisted'] == true;
-  String? get blacklistReason => _string(raw['blacklist_reason'] ?? raw['blacklistReason']);
+  bool get blacklistStatus =>
+      raw['blacklist_status'] == true || raw['blacklisted'] == true;
+  String? get blacklistReason =>
+      _string(raw['blacklist_reason'] ?? raw['blacklistReason']);
   String? get notes => _string(raw['notes']);
 }
 

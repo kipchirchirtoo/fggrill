@@ -1,77 +1,114 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  X, User, Mail, Phone, MapPin, Hash, Building,
-  Briefcase, Star, MessageSquare, Save
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { guestAPI } from '@/lib/api';
+  X,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Hash,
+  Building,
+  Briefcase,
+  Star,
+  MessageSquare,
+  Save,
+} from "lucide-react";
+import { toast } from "sonner";
+import { guestAPI } from "@/lib/api";
 
 interface GuestModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialData?: any;
-  mode?: 'create' | 'edit';
+  mode?: "create" | "edit";
 }
 
-export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: GuestModalProps): JSX.Element | null {
+export function GuestModal({
+  isOpen,
+  onClose,
+  initialData,
+  mode = "create",
+}: GuestModalProps): JSX.Element | null {
   const [step, setStep] = useState(1);
-  const [guestData, setGuestData] = useState(initialData || {
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    idNumber: '',
-    nationality: '',
-    address: '',
-    company: '',
-    vipStatus: false,
-    notes: ''
-  });
+  const [guestData, setGuestData] = useState(
+    initialData || {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      idNumber: "",
+      carNumberPlate: "",
+      nationality: "",
+      address: "",
+      company: "",
+      vipStatus: false,
+      notes: "",
+    },
+  );
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >,
+  ) => {
     const { name, value, type } = e.target;
     setGuestData((prev: any) => ({
       ...prev,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+      [name]:
+        type === "checkbox" ? (e.target as HTMLInputElement).checked : value,
     }));
   };
 
   const handleSubmit = async () => {
     try {
+      if (
+        !guestData.firstName ||
+        !guestData.lastName ||
+        !guestData.phone ||
+        !guestData.idNumber?.trim()
+      ) {
+        toast.error("First name, last name, phone and ID number are required");
+        return;
+      }
+
       const payload = {
         first_name: guestData.firstName,
         last_name: guestData.lastName,
         email: guestData.email,
-        phone_number: guestData.phone,
+        phone: guestData.phone,
         id_number: guestData.idNumber,
+        car_number_plate: guestData.carNumberPlate,
         nationality: guestData.nationality,
         address: guestData.address,
         company: guestData.company,
         vip_status: guestData.vipStatus,
-        notes: guestData.notes
+        notes: guestData.notes,
       };
-      if (mode === 'edit' && initialData?.id) {
+      if (mode === "edit" && initialData?.id) {
         await guestAPI.updateGuest(initialData.id, payload);
       } else {
         await guestAPI.createGuest(payload);
       }
-      toast.success('Guest ' + (mode === 'create' ? 'created' : 'updated') + ' successfully!');
+      toast.success(
+        "Guest " +
+          (mode === "create" ? "created" : "updated") +
+          " successfully!",
+      );
       onClose();
       setStep(1);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save guest');
+      toast.error(error.message || "Failed to save guest");
     }
   };
 
   if (!isOpen) return null;
 
   const steps = [
-    { title: 'Personal Info', icon: <User className="h-4 w-4" /> },
-    { title: 'Documents', icon: <Hash className="h-4 w-4" /> },
-    { title: 'Additional', icon: <MapPin className="h-4 w-4" /> }
+    { title: "Personal Info", icon: <User className="h-4 w-4" /> },
+    { title: "Documents", icon: <Hash className="h-4 w-4" /> },
+    { title: "Additional", icon: <MapPin className="h-4 w-4" /> },
   ];
 
   return (
@@ -93,18 +130,21 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900 font-sf-pro-display">
-              {mode === 'create' ? 'Add New Guest' : 'Edit Guest'}
+              {mode === "create" ? "Add New Guest" : "Edit Guest"}
             </h2>
             <div className="flex items-center gap-2 mt-1">
               {steps.map((s, i) => (
                 <div
                   key={i}
-                  className={`h-1 rounded-full transition-all duration-300 ${i + 1 <= step ? 'w-8 bg-indigo-600' : 'w-4 bg-gray-200'}`}
+                  className={`h-1 rounded-full transition-all duration-300 ${i + 1 <= step ? "w-8 bg-indigo-600" : "w-4 bg-gray-200"}`}
                 />
               ))}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
             <X className="h-5 w-5 text-gray-500" />
           </button>
         </div>
@@ -126,7 +166,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-500 ml-1">First Name</label>
+                    <label className="text-xs font-medium text-gray-500 ml-1">
+                      First Name
+                    </label>
                     <input
                       type="text"
                       name="firstName"
@@ -137,7 +179,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-500 ml-1">Last Name</label>
+                    <label className="text-xs font-medium text-gray-500 ml-1">
+                      Last Name
+                    </label>
                     <input
                       type="text"
                       name="lastName"
@@ -149,7 +193,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 ml-1">Email Address</label>
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    Email Address
+                  </label>
                   <input
                     type="email"
                     name="email"
@@ -160,7 +206,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 ml-1">Phone Number</label>
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    Phone Number
+                  </label>
                   <input
                     type="tel"
                     name="phone"
@@ -186,7 +234,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                   <span>Documents & Origin</span>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 ml-1">ID/Passport Number</label>
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    ID/Passport Number *
+                  </label>
                   <input
                     type="text"
                     name="idNumber"
@@ -197,7 +247,27 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 ml-1">Nationality</label>
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    Car Number Plate
+                  </label>
+                  <input
+                    type="text"
+                    name="carNumberPlate"
+                    value={guestData.carNumberPlate || ""}
+                    onChange={(event) =>
+                      setGuestData((prev: any) => ({
+                        ...prev,
+                        carNumberPlate: event.target.value.toUpperCase(),
+                      }))
+                    }
+                    placeholder="KDA 123A"
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    Nationality
+                  </label>
                   <input
                     type="text"
                     name="nationality"
@@ -208,7 +278,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 ml-1">Company (Optional)</label>
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    Company (Optional)
+                  </label>
                   <input
                     type="text"
                     name="company"
@@ -234,7 +306,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                   <span>Additional Details</span>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 ml-1">Full Address</label>
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    Full Address
+                  </label>
                   <textarea
                     name="address"
                     value={guestData.address}
@@ -245,7 +319,9 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 ml-1">Notes</label>
+                  <label className="text-xs font-medium text-gray-500 ml-1">
+                    Notes
+                  </label>
                   <textarea
                     name="notes"
                     value={guestData.notes}
@@ -264,7 +340,10 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
                     onChange={handleChange}
                     className="h-5 w-5 text-indigo-600 rounded-lg border-gray-300 focus:ring-indigo-500"
                   />
-                  <label htmlFor="vipStatus" className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                  <label
+                    htmlFor="vipStatus"
+                    className="text-sm font-semibold text-indigo-900 flex items-center gap-2"
+                  >
                     <Star className="h-4 w-4 fill-indigo-600" />
                     Mark as VIP Guest
                   </label>
@@ -297,7 +376,7 @@ export function GuestModal({ isOpen, onClose, initialData, mode = 'create' }: Gu
               className="flex-1 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold shadow-lg shadow-green-600/20 transition-all flex items-center justify-center gap-2"
             >
               <Save className="h-4 w-4" />
-              {mode === 'create' ? 'Add Guest' : 'Save Changes'}
+              {mode === "create" ? "Add Guest" : "Save Changes"}
             </button>
           )}
         </div>

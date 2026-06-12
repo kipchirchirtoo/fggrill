@@ -214,6 +214,8 @@ const _navItems = [
       BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
   _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
       Icons.receipt_long),
+  _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings & Invoices',
+      Icons.request_quote),
   _NavItem(BranchAccountantSection.outboundPayments, 'Outbound Payments',
       Icons.payments),
   _NavItem(BranchAccountantSection.salesPayments, 'Sales & Payments',
@@ -1108,8 +1110,11 @@ class _CashierClearanceSectionState
   void _showDetails(Map<String, dynamic> item) {
     openRecordDetailScreen(
       context,
-      title:
-          'Cashier Clearance — ${_text(item, ['cashier_name', 'cashier', 'user_name'])}',
+      title: 'Cashier Clearance — ${_text(item, [
+            'cashier_name',
+            'cashier',
+            'user_name'
+          ])}',
       subtitle: 'Expected cash, actual cash, variance, and payment breakdown.',
       record: item,
     );
@@ -9167,56 +9172,191 @@ class _BookingsInvoicesSection extends ConsumerStatefulWidget {
 
 class _BookingsInvoicesSectionState
     extends ConsumerState<_BookingsInvoicesSection> {
-  late Future<List<Map<String, dynamic>>> _future =
-      ref.read(branchAccountantRepositoryProvider).getFinanceInvoices();
+  String _sourceType = 'all';
+  String _status = 'all';
+  late Future<Map<String, dynamic>> _future = ref
+      .read(branchAccountantRepositoryProvider)
+      .getBookingInvoiceQueue(sourceType: _sourceType, status: _status);
 
   void _refresh() {
-    final nextFuture =
-        ref.read(branchAccountantRepositoryProvider).getFinanceInvoices();
+    final nextFuture = ref
+        .read(branchAccountantRepositoryProvider)
+        .getBookingInvoiceQueue(sourceType: _sourceType, status: _status);
     setState(() {
       _future = nextFuture;
     });
   }
 
+  Future<void> _generateInvoice(Map<String, dynamic> source) async {
+    final sourceType = _text(source, ['source_type']);
+    final sourceId = _text(source, ['id']);
+    if (sourceType.isEmpty || sourceId.isEmpty) return;
+    try {
+      _notify(context, 'Generating invoice...');
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .createBookingSourceInvoice(sourceType, sourceId);
+      if (mounted) _notify(context, 'Invoice generated');
+      _refresh();
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to generate invoice: $e');
+    }
+  }
+
+  Future<void> _downloadInvoice(Map<String, dynamic> row) async {
+    final invoiceId = _text(row, ['invoice_id', 'id']);
+    if (invoiceId.isEmpty) return;
+    try {
+      _notify(context, 'Preparing branded invoice PDF...');
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadArInvoicePdf(
+            invoiceId,
+            invoiceNumber: _text(row, ['invoice_number']),
+          );
+      if (mounted) _notify(context, 'Invoice PDF saved to ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to download invoice: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
+    return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Bookings & Invoices',
-          subtitle:
-              'Branch invoice queue for hotel bookings, restaurant bills, catering, and conference revenue.',
-          actions: [_RefreshButton(onPressed: _refresh)],
-          children: [
-            _SectionCard(
-              title: 'Invoice Register',
-              child: _SimpleTable(
-                columns: const [
-                  'Invoice',
-                  'Customer',
-                  'Source',
-                  'Total',
-                  'Balance',
-                  'Status'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e,
-                              ['invoice_number', 'confirmation_number', 'id']),
-                          _text(e, ['customer_name', 'guest_name']),
-                          _text(e, ['source', 'invoice_type']),
-                          _money(_num(e['total_amount'])),
-                          _money(_num(e['balance'])),
-                          _StatusPill(_text(e, ['status'])),
-                        ])
-                    .toList(),
+        builder: (payload) {
+          final items = _list(payload);
+          final summary = _map(payload['summary']);
+          final uninvoiced = items
+              .where((e) =>
+                  _text(e, ['source_type']) != 'invoice' &&
+                  _text(e, ['invoice_id']).isEmpty)
+              .length;
+          final invoiced = items.where((e) {
+            return _text(e, ['invoice_id']).isNotEmpty ||
+                _text(e, ['source_type']) == 'invoice';
+          }).length;
+          final outstanding = summary.isEmpty
+              ? items.fold<num>(0, (sum, e) => sum + _num(e['balance']))
+              : _num(summary['outstanding_amount']);
+          return _Page(
+            title: 'Bookings & Invoices',
+            subtitle:
+                'Invoice room bookings, conference bookings, and outside catering from one branch queue.',
+            actions: [
+              SizedBox(
+                width: 190,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _sourceType,
+                  decoration: const InputDecoration(labelText: 'Source'),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All sources')),
+                    DropdownMenuItem(value: 'room', child: Text('Rooms')),
+                    DropdownMenuItem(
+                        value: 'conference', child: Text('Conference')),
+                    DropdownMenuItem(
+                        value: 'outside_catering',
+                        child: Text('Outside Catering')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _sourceType = value ?? 'all');
+                    _refresh();
+                  },
+                ),
               ),
-            ),
-          ],
-        ),
+              SizedBox(
+                width: 170,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All')),
+                    DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                    DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
+                    DropdownMenuItem(value: 'partial', child: Text('Partial')),
+                    DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _status = value ?? 'all');
+                    _refresh();
+                  },
+                ),
+              ),
+              _RefreshButton(onPressed: _refresh),
+            ],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Total Records', '${items.length}',
+                    Icons.request_quote, Colors.blue),
+                _MetricCard('Need Invoice', '$uninvoiced',
+                    Icons.pending_actions, Colors.orange),
+                _MetricCard(
+                    'Invoiced', '$invoiced', Icons.receipt_long, Colors.green),
+                _MetricCard('Outstanding', _money(outstanding),
+                    Icons.account_balance_wallet, Colors.purple),
+              ]),
+              _SectionCard(
+                title: 'Booking Invoice Queue',
+                child: _SimpleTable(
+                  columns: const [
+                    'Source',
+                    'Reference',
+                    'Customer',
+                    'Date',
+                    'Total',
+                    'Balance',
+                    'Invoice',
+                    'Status',
+                    'Actions'
+                  ],
+                  rows: items
+                      .map((e) => [
+                            _text(e, ['source_label', 'source_type']),
+                            _text(e, ['reference', 'invoice_number', 'id']),
+                            _text(e, ['customer_name', 'guest_name']),
+                            _shortDate(
+                                _text(e, ['service_date', 'created_at'])),
+                            _money(_num(e['total_amount'])),
+                            _money(_num(e['balance'])),
+                            _text(e, ['invoice_number']).isEmpty
+                                ? 'Not generated'
+                                : _text(e, ['invoice_number']),
+                            _StatusPill(_text(e, [
+                              'invoice_status',
+                              'payment_status',
+                              'status'
+                            ])),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                if (_text(e, ['invoice_id']).isEmpty &&
+                                    _text(e, ['source_type']) != 'invoice')
+                                  _CompactAction(
+                                    label: 'Generate',
+                                    icon: Icons.add,
+                                    filled: true,
+                                    onPressed: () => _generateInvoice(e),
+                                  ),
+                                if (_text(e, ['invoice_id']).isNotEmpty ||
+                                    _text(e, ['source_type']) == 'invoice')
+                                  _CompactAction(
+                                    label: 'PDF',
+                                    icon: Icons.picture_as_pdf,
+                                    onPressed: () => _downloadInvoice(e),
+                                  ),
+                              ],
+                            ),
+                          ])
+                      .toList(),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -9386,6 +9526,7 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
     final notes =
         await _textDialog(context, 'Approve Stock Take', hint: 'Review notes');
     if (notes == null) return;
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -10973,7 +11114,6 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     final parsed = DateTime.tryParse(value);
     return parsed == null ? value : DateFormat('yyyy-MM-dd').format(parsed);
   }
-
 
   void _openPoHistory(String supplierId, String supplierName) {
     if (supplierId.isEmpty && supplierName.isEmpty) return;

@@ -736,7 +736,7 @@ class BranchAccountantRepository {
   Future<List<Map<String, dynamic>>> getFinanceInvoices() async {
     final branchId = await getBranchId();
     try {
-      return await _getList('/finance/invoices', query: {
+      return await _getList('/accounting/invoices', query: {
         if (branchId.isNotEmpty) 'branch_id': branchId,
       });
     } on DioException catch (e) {
@@ -748,6 +748,43 @@ class BranchAccountantRepository {
       }
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> getBookingInvoiceQueue({
+    String sourceType = 'all',
+    String status = 'all',
+  }) async {
+    final branchId = await getBranchId();
+    return _getMap('/accounting/booking-invoice-queue', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (sourceType != 'all') 'source_type': sourceType,
+      if (status != 'all') 'status': status,
+    });
+  }
+
+  Future<Map<String, dynamic>> createBookingSourceInvoice(
+    String sourceType,
+    String sourceId,
+  ) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post(
+      '/accounting/booking-invoice-queue/$sourceType/$sourceId/invoice',
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+    );
+    return _asMap(res.data);
+  }
+
+  Future<File> downloadArInvoicePdf(String id, {String? invoiceNumber}) async {
+    final branchId = await getBranchId();
+    final res = await _dio.get<List<int>>(
+      '/accounting/invoices/$id/pdf',
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final safeNumber = (invoiceNumber == null || invoiceNumber.trim().isEmpty)
+        ? id
+        : invoiceNumber.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    return _saveBytes(res.data ?? const [], 'Invoice_$safeNumber.pdf');
   }
 
   Future<List<Map<String, dynamic>>> getBranchPayments({

@@ -37,6 +37,82 @@ const normalizeText = (value: any): string | null => {
     return text.length > 0 ? text : null;
 };
 
+const sameNormalizedText = (left: any, right: any): boolean => {
+    const normalizedLeft = normalizeText(left)?.toLowerCase() || null;
+    const normalizedRight = normalizeText(right)?.toLowerCase() || null;
+    return !!normalizedLeft && normalizedLeft === normalizedRight;
+};
+
+const findExistingMatchingGRN = async (params: {
+    poId?: string;
+    supplierId: string;
+    invoiceNumber: string | null;
+    deliveryNoteNumber: string | null;
+    totalItems: number;
+    totalQuantity: number;
+    totalValue: number;
+}) => {
+    if (!params.poId) return null;
+
+    const { data: candidates, error } = await supabase
+        .from('store_grn')
+        .select('*')
+        .eq('po_id', params.poId)
+        .eq('supplier_id', params.supplierId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+    if (error) throw error;
+
+    const retryWindowStart = Date.now() - 15 * 60 * 1000;
+    return (candidates || []).find((grn: any) => {
+        if (sameNormalizedText(grn.invoice_number, params.invoiceNumber)) return true;
+        if (sameNormalizedText(grn.delivery_note_number, params.deliveryNoteNumber)) return true;
+
+        const createdAt = Date.parse(grn.created_at || '');
+        const isRecentRetry = Number.isFinite(createdAt) && createdAt >= retryWindowStart;
+        if (!isRecentRetry) return false;
+
+        const sameTotals =
+            toNumber(grn.total_items) === params.totalItems &&
+            Math.abs(toNumber(grn.total_quantity) - params.totalQuantity) < 0.0001 &&
+            Math.abs(toNumber(grn.total_value) - params.totalValue) < 0.0001;
+
+        return sameTotals;
+    }) || null;
+};
+
+const assertPurchaseOrderCanReceive = async (poId?: string) => {
+    if (!poId) return;
+
+    const { data: po, error: poError } = await supabase
+        .from('store_purchase_orders')
+        .select('id, status')
+        .eq('id', poId)
+        .maybeSingle();
+
+    if (poError) throw poError;
+    if (!po) throw new AppError('Purchase order not found', 404);
+
+    const { data: poItems, error: poItemsError } = await supabase
+        .from('store_po_items')
+        .select('quantity_ordered, quantity_pending')
+        .eq('po_id', poId);
+
+    if (poItemsError) throw poItemsError;
+
+    const totalPending = (poItems || []).reduce((sum: number, item: any) => {
+        const pending = item.quantity_pending == null
+            ? toNumber(item.quantity_ordered)
+            : toNumber(item.quantity_pending);
+        return sum + pending;
+    }, 0);
+
+    if (po.status === 'fully_received' || totalPending <= 0.0001) {
+        throw new AppError('Purchase order has already been fully received. Open the existing GRN instead of posting again.', 409);
+    }
+};
+
 const updatePurchaseOrderReceipt = async (
     poId: string | undefined,
     grnItems: any[],
@@ -93,7 +169,7 @@ const updatePurchaseOrderReceipt = async (
     );
     const totalReceived = Math.max(0, totalOrdered - totalPending);
 
-    const nextStatus = totalPending <= 0.0001 ? 'received' : 'partial_delivery';
+    const nextStatus = totalPending <= 0.0001 ? 'fully_received' : 'partially_received';
     const updatePayload: any = {
         status: nextStatus,
         updated_at: new Date().toISOString()
@@ -342,14 +418,53 @@ export const printGRN = async (
             .select(`
                 *,
                 supplier:store_suppliers(*),
-                purchase_order:store_purchase_orders(*),
-                received_by:users(id, name, email)
+                purchase_order:store_purchase_orders(*)
             `)
             .eq('id', id)
             .single();
 
-        if (grnError || !grn) {
+        if (grnError) {
+            logger.error('Supabase error fetching GRN for PDF:', grnError);
+            throw new AppError(`Failed to fetch GRN: ${grnError.message}`, 500);
+        }
+
+        if (!grn) {
             throw new AppError('GRN not found', 404);
+        }
+
+        let receivedBy = null;
+        if (grn.received_by_id) {
+            const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('id, name, email')
+                .eq('id', grn.received_by_id)
+                .maybeSingle();
+
+            if (userError) {
+                logger.warn(`Could not load GRN receiver ${grn.received_by_id}: ${userError.message}`);
+            } else {
+                receivedBy = user;
+            }
+
+            if (!receivedBy) {
+                const { data: authUser, error: authUserError } =
+                    await supabase.auth.admin.getUserById(grn.received_by_id);
+
+                if (authUserError) {
+                    logger.warn(`Could not load auth user for GRN receiver ${grn.received_by_id}: ${authUserError.message}`);
+                } else if (authUser?.user) {
+                    const metadata = authUser.user.user_metadata || {};
+                    const fullName = [metadata.first_name, metadata.last_name]
+                        .map((part: any) => normalizeText(part))
+                        .filter(Boolean)
+                        .join(' ');
+                    receivedBy = {
+                        id: authUser.user.id,
+                        name: fullName || metadata.name || null,
+                        email: authUser.user.email || null
+                    };
+                }
+            }
         }
 
         const { data: items, error: itemsError } = await supabase
@@ -377,7 +492,7 @@ export const printGRN = async (
             item: itemMap.get(item.item_id) || null
         }));
 
-        const pdfBuffer = await generateGRNPDF(grn, enrichedItems);
+        const pdfBuffer = await generateGRNPDF({ ...grn, received_by: receivedBy }, enrichedItems);
         const filename = `${grn.grn_number || 'GRN'}.pdf`.replace(/[^A-Za-z0-9._-]/g, '_');
 
         res.setHeader('Content-Type', 'application/pdf');
@@ -457,6 +572,34 @@ export const createGRN = async (
         const total_items = normalizedItems.length;
         const total_quantity = normalizedItems.reduce((sum: number, item: any) => sum + Number(item.quantity_received), 0);
         const total_value = normalizedItems.reduce((sum: number, item: any) => sum + (Number(item.quantity_received) * Number(item.unit_price)), 0);
+        const resolvedInvoiceNumber = normalizeText(invoice_number);
+        const resolvedDeliveryNoteNumber = normalizeText(delivery_note_number);
+
+        const existingGRN = await findExistingMatchingGRN({
+            poId: po_id,
+            supplierId: supplier_id,
+            invoiceNumber: resolvedInvoiceNumber,
+            deliveryNoteNumber: resolvedDeliveryNoteNumber,
+            totalItems: total_items,
+            totalQuantity: total_quantity,
+            totalValue: total_value
+        });
+
+        if (existingGRN) {
+            logger.warn(`Duplicate GRN post ignored for PO ${po_id}. Returning existing GRN ${existingGRN.grn_number}`);
+            res.status(200).json({
+                success: true,
+                duplicate: true,
+                message: `Matching GRN ${existingGRN.grn_number} already exists`,
+                data: {
+                    ...existingGRN,
+                    duplicate: true
+                }
+            });
+            return;
+        }
+
+        await assertPurchaseOrderCanReceive(po_id);
 
         // Start transaction (manual handling via separate calls as Supabase JS doesn't support transactions directly)
         // Note: For production, using a PostgreSQL RPC for the whole transaction is safer.
@@ -469,8 +612,8 @@ export const createGRN = async (
                 po_id,
                 supplier_id,
                 grn_date: resolvedGrnDate,
-                delivery_note_number: normalizeText(delivery_note_number),
-                invoice_number: normalizeText(invoice_number),
+                delivery_note_number: resolvedDeliveryNoteNumber,
+                invoice_number: resolvedInvoiceNumber,
                 vehicle_number,
                 driver_name,
                 driver_phone,
@@ -584,7 +727,6 @@ export const createGRN = async (
 
         let supplierInvoice = null;
         // 4. Create a DRAFT Supplier Invoice automatically if invoice_number is provided
-        const resolvedInvoiceNumber = normalizeText(invoice_number);
         if (resolvedInvoiceNumber) {
             try {
                 logger.info(`Creating draft invoice ${resolvedInvoiceNumber} for GRN ${grn_number}...`);

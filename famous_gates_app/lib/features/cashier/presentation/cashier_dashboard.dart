@@ -32,6 +32,7 @@ class CashierDashboard extends ConsumerStatefulWidget {
     this.initialBillRef,
     this.initialAmount,
     this.initialMethod,
+    this.embedded = false,
   });
 
   final CashierTab initialTab;
@@ -41,6 +42,7 @@ class CashierDashboard extends ConsumerStatefulWidget {
   final String? initialBillRef;
   final String? initialAmount;
   final String? initialMethod;
+  final bool embedded;
 
   @override
   ConsumerState<CashierDashboard> createState() => _CashierDashboardState();
@@ -95,6 +97,61 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
       ),
     ];
 
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Reception Cashier',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Cashier desk, bill lookup, payments, shifts and credit bills inside Reception.',
+                      style: TextStyle(color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    ref.invalidate(cashierStatsProvider);
+                    ref.invalidate(cashierReconciliationProvider);
+                    ref.invalidate(cashierCurrentShiftProvider);
+                    ref.invalidate(cashierInsightsProvider);
+                  },
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Refresh'),
+                ),
+              ],
+            ),
+          ),
+          _EmbeddedCashierTabs(
+            tabs: tabs,
+            currentTab: _tab,
+            onTabChanged: (index) => setState(() => _tab = index),
+          ),
+          Expanded(
+            child: KeyedSubtree(
+              key: ValueKey(
+                  'embedded_cashier_${_tab}_${widget.initialBillRef ?? ''}_${widget.initialAmount ?? ''}_${widget.initialMethod ?? ''}'),
+              child: tabs[_tab].content,
+            ),
+          ),
+        ],
+      );
+    }
+
     return DashboardShell(
       title: 'Cashier Desk',
       currentTab: _tab,
@@ -112,6 +169,50 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           label: const Text('Refresh'),
         ),
       ],
+    );
+  }
+}
+
+class _EmbeddedCashierTabs extends StatelessWidget {
+  const _EmbeddedCashierTabs({
+    required this.tabs,
+    required this.currentTab,
+    required this.onTabChanged,
+  });
+
+  final List<DashboardTab> tabs;
+  final int currentTab;
+  final ValueChanged<int> onTabChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.kSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var index = 0; index < tabs.length; index++)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: ChoiceChip(
+                  selected: index == currentTab,
+                  avatar: tabs[index].icon == null
+                      ? null
+                      : Icon(tabs[index].icon, size: 16),
+                  label: Text(tabs[index].label),
+                  onSelected: (_) => onTabChanged(index),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -5133,6 +5133,7 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
         }
 
         const today = new Date().toISOString().split('T')[0];
+        const normalizedStatus = normalizeCashierLogbookStatus(status, 'open');
 
         // If updating existing logbook, check if it's approved
         if (id) {
@@ -5164,7 +5165,10 @@ export const saveCashierLogbook = async (req: Request, res: Response, next: Next
                 total_mpesa,
                 total_swipe,
                 notes,
-                status: status || 'open',
+                status: normalizedStatus,
+                ...(normalizedStatus === 'pending_audit' || normalizedStatus === 'pending_accountant_review'
+                    ? { submitted_at: new Date().toISOString() }
+                    : {}),
                 updated_at: new Date()
             })
             .select()
@@ -5270,6 +5274,15 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
 
         if (fetchError || !logbook) {
             throw new AppError('Logbook not found or access denied', 404);
+        }
+
+        if (logbook.status === 'pending_audit' || logbook.status === 'pending_accountant_review') {
+            res.json({
+                success: true,
+                message: 'Logbook already submitted for review',
+                data: logbook
+            });
+            return;
         }
 
         if (logbook.status !== 'open') {
@@ -5405,6 +5418,32 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
 function logbookNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeCashierLogbookStatus(value: unknown, fallback = 'open'): string {
+    const status = String(value || '').trim().toLowerCase();
+    switch (status) {
+        case '':
+            return fallback;
+        case 'draft':
+            return 'open';
+        case 'submitted':
+        case 'pending':
+        case 'submitted_for_audit':
+            return 'pending_audit';
+        case 'submitted_to_accountant':
+        case 'accountant_review':
+            return 'pending_accountant_review';
+        case 'open':
+        case 'closed':
+        case 'pending_accountant_review':
+        case 'pending_audit':
+        case 'approved':
+        case 'rejected':
+            return status;
+        default:
+            return fallback;
+    }
 }
 
 function logbookText(value: unknown, fallback = ''): string {

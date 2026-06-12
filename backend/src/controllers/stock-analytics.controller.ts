@@ -2,6 +2,33 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 
+const parsePeriodDays = (value: unknown, fallback = 30): number => {
+    const raw = String(value ?? '').trim().toLowerCase();
+    const numeric = Number.parseInt(raw, 10);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+
+    switch (raw) {
+        case 'today':
+        case 'day':
+        case 'daily':
+            return 1;
+        case 'week':
+        case 'weekly':
+            return 7;
+        case 'month':
+        case 'monthly':
+            return 30;
+        case 'quarter':
+        case 'quarterly':
+            return 90;
+        case 'year':
+        case 'yearly':
+            return 365;
+        default:
+            return fallback;
+    }
+};
+
 /**
  * @desc    Get stock consumption trends
  * @route   GET /api/store/consumption-trends
@@ -25,7 +52,7 @@ export const getConsumptionTrends = async (
             return;
         }
 
-        const days = parseInt(period as string);
+        const days = parsePeriodDays(period);
         const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
         // Get stock out transactions (consumption) - try stock_out_records first, then branch_stock_movements
@@ -354,7 +381,7 @@ export const getStockMovement = async (
             return;
         }
 
-        const period = parseInt(days as string);
+        const period = parsePeriodDays(days);
         const startDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
 
         // Get stock in (receipts) - try stock_in_records first, then branch_stock_movements
@@ -525,7 +552,7 @@ export const getWastageAnalytics = async (
             return;
         }
 
-        const period = parseInt(days as string);
+        const period = parsePeriodDays(days);
         const startDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000).toISOString();
 
         const { data: wastage, error } = await supabase

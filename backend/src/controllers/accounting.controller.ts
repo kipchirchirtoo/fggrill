@@ -3,6 +3,8 @@ import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import axios from 'axios';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -17,6 +19,222 @@ const getBranchName = async (branchId: number | null): Promise<string> => {
     return data?.name || 'Unknown Branch';
   } catch (e) {
     return 'Unknown Branch';
+  }
+};
+
+type BookingInvoiceSourceType = 'room' | 'conference' | 'outside_catering';
+
+const money = (value: any): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const text = (...values: any[]): string => {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const normalized = String(value).trim();
+    if (normalized && normalized.toLowerCase() !== 'null') return normalized;
+  }
+  return '';
+};
+
+const dateOnly = (value?: string | null): string => {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
+  return parsed.toISOString().slice(0, 10);
+};
+
+const addDays = (days: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+const resolveBranchId = (req: Request): number | null => {
+  const requested = req.query.branch_id ?? req.query.branchId;
+  const raw = isGlobalRole(req.user?.role) ? requested ?? req.user?.branch_id : req.user?.branch_id;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const sourceReference = (sourceType: string, sourceId: string): string =>
+  `${sourceType}:${sourceId}`;
+
+const normalizeInvoiceItem = (description: string, total: number, quantity = 1) => ({
+  description: description || 'Service charge',
+  quantity,
+  unit_price: quantity > 0 ? total / quantity : total,
+  total,
+});
+
+const normalizeSourceRow = (
+  sourceType: BookingInvoiceSourceType,
+  row: any,
+  invoice?: any
+) => {
+  if (sourceType === 'room') {
+    const guest = row.guest || {};
+    const room = row.room || {};
+    const nights =
+      row.check_in_date && row.check_out_date
+        ? Math.max(
+            1,
+            Math.ceil(
+              (new Date(row.check_out_date).getTime() -
+                new Date(row.check_in_date).getTime()) /
+                (1000 * 60 * 60 * 24)
+            )
+          )
+        : 1;
+    const total = money(row.total_amount ?? row.total ?? row.room_charges);
+    const paid = money(row.deposit_amount ?? row.amount_paid ?? row.paid_amount);
+    const customerName = text(
+      row.guest_name,
+      [guest.first_name, guest.last_name].filter(Boolean).join(' '),
+      guest.name,
+      row.customer_name
+    );
+    return {
+      id: row.id,
+      source_type: sourceType,
+      source_label: 'Room Booking',
+      reference: text(row.confirmation_number, row.booking_number, row.short_code, row.id),
+      customer_name: customerName || 'Guest',
+      customer_email: text(guest.email, row.email),
+      customer_phone: text(guest.phone, row.phone),
+      service_date: dateOnly(row.check_in_date),
+      end_date: dateOnly(row.check_out_date),
+      description: `Room ${text(room.room_number, row.room_number)} (${nights} night${nights === 1 ? '' : 's'})`,
+      total_amount: total,
+      amount_paid: paid,
+      balance: Math.max(total - paid, 0),
+      status: row.status || 'pending',
+      payment_status: row.payment_status || (paid >= total && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'pending'),
+      invoice_id: invoice?.id ?? row.invoice_id ?? null,
+      invoice_number: invoice?.invoice_number ?? row.invoice_number ?? null,
+      invoice_status: invoice?.status ?? null,
+      can_generate_invoice: !invoice?.id,
+    };
+  }
+
+  if (sourceType === 'conference') {
+    const hall = row.hall || {};
+    const total = money(row.total_amount);
+    const paid = money(row.amount_paid ?? row.paid_amount);
+    const customerName = text(row.company_name, row.customer_name, row.contact_person);
+    return {
+      id: row.id,
+      source_type: sourceType,
+      source_label: 'Conference Booking',
+      reference: text(row.invoice_number, row.booking_number, row.id),
+      customer_name: customerName || 'Conference Customer',
+      customer_email: text(row.customer_email),
+      customer_phone: text(row.customer_phone),
+      service_date: dateOnly(row.start_date),
+      end_date: dateOnly(row.end_date),
+      description: `Conference hall${text(hall.name) ? ': ' + text(hall.name) : ''}`,
+      total_amount: total,
+      amount_paid: paid,
+      balance: Math.max(total - paid, 0),
+      status: row.booking_status || 'confirmed',
+      payment_status: row.payment_status || (paid >= total && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'pending'),
+      invoice_id: invoice?.id ?? row.invoice_id ?? null,
+      invoice_number: invoice?.invoice_number ?? null,
+      invoice_status: invoice?.status ?? null,
+      can_generate_invoice: !invoice?.id,
+    };
+  }
+
+  const total = money(row.total_amount ?? row.expected_revenue ?? row.actual_revenue);
+  const paid = money(row.amount_paid ?? row.paid_amount);
+  return {
+    id: row.id,
+    source_type: sourceType,
+    source_label: 'Outside Catering',
+    reference: text(row.booking_number, row.event_number, row.id),
+    customer_name: text(row.customer_name, row.client_name, row.contact_person) || 'Catering Customer',
+    customer_email: text(row.customer_email, row.email),
+    customer_phone: text(row.customer_phone, row.phone),
+    service_date: dateOnly(row.event_date ?? row.date),
+    end_date: dateOnly(row.event_date ?? row.date),
+    description: text(row.event_name, row.name, row.event_type, 'Outside catering event'),
+    total_amount: total,
+    amount_paid: paid,
+    balance: Math.max(total - paid, 0),
+    status: row.booking_status || row.status || 'pending',
+    payment_status: row.payment_status || (paid >= total && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'pending'),
+    invoice_id: invoice?.id ?? row.invoice_id ?? null,
+    invoice_number: invoice?.invoice_number ?? null,
+    invoice_status: invoice?.status ?? null,
+    can_generate_invoice: !invoice?.id,
+  };
+};
+
+const getOrCreateAccountingCustomer = async (
+  source: ReturnType<typeof normalizeSourceRow>,
+  branchId: number | null
+): Promise<string | null> => {
+  const customerName = source.customer_name || 'Customer';
+  const email = source.customer_email || null;
+
+  let lookup = supabase
+    .from('accounting_customers')
+    .select('id')
+    .ilike('customer_name', customerName)
+    .limit(1);
+  if (branchId) lookup = lookup.eq('branch_id', branchId);
+
+  const { data: existing } = await lookup.maybeSingle();
+  if (existing?.id) return existing.id;
+
+  const { data: created, error } = await supabase
+    .from('accounting_customers')
+    .insert([{
+      customer_code: `CUST-${Date.now()}`,
+      customer_name: customerName,
+      email,
+      phone: source.customer_phone || null,
+      is_active: true,
+      branch_id: branchId,
+    }])
+    .select('id')
+    .single();
+
+  if (error) {
+    logger.error('Unable to create accounting customer for invoice source:', error);
+    return null;
+  }
+  return created?.id ?? null;
+};
+
+const findInvoiceByReference = async (reference: string, branchId: number | null) => {
+  let query = supabase
+    .from('accounting_ar_invoices')
+    .select('*, customer:accounting_customers!customer_id(id, customer_name, email, phone)')
+    .eq('reference', reference)
+    .limit(1);
+  if (branchId) query = query.eq('branch_id', branchId);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data;
+};
+
+const bestEffortLinkInvoiceToSource = async (
+  sourceType: BookingInvoiceSourceType,
+  sourceId: string,
+  invoiceId: string
+) => {
+  const table =
+    sourceType === 'room'
+      ? 'reservations'
+      : sourceType === 'conference'
+        ? 'conference_hall_bookings'
+        : 'catering_bookings';
+  try {
+    await supabase.from(table).update({ invoice_id: invoiceId }).eq('id', sourceId);
+  } catch (error) {
+    logger.warn(`Invoice link skipped for ${table}.${sourceId}: ${(error as any)?.message || error}`);
   }
 };
 
@@ -510,6 +728,323 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
 
     res.status(200).json({ success: true, count: data?.length || 0, data });
   } catch (error) {
+    next(error);
+  }
+};
+
+export const getBookingInvoiceQueue = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    const sourceFilter = text(req.query.source_type, req.query.sourceType).toLowerCase();
+    const statusFilter = text(req.query.status).toLowerCase();
+
+    let invoiceQuery = supabase
+      .from('accounting_ar_invoices')
+      .select('*, customer:accounting_customers!customer_id(id, customer_name, email, phone)')
+      .order('invoice_date', { ascending: false });
+    if (branchId) invoiceQuery = invoiceQuery.eq('branch_id', branchId);
+    const { data: invoices, error: invoiceError } = await invoiceQuery;
+    if (invoiceError) throw invoiceError;
+
+    const invoiceByReference = new Map<string, any>();
+    for (const inv of invoices || []) {
+      if (inv.reference) invoiceByReference.set(String(inv.reference), inv);
+    }
+
+    const sources: any[] = [];
+    const warnings: string[] = [];
+
+    const loadRooms = async () => {
+      let select = '*, guest:guests!guest_id(*), room:rooms!room_id(id, room_number, room_type, branch_id, status)';
+      let query = supabase
+        .from('reservations')
+        .select(select)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('room', row.id);
+        sources.push(normalizeSourceRow('room', row, invoiceByReference.get(ref)));
+      }
+    };
+
+    const loadConference = async () => {
+      let query = supabase
+        .from('conference_hall_bookings')
+        .select('*, hall:conference_halls(*)')
+        .order('start_date', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('conference', row.id);
+        sources.push(normalizeSourceRow('conference', row, invoiceByReference.get(ref)));
+      }
+    };
+
+    const loadCatering = async () => {
+      let query = supabase
+        .from('catering_bookings')
+        .select('*')
+        .order('event_date', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('outside_catering', row.id);
+        sources.push(normalizeSourceRow('outside_catering', row, invoiceByReference.get(ref)));
+      }
+    };
+
+    const loaders: Array<[string, () => Promise<void>]> = [
+      ['room', loadRooms],
+      ['conference', loadConference],
+      ['outside_catering', loadCatering],
+    ];
+    for (const [key, loader] of loaders) {
+      if (sourceFilter && sourceFilter !== 'all' && sourceFilter !== key) continue;
+      try {
+        await loader();
+      } catch (error: any) {
+        warnings.push(`${key}: ${error?.message || 'failed to load'}`);
+        logger.warn(`Booking invoice queue source failed (${key})`, error);
+      }
+    }
+
+    const invoiceRows = (invoices || []).map((invoice: any) => ({
+      id: invoice.id,
+      source_type: 'invoice',
+      source_label: 'AR Invoice',
+      reference: invoice.reference || invoice.invoice_number || invoice.id,
+      customer_name: invoice.customer?.customer_name || invoice.customer_name || 'Customer',
+      customer_email: invoice.customer?.email || invoice.customer_email || '',
+      customer_phone: invoice.customer?.phone || invoice.customer_phone || '',
+      service_date: invoice.invoice_date,
+      end_date: invoice.due_date,
+      description: invoice.notes || invoice.type || 'Customer invoice',
+      total_amount: money(invoice.total_amount),
+      amount_paid: money(invoice.paid_amount),
+      balance: money(invoice.balance),
+      status: invoice.status || 'unpaid',
+      payment_status: invoice.status || 'unpaid',
+      invoice_id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      invoice_status: invoice.status,
+      can_generate_invoice: false,
+    }));
+
+    let rows = [...sources, ...invoiceRows];
+    if (statusFilter && statusFilter !== 'all') {
+      rows = rows.filter((row) =>
+        String(row.invoice_status || row.payment_status || row.status || '')
+          .toLowerCase()
+          .includes(statusFilter)
+      );
+    }
+
+    rows.sort((a, b) => {
+      const bd = new Date(b.service_date || b.end_date || 0).getTime();
+      const ad = new Date(a.service_date || a.end_date || 0).getTime();
+      return bd - ad;
+    });
+
+    const summary = {
+      total_sources: sources.length,
+      uninvoiced: sources.filter((row) => !row.invoice_id).length,
+      invoices: invoiceRows.length,
+      outstanding_amount: rows.reduce((sum, row) => sum + money(row.balance), 0),
+    };
+
+    res.status(200).json({
+      success: true,
+      count: rows.length,
+      summary,
+      warnings,
+      data: rows,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createInvoiceFromBookingSource = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const sourceType = String(req.params.sourceType || req.body.source_type || '').toLowerCase() as BookingInvoiceSourceType;
+    const sourceId = String(req.params.sourceId || req.body.source_id || '');
+    const branchId = resolveBranchId(req);
+
+    if (!['room', 'conference', 'outside_catering'].includes(sourceType) || !sourceId) {
+      res.status(400).json({ success: false, message: 'Valid source type and source id are required' });
+      return;
+    }
+
+    const reference = sourceReference(sourceType, sourceId);
+    const existing = await findInvoiceByReference(reference, branchId);
+    if (existing) {
+      res.status(200).json({ success: true, data: existing, message: 'Invoice already exists for this booking' });
+      return;
+    }
+
+    let row: any = null;
+    if (sourceType === 'room') {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('*, guest:guests!guest_id(*), room:rooms!room_id(id, room_number, room_type, branch_id, status)')
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (error) throw error;
+      row = data;
+    } else if (sourceType === 'conference') {
+      const { data, error } = await supabase
+        .from('conference_hall_bookings')
+        .select('*, hall:conference_halls(*)')
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (error) throw error;
+      row = data;
+    } else {
+      const { data, error } = await supabase
+        .from('catering_bookings')
+        .select('*')
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (error) throw error;
+      row = data;
+    }
+
+    if (!row) {
+      res.status(404).json({ success: false, message: 'Booking source not found' });
+      return;
+    }
+
+    const source = normalizeSourceRow(sourceType, row);
+    if (branchId && Number(row.branch_id ?? row.room?.branch_id) !== branchId) {
+      res.status(403).json({ success: false, message: 'Booking source is outside your branch' });
+      return;
+    }
+
+    const total = money(source.total_amount);
+    const paid = Math.min(money(source.amount_paid), total);
+    const balance = Math.max(total - paid, 0);
+    const customerId = await getOrCreateAccountingCustomer(source, branchId);
+    const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-5)}`;
+    const items = [normalizeInvoiceItem(source.description, total)];
+
+    const { data: invoice, error } = await supabase
+      .from('accounting_ar_invoices')
+      .insert([{
+        invoice_number: invoiceNumber,
+        customer_id: customerId,
+        invoice_date: dateOnly(req.body.invoice_date),
+        due_date: req.body.due_date ? dateOnly(req.body.due_date) : addDays(14),
+        subtotal: total,
+        tax_amount: 0,
+        total_amount: total,
+        paid_amount: paid,
+        balance,
+        status: balance <= 0 ? 'paid' : paid > 0 ? 'partially_paid' : 'unpaid',
+        reference,
+        notes: req.body.notes || `${source.source_label} ${source.reference}`,
+        items,
+        type: sourceType === 'room' ? 'ROOM_BOOKING' : sourceType === 'conference' ? 'CONFERENCE' : 'OUTSIDE_CATERING',
+        created_by: req.user?.id,
+        branch_id: branchId,
+      }])
+      .select('*, customer:accounting_customers!customer_id(id, customer_name, email, phone)')
+      .single();
+
+    if (error) throw error;
+
+    await bestEffortLinkInvoiceToSource(sourceType, sourceId, invoice.id);
+
+    res.status(201).json({ success: true, data: invoice });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const downloadInvoicePdf = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    let query = supabase
+      .from('accounting_ar_invoices')
+      .select('*, customer:accounting_customers!customer_id(id, customer_name, email, phone), branch:branches(id, name, address, location, phone, email)')
+      .eq('id', id);
+
+    const branchId = resolveBranchId(req);
+    if (branchId) query = query.eq('branch_id', branchId);
+
+    const { data: invoice, error } = await query.maybeSingle();
+    if (error) throw error;
+    if (!invoice) {
+      res.status(404).json({ success: false, message: 'Invoice not found' });
+      return;
+    }
+
+    const items = Array.isArray(invoice.items) ? invoice.items : [];
+    const payload = {
+      invoice_number: invoice.invoice_number,
+      invoice_date: invoice.invoice_date,
+      due_date: invoice.due_date,
+      status: invoice.status || 'unpaid',
+      customer_name: invoice.customer?.customer_name || invoice.customer_name || 'Customer',
+      customer_address: invoice.branch?.name || 'FamousGate Hotels',
+      customer_phone: invoice.customer?.phone || invoice.customer_phone || '',
+      items: items.map((item: any, index: number) => ({
+        description: item.description || item.name || `Item ${index + 1}`,
+        quantity: money(item.quantity || item.qty || 1) || 1,
+        unit_price: money(item.unit_price || item.unitPrice || item.price),
+        total: money(item.total || item.total_amount),
+      })),
+      tax_rate: invoice.subtotal ? (money(invoice.tax_amount) / money(invoice.subtotal)) * 100 : 0,
+      notes: invoice.notes || 'Thank you for your business.',
+      terms: 'Payment due by invoice due date.',
+      reference_code: invoice.reference || invoice.invoice_number,
+    };
+
+    const pythonResponse = await axios.post(
+      `${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf`,
+      {
+        reportType: 'invoice',
+        data: payload,
+        filters: {
+          branch_id: invoice.branch_id,
+          branch_name: invoice.branch?.name,
+          invoice_id: invoice.id,
+        },
+        useRealData: false,
+      },
+      { responseType: 'arraybuffer' }
+    );
+
+    const filename = `${invoice.invoice_number || 'Invoice'}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', Buffer.from(pythonResponse.data).length.toString());
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(Buffer.from(pythonResponse.data));
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      logger.error('Failed to generate AR invoice PDF', error);
+      res.status(502).json({ success: false, message: 'Unable to generate invoice PDF at this time' });
+      return;
+    }
     next(error);
   }
 };

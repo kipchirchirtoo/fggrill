@@ -10,6 +10,7 @@ import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_skeleton.dart';
 import '../../../core/widgets/stat_card.dart';
+import '../../cashier/presentation/cashier_dashboard.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
 import 'screens/screens.dart';
@@ -34,10 +35,16 @@ class ReceptionDashboard extends ConsumerStatefulWidget {
     super.key,
     this.initialSection = ReceptionSection.overview,
     this.guestId,
+    this.cashierBillRef,
+    this.cashierAmount,
+    this.cashierMethod,
   });
 
   final ReceptionSection initialSection;
   final String? guestId;
+  final String? cashierBillRef;
+  final String? cashierAmount;
+  final String? cashierMethod;
 
   @override
   ConsumerState<ReceptionDashboard> createState() => _ReceptionDashboardState();
@@ -46,6 +53,9 @@ class ReceptionDashboard extends ConsumerStatefulWidget {
 class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
   late ReceptionSection _section = widget.initialSection;
   late String? _guestId = widget.guestId;
+  late String? _cashierBillRef = widget.cashierBillRef;
+  late String? _cashierAmount = widget.cashierAmount;
+  late String? _cashierMethod = widget.cashierMethod;
   late Future<_ReceptionSnapshot> _future;
   final _searchController = TextEditingController();
   String _statusFilter = 'all';
@@ -114,13 +124,33 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
     final payments =
         await guard(_repo.getCashierPayments(), <Map<String, dynamic>>[]);
     final logbook = await guard(_repo.getLogbookToday(), <String, dynamic>{});
-    final guestProfile = _guestId == null
+    final rawGuestProfile = _guestId == null
         ? <String, dynamic>{}
         : await guard(_repo.getGuest(_guestId!), <String, dynamic>{});
-    final guestHistory = _guestId == null
+    final guestFallback = _guestId == null
+        ? <String, dynamic>{}
+        : guestRows.firstWhere(
+            (row) => '${row['id'] ?? row['guest_id'] ?? ''}' == _guestId,
+            orElse: () => <String, dynamic>{},
+          );
+    final guestProfile = _guestId == null
+        ? <String, dynamic>{}
+        : _normalizeGuestProfile({...guestFallback, ...rawGuestProfile});
+
+    final rawGuestHistory = _guestId == null
         ? <Map<String, dynamic>>[]
         : await guard(
             _repo.getGuestHistory(_guestId!), <Map<String, dynamic>>[]);
+    final bookingHistoryFallback = _guestId == null
+        ? <Map<String, dynamic>>[]
+        : bookingRows
+            .where((row) =>
+                '${row['guest_id'] ?? row['guestId'] ?? ''}' == _guestId)
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+    final guestHistory = _normalizeStayHistory(
+      rawGuestHistory.isEmpty ? bookingHistoryFallback : rawGuestHistory,
+    );
     final guestLoyalty = _guestId == null
         ? <String, dynamic>{}
         : await guard(_repo.getGuestLoyalty(_guestId!), <String, dynamic>{});
@@ -159,7 +189,12 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
 
   void _selectSection(ReceptionSection section) {
     if (section == ReceptionSection.cashier) {
-      setState(() => _section = section);
+      setState(() {
+        _section = section;
+        _cashierBillRef = null;
+        _cashierAmount = null;
+        _cashierMethod = null;
+      });
       return;
     }
     setState(() {
@@ -313,12 +348,79 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
       case ReceptionSection.catering:
         return _CateringSection(data: data, onRefresh: _refresh);
       case ReceptionSection.cashier:
-        return _CashierSection(data: data, onRefresh: _refresh);
+        return _CashierSection(
+          billRef: _cashierBillRef,
+          amount: _cashierAmount,
+          method: _cashierMethod,
+        );
       case ReceptionSection.logbook:
         return _LogbookSection(data: data, onRefresh: _refresh);
       case ReceptionSection.history:
         return _HistorySection(data: data, onRefresh: _refresh);
     }
+  }
+
+  Map<String, dynamic> _normalizeGuestProfile(Map<String, dynamic> raw) {
+    final row = Map<String, dynamic>.from(raw);
+    for (final key in const ['guest', 'profile', 'data']) {
+      final nested = row[key];
+      if (nested is Map) {
+        row.addAll(Map<String, dynamic>.from(nested));
+      }
+    }
+
+    final first = _text(row, const ['first_name', 'firstName']) ?? '';
+    final last = _text(row, const ['last_name', 'lastName']) ?? '';
+    final joined = '$first $last'.trim();
+    if ((_text(row, const ['full_name', 'name']) ?? '').isEmpty &&
+        joined.isNotEmpty) {
+      row['full_name'] = joined;
+    }
+
+    row['phone'] ??= row['phone_number'] ?? row['mobile'] ?? row['contact'];
+    row['email'] ??= row['email_address'];
+    row['id_number'] ??=
+        row['national_id'] ?? row['passport_number'] ?? row['document_number'];
+    row['car_number_plate'] ??= row['vehicle_plate'] ??
+        row['vehiclePlate'] ??
+        row['carPlate'] ??
+        row['number_plate'];
+    return row;
+  }
+
+  List<Map<String, dynamic>> _normalizeStayHistory(
+      List<Map<String, dynamic>> rows) {
+    return rows.map((raw) {
+      final row = Map<String, dynamic>.from(raw);
+
+      void flatten(String key) {
+        final nested = row[key];
+        if (nested is Map) row.addAll(Map<String, dynamic>.from(nested));
+      }
+
+      flatten('booking');
+      flatten('reservation');
+
+      final room = row['room'];
+      if (room is Map) {
+        final map = Map<String, dynamic>.from(room);
+        row['room_number'] ??=
+            map['room_number'] ?? map['number'] ?? map['name'];
+        row['room_type'] ??= map['room_type'] ?? map['type'];
+      }
+
+      row['booking_number'] ??= row['confirmation_number'] ??
+          row['confirmationNumber'] ??
+          row['booking_reference'] ??
+          row['reference'] ??
+          row['id'];
+      row['room_number'] ??= row['roomNumber'];
+      row['check_in'] ??= row['check_in_date'] ?? row['checkInDate'];
+      row['check_out'] ??= row['check_out_date'] ?? row['checkOutDate'];
+      row['total_amount'] ??=
+          row['grand_total'] ?? row['amount'] ?? row['balance_amount'];
+      return row;
+    }).toList();
   }
 
   // ── Navigation helpers for new screens ──────────────────────────────────────
@@ -1061,7 +1163,7 @@ class _GuestsSection extends ConsumerWidget {
         children: [
           _FilterBar(
             searchController: searchController,
-            searchHint: 'Search guests by name, phone, email',
+            searchHint: 'Search guests by name, phone, ID or car plate',
             onSearch: onSearch,
             filters: [
               _InlineChoice(
@@ -1092,7 +1194,10 @@ class _GuestsSection extends ConsumerWidget {
                       return _RecordTileData(
                         title: guest.name.isEmpty ? 'Guest' : guest.name,
                         subtitle:
-                            '${guest.email ?? '-'} • ${guest.phone ?? '-'}${activeBooking == null ? '' : ' • Room ${activeBooking.roomNumber}'}',
+                            '${guest.email ?? '-'} • ${guest.phone ?? '-'}'
+                            '${guest.idNumber == null ? '' : ' • ID ${guest.idNumber}'}'
+                            '${guest.carNumberPlate == null ? '' : ' • ${guest.carNumberPlate}'}'
+                            '${activeBooking == null ? '' : ' • Room ${activeBooking.roomNumber}'}',
                         leading: CircleAvatar(
                             child: Text(
                                 (guest.name.isNotEmpty ? guest.name[0] : '?')
@@ -1174,6 +1279,16 @@ class _GuestProfileSection extends StatelessWidget {
                 {
                   'label': 'ID / Passport',
                   'value': _text(guest, ['id_number', 'passport_number']) ?? '-'
+                },
+                {
+                  'label': 'Car plate',
+                  'value': _text(guest, [
+                        'car_number_plate',
+                        'carNumberPlate',
+                        'vehicle_plate',
+                        'vehiclePlate'
+                      ]) ??
+                      '-'
                 },
               ]),
             ),
@@ -1459,7 +1574,8 @@ class _ConferenceSection extends ConsumerWidget {
                           Icons.point_of_sale,
                           invoice == null
                               ? null
-                              : () => context.go('/cashier?invoice=$invoice')),
+                              : () => _openReceptionCashier(context,
+                                  billRef: invoice)),
                       _SmallAction(
                           'Add payment',
                           Icons.payments,
@@ -1562,71 +1678,26 @@ class _CateringSection extends ConsumerWidget {
   }
 }
 
-class _CashierSection extends ConsumerWidget {
-  const _CashierSection({required this.data, required this.onRefresh});
-  final _ReceptionSnapshot data;
-  final VoidCallback onRefresh;
+class _CashierSection extends StatelessWidget {
+  const _CashierSection({
+    this.billRef,
+    this.amount,
+    this.method,
+  });
+
+  final String? billRef;
+  final String? amount;
+  final String? method;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _PageScaffold(
-      title: 'Reception Cashier',
-      subtitle:
-          'Same cashier station access exposed inside the reception dashboard.',
-      actions: [
-        OutlinedButton.icon(
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Refresh')),
-        ElevatedButton.icon(
-          onPressed: () => context.go('/cashier'),
-          icon: const Icon(Icons.open_in_new, size: 16),
-          label: const Text('Open Full Cashier Station'),
-        ),
-        ElevatedButton.icon(
-          onPressed: () => _showDynamicBillDialog(context, ref, onRefresh),
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Dynamic Bill'),
-        ),
-      ],
-      child: Column(
-        children: [
-          _StatGrid(cards: [
-            _StatData(
-                "Today's Revenue",
-                _money(_num(data.cashierStats,
-                    ['today_payments', 'todayRevenue', 'today_collections'])),
-                Icons.payments_outlined,
-                AppColors.kSuccess),
-            _StatData('Pending Confirmation', '${data.unpaidBills.length}',
-                Icons.verified_outlined, AppColors.kWarning),
-            _StatData(
-                'Active Credit Bills',
-                '${data.creditBills.where((b) => _text(b, [
-                          'status'
-                        ]) != 'paid').length}',
-                Icons.credit_score_outlined,
-                AppColors.kError),
-            _StatData('Payments', '${data.payments.length}',
-                Icons.receipt_long_outlined, AppColors.kPrimary),
-          ]),
-          const SizedBox(height: 16),
-          _ResponsivePair(
-            left: _CardPanel(
-              title: 'Unconfirmed Bills',
-              child: _BillsList(
-                  bills: data.unpaidBills,
-                  onPay: (bill) => _openCashierForBill(context, bill)),
-            ),
-            right: _CardPanel(
-              title: 'Recent Credit Bills',
-              child: _BillsList(
-                  bills: data.creditBills.take(10).toList(),
-                  onPay: (bill) => _openCashierForBill(context, bill)),
-            ),
-          ),
-        ],
-      ),
+  Widget build(BuildContext context) {
+    return CashierDashboard(
+      key: ValueKey(
+          'reception_cashier_${billRef ?? ''}_${amount ?? ''}_${method ?? ''}'),
+      embedded: true,
+      initialBillRef: billRef,
+      initialAmount: amount,
+      initialMethod: method,
     );
   }
 }
@@ -1641,7 +1712,8 @@ class _LogbookSection extends ConsumerWidget {
     final openingFloat = _num(data.logbook, ['opening_float', 'openingFloat']);
     num cash = 0, mpesa = 0, card = 0;
     for (final p in data.payments) {
-      final method = (_text(p, ['payment_method', 'method']) ?? '').toLowerCase();
+      final method =
+          (_text(p, ['payment_method', 'method']) ?? '').toLowerCase();
       final amount = _num(p, ['amount', 'total_amount', 'payment_amount']);
       if (method.contains('mpesa')) {
         mpesa += amount;
@@ -1682,7 +1754,7 @@ class _LogbookSection extends ConsumerWidget {
         },
         'notes':
             'Auto-generated reception shift logbook. Cash ${_money(r['cash']!)}, M-Pesa ${_money(r['mpesa']!)}, Card ${_money(r['card']!)}.',
-        'status': 'submitted',
+        'status': 'open',
       });
       // 2. Send it to the auditor for review (best-effort — the save already
       // persisted, so a submit hiccup must not look like a failure).
@@ -1704,7 +1776,8 @@ class _LogbookSection extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        _snack(context, apiErrorMessage(e, fallback: 'Could not submit logbook'),
+        _snack(
+            context, apiErrorMessage(e, fallback: 'Could not submit logbook'),
             error: true);
       }
     }
@@ -1776,7 +1849,8 @@ class _LogbookSection extends ConsumerWidget {
         _CardPanel(
           title: 'Shift Notes',
           child: Text(
-            _text(data.logbook, ['notes']) ?? 'No notes recorded for this shift.',
+            _text(data.logbook, ['notes']) ??
+                'No notes recorded for this shift.',
             style: const TextStyle(height: 1.5),
           ),
         ),
@@ -1807,30 +1881,33 @@ class _HistorySection extends StatelessWidget {
         left: _CardPanel(
           title: 'Recent Bookings History',
           child: _SimpleRows(
-            rows: data.bookingRows.take(50).map((b) => {
-                  ...b,
-                  'booking_number': _text(b, [
-                        'booking_number',
-                        'confirmation_number',
-                        'reference',
-                        'ref'
-                      ]) ??
-                      '-',
-                  'guest_name': _text(b, [
-                        'guest_name',
-                        'guest.name',
-                        'guest.first_name',
-                        'customer_name'
-                      ]) ??
-                      'Walk-in',
-                  'room_number': _text(b, [
-                        'room_number',
-                        'room.room_number',
-                        'room.number',
-                        'room_no'
-                      ]) ??
-                      '-',
-                }).toList(),
+            rows: data.bookingRows
+                .take(50)
+                .map((b) => {
+                      ...b,
+                      'booking_number': _text(b, [
+                            'booking_number',
+                            'confirmation_number',
+                            'reference',
+                            'ref'
+                          ]) ??
+                          '-',
+                      'guest_name': _text(b, [
+                            'guest_name',
+                            'guest.name',
+                            'guest.first_name',
+                            'customer_name'
+                          ]) ??
+                          'Walk-in',
+                      'room_number': _text(b, [
+                            'room_number',
+                            'room.room_number',
+                            'room.number',
+                            'room_no'
+                          ]) ??
+                          '-',
+                    })
+                .toList(),
             fields: const [
               'booking_number',
               'guest_name',
@@ -1843,19 +1920,22 @@ class _HistorySection extends StatelessWidget {
         right: _CardPanel(
           title: 'Recent Payments',
           child: _SimpleRows(
-            rows: data.payments.take(50).map((p) => {
-                  ...p,
-                  'customer_name': _text(p, [
-                        'customer_name',
-                        'guest_name',
-                        'customer.name',
-                        'guest.name',
-                        'booking.guest_name',
-                        'bill.customer_name',
-                        'payer_name'
-                      ]) ??
-                      'Walk-in',
-                }).toList(),
+            rows: data.payments
+                .take(50)
+                .map((p) => {
+                      ...p,
+                      'customer_name': _text(p, [
+                            'customer_name',
+                            'guest_name',
+                            'customer.name',
+                            'guest.name',
+                            'booking.guest_name',
+                            'bill.customer_name',
+                            'payer_name'
+                          ]) ??
+                          'Walk-in',
+                    })
+                .toList(),
             fields: const [
               'customer_name',
               'payment_method',
@@ -2927,34 +3007,6 @@ class _HousekeepingRoomGrid extends StatelessWidget {
   }
 }
 
-class _BillsList extends StatelessWidget {
-  const _BillsList({required this.bills, required this.onPay});
-  final List<Map<String, dynamic>> bills;
-  final ValueChanged<Map<String, dynamic>> onPay;
-
-  @override
-  Widget build(BuildContext context) {
-    if (bills.isEmpty) return const EmptyState(message: 'No bills found');
-    return _RecordList(
-      rows: bills.map((bill) {
-        return _RecordTileData(
-          title:
-              '#${_text(bill, ['bill_number', 'invoice_number', 'id']) ?? '-'}',
-          subtitle: '${_text(bill, [
-                    'customer_name',
-                    'staff_name'
-                  ]) ?? 'Walk-in'} • ${_text(bill, ['bill_type', 'source']) ?? 'bill'}',
-          trailing: Text(_money(_num(bill, ['total_amount', 'amount'])),
-              style: const TextStyle(fontWeight: FontWeight.w800)),
-          actions: [
-            _SmallAction('Record payment', Icons.payments, () => onPay(bill)),
-          ],
-        );
-      }).toList(),
-    );
-  }
-}
-
 class _SimpleRows extends StatelessWidget {
   const _SimpleRows({
     required this.rows,
@@ -3085,6 +3137,7 @@ class _RecordField {
   const _RecordField(this.key, this.label,
       {this.numeric = false,
       this.multiline = false,
+      this.isRequired = false,
       this.initial,
       this.options,
       this.optionLabels});
@@ -3092,6 +3145,7 @@ class _RecordField {
   final String label;
   final bool numeric;
   final bool multiline;
+  final bool isRequired;
   final String? initial;
   final List<String>? options;
 
@@ -3194,6 +3248,13 @@ class _RecordDialogState extends State<_RecordDialog> {
                     final value = field.options == null
                         ? _controllers[field.key]!.text.trim()
                         : _selectValues[field.key];
+                    if (field.isRequired && (value == null || value.isEmpty)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${field.label} is required')),
+                      );
+                      setState(() => _busy = false);
+                      return;
+                    }
                     values[field.key] =
                         field.numeric ? num.tryParse(value ?? '') ?? 0 : value;
                   }
@@ -3221,6 +3282,8 @@ class _NewReservationDialog extends ConsumerStatefulWidget {
 }
 
 class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
+  static final _dateFormat = DateFormat('yyyy-MM-dd');
+
   final _checkIn = TextEditingController(
       text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
   final _checkOut = TextEditingController(
@@ -3238,6 +3301,48 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   List<Guest> _guests = [];
   Map<String, dynamic>? _selectedRoom;
   Guest? _selectedGuest;
+
+  DateTime get _checkInDate =>
+      DateTime.tryParse(_checkIn.text) ?? DateTime.now();
+
+  DateTime get _checkOutDate =>
+      DateTime.tryParse(_checkOut.text) ??
+      _checkInDate.add(const Duration(days: 1));
+
+  Future<void> _pickStayDate({required bool checkIn}) async {
+    final currentIn = _checkInDate;
+    final currentOut = _checkOutDate;
+    final firstDate = checkIn
+        ? DateTime.now().subtract(const Duration(days: 1))
+        : currentIn.add(const Duration(days: 1));
+    final initialDate = checkIn
+        ? currentIn
+        : currentOut.isAfter(firstDate)
+            ? currentOut
+            : firstDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+      helpText: checkIn ? 'Select check-in date' : 'Select check-out date',
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      if (checkIn) {
+        _checkIn.text = _dateFormat.format(picked);
+        if (!_checkOutDate.isAfter(picked)) {
+          _checkOut.text =
+              _dateFormat.format(picked.add(const Duration(days: 1)));
+        }
+      } else {
+        _checkOut.text = _dateFormat.format(picked);
+      }
+      _rooms = [];
+      _selectedRoom = null;
+    });
+  }
 
   @override
   void dispose() {
@@ -3270,15 +3375,27 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                   Row(children: [
                     Expanded(
                         child: TextField(
-                            controller: _checkIn,
-                            decoration: const InputDecoration(
-                                labelText: 'Check-in date'))),
+                      controller: _checkIn,
+                      readOnly: true,
+                      onTap: () => _pickStayDate(checkIn: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Check-in date',
+                        prefixIcon: Icon(Icons.calendar_today),
+                        suffixIcon: Icon(Icons.arrow_drop_down),
+                      ),
+                    )),
                     const SizedBox(width: 12),
                     Expanded(
                         child: TextField(
-                            controller: _checkOut,
-                            decoration: const InputDecoration(
-                                labelText: 'Check-out date'))),
+                      controller: _checkOut,
+                      readOnly: true,
+                      onTap: () => _pickStayDate(checkIn: false),
+                      decoration: const InputDecoration(
+                        labelText: 'Check-out date',
+                        prefixIcon: Icon(Icons.event_available),
+                        suffixIcon: Icon(Icons.arrow_drop_down),
+                      ),
+                    )),
                   ]),
                   const SizedBox(height: 12),
                   Row(children: [
@@ -3457,6 +3574,16 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   }
 
   Future<void> _searchRooms() async {
+    if (!_checkOutDate.isAfter(_checkInDate)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Check-out date must be after check-in date'),
+          ),
+        );
+      }
+      return;
+    }
     setState(() => _busy = true);
     try {
       final rows =
@@ -3547,10 +3674,14 @@ class _InlineGuestDialog extends ConsumerStatefulWidget {
 }
 
 class _InlineGuestDialogState extends ConsumerState<_InlineGuestDialog> {
+  final _formKey = GlobalKey<FormState>();
   final _first = TextEditingController();
   final _last = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
+  final _idNumber = TextEditingController();
+  final _carNumberPlate = TextEditingController();
+  String _idType = 'national_id';
 
   @override
   void dispose() {
@@ -3558,6 +3689,8 @@ class _InlineGuestDialogState extends ConsumerState<_InlineGuestDialog> {
     _last.dispose();
     _phone.dispose();
     _email.dispose();
+    _idNumber.dispose();
+    _carNumberPlate.dispose();
     super.dispose();
   }
 
@@ -3566,24 +3699,64 @@ class _InlineGuestDialogState extends ConsumerState<_InlineGuestDialog> {
     return AlertDialog(
       title: const Text('New Guest'),
       content: SizedBox(
-        width: 420,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-              controller: _first,
-              decoration: const InputDecoration(labelText: 'First name')),
-          const SizedBox(height: 10),
-          TextField(
-              controller: _last,
-              decoration: const InputDecoration(labelText: 'Last name')),
-          const SizedBox(height: 10),
-          TextField(
-              controller: _phone,
-              decoration: const InputDecoration(labelText: 'Phone')),
-          const SizedBox(height: 10),
-          TextField(
-              controller: _email,
-              decoration: const InputDecoration(labelText: 'Email')),
-        ]),
+        width: 460,
+        child: Form(
+          key: _formKey,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextFormField(
+                controller: _first,
+                decoration: const InputDecoration(labelText: 'First name *'),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Required' : null),
+            const SizedBox(height: 10),
+            TextFormField(
+                controller: _last,
+                decoration: const InputDecoration(labelText: 'Last name *'),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Required' : null),
+            const SizedBox(height: 10),
+            TextFormField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone *'),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Required' : null),
+            const SizedBox(height: 10),
+            TextFormField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email')),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: _idType,
+              decoration: const InputDecoration(labelText: 'ID Type'),
+              items: const [
+                DropdownMenuItem(
+                    value: 'national_id', child: Text('National ID')),
+                DropdownMenuItem(value: 'passport', child: Text('Passport')),
+                DropdownMenuItem(
+                    value: 'driving_license', child: Text('Driving License')),
+                DropdownMenuItem(
+                    value: 'military_id', child: Text('Military ID')),
+              ],
+              onChanged: (value) =>
+                  setState(() => _idType = value ?? 'national_id'),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+                controller: _idNumber,
+                decoration: const InputDecoration(labelText: 'ID number *'),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Required' : null),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _carNumberPlate,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                  labelText: 'Car number plate (optional)'),
+            ),
+          ]),
+        ),
       ),
       actions: [
         TextButton(
@@ -3591,12 +3764,17 @@ class _InlineGuestDialogState extends ConsumerState<_InlineGuestDialog> {
             child: const Text('Cancel')),
         ElevatedButton(
           onPressed: () async {
+            if (!_formKey.currentState!.validate()) return;
             final row =
                 await ref.read(receptionRepositoryProvider).createGuest({
               'first_name': _first.text,
               'last_name': _last.text,
               'phone': _phone.text,
               'email': _email.text,
+              'id_type': _idType,
+              'id_number': _idNumber.text.trim(),
+              if (_carNumberPlate.text.trim().isNotEmpty)
+                'car_number_plate': _carNumberPlate.text.trim().toUpperCase(),
             });
             if (context.mounted) Navigator.pop(context, Guest.fromJson(row));
           },
@@ -3676,11 +3854,33 @@ Future<void> _showGuestFormDialog(BuildContext context, WidgetRef ref,
     builder: (_) => _RecordDialog(
       title: guest == null ? 'Register New Guest' : 'Edit Guest',
       fields: [
-        _RecordField('first_name', 'First name', initial: guest?.firstName),
-        _RecordField('last_name', 'Last name', initial: guest?.lastName),
-        _RecordField('phone', 'Phone', initial: guest?.phone),
+        _RecordField('first_name', 'First name',
+            initial: guest?.firstName, isRequired: true),
+        _RecordField('last_name', 'Last name',
+            initial: guest?.lastName, isRequired: true),
+        _RecordField('phone', 'Phone', initial: guest?.phone, isRequired: true),
         _RecordField('email', 'Email', initial: guest?.email),
-        _RecordField('id_number', 'ID / Passport', initial: guest?.idNumber),
+        _RecordField(
+          'id_type',
+          'ID Type',
+          initial: guest?.idType ?? 'national_id',
+          options: const [
+            'national_id',
+            'passport',
+            'driving_license',
+            'military_id',
+          ],
+          optionLabels: const {
+            'national_id': 'National ID',
+            'passport': 'Passport',
+            'driving_license': 'Driving License',
+            'military_id': 'Military ID',
+          },
+        ),
+        _RecordField('id_number', 'ID / Passport',
+            initial: guest?.idNumber, isRequired: true),
+        _RecordField('car_number_plate', 'Car number plate',
+            initial: guest?.carNumberPlate),
       ],
       onSubmit: (values) async {
         if (guest == null) {
@@ -3827,7 +4027,7 @@ Future<void> _showPaymentMethodSheet(BuildContext context, Booking booking,
         Text('Settle balance ${_money(due)}',
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
         const SizedBox(height: 4),
-        Text('Redirecting to cashier station with amount pre-filled',
+        Text('Opening Reception cashier with amount pre-filled',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
         const SizedBox(height: 16),
         Wrap(
@@ -3839,8 +4039,10 @@ Future<void> _showPaymentMethodSheet(BuildContext context, Booking booking,
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
-                  context.go(
-                      '/cashier?billId=$billRef&method=$method&amount=${due.toStringAsFixed(0)}');
+                  _openReceptionCashier(context,
+                      billRef: billRef,
+                      method: method,
+                      amount: due.toStringAsFixed(0));
                 },
                 icon: Icon(method == 'mpesa'
                     ? Icons.phone_android
@@ -4009,8 +4211,13 @@ Future<void> _showConferenceBookingDialog(BuildContext context, WidgetRef ref,
       if ((_text(h, ['id']) ?? '').isNotEmpty)
         _text(h, ['id'])!: () {
           final name = _text(h, ['name', 'hall_name', 'title']) ?? 'Hall';
-          final price = _num(
-              h, ['base_price_per_day', 'price_per_day', 'rate', 'price', 'amount']);
+          final price = _num(h, [
+            'base_price_per_day',
+            'price_per_day',
+            'rate',
+            'price',
+            'amount'
+          ]);
           return price > 0 ? '$name • ${_money(price)}/day' : name;
         }(),
   };
@@ -4073,42 +4280,19 @@ Future<void> _showCateringDialog(
   );
 }
 
-Future<void> _showDynamicBillDialog(
-    BuildContext context, WidgetRef ref, VoidCallback onSuccess) async {
-  await showDialog<void>(
-    context: context,
-    builder: (_) => _RecordDialog(
-      title: 'Create Dynamic Bill',
-      fields: const [
-        _RecordField('customer_name', 'Customer name'),
-        _RecordField('bill_type', 'Bill type', options: [
-          'misc',
-          'room_service',
-          'conference',
-          'catering',
-          'credit'
-        ]),
-        _RecordField('description', 'Description', multiline: true),
-        _RecordField('total_amount', 'Total amount',
-            numeric: true, initial: '0'),
-      ],
-      onSubmit: (values) async {
-        await ref.read(receptionRepositoryProvider).createDynamicBill(values);
-        onSuccess();
-      },
-    ),
-  );
-}
-
-// Open the full cashier station for this bill, with the bill reference and the
-// outstanding amount pre-filled and ready for payment confirmation.
-void _openCashierForBill(BuildContext context, Map<String, dynamic> bill) {
-  final ref0 = _text(bill, ['bill_number', 'invoice_number', 'id']);
-  if (ref0 == null) return;
-  final outstanding = _num(
-      bill, ['balance', 'balance_amount', 'total_amount', 'amount']);
-  context.go(
-      '/cashier?billId=$ref0&amount=${outstanding.toStringAsFixed(0)}');
+void _openReceptionCashier(
+  BuildContext context, {
+  String? billRef,
+  String? amount,
+  String? method,
+}) {
+  final query = <String, String>{
+    if (billRef != null && billRef.trim().isNotEmpty) 'billId': billRef.trim(),
+    if (amount != null && amount.trim().isNotEmpty) 'amount': amount.trim(),
+    if (method != null && method.trim().isNotEmpty) 'method': method.trim(),
+  };
+  context
+      .go(Uri(path: '/reception/cashier', queryParameters: query).toString());
 }
 
 Future<void> _showAmountDialog(BuildContext context, String title,
@@ -4161,7 +4345,8 @@ Future<void> _showAmountDialog(BuildContext context, String title,
                 if (context.mounted) Navigator.pop(context);
               } catch (e) {
                 if (context.mounted) {
-                  _snack(context, apiErrorMessage(e, fallback: 'Payment failed'),
+                  _snack(
+                      context, apiErrorMessage(e, fallback: 'Payment failed'),
                       error: true);
                 }
               }

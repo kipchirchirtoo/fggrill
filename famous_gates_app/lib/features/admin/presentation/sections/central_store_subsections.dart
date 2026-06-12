@@ -476,6 +476,7 @@ Widget _rowTile({
   required String subtitle,
   String? meta,
   Widget? trailing,
+  double trailingMaxWidth = 360,
 }) {
   return ListTile(
     leading: CircleAvatar(
@@ -498,7 +499,7 @@ Widget _rowTile({
                 color: AppColors.kTextSecondary,
                 fontWeight: FontWeight.w600))
         : ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
+            constraints: BoxConstraints(maxWidth: trailingMaxWidth),
             child: Align(
               alignment: Alignment.centerRight,
               widthFactor: 1,
@@ -637,10 +638,20 @@ TextField _field(
 Widget _statusChip(String status) {
   final color = _statusColor(status);
   return Chip(
-    label: Text(status.toUpperCase(), style: const TextStyle(fontSize: 10)),
+    label: Text(_statusLabel(status).toUpperCase(),
+        style: const TextStyle(fontSize: 10)),
     backgroundColor: color.withValues(alpha: 0.1),
     labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
   );
+}
+
+String _statusLabel(String status) {
+  final normalized = status.trim().toLowerCase();
+  if (normalized == 'fully_received') return 'Fully Received';
+  if (normalized == 'partially_received') return 'Partially Received';
+  if (normalized == 'sent_to_supplier') return 'Sent to Supplier';
+  if (normalized == 'pending_approval') return 'Pending Approval';
+  return status.replaceAll('_', ' ');
 }
 
 /// Open a full-screen, well-structured detail page for a record (replaces the
@@ -2491,8 +2502,16 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                   poNumber.contains(q) ||
                   supplier.contains(q) ||
                   branch.contains(q);
-              final matchesStatus =
-                  _statusFilter == 'all' || status == _statusFilter;
+              final matchesStatus = _statusFilter == 'all' ||
+                  status == _statusFilter ||
+                  (_statusFilter == 'received' &&
+                      (status == 'fully_received' ||
+                          status == 'partially_received')) ||
+                  (_statusFilter == 'history' &&
+                      (status == 'fully_received' ||
+                          status == 'partially_received' ||
+                          status == 'closed' ||
+                          status == 'cancelled'));
               final matchesSupplier = _listSupplierId == null ||
                   _text(row, ['supplier_id'], '') == _listSupplierId;
               return matchesSearch && matchesStatus && matchesSupplier;
@@ -2525,9 +2544,14 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                           value: 'pending', child: Text('Pending')),
                       DropdownMenuItem(
                           value: 'approved', child: Text('Approved')),
-                      DropdownMenuItem(value: 'sent', child: Text('Sent')),
                       DropdownMenuItem(
-                          value: 'received', child: Text('Received')),
+                          value: 'sent_to_supplier',
+                          child: Text('Sent to Supplier')),
+                      DropdownMenuItem(
+                          value: 'received',
+                          child: Text('Received / Archived')),
+                      DropdownMenuItem(
+                          value: 'history', child: Text('History')),
                       DropdownMenuItem(
                           value: 'cancelled', child: Text('Cancelled')),
                     ],
@@ -2604,54 +2628,8 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                     subtitle: '${_text(row, [
                           'supplier_name'
                         ])} • ${_date(row['created_at'] ?? row['order_date'])}',
-                    trailing: Wrap(spacing: 6, children: [
-                      _statusChip(status),
-                      OutlinedButton(
-                          onPressed: () =>
-                              _showPurchaseOrderDetails(context, row),
-                          child: const Text('View')),
-                      OutlinedButton(
-                          onPressed: () async {
-                            try {
-                              final detail = await ref
-                                  .read(adminRepositoryProvider)
-                                  .getPurchaseOrder(_id(row));
-                              if (mounted) await _printPurchaseOrderPdf(detail);
-                            } catch (error) {
-                              if (mounted) {
-                                _snack(
-                                    this.context, 'Failed to print PO: $error');
-                              }
-                            }
-                          },
-                          child: const Text('Print')),
-                      if (status.toLowerCase() == 'draft')
-                        OutlinedButton(
-                            onPressed: () => _editDraftPurchaseOrder(row),
-                            child: const Text('Edit')),
-                      if (status.toLowerCase().contains('pending') ||
-                          status.toLowerCase() == 'draft')
-                        ElevatedButton(
-                            onPressed: () =>
-                                _poAction(context, ref, row, 'approve'),
-                            child: const Text('Approve')),
-                      if (!status.toLowerCase().contains('cancel'))
-                        TextButton(
-                            onPressed: () =>
-                                _poAction(context, ref, row, 'cancel'),
-                            child: const Text('Reject')),
-                      if (status.toLowerCase().contains('approved'))
-                        OutlinedButton(
-                            onPressed: () =>
-                                _poAction(context, ref, row, 'send'),
-                            child: const Text('Send')),
-                      if (status.toLowerCase().contains('approved'))
-                        OutlinedButton(
-                            onPressed: () => ref
-                                .read(adminSectionProvider.notifier)
-                                .state = AdminSection.goodsReceiving,
-                            child: const Text('Receive')),
-                    ]),
+                    trailingMaxWidth: 520,
+                    trailing: _purchaseOrderActions(context, ref, row, status),
                   );
                 },
               ),
@@ -2659,6 +2637,164 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           },
         ),
       );
+
+  Widget _purchaseOrderActions(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> row,
+    String status,
+  ) {
+    final lowerStatus = status.toLowerCase();
+    final isDraft = lowerStatus == 'draft';
+    final canApprove = lowerStatus.contains('pending') || isDraft;
+    final isApproved = lowerStatus.contains('approved');
+    final canReject = !lowerStatus.contains('cancel');
+
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        _poStatusPill(status),
+        _poActionButton(
+          label: 'View',
+          width: 68,
+          onPressed: () => _showPurchaseOrderDetails(context, row),
+        ),
+        _poActionButton(
+          label: 'Print',
+          width: 68,
+          onPressed: () async {
+            try {
+              final detail = await ref
+                  .read(adminRepositoryProvider)
+                  .getPurchaseOrder(_id(row));
+              if (mounted) await _printPurchaseOrderPdf(detail);
+            } catch (error) {
+              if (mounted) _snack(this.context, 'Failed to print PO: $error');
+            }
+          },
+        ),
+        if (isDraft)
+          _poActionButton(
+            label: 'Edit',
+            width: 64,
+            onPressed: () => _editDraftPurchaseOrder(row),
+          ),
+        if (canApprove)
+          _poActionButton(
+            label: 'Approve',
+            width: 88,
+            primary: true,
+            onPressed: () => _poAction(context, ref, row, 'approve'),
+          ),
+        if (isApproved)
+          _poActionButton(
+            label: 'Send',
+            width: 68,
+            onPressed: () => _poAction(context, ref, row, 'send'),
+          ),
+        if (isApproved)
+          _poActionButton(
+            label: 'Receive',
+            width: 82,
+            onPressed: () => ref.read(adminSectionProvider.notifier).state =
+                AdminSection.goodsReceiving,
+          ),
+        if (canReject)
+          _poActionButton(
+            label: 'Reject',
+            width: 76,
+            destructive: true,
+            onPressed: () => _poAction(context, ref, row, 'cancel'),
+          ),
+      ],
+    );
+  }
+
+  Widget _poStatusPill(String status) {
+    final color = _statusColor(status);
+    return Container(
+      height: 32,
+      constraints: const BoxConstraints(minWidth: 88, maxWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        _statusLabel(status).toUpperCase(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _poActionButton({
+    required String label,
+    required double width,
+    required VoidCallback onPressed,
+    bool primary = false,
+    bool destructive = false,
+  }) {
+    final foreground = destructive ? Colors.red.shade700 : AppColors.kPrimary;
+    final sideColor = destructive
+        ? Colors.red.shade300
+        : AppColors.kPrimary.withValues(alpha: 0.45);
+    const textStyle = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+    );
+    final child = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    if (primary) {
+      return SizedBox(
+        width: width,
+        height: 32,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            padding: EdgeInsets.zero,
+            textStyle: textStyle,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            shape: const StadiumBorder(),
+          ),
+          child: child,
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: width,
+      height: 32,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: foreground,
+          side: BorderSide(color: sideColor),
+          padding: EdgeInsets.zero,
+          textStyle: textStyle,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+          shape: const StadiumBorder(),
+        ),
+        child: child,
+      ),
+    );
+  }
 
   Widget _createView(
     List<Map<String, dynamic>> suppliers,

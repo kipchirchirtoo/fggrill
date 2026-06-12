@@ -503,15 +503,13 @@ class _AuditorDataSection extends ConsumerWidget {
         }).toList();
       }
 
+      final candidateMaps = _candidateMaps(data);
       final specificKeys = listKeys
           .where((key) => !{'items', 'rows', 'records', 'data'}.contains(key))
           .toList();
       final combined = <Map<String, dynamic>>[];
       for (final key in specificKeys) {
-        final value = data[key];
-        if (value is List) {
-          combined.addAll(_mapsFromList(value, sourceKey: key));
-        }
+        combined.addAll(_rowsForKey(candidateMaps, key));
       }
       if (combined.isNotEmpty) return combined;
 
@@ -528,22 +526,97 @@ class _AuditorDataSection extends ConsumerWidget {
         'deliveries',
         'payments',
         'branch_summaries',
+        'cashier_summaries',
+        'recent_transactions',
+        'transactions',
+        'stock_items',
+        'inventory',
+        'stock_takes',
+        'purchase_orders',
+        'expenses',
+        'employee_bills',
+        'guest_bills',
+        'credit_bills',
+        'bills',
+        'exceptions',
+        'discrepancies',
+        'flags',
+        'approvals',
+        'requisitions',
+        'usage',
+        'entries',
+        'wastage',
+        'analysis',
+        'sold_items',
+        'restaurant_orders',
+        'bar_orders',
+        'pos_transactions',
       ]) {
-        final value = data[key];
-        if (value is List) {
-          return _mapsFromList(value, sourceKey: key);
+        final rows = _rowsForKey(candidateMaps, key);
+        if (rows.isNotEmpty) return rows;
+      }
+      for (final candidate in candidateMaps) {
+        for (final value in candidate.values) {
+          if (value is List) {
+            return _mapsFromList(value);
+          }
         }
       }
-      for (final value in data.values) {
-        if (value is List) {
-          return _mapsFromList(value);
-        }
-      }
+      final nestedRows = _firstNestedRows(data);
+      if (nestedRows.isNotEmpty) return nestedRows;
 
       final summary = data['summary'];
       if (summary is Map && summary['branch_summaries'] is List) {
         final rows = _mapsFromList(summary['branch_summaries'] as List,
             sourceKey: 'branch_summaries');
+        if (rows.isNotEmpty) return rows;
+      }
+    }
+    return [];
+  }
+
+  List<Map<String, dynamic>> _rowsForKey(
+    List<Map<dynamic, dynamic>> maps,
+    String key,
+  ) {
+    final rows = <Map<String, dynamic>>[];
+    for (final map in maps) {
+      final value = map[key];
+      if (value is List) {
+        rows.addAll(_mapsFromList(value, sourceKey: key));
+      } else if (value is Map) {
+        for (final entry in value.entries) {
+          if (entry.value is List) {
+            rows.addAll(_mapsFromList(entry.value as List,
+                sourceKey: '${key}_${entry.key}'));
+          }
+        }
+      }
+    }
+    return rows;
+  }
+
+  List<Map<dynamic, dynamic>> _candidateMaps(Map<dynamic, dynamic> data) {
+    final maps = <Map<dynamic, dynamic>>[data];
+    for (final key in const ['data', 'payload', 'result', 'summary', 'stats']) {
+      final value = data[key];
+      if (value is Map) maps.add(value);
+    }
+    return maps;
+  }
+
+  List<Map<String, dynamic>> _firstNestedRows(dynamic data, {int depth = 0}) {
+    if (depth > 4) return [];
+    if (data is List) return _mapsFromList(data);
+    if (data is! Map) return [];
+    for (final entry in data.entries) {
+      final value = entry.value;
+      if (value is List) {
+        final rows = _mapsFromList(value, sourceKey: '${entry.key}');
+        if (rows.isNotEmpty) return rows;
+      }
+      if (value is Map) {
+        final rows = _firstNestedRows(value, depth: depth + 1);
         if (rows.isNotEmpty) return rows;
       }
     }
@@ -1049,6 +1122,9 @@ String? _sourceType(String sourceKey) {
     'requests' || 'approvals' || 'requisitions' => 'stock_request',
     'stock_takes' || 'audits' => 'stock_audit',
     'transactions' || 'payments' || 'recent_transactions' => 'payment',
+    'restaurant_orders' || 'orders_restaurant' => 'restaurant_order',
+    'bar_orders' || 'orders_bar' => 'bar_order',
+    'pos_transactions' || 'orders_pos' => 'pos_transaction',
     'cashier_summaries' || 'branch_summaries' => 'logbook',
     'logbooks' || 'logs' => 'logbook',
     _ => null,
@@ -1062,8 +1138,12 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
   if (key == 'reference') {
     return row['reference'] ??
         row['reference_number'] ??
+        row['payment_reference'] ??
+        row['transaction_id'] ??
+        row['invoice_number'] ??
         row['bill_number'] ??
         row['order_number'] ??
+        row['request_number'] ??
         row['id'];
   }
   if (key == 'staff_name' || key == 'employee_name') {
@@ -1074,7 +1154,10 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
         row['customer_name'];
   }
   if (key == 'cashier_name') {
-    return _nestedName(row['cashier']) ?? _nestedName(row['user']);
+    return row['cashier_name'] ??
+        _nestedName(row['cashier']) ??
+        _nestedName(row['user']) ??
+        _nestedName(row['creator']);
   }
   if (key == 'requested_by') {
     return _nestedName(row['requester']) ??
@@ -1231,10 +1314,28 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
     return row['auditor_status'] ??
         row['approval_status'] ??
         row['review_status'] ??
-        row['audit_status'];
+        row['audit_status'] ??
+        row['payment_status'] ??
+        row['state'];
   }
   if (key == 'created_at') {
-    return row['submitted_at'] ?? row['requested_at'] ?? row['date'];
+    return row['created_at'] ??
+        row['submitted_at'] ??
+        row['requested_at'] ??
+        row['log_date'] ??
+        row['shift_date'] ??
+        row['business_date'] ??
+        row['date'];
+  }
+  if (key == 'log_date') {
+    return row['log_date'] ?? row['date'] ?? row['created_at'];
+  }
+  if (key == 'bill_number') {
+    return row['bill_number'] ??
+        row['invoice_number'] ??
+        row['reference'] ??
+        row['reference_number'] ??
+        row['id'];
   }
   return null;
 }
@@ -1254,7 +1355,10 @@ Map<String, dynamic> _normalizeRow(Map<String, dynamic> row) {
       row['item_sku'];
   if (itemName != null) row.putIfAbsent('item_name', () => itemName);
 
-  final cashierName = _nestedName(row['cashier']) ?? _nestedName(row['user']);
+  final cashierName = row['cashier_name'] ??
+      _nestedName(row['cashier']) ??
+      _nestedName(row['user']) ??
+      _nestedName(row['creator']);
   if (cashierName != null) row.putIfAbsent('cashier_name', () => cashierName);
 
   final requestedBy = _nestedName(row['requester']) ??
@@ -1285,11 +1389,55 @@ Map<String, dynamic> _normalizeRow(Map<String, dynamic> row) {
 
   row.putIfAbsent('role', () => row['staff_role'] ?? row['position']);
   row.putIfAbsent('action', () => row['type'] ?? row['description']);
-  row.putIfAbsent('created_at', () => row['date']);
-  row.putIfAbsent('invoice_number',
-      () => row['bill_number'] ?? row['number'] ?? row['reference']);
   row.putIfAbsent(
-      'total_amount', () => row['amount'] ?? row['total'] ?? row['bill_total']);
+      'created_at',
+      () =>
+          row['submitted_at'] ??
+          row['requested_at'] ??
+          row['log_date'] ??
+          row['shift_date'] ??
+          row['business_date'] ??
+          row['date']);
+  row.putIfAbsent('log_date',
+      () => row['date'] ?? row['shift_date'] ?? row['business_date']);
+  row.putIfAbsent(
+      'reference',
+      () =>
+          row['reference_number'] ??
+          row['payment_reference'] ??
+          row['transaction_id'] ??
+          row['invoice_number'] ??
+          row['bill_number'] ??
+          row['order_number'] ??
+          row['id']);
+  row.putIfAbsent('bill_number',
+      () => row['invoice_number'] ?? row['reference'] ?? row['id']);
+  row.putIfAbsent(
+      'invoice_number',
+      () =>
+          row['bill_number'] ??
+          row['number'] ??
+          row['reference'] ??
+          row['reference_number']);
+  row.putIfAbsent(
+      'total_amount',
+      () =>
+          row['amount'] ??
+          row['total'] ??
+          row['bill_total'] ??
+          row['total_payments'] ??
+          row['closing_balance']);
+  row.putIfAbsent(
+      'amount', () => row['total_amount'] ?? row['total'] ?? row['balance']);
+  row.putIfAbsent(
+      'status',
+      () =>
+          row['auditor_status'] ??
+          row['approval_status'] ??
+          row['review_status'] ??
+          row['audit_status'] ??
+          row['payment_status'] ??
+          row['state']);
   row.putIfAbsent('total_sales', () => _derivedValue(row, 'total_sales'));
   row.putIfAbsent('total_cash', () => _derivedValue(row, 'total_cash'));
   row.putIfAbsent('request_number',
@@ -2214,6 +2362,7 @@ _AuditorRowAction _creditBillStatusAction(
       requiresNotes: false,
       body: (_, notes) => {
         'role': 'auditor',
+        'status': status,
         if (notes.isNotEmpty) 'notes': notes,
       },
       visible: _isPending,
@@ -5312,7 +5461,7 @@ class AuditorCreditBillsSection extends StatelessWidget {
         title: 'Credit Bills',
         subtitle: 'Credit bills, paid bills, loans and staff advances',
         icon: PhosphorIcons.creditCard(),
-        endpoint: '/credit/pending/auditor',
+        endpoint: '/auditor/credit-bills',
         listKeys: const [
           'employee_bills',
           'guest_bills',

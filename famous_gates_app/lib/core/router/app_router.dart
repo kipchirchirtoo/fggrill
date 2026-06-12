@@ -631,9 +631,15 @@ List<GoRoute> get _receptionSectionRoutes => [
       ),
       GoRoute(
         path: '/reception/cashier',
-        builder: (context, state) => const ReceptionDashboard(
-          initialSection: ReceptionSection.cashier,
-        ),
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return ReceptionDashboard(
+            initialSection: ReceptionSection.cashier,
+            cashierBillRef: q['billId'] ?? q['billRef'] ?? q['invoice'],
+            cashierAmount: q['amount'],
+            cashierMethod: q['method'],
+          );
+        },
       ),
       GoRoute(
         path: '/reception/logbook',
@@ -1313,7 +1319,14 @@ const _branchManagerSectionRouteSpecs =
   MapEntry('/branch-manager/maintenance', BranchManagerSection.maintenance),
   MapEntry('/branch-manager/wastage', BranchManagerSection.wastage),
   MapEntry('/branch-manager/reports', BranchManagerSection.reports),
-  MapEntry('/branch-manager/communications', BranchManagerSection.reports),
+  MapEntry('/branch-manager/kitchen/stock', BranchManagerSection.kitchenStock),
+  MapEntry('/branch-manager/kitchen/requisitions',
+      BranchManagerSection.kitchenRequisitions),
+  MapEntry(
+      '/branch-manager/kitchen/recipes', BranchManagerSection.kitchenRecipes),
+  MapEntry('/branch-manager/kitchen/usage', BranchManagerSection.kitchenUsage),
+  MapEntry(
+      '/branch-manager/kitchen/wastage', BranchManagerSection.kitchenWastage),
 ];
 
 const _branchAccountantSectionRouteSpecs =

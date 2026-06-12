@@ -360,7 +360,15 @@ class StoreRepository {
   /// Submit a new Goods Receipt Note.
   /// [data] must contain: po_id, supplier_id, items[].
   Future<Map<String, dynamic>> submitGrn(Map<String, dynamic> data) async {
-    final response = await _dio.post('/procurement/grn', data: data);
+    final response = await _dio.post(
+      '/procurement/grn',
+      data: data,
+      options: Options(
+        sendTimeout: const Duration(minutes: 2),
+        receiveTimeout: const Duration(minutes: 3),
+        extra: const {'disable_retry': true},
+      ),
+    );
     return _unwrap(response.data);
   }
 

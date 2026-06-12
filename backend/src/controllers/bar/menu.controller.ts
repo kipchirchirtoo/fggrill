@@ -6,27 +6,13 @@ import { logger } from '../../utils/logger';
 // DRINK CATEGORIES
 // ==========================================
 
-const BAR_KEYWORDS = [
-  'beverage', 'drink', 'beer', 'wine', 'cocktail', 'spirit',
-  'juice', 'tea', 'coffee', 'water', 'soda', 'shisha',
-  'liquor', 'whiskey', 'vodka', 'gin', 'rum', 'brandy', 'tequila'
-];
-
 export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // Return all active categories — the is_bar column is optional/may not exist,
-    // so we avoid filtering on it to prevent 400 errors in the admin view.
-    let query = supabase
-      .from('restaurant_menu_categories')
+    const { data: categories, error } = await supabase
+      .from('bar_drink_categories')
       .select('*')
-      .eq('is_active', true);
-
-    const branchId = req.query.branch_id || req.user?.branch_id;
-    if (branchId) {
-      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
-    }
-
-    const { data: categories, error } = await query.order('sort_order', { ascending: true });
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
 
     if (error) throw error;
 
@@ -38,16 +24,15 @@ export const getCategories = async (req: Request, res: Response, next: NextFunct
 
 export const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { name, sort_order, description, is_bar } = req.body;
+    const { name, sort_order, description } = req.body;
 
     const { data, error } = await supabase
-      .from('restaurant_menu_categories')
+      .from('bar_drink_categories')
       .insert([{
         name,
         sort_order,
         description,
-        is_active: true,
-        is_bar: is_bar ?? true // Default to bar if created via bar controller
+        is_active: true
       }])
       .select()
       .single();
@@ -69,13 +54,13 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
     const { category_id, search } = req.query;
     const branchId = req.query.branch_id || req.user?.branch_id;
 
-    // Build the items query — show ALL items for admin (no is_available filter)
-    // so admins can manage both active and inactive drinks.
+    // Keep the bar menu isolated from restaurant food items. Restaurant menu
+    // lives in restaurant_menu_items; bar menu is managed in bar_drinks.
     let query = supabase
-      .from('restaurant_menu_items')
+      .from('bar_drinks')
       .select(`
         *,
-        category:restaurant_menu_categories(id, name)
+        category:bar_drink_categories(id, name)
       `);
 
     if (branchId) {
@@ -111,8 +96,11 @@ export const getDrink = async (req: Request, res: Response, next: NextFunction):
   try {
     const { id } = req.params;
     const { data, error } = await supabase
-      .from('restaurant_menu_items')
-      .select('*')
+      .from('bar_drinks')
+      .select(`
+        *,
+        category:bar_drink_categories(id, name)
+      `)
       .eq('id', id)
       .single();
 
@@ -131,19 +119,17 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
       unit, branch_id, image_url
     } = req.body;
 
-    // We no longer require branch_id for menu items as they are global in the new schema
-    // Preparation time is required in new schema, default to 5 mins for drinks
-
     const { data, error } = await supabase
-      .from('restaurant_menu_items')
+      .from('bar_drinks')
       .insert([{
         category_id,
         name,
         description,
         price,
+        cost_price,
+        unit: unit || 'bottle',
         branch_id: branch_id || null,
         image_url,
-        preparation_time: 5, // Default for drinks
         is_available: true
       }])
       .select()
@@ -165,12 +151,34 @@ export const updateDrink = async (req: Request, res: Response, next: NextFunctio
     const { id } = req.params;
     const updates = req.body;
 
-    // Filter out fields that might not exist in target table
-    const { cost_price, unit, ...validUpdates } = updates;
+    const {
+      category_id,
+      name,
+      description,
+      price,
+      cost_price,
+      unit,
+      branch_id,
+      image_url,
+      is_available,
+    } = updates;
+    const validUpdates: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (category_id !== undefined) validUpdates.category_id = category_id || null;
+    if (name !== undefined) validUpdates.name = name;
+    if (description !== undefined) validUpdates.description = description;
+    if (price !== undefined) validUpdates.price = price;
+    if (cost_price !== undefined) validUpdates.cost_price = cost_price;
+    if (unit !== undefined) validUpdates.unit = unit;
+    if (branch_id !== undefined) validUpdates.branch_id = branch_id || null;
+    if (image_url !== undefined) validUpdates.image_url = image_url;
+    if (is_available !== undefined) validUpdates.is_available = is_available;
 
     const { data, error } = await supabase
-      .from('restaurant_menu_items')
-      .update({ ...validUpdates, updated_at: new Date().toISOString() })
+      .from('bar_drinks')
+      .update(validUpdates)
       .eq('id', id)
       .select()
       .single();
@@ -189,7 +197,7 @@ export const toggleDrinkAvailability = async (req: Request, res: Response, next:
 
     // Get current status
     const { data: current } = await supabase
-      .from('restaurant_menu_items')
+      .from('bar_drinks')
       .select('is_available')
       .eq('id', id)
       .single();
@@ -197,7 +205,7 @@ export const toggleDrinkAvailability = async (req: Request, res: Response, next:
     if (!current) throw new Error('Drink not found');
 
     const { data, error } = await supabase
-      .from('restaurant_menu_items')
+      .from('bar_drinks')
       .update({ is_available: !current.is_available })
       .eq('id', id)
       .select()
@@ -214,7 +222,7 @@ export const toggleDrinkAvailability = async (req: Request, res: Response, next:
 export const deleteDrink = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { error } = await supabase.from('restaurant_menu_items').delete().eq('id', id);
+    const { error } = await supabase.from('bar_drinks').delete().eq('id', id);
     if (error) throw error;
     res.status(200).json({ success: true, message: 'Drink deleted' });
   } catch (error) {
@@ -249,7 +257,7 @@ export const uploadDrinkImage = async (req: Request, res: Response, next: NextFu
       .getPublicUrl(path);
 
     const { data: drink, error: updateError } = await supabase
-      .from('restaurant_menu_items')
+      .from('bar_drinks')
       .update({ image_url: publicUrl })
       .eq('id', id)
       .select()

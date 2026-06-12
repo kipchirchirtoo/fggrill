@@ -1,18 +1,44 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
 
+const cateringBranchId = (req: Request) => req.headers['x-branch-id'] || req.query.branch_id;
+
+const decorateCateringBookings = async (rows: any[] = []) => {
+  const creatorIds = [...new Set(
+    rows
+      .map((row) => row.created_by)
+      .filter((id) => id !== null && id !== undefined && `${id}`.trim() !== '')
+      .map((id) => `${id}`)
+  )];
+
+  if (!creatorIds.length) return rows;
+
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, email')
+    .in('id', creatorIds);
+
+  if (error) {
+    console.warn('Unable to hydrate catering booking creators:', error.message);
+    return rows;
+  }
+
+  const usersById = new Map((users || []).map((user: any) => [`${user.id}`, user]));
+  return rows.map((row) => ({
+    ...row,
+    created_by_user: usersById.get(`${row.created_by}`) || null
+  }));
+};
+
 // Get all catering bookings
 export const getCateringBookings = async (req: Request, res: Response) => {
   try {
-    const branchId = req.headers['x-branch-id'];
+    const branchId = cateringBranchId(req);
     const { startDate, endDate, status, search } = req.query;
 
     let query = supabase
       .from('catering_bookings')
-      .select(`
-        *,
-        created_by_user:users!catering_bookings_created_by_fkey(first_name, last_name)
-      `)
+      .select('*')
       .order('event_date', { ascending: false });
 
     if (branchId) {
@@ -38,10 +64,11 @@ export const getCateringBookings = async (req: Request, res: Response) => {
     const { data, error } = await query;
 
     if (error) throw error;
+    const decorated = await decorateCateringBookings(data || []);
 
     res.status(200).json({
       success: true,
-      data
+      data: decorated
     });
   } catch (error: any) {
     console.error('Error fetching catering bookings:', error);
@@ -59,10 +86,7 @@ export const getCateringBookingById = async (req: Request, res: Response) => {
 
     const { data, error } = await supabase
       .from('catering_bookings')
-      .select(`
-        *,
-        created_by_user:users!catering_bookings_created_by_fkey(first_name, last_name)
-      `)
+      .select('*')
       .eq('id', id)
       .single();
 
@@ -75,9 +99,11 @@ export const getCateringBookingById = async (req: Request, res: Response) => {
       });
     }
 
+    const [decorated] = await decorateCateringBookings([data]);
+
     res.status(200).json({
       success: true,
-      data
+      data: decorated || data
     });
   } catch (error: any) {
     console.error('Error fetching catering booking:', error);
@@ -91,7 +117,7 @@ export const getCateringBookingById = async (req: Request, res: Response) => {
 // Create catering booking
 export const createCateringBooking = async (req: Request, res: Response) => {
   try {
-    const branchId = req.headers['x-branch-id'];
+    const branchId = cateringBranchId(req);
     const userId = (req as any).user?.id;
     
     const bookingData = {
@@ -273,7 +299,7 @@ export const recordCateringPayment = async (req: Request, res: Response) => {
 // Get catering bookings calendar data
 export const getCateringCalendar = async (req: Request, res: Response) => {
   try {
-    const branchId = req.headers['x-branch-id'];
+    const branchId = cateringBranchId(req);
     const { month, year } = req.query;
 
     let query = supabase

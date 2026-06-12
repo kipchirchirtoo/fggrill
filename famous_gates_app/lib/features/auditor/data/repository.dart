@@ -144,6 +144,13 @@ class AuditorRepository {
         queryParameters: queryParameters,
       );
     }
+    if (endpoint == '/auditor/credit-bills' ||
+        endpoint == '/credit/pending/auditor') {
+      return _getCreditBillsForAudit(
+        branchId: branchId,
+        queryParameters: queryParameters,
+      );
+    }
     try {
       final response = await _dio.get(endpoint,
           queryParameters: {
@@ -247,16 +254,143 @@ class AuditorRepository {
     };
   }
 
+  Future<Map<String, dynamic>> _getCreditBillsForAudit({
+    required String branchId,
+    Map<String, dynamic> queryParameters = const {},
+  }) async {
+    final params = <String, dynamic>{
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      ...queryParameters,
+    };
+
+    final responses = await Future.wait<dynamic>([
+      _getOptional('/cashier/credit-bills', params, branchId),
+      _getOptional('/payroll/credit-bills', params, branchId),
+    ]);
+
+    final guestBills = _listFromResponse(responses[0]).map((row) {
+      return {
+        ...row,
+        '_source': 'guest_bills',
+        'type': row['bill_type'] ?? 'customer_credit_bill',
+        'customer_name':
+            row['customer_name'] ?? row['guest_name'] ?? row['staff_name'],
+        'employee_name': row['staff_name'] ?? row['employee_name'],
+        'bill_number': row['bill_number'] ?? row['reference'] ?? row['id'],
+        'amount': row['amount'] ?? row['total_amount'] ?? row['balance'],
+        'total_amount': row['total_amount'] ?? row['amount'] ?? row['balance'],
+        'status': row['auditor_status'] ??
+            row['approval_status'] ??
+            row['status'] ??
+            row['payment_status'],
+      };
+    });
+
+    final employeeBills = _listFromResponse(responses[1]).map((row) {
+      final staff = row['staff'];
+      final staffName = staff is Map
+          ? [
+              staff['first_name'],
+              staff['last_name'],
+            ]
+              .where((part) => part != null && '$part'.trim().isNotEmpty)
+              .join(' ')
+          : null;
+      return {
+        ...row,
+        '_source': 'employee_bills',
+        'type': row['bill_type'] ?? 'employee_credit_bill',
+        'employee_name': row['employee_name'] ?? row['staff_name'] ?? staffName,
+        'customer_name': row['customer_name'],
+        'bill_number': row['bill_number'] ?? row['reference'] ?? row['id'],
+        'amount': row['amount'] ?? row['total_amount'] ?? row['balance'],
+        'total_amount': row['total_amount'] ?? row['amount'] ?? row['balance'],
+        'status': row['auditor_status'] ??
+            row['approval_status'] ??
+            row['status'] ??
+            row['payment_status'],
+      };
+    });
+
+    final rows = [...guestBills, ...employeeBills].toList();
+    final pending = rows.where((row) {
+      final status =
+          '${row['status'] ?? row['auditor_status'] ?? ''}'.toLowerCase();
+      return status.isEmpty ||
+          status == 'pending' ||
+          status == 'submitted' ||
+          status == 'confirmed' ||
+          status == 'accountant_verified';
+    }).length;
+    final totalValue = rows.fold<num>(0, (sum, row) {
+      final value = row['total_amount'] ?? row['amount'] ?? row['balance'] ?? 0;
+      return sum + (value is num ? value : num.tryParse('$value') ?? 0);
+    });
+
+    return {
+      'success': true,
+      'count': rows.length,
+      'data': {
+        'summary': {
+          'records': rows.length,
+          'pending_review': pending,
+          'total_value': totalValue,
+        },
+        'employee_bills': employeeBills.toList(),
+        'guest_bills': guestBills.toList(),
+        'credit_bills': rows,
+      },
+    };
+  }
+
+  Future<dynamic> _getOptional(
+    String endpoint,
+    Map<String, dynamic> params,
+    String branchId,
+  ) async {
+    try {
+      final response = await _dio.get(endpoint,
+          queryParameters: params, options: _branchOptions(branchId));
+      return response.data;
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      if (status == 400 || status == 403 || status == 404 || status == 500) {
+        return {'success': true, 'data': <Map<String, dynamic>>[]};
+      }
+      rethrow;
+    }
+  }
+
   List<Map<String, dynamic>> _listFromResponse(dynamic responseData) {
     dynamic value = responseData;
     if (value is Map && value['success'] == true && value.containsKey('data')) {
       value = value['data'];
     }
     if (value is Map) {
-      for (final key in ['records', 'items', 'rows', 'data', 'invoices']) {
+      for (final key in [
+        'records',
+        'items',
+        'rows',
+        'data',
+        'invoices',
+        'bills',
+        'credit_bills',
+        'employee_bills',
+        'guest_bills',
+        'transactions',
+        'payments',
+        'logbooks',
+      ]) {
         final list = value[key];
         if (list is List) {
           return list.whereType<Map>().map(Map<String, dynamic>.from).toList();
+        }
+      }
+      for (final nested in ['payload', 'result', 'summary']) {
+        final child = value[nested];
+        if (child is Map) {
+          final rows = _listFromResponse(child);
+          if (rows.isNotEmpty) return rows;
         }
       }
     }
@@ -277,6 +411,41 @@ class AuditorRepository {
     Map<String, dynamic> data = const {},
     Map<String, dynamic> queryParameters = const {},
   }) async {
+    final creditMatch = RegExp(r'^/credit/(employee|guest)/([^/]+)/confirm$')
+        .firstMatch(endpoint);
+    if (creditMatch != null) {
+      final type = creditMatch.group(1)!;
+      final id = creditMatch.group(2)!;
+      final requestedStatus = '${data['status'] ?? 'approved'}'.toLowerCase();
+      final notes = data['notes'];
+      if (type == 'guest') {
+        if (requestedStatus != 'approved') {
+          await _dio.post('/auditor/watchlist', data: {
+            'entity_type': 'credit_bill',
+            'entity_id': id,
+            'reason': notes ?? 'Credit bill marked for auditor review',
+          });
+          return {'success': true};
+        }
+        final response = await _dio.patch('/cashier/credit-bills/$id/confirm',
+            data: {
+              'role': 'auditor',
+              if (notes != null) 'notes': notes,
+            },
+            queryParameters: queryParameters);
+        return response.data;
+      }
+      final response = await _dio.patch('/payroll/credit-bills/$id',
+          data: {
+            'status': requestedStatus == 'approved'
+                ? 'auditor_confirmed'
+                : 'cancelled',
+            if (notes != null) 'notes': notes,
+          },
+          queryParameters: queryParameters);
+      return response.data;
+    }
+
     final response = switch (method.toUpperCase()) {
       'GET' => await _dio.get(endpoint,
           queryParameters: queryParameters,

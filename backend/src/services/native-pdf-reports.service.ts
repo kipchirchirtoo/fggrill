@@ -33,6 +33,54 @@ function fmtDate(d: string | null | undefined): string {
   return new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function cleanText(value: any, fallback = '—'): string {
+  const text = value == null ? '' : String(value).trim();
+  return text && text !== 'null' && text !== 'undefined' ? text : fallback;
+}
+
+function displayPerson(user: any): string {
+  const name = cleanText(user?.name, '');
+  const email = cleanText(user?.email, '');
+  if (name && email) return `${name} (${email})`;
+  if (name) return name;
+  if (email) return email;
+  return '—';
+}
+
+function drawInfoPanel(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  title: string,
+  rows: { label: string; value: string }[]
+) {
+  const rowHeight = 22;
+  const height = 32 + rows.length * rowHeight;
+  doc.roundedRect(x, y, width, height, 6).fillAndStroke('#fbfbfb', BORDER);
+  doc.fillColor(ACCENT).font('Helvetica-Bold').fontSize(8.5)
+    .text(title.toUpperCase(), x + 12, y + 11, { width: width - 24 });
+
+  rows.forEach((row, index) => {
+    const rowY = y + 32 + index * rowHeight;
+    if (index > 0) {
+      doc.strokeColor('#eeeeee').lineWidth(0.3).moveTo(x + 12, rowY - 4).lineTo(x + width - 12, rowY - 4).stroke();
+    }
+    doc.fillColor(SECONDARY).font('Helvetica-Bold').fontSize(7.2)
+      .text(row.label, x + 12, rowY, { width: 78, height: 15, ellipsis: true });
+    doc.fillColor(PRIMARY).font('Helvetica').fontSize(8.2)
+      .text(cleanText(row.value), x + 96, rowY - 1, {
+        width: width - 108,
+        height: 18,
+        lineBreak: false,
+        ellipsis: true,
+      });
+  });
+
+  doc.fillColor(PRIMARY);
+  return y + height;
+}
+
 // ── Shared header (logo + company info + divider) ─────────────────────────────
 function drawBrandedHeader(doc: PDFKit.PDFDocument, title: string, subtitle?: string) {
   const logoPath = getLogoPath();
@@ -1285,38 +1333,36 @@ export async function generateGRNPDF(grn: any, items: any[]): Promise<Buffer> {
     let y = drawBrandedHeader(doc, 'GOODS RECEIVED NOTE', subtitle);
 
     const leftX = 40;
-    const rightX = 330;
+    const rightX = 318;
     const blockTop = y;
+    const supplierContact = [supplier.phone, supplier.email]
+      .map((value: any) => cleanText(value, ''))
+      .filter(Boolean)
+      .join(' | ');
 
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(SECONDARY).text('SUPPLIER', leftX, blockTop);
-    doc.font('Helvetica').fontSize(9).fillColor(PRIMARY)
-      .text(supplier.name || grn.supplier_name || '—', leftX, blockTop + 16, { width: 240 })
-      .text(supplier.phone || supplier.email || '—', leftX, blockTop + 30, { width: 240 });
+    const supplierBottom = drawInfoPanel(doc, leftX, blockTop, 258, 'Supplier', [
+      { label: 'Name', value: supplier.name || grn.supplier_name },
+      { label: 'Contact', value: supplierContact || supplier.phone || supplier.email },
+      { label: 'Supplier Code', value: supplier.supplier_code },
+    ]);
 
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(SECONDARY).text('RECEIVING DETAILS', rightX, blockTop);
-    const details = [
-      ['PO Number', po.po_number || grn.po_number || '—'],
-      ['Invoice Number', grn.invoice_number || '—'],
-      ['Delivery Note', grn.delivery_note_number || '—'],
-      ['Received By', receivedBy.name || receivedBy.email || grn.received_by_id || '—'],
-    ];
+    const detailsBottom = drawInfoPanel(doc, rightX, blockTop, 237, 'Receiving Details', [
+      { label: 'PO Number', value: po.po_number || grn.po_number },
+      { label: 'Invoice No.', value: grn.invoice_number },
+      { label: 'Delivery Note', value: grn.delivery_note_number },
+      { label: 'Received By', value: displayPerson(receivedBy) },
+    ]);
 
-    details.forEach(([label, value], index) => {
-      const rowY = blockTop + 16 + index * 14;
-      doc.font('Helvetica-Bold').fontSize(8).fillColor(SECONDARY).text(label, rightX, rowY, { width: 95 });
-      doc.font('Helvetica').fontSize(8).fillColor(PRIMARY).text(String(value), rightX + 100, rowY, { width: 125, ellipsis: true });
-    });
-
-    y = blockTop + 88;
+    y = Math.max(supplierBottom, detailsBottom) + 20;
 
     const cols = [
-      { label: '#', x: 42, width: 20 },
-      { label: 'Item Description', x: 66, width: 160 },
-      { label: 'SKU', x: 230, width: 105 },
-      { label: 'Ordered', x: 339, width: 45, align: 'right' },
-      { label: 'Received', x: 388, width: 50, align: 'right' },
-      { label: 'Unit Price', x: 442, width: 60, align: 'right' },
-      { label: 'Total', x: 506, width: 68, align: 'right' },
+      { label: '#', x: 44, width: 18 },
+      { label: 'Item Description', x: 70, width: 168 },
+      { label: 'SKU', x: 242, width: 112 },
+      { label: 'Ordered', x: 358, width: 46, align: 'right' },
+      { label: 'Received', x: 408, width: 50, align: 'right' },
+      { label: 'Unit Price', x: 462, width: 55, align: 'right' },
+      { label: 'Total', x: 521, width: 54, align: 'right' },
     ];
 
     y = drawTableHeader(doc, y, cols);
@@ -1338,13 +1384,13 @@ export async function generateGRNPDF(grn: any, items: any[]): Promise<Buffer> {
 
       if (index % 2 === 0) doc.rect(40, y, doc.page.width - 80, rowHeight).fill(ROW_BG);
       doc.fillColor(PRIMARY).fontSize(7.8).font('Helvetica');
-      doc.text(String(index + 1), 42, y + 5, { width: 20 });
-      doc.text(itemName, 66, y + 5, { width: 160, ellipsis: true });
-      doc.text(row.item_id || detail.sku || '—', 230, y + 5, { width: 105, ellipsis: true });
-      doc.text(String(row.quantity_ordered || 0), 339, y + 5, { width: 45, align: 'right' });
-      doc.text(String(qtyReceived), 388, y + 5, { width: 50, align: 'right' });
-      doc.text(fmt(unitPrice), 442, y + 5, { width: 60, align: 'right' });
-      doc.text(fmt(lineTotal), 506, y + 5, { width: 68, align: 'right' });
+      doc.text(String(index + 1), 44, y + 5, { width: 18 });
+      doc.text(itemName, 70, y + 5, { width: 168, ellipsis: true });
+      doc.text(row.item_id || detail.sku || '—', 242, y + 5, { width: 112, ellipsis: true });
+      doc.text(String(row.quantity_ordered || 0), 358, y + 5, { width: 46, align: 'right' });
+      doc.text(String(qtyReceived), 408, y + 5, { width: 50, align: 'right' });
+      doc.text(fmt(unitPrice), 462, y + 5, { width: 55, align: 'right' });
+      doc.text(fmt(lineTotal), 521, y + 5, { width: 54, align: 'right' });
       doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, y + rowHeight).lineTo(doc.page.width - 40, y + rowHeight).stroke();
       y += rowHeight;
     });

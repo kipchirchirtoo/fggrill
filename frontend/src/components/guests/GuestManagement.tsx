@@ -1,21 +1,52 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Users, Search, Filter, Plus, Edit, Eye, Trash2, Phone, Mail,
-  MapPin, Calendar, Star, Crown, Clock, CreditCard, Bed, History,
-  FileText, MessageSquare, Heart, Award, ChevronRight, X, Check,
-  Loader2, Download, Upload, RefreshCw, UserPlus, Settings
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { guestAPI, bookingsAPI } from '@/lib/api';
-import { IOSButton } from '@/components/ui/ios-button';
-import { IOSCard } from '@/components/ui/ios-card';
-import { IOSBadge } from '@/components/ui/ios-badge';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { formatDate } from '@/lib/date-utils';
+  Users,
+  Search,
+  Filter,
+  Plus,
+  Edit,
+  Eye,
+  Trash2,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  Star,
+  Crown,
+  Clock,
+  CreditCard,
+  Bed,
+  History,
+  FileText,
+  MessageSquare,
+  Heart,
+  Award,
+  ChevronRight,
+  X,
+  Check,
+  Loader2,
+  Download,
+  Upload,
+  RefreshCw,
+  UserPlus,
+  Settings,
+} from "lucide-react";
+import { toast } from "sonner";
+import { guestAPI, bookingsAPI } from "@/lib/api";
+import { IOSButton } from "@/components/ui/ios-button";
+import { IOSCard } from "@/components/ui/ios-card";
+import { IOSBadge } from "@/components/ui/ios-badge";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { formatDate } from "@/lib/date-utils";
 
 interface Guest {
   id: string;
@@ -26,12 +57,13 @@ interface Guest {
   nationality?: string;
   id_type?: string;
   id_number?: string;
+  car_number_plate?: string;
   address?: string;
   city?: string;
   country?: string;
   date_of_birth?: string;
   is_vip: boolean;
-  loyalty_tier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+  loyalty_tier?: "bronze" | "silver" | "gold" | "platinum";
   loyalty_points?: number;
   total_stays?: number;
   total_spent?: number;
@@ -64,20 +96,34 @@ interface GuestManagementProps {
 }
 
 const LOYALTY_TIERS = {
-  bronze: { color: 'bg-amber-100 text-amber-700', icon: Award, minPoints: 0 },
-  silver: { color: 'bg-gray-100 text-gray-700', icon: Award, minPoints: 500 },
-  gold: { color: 'bg-yellow-100 text-yellow-700', icon: Crown, minPoints: 2000 },
-  platinum: { color: 'bg-purple-100 text-purple-700', icon: Crown, minPoints: 5000 }
+  bronze: { color: "bg-amber-100 text-amber-700", icon: Award, minPoints: 0 },
+  silver: { color: "bg-gray-100 text-gray-700", icon: Award, minPoints: 500 },
+  gold: {
+    color: "bg-yellow-100 text-yellow-700",
+    icon: Crown,
+    minPoints: 2000,
+  },
+  platinum: {
+    color: "bg-purple-100 text-purple-700",
+    icon: Crown,
+    minPoints: 5000,
+  },
 };
 
-export function GuestManagement({ branchId, onGuestSelect, compact = false }: GuestManagementProps) {
+export function GuestManagement({
+  branchId,
+  onGuestSelect,
+  compact = false,
+}: GuestManagementProps) {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [filterVIP, setFilterVIP] = useState<boolean | null>(null);
-  const [filterLoyalty, setFilterLoyalty] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'name' | 'recent' | 'stays' | 'spent'>('recent');
-  
+  const [filterLoyalty, setFilterLoyalty] = useState<string>("");
+  const [sortBy, setSortBy] = useState<"name" | "recent" | "stays" | "spent">(
+    "recent",
+  );
+
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -95,11 +141,13 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
     setIsLoading(true);
     try {
       const response = await guestAPI.getGuests();
-      const guestsData = response.data || response.guests || response || [];
+      const responseBody = response as any;
+      const guestsData =
+        responseBody.data || responseBody.guests || responseBody || [];
       setGuests(Array.isArray(guestsData) ? guestsData : []);
     } catch (error) {
-      console.error('Error fetching guests:', error);
-      toast.error('Failed to load guests');
+      console.error("Error fetching guests:", error);
+      toast.error("Failed to load guests");
     } finally {
       setIsLoading(false);
     }
@@ -117,14 +165,14 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
           id: b.id,
           check_in: b.check_in_date || b.check_in,
           check_out: b.check_out_date || b.check_out,
-          room_number: b.room?.room_number || b.room_number || '-',
-          room_type: b.room_type?.name || b.room?.type || 'Standard',
+          room_number: b.room?.room_number || b.room_number || "-",
+          room_type: b.room_type?.name || b.room?.type || "Standard",
           total_amount: b.total_amount || 0,
-          status: b.status
+          status: b.status,
         }));
       setStayHistory(guestBookings);
     } catch (error) {
-      console.error('Error fetching history:', error);
+      console.error("Error fetching history:", error);
     } finally {
       setIsLoadingHistory(false);
     }
@@ -144,50 +192,65 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
 
   const handleNewGuest = () => {
     setFormData({
-      first_name: '',
-      last_name: '',
-      email: '',
-      phone: '',
-      is_vip: false
+      first_name: "",
+      last_name: "",
+      email: "",
+      phone: "",
+      id_type: "national_id",
+      id_number: "",
+      car_number_plate: "",
+      is_vip: false,
     });
     setIsNewModalOpen(true);
   };
 
   const handleSaveGuest = async () => {
     try {
+      if (
+        !formData.first_name ||
+        !formData.last_name ||
+        !formData.phone ||
+        !formData.id_number?.trim()
+      ) {
+        toast.error("First name, last name, phone and ID number are required");
+        return;
+      }
+
       if (selectedGuest) {
         await guestAPI.updateGuest(selectedGuest.id, formData);
-        toast.success('Guest updated successfully');
+        toast.success("Guest updated successfully");
       } else {
         await guestAPI.createGuest(formData);
-        toast.success('Guest created successfully');
+        toast.success("Guest created successfully");
       }
       setIsEditModalOpen(false);
       setIsNewModalOpen(false);
       fetchGuests();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save guest');
+      toast.error(error.message || "Failed to save guest");
     }
   };
 
   const handleDeleteGuest = async (guestId: string) => {
-    if (!confirm('Are you sure you want to delete this guest?')) return;
+    if (!confirm("Are you sure you want to delete this guest?")) return;
     try {
       await guestAPI.deleteGuest(guestId);
-      toast.success('Guest deleted');
+      toast.success("Guest deleted");
       fetchGuests();
     } catch (error) {
-      toast.error('Failed to delete guest');
+      toast.error("Failed to delete guest");
     }
   };
 
   const handleToggleVIP = async (guest: Guest) => {
     try {
       await guestAPI.updateGuest(guest.id, { is_vip: !guest.is_vip });
-      toast.success(guest.is_vip ? 'VIP status removed' : 'Guest marked as VIP');
+      toast.success(
+        guest.is_vip ? "VIP status removed" : "Guest marked as VIP",
+      );
       fetchGuests();
     } catch (error) {
-      toast.error('Failed to update VIP status');
+      toast.error("Failed to update VIP status");
     }
   };
 
@@ -198,36 +261,45 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
     // Search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      result = result.filter(g =>
-        g.first_name?.toLowerCase().includes(term) ||
-        g.last_name?.toLowerCase().includes(term) ||
-        g.email?.toLowerCase().includes(term) ||
-        g.phone?.includes(term)
+      result = result.filter(
+        (g) =>
+          g.first_name?.toLowerCase().includes(term) ||
+          g.last_name?.toLowerCase().includes(term) ||
+          g.email?.toLowerCase().includes(term) ||
+          g.phone?.includes(term),
       );
     }
 
     // VIP filter
     if (filterVIP !== null) {
-      result = result.filter(g => g.is_vip === filterVIP);
+      result = result.filter((g) => g.is_vip === filterVIP);
     }
 
     // Loyalty filter
     if (filterLoyalty) {
-      result = result.filter(g => g.loyalty_tier === filterLoyalty);
+      result = result.filter((g) => g.loyalty_tier === filterLoyalty);
     }
 
     // Sort
     switch (sortBy) {
-      case 'name':
-        result.sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
+      case "name":
+        result.sort((a, b) =>
+          `${a.first_name} ${a.last_name}`.localeCompare(
+            `${b.first_name} ${b.last_name}`,
+          ),
+        );
         break;
-      case 'recent':
-        result.sort((a, b) => new Date(b.last_stay || b.created_at).getTime() - new Date(a.last_stay || a.created_at).getTime());
+      case "recent":
+        result.sort(
+          (a, b) =>
+            new Date(b.last_stay || b.created_at).getTime() -
+            new Date(a.last_stay || a.created_at).getTime(),
+        );
         break;
-      case 'stays':
+      case "stays":
         result.sort((a, b) => (b.total_stays || 0) - (a.total_stays || 0));
         break;
-      case 'spent':
+      case "spent":
         result.sort((a, b) => (b.total_spent || 0) - (a.total_spent || 0));
         break;
     }
@@ -254,13 +326,20 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Guest Management</h2>
-          <p className="text-sm text-gray-500">{filteredGuests.length} guests found</p>
+          <p className="text-sm text-gray-500">
+            {filteredGuests.length} guests found
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <IOSButton variant="outline" onClick={fetchGuests}>
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+            />
           </IOSButton>
-          <IOSButton onClick={handleNewGuest} className="bg-[#3C3C43] hover:bg-[#000000] text-white">
+          <IOSButton
+            onClick={handleNewGuest}
+            className="bg-[#3C3C43] hover:bg-[#000000] text-white"
+          >
             <UserPlus className="h-4 w-4 mr-2" />
             New Guest
           </IOSButton>
@@ -279,8 +358,12 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
           />
         </div>
         <select
-          value={filterVIP === null ? '' : filterVIP ? 'vip' : 'regular'}
-          onChange={(e) => setFilterVIP(e.target.value === '' ? null : e.target.value === 'vip')}
+          value={filterVIP === null ? "" : filterVIP ? "vip" : "regular"}
+          onChange={(e) =>
+            setFilterVIP(
+              e.target.value === "" ? null : e.target.value === "vip",
+            )
+          }
           className="px-3 py-2 border rounded-ios-lg text-sm"
         >
           <option value="">All Guests</option>
@@ -323,13 +406,15 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
             <p className="text-sm mt-1">Try adjusting your search or filters</p>
           </div>
         ) : (
-          filteredGuests.map(guest => (
+          filteredGuests.map((guest) => (
             <motion.div
               key={guest.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
-              onClick={() => onGuestSelect ? onGuestSelect(guest) : handleViewGuest(guest)}
+              onClick={() =>
+                onGuestSelect ? onGuestSelect(guest) : handleViewGuest(guest)
+              }
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -338,7 +423,8 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                       <Crown className="h-6 w-6 text-[#3C3C43]" />
                     ) : (
                       <span className="text-lg font-semibold font-sf-pro-display text-[#3C3C43]">
-                        {guest.first_name?.[0]}{guest.last_name?.[0]}
+                        {guest.first_name?.[0]}
+                        {guest.last_name?.[0]}
                       </span>
                     )}
                   </div>
@@ -370,32 +456,47 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right hidden md:block">
-                    <p className="text-sm font-medium">{guest.total_stays || 0} stays</p>
+                    <p className="text-sm font-medium">
+                      {guest.total_stays || 0} stays
+                    </p>
                     <p className="text-xs text-gray-500">
-                      {guest.last_stay ? `Last: ${formatDate(guest.last_stay)}` : 'New guest'}
+                      {guest.last_stay
+                        ? `Last: ${formatDate(guest.last_stay)}`
+                        : "New guest"}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
                     <IOSButton
                       size="sm"
                       variant="ghost"
-                      onClick={(e) => { e.stopPropagation(); handleViewGuest(guest); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewGuest(guest);
+                      }}
                     >
                       <Eye className="h-4 w-4" />
                     </IOSButton>
                     <IOSButton
                       size="sm"
                       variant="ghost"
-                      onClick={(e) => { e.stopPropagation(); handleEditGuest(guest); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditGuest(guest);
+                      }}
                     >
                       <Edit className="h-4 w-4" />
                     </IOSButton>
                     <IOSButton
                       size="sm"
                       variant="ghost"
-                      onClick={(e) => { e.stopPropagation(); handleToggleVIP(guest); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleVIP(guest);
+                      }}
                     >
-                      <Star className={`h-4 w-4 ${guest.is_vip ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                      <Star
+                        className={`h-4 w-4 ${guest.is_vip ? "fill-yellow-400 text-yellow-400" : ""}`}
+                      />
                     </IOSButton>
                   </div>
                 </div>
@@ -423,7 +524,8 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                     <Crown className="h-8 w-8 text-[#3C3C43]" />
                   ) : (
                     <span className="text-2xl font-bold text-[#3C3C43]">
-                      {selectedGuest.first_name?.[0]}{selectedGuest.last_name?.[0]}
+                      {selectedGuest.first_name?.[0]}
+                      {selectedGuest.last_name?.[0]}
                     </span>
                   )}
                 </div>
@@ -433,14 +535,18 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                       {selectedGuest.first_name} {selectedGuest.last_name}
                     </h2>
                     {selectedGuest.is_vip && (
-                      <IOSBadge className="bg-purple-100 text-purple-700">VIP</IOSBadge>
+                      <IOSBadge className="bg-purple-100 text-purple-700">
+                        VIP
+                      </IOSBadge>
                     )}
                     {getLoyaltyBadge(selectedGuest.loyalty_tier)}
                   </div>
                   <p className="text-gray-600">{selectedGuest.email}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold">{selectedGuest.total_stays || 0}</p>
+                  <p className="text-2xl font-bold">
+                    {selectedGuest.total_stays || 0}
+                  </p>
                   <p className="text-sm text-gray-500">Total Stays</p>
                 </div>
               </div>
@@ -449,30 +555,43 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-gray-50 rounded-ios-lg">
                   <p className="text-xs text-gray-500 mb-1">Phone</p>
-                  <p className="font-medium">{selectedGuest.phone || '-'}</p>
+                  <p className="font-medium">{selectedGuest.phone || "-"}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-ios-lg">
                   <p className="text-xs text-gray-500 mb-1">Nationality</p>
-                  <p className="font-medium">{selectedGuest.nationality || '-'}</p>
+                  <p className="font-medium">
+                    {selectedGuest.nationality || "-"}
+                  </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-ios-lg">
                   <p className="text-xs text-gray-500 mb-1">ID Type</p>
-                  <p className="font-medium">{selectedGuest.id_type || '-'}</p>
+                  <p className="font-medium">{selectedGuest.id_type || "-"}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-ios-lg">
                   <p className="text-xs text-gray-500 mb-1">ID Number</p>
-                  <p className="font-medium">{selectedGuest.id_number || '-'}</p>
+                  <p className="font-medium">
+                    {selectedGuest.id_number || "-"}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-ios-lg">
+                  <p className="text-xs text-gray-500 mb-1">Car Number Plate</p>
+                  <p className="font-medium">
+                    {selectedGuest.car_number_plate || "-"}
+                  </p>
                 </div>
               </div>
 
               {/* Preferences */}
               {selectedGuest.preferences && (
                 <div>
-                  <h3 className="font-semibold font-sf-pro-display mb-2">Preferences</h3>
+                  <h3 className="font-semibold font-sf-pro-display mb-2">
+                    Preferences
+                  </h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedGuest.preferences.room_type && (
                       <IOSBadge className="bg-blue-100 text-blue-700">
-                        <Bed className="h-3 w-3 mr-1" /> {selectedGuest.preferences.room_type}
+                        <Bed className="h-3 w-3 mr-1" />{" "}
+                        {selectedGuest.preferences.room_type}
                       </IOSBadge>
                     )}
                     {selectedGuest.preferences.floor_preference && (
@@ -480,8 +599,13 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                         Floor: {selectedGuest.preferences.floor_preference}
                       </IOSBadge>
                     )}
-                    {selectedGuest.preferences.dietary?.map(d => (
-                      <IOSBadge key={d} className="bg-orange-100 text-orange-700">{d}</IOSBadge>
+                    {selectedGuest.preferences.dietary?.map((d) => (
+                      <IOSBadge
+                        key={d}
+                        className="bg-orange-100 text-orange-700"
+                      >
+                        {d}
+                      </IOSBadge>
                     ))}
                   </div>
                 </div>
@@ -497,24 +621,36 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                     <Loader2 className="h-5 w-5 animate-spin" />
                   </div>
                 ) : stayHistory.length === 0 ? (
-                  <p className="text-gray-500 text-sm py-4">No previous stays</p>
+                  <p className="text-gray-500 text-sm py-4">
+                    No previous stays
+                  </p>
                 ) : (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {stayHistory.map(stay => (
-                      <div key={stay.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-ios-lg">
+                    {stayHistory.map((stay) => (
+                      <div
+                        key={stay.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-ios-lg"
+                      >
                         <div>
                           <p className="font-medium">Room {stay.room_number}</p>
                           <p className="text-xs text-gray-500">
-                            {formatDate(stay.check_in)} - {formatDate(stay.check_out)}
+                            {formatDate(stay.check_in)} -{" "}
+                            {formatDate(stay.check_out)}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium">KES {stay.total_amount?.toLocaleString()}</p>
-                          <IOSBadge className={
-                            stay.status === 'completed' ? 'bg-green-100 text-green-700' :
-                            stay.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                            'bg-blue-100 text-blue-700'
-                          }>
+                          <p className="font-medium">
+                            KES {stay.total_amount?.toLocaleString()}
+                          </p>
+                          <IOSBadge
+                            className={
+                              stay.status === "completed"
+                                ? "bg-green-100 text-green-700"
+                                : stay.status === "cancelled"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-blue-100 text-blue-700"
+                            }
+                          >
                             {stay.status}
                           </IOSBadge>
                         </div>
@@ -526,12 +662,19 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
 
               {/* Actions */}
               <div className="flex gap-3 pt-4 border-t">
-                <IOSButton variant="outline" className="flex-1" onClick={() => setIsViewModalOpen(false)}>
+                <IOSButton
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setIsViewModalOpen(false)}
+                >
                   Close
                 </IOSButton>
-                <IOSButton 
+                <IOSButton
                   className="flex-1 bg-[#3C3C43] hover:bg-[#000000]"
-                  onClick={() => { setIsViewModalOpen(false); handleEditGuest(selectedGuest); }}
+                  onClick={() => {
+                    setIsViewModalOpen(false);
+                    handleEditGuest(selectedGuest);
+                  }}
                 >
                   <Edit className="h-4 w-4 mr-2" /> Edit Profile
                 </IOSButton>
@@ -542,55 +685,81 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
       </Dialog>
 
       {/* Edit/New Guest Modal */}
-      <Dialog open={isEditModalOpen || isNewModalOpen} onOpenChange={(open) => { setIsEditModalOpen(false); setIsNewModalOpen(false); }}>
+      <Dialog
+        open={isEditModalOpen || isNewModalOpen}
+        onOpenChange={(open) => {
+          setIsEditModalOpen(false);
+          setIsNewModalOpen(false);
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {selectedGuest ? 'Edit Guest' : 'New Guest'}
+              {selectedGuest ? "Edit Guest" : "New Guest"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">First Name *</label>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  First Name *
+                </label>
                 <Input
-                  value={formData.first_name || ''}
-                  onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                  value={formData.first_name || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, first_name: e.target.value })
+                  }
                   placeholder="John"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Last Name *</label>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  Last Name *
+                </label>
                 <Input
-                  value={formData.last_name || ''}
-                  onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                  value={formData.last_name || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, last_name: e.target.value })
+                  }
                   placeholder="Doe"
                 />
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Email *</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Email *
+              </label>
               <Input
                 type="email"
-                value={formData.email || ''}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                value={formData.email || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
                 placeholder="john@example.com"
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Phone *</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Phone *
+              </label>
               <Input
-                value={formData.phone || ''}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                value={formData.phone || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
                 placeholder="+254 700 000 000"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">ID Type</label>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  ID Type
+                </label>
                 <select
-                  value={formData.id_type || ''}
-                  onChange={(e) => setFormData({ ...formData, id_type: e.target.value })}
+                  value={formData.id_type || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, id_type: e.target.value })
+                  }
                   className="w-full px-3 py-2 border rounded-ios-lg"
                 >
                   <option value="">Select...</option>
@@ -600,19 +769,42 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">ID Number</label>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  ID Number *
+                </label>
                 <Input
-                  value={formData.id_number || ''}
-                  onChange={(e) => setFormData({ ...formData, id_number: e.target.value })}
+                  value={formData.id_number || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, id_number: e.target.value })
+                  }
                   placeholder="ID Number"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  Car Number Plate
+                </label>
+                <Input
+                  value={formData.car_number_plate || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      car_number_plate: e.target.value.toUpperCase(),
+                    })
+                  }
+                  placeholder="KDA 123A"
                 />
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Nationality</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Nationality
+              </label>
               <Input
-                value={formData.nationality || ''}
-                onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                value={formData.nationality || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, nationality: e.target.value })
+                }
                 placeholder="Kenyan"
               />
             </div>
@@ -621,27 +813,43 @@ export function GuestManagement({ branchId, onGuestSelect, compact = false }: Gu
                 <input
                   type="checkbox"
                   checked={formData.is_vip || false}
-                  onChange={(e) => setFormData({ ...formData, is_vip: e.target.checked })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, is_vip: e.target.checked })
+                  }
                   className="w-4 h-4 rounded"
                 />
                 <span className="text-sm font-medium">VIP Guest</span>
               </label>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Notes</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Notes
+              </label>
               <textarea
-                value={formData.notes || ''}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                value={formData.notes || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
                 placeholder="Special notes about this guest..."
                 className="w-full px-3 py-2 border rounded-ios-lg resize-none"
                 rows={3}
               />
             </div>
             <div className="flex gap-3 pt-4">
-              <IOSButton variant="outline" className="flex-1" onClick={() => { setIsEditModalOpen(false); setIsNewModalOpen(false); }}>
+              <IOSButton
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setIsNewModalOpen(false);
+                }}
+              >
                 Cancel
               </IOSButton>
-              <IOSButton className="flex-1 bg-[#3C3C43] hover:bg-[#000000]" onClick={handleSaveGuest}>
+              <IOSButton
+                className="flex-1 bg-[#3C3C43] hover:bg-[#000000]"
+                onClick={handleSaveGuest}
+              >
                 <Check className="h-4 w-4 mr-2" /> Save Guest
               </IOSButton>
             </div>

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH
+unset LIBRARY_PATH LD_LIBRARY_PATH GCC_EXEC_PREFIX COMPILER_PATH
+export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig
+exec /usr/bin/g++ -B/usr/bin "$@"

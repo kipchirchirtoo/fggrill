@@ -26,11 +26,13 @@ class KitchenOperationsDashboard extends ConsumerStatefulWidget {
     this.initialSection = KitchenOperationsSection.overview,
     this.stockSku,
     this.initialFoodTab = KitchenFoodTab.rules,
+    this.embedded = false,
   });
 
   final KitchenOperationsSection initialSection;
   final String? stockSku;
   final KitchenFoodTab initialFoodTab;
+  final bool embedded;
 
   @override
   ConsumerState<KitchenOperationsDashboard> createState() =>
@@ -151,6 +153,15 @@ class _KitchenOperationsDashboardState
   }
 
   void _selectSection(KitchenOperationsSection section) {
+    if (widget.embedded) {
+      setState(() {
+        _section = section;
+        _detailSku = null;
+        _selectedStockTab = 'levels';
+        _future = _load();
+      });
+      return;
+    }
     context.go(_pathFor(section));
   }
 
@@ -175,6 +186,31 @@ class _KitchenOperationsDashboardState
 
   @override
   Widget build(BuildContext context) {
+    final content = FutureBuilder<_KitchenSnapshot>(
+      key: ValueKey(
+        '${_section.name}-$_stockSearch-$_transactionType-$_requisitionStatus-$_usageType-$_wastageReason-$_detailSku-$_foodTab',
+      ),
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: LoadingSkeleton(type: SkeletonType.list),
+          );
+        }
+        if (snapshot.hasError) {
+          return ErrorState(
+            message: '${snapshot.error}',
+            onRetry: _refresh,
+          );
+        }
+        final data = snapshot.data ?? _KitchenSnapshot.empty();
+        return _buildSection(data);
+      },
+    );
+    if (widget.embedded) return content;
+
     return MasterDashboardShell<KitchenOperationsSection>(
       title: 'Kitchen Operations',
       subtitle: 'Stock, recipes and food controls',
@@ -227,29 +263,7 @@ class _KitchenOperationsDashboardState
         ),
       ],
       onSectionSelected: _selectSection,
-      child: FutureBuilder<_KitchenSnapshot>(
-        key: ValueKey(
-          '${_section.name}-$_stockSearch-$_transactionType-$_requisitionStatus-$_usageType-$_wastageReason-$_detailSku-$_foodTab',
-        ),
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Padding(
-              padding: EdgeInsets.all(24),
-              child: LoadingSkeleton(type: SkeletonType.list),
-            );
-          }
-          if (snapshot.hasError) {
-            return ErrorState(
-              message: '${snapshot.error}',
-              onRetry: _refresh,
-            );
-          }
-          final data = snapshot.data ?? _KitchenSnapshot.empty();
-          return _buildSection(data);
-        },
-      ),
+      child: content,
     );
   }
 

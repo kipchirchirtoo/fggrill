@@ -9,7 +9,8 @@ class GuestManagementScreen extends ConsumerStatefulWidget {
   const GuestManagementScreen({super.key});
 
   @override
-  ConsumerState<GuestManagementScreen> createState() => _GuestManagementScreenState();
+  ConsumerState<GuestManagementScreen> createState() =>
+      _GuestManagementScreenState();
 }
 
 class _GuestManagementScreenState extends ConsumerState<GuestManagementScreen> {
@@ -71,8 +72,14 @@ class _GuestManagementScreenState extends ConsumerState<GuestManagementScreen> {
         final last = g.lastName?.toLowerCase() ?? '';
         final phone = g.phone?.toLowerCase() ?? '';
         final email = g.email?.toLowerCase() ?? '';
-        return first.contains(query) || last.contains(query) || 
-               phone.contains(query) || email.contains(query);
+        final idNumber = g.idNumber?.toLowerCase() ?? '';
+        final carNumberPlate = g.carNumberPlate?.toLowerCase() ?? '';
+        return first.contains(query) ||
+            last.contains(query) ||
+            phone.contains(query) ||
+            email.contains(query) ||
+            idNumber.contains(query) ||
+            carNumberPlate.contains(query);
       }).toList();
     }
 
@@ -161,7 +168,8 @@ class _GuestManagementScreenState extends ConsumerState<GuestManagementScreen> {
                           itemBuilder: (context, index) {
                             final guest = _filteredGuests[index];
                             return Card(
-                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 4),
                               child: ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: guest.isVip
@@ -170,27 +178,35 @@ class _GuestManagementScreenState extends ConsumerState<GuestManagementScreen> {
                                           ? Colors.red
                                           : AppColors.kPrimary,
                                   child: Text(
-                                    (guest.firstName?.isNotEmpty == true ? guest.firstName![0].toUpperCase() : 'G'),
+                                    (guest.firstName?.isNotEmpty == true
+                                        ? guest.firstName![0].toUpperCase()
+                                        : 'G'),
                                     style: const TextStyle(color: Colors.white),
                                   ),
                                 ),
-                                title: Text('${guest.firstName} ${guest.lastName}'),
+                                title: Text(
+                                    '${guest.firstName} ${guest.lastName}'),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(guest.phone ?? '-'),
                                     if (guest.email != null) Text(guest.email!),
-                                    if (guest.loyaltyPoints != null && guest.loyaltyPoints! > 0)
-                                      Text('${guest.loyaltyPoints} points', style: const TextStyle(color: Colors.green)),
+                                    if (guest.loyaltyPoints != null &&
+                                        guest.loyaltyPoints! > 0)
+                                      Text('${guest.loyaltyPoints} points',
+                                          style: const TextStyle(
+                                              color: Colors.green)),
                                   ],
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (guest.isVip)
-                                      const Icon(Icons.star, color: Colors.amber, size: 20),
+                                      const Icon(Icons.star,
+                                          color: Colors.amber, size: 20),
                                     if (guest.blacklistStatus)
-                                      const Icon(Icons.block, color: Colors.red, size: 20),
+                                      const Icon(Icons.block,
+                                          color: Colors.red, size: 20),
                                     const Icon(Icons.chevron_right),
                                   ],
                                 ),
@@ -248,7 +264,8 @@ class _GuestDetailsSheet extends StatelessWidget {
             children: [
               Text(
                 '${guest.firstName} ${guest.lastName}',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               IconButton(
                 icon: const Icon(Icons.close),
@@ -261,22 +278,28 @@ class _GuestDetailsSheet extends StatelessWidget {
             _infoRow('Phone', guest.phone ?? '-'),
             if (guest.email != null) _infoRow('Email', guest.email!),
             if (guest.address != null) _infoRow('Address', guest.address!),
-            if (guest.nationality != null) _infoRow('Nationality', guest.nationality!),
+            if (guest.nationality != null)
+              _infoRow('Nationality', guest.nationality!),
           ]),
           _section('Identification', [
             if (guest.idType != null) _infoRow('ID Type', guest.idType!),
             if (guest.idNumber != null) _infoRow('ID Number', guest.idNumber!),
+            if (guest.carNumberPlate != null)
+              _infoRow('Car Number Plate', guest.carNumberPlate!),
           ]),
           _section('Loyalty & Status', [
             _infoRow('VIP Status', guest.isVip ? 'Yes' : 'No'),
             if (guest.vipTier != null) _infoRow('VIP Tier', guest.vipTier!),
-            if (guest.loyaltyPoints != null) _infoRow('Loyalty Points', '${guest.loyaltyPoints}'),
+            if (guest.loyaltyPoints != null)
+              _infoRow('Loyalty Points', '${guest.loyaltyPoints}'),
             _infoRow('Blacklisted', guest.blacklistStatus ? 'Yes' : 'No'),
-            if (guest.blacklistReason != null) _infoRow('Reason', guest.blacklistReason!),
+            if (guest.blacklistReason != null)
+              _infoRow('Reason', guest.blacklistReason!),
           ]),
           if (guest.notes != null)
             _section('Notes', [
-              Text(guest.notes!, style: const TextStyle(fontStyle: FontStyle.italic)),
+              Text(guest.notes!,
+                  style: const TextStyle(fontStyle: FontStyle.italic)),
             ]),
           const SizedBox(height: 16),
           Row(
@@ -312,7 +335,8 @@ class _GuestDetailsSheet extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const Divider(),
         ...children,
       ],
@@ -353,6 +377,7 @@ class _CreateGuestDialogState extends ConsumerState<_CreateGuestDialog> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _idNumberController = TextEditingController();
+  final _carNumberPlateController = TextEditingController();
   String _idType = 'National ID';
   bool _isSubmitting = false;
 
@@ -363,6 +388,7 @@ class _CreateGuestDialogState extends ConsumerState<_CreateGuestDialog> {
     _phoneController.dispose();
     _emailController.dispose();
     _idNumberController.dispose();
+    _carNumberPlateController.dispose();
     super.dispose();
   }
 
@@ -375,15 +401,21 @@ class _CreateGuestDialogState extends ConsumerState<_CreateGuestDialog> {
         'first_name': _firstNameController.text.trim(),
         'last_name': _lastNameController.text.trim(),
         'phone': _phoneController.text.trim(),
-        if (_emailController.text.trim().isNotEmpty) 'email': _emailController.text.trim(),
+        if (_emailController.text.trim().isNotEmpty)
+          'email': _emailController.text.trim(),
         if (_idType.isNotEmpty) 'id_type': _idType,
-        if (_idNumberController.text.trim().isNotEmpty) 'id_number': _idNumberController.text.trim(),
+        'id_number': _idNumberController.text.trim(),
+        if (_carNumberPlateController.text.trim().isNotEmpty)
+          'car_number_plate':
+              _carNumberPlateController.text.trim().toUpperCase(),
       });
 
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Guest created successfully'), backgroundColor: Colors.green),
+          const SnackBar(
+              content: Text('Guest created successfully'),
+              backgroundColor: Colors.green),
         );
         widget.onCreate();
       }
@@ -410,18 +442,21 @@ class _CreateGuestDialogState extends ConsumerState<_CreateGuestDialog> {
               TextFormField(
                 controller: _firstNameController,
                 decoration: const InputDecoration(labelText: 'First Name *'),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               TextFormField(
                 controller: _lastNameController,
                 decoration: const InputDecoration(labelText: 'Last Name *'),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               TextFormField(
                 controller: _phoneController,
                 decoration: const InputDecoration(labelText: 'Phone *'),
                 keyboardType: TextInputType.phone,
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               TextFormField(
                 controller: _emailController,
@@ -438,7 +473,15 @@ class _CreateGuestDialogState extends ConsumerState<_CreateGuestDialog> {
               ),
               TextFormField(
                 controller: _idNumberController,
-                decoration: const InputDecoration(labelText: 'ID Number'),
+                decoration: const InputDecoration(labelText: 'ID Number *'),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              TextFormField(
+                controller: _carNumberPlateController,
+                decoration: const InputDecoration(
+                    labelText: 'Car Number Plate (optional)'),
+                textCapitalization: TextCapitalization.characters,
               ),
             ],
           ),
@@ -452,7 +495,10 @@ class _CreateGuestDialogState extends ConsumerState<_CreateGuestDialog> {
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submit,
           child: _isSubmitting
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Create'),
         ),
       ],

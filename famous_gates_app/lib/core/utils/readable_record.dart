@@ -23,6 +23,21 @@ String readableRecordLabel(String key) {
     'sku': 'Item Code',
     'item_id': 'Item',
     'item_name': 'Item Name',
+    'menu_item_id': 'Menu Item',
+    'menu_item_name': 'Menu Item',
+    'room_id': 'Room',
+    'room_number': 'Room',
+    'room_type_id': 'Room Type',
+    'room_type': 'Room Type',
+    'guest_id': 'Guest',
+    'guest_name': 'Guest',
+    'staff_name': 'Staff',
+    'waiter_id': 'Waiter',
+    'waiter_name': 'Waiter',
+    'cashier_id': 'Cashier',
+    'cashier_name': 'Cashier',
+    'category_id': 'Category',
+    'category_name': 'Category',
     'unit_of_measure': 'Unit',
     'quantity_requested': 'Requested Quantity',
     'requested_quantity': 'Requested Quantity',
@@ -58,6 +73,8 @@ String readableRecordLabel(String key) {
     'invoice_number': 'Invoice Number',
     'receipt_number': 'Receipt Number',
     'order_number': 'Order Number',
+    'booking_reference': 'Booking Reference',
+    'confirmation_number': 'Confirmation Number',
     'count_number': 'Stock Take Number',
     'take_number': 'Stock Take Number',
     'request_id': 'Request',
@@ -122,12 +139,16 @@ String readableBoolean(dynamic value) {
 String? readableMapName(Map<dynamic, dynamic> value) {
   final firstName = '${value['first_name'] ?? ''}'.trim();
   final lastName = '${value['last_name'] ?? ''}'.trim();
-  final fullName = '${value['full_name'] ?? value['name'] ?? ''}'.trim();
+  final fullName =
+      '${value['full_name'] ?? value['guest_name'] ?? value['staff_name'] ?? value['waiter_name'] ?? value['cashier_name'] ?? value['name'] ?? ''}'
+          .trim();
   final joinedName = '$firstName $lastName'.trim();
   final email = '${value['email'] ?? ''}'.trim();
   final code = '${value['code'] ?? value['branch_code'] ?? ''}'.trim();
+  final room = '${value['room_number'] ?? value['number'] ?? ''}'.trim();
+  final title = '${value['title'] ?? value['description'] ?? ''}'.trim();
   final number =
-      '${value['request_number'] ?? value['po_number'] ?? value['invoice_number'] ?? value['grn_number'] ?? value['sku'] ?? ''}'
+      '${value['request_number'] ?? value['po_number'] ?? value['invoice_number'] ?? value['grn_number'] ?? value['order_number'] ?? value['booking_reference'] ?? value['confirmation_number'] ?? value['sku'] ?? value['item_sku'] ?? ''}'
           .trim();
 
   if (joinedName.isNotEmpty) {
@@ -136,7 +157,9 @@ String? readableMapName(Map<dynamic, dynamic> value) {
   if (fullName.isNotEmpty) {
     return code.isNotEmpty ? '$fullName ($code)' : fullName;
   }
+  if (room.isNotEmpty) return room;
   if (number.isNotEmpty) return number;
+  if (title.isNotEmpty) return title;
   if (email.isNotEmpty) return email;
   return null;
 }
@@ -178,6 +201,18 @@ String? readableRelatedValue(Map<String, dynamic> row, String key) {
     if (key == 'auditor_id') 'auditor',
     if (key == 'auditor_id') 'reviewed_by_user',
     if (key == 'cashier_id') 'cashier',
+    if (key == 'cashier_id') 'cashier_user',
+    if (key == 'waiter_id') 'waiter',
+    if (key == 'waiter_id') 'waiter_user',
+    if (key == 'guest_id') 'guest',
+    if (key == 'room_id') 'room',
+    if (key == 'room_type_id') 'room_type',
+    if (key == 'item_id') 'item',
+    if (key == 'item_id') 'inventory_item',
+    if (key == 'item_id') 'stock_item',
+    if (key == 'item_id') 'menu_item',
+    if (key == 'menu_item_id') 'menu_item',
+    if (key == 'category_id') 'category',
     if (key == 'staff_id' || key == 'employee_id') 'staff',
     if (key == 'staff_id' || key == 'employee_id') 'employee',
     if (key == 'user_id') 'user',
@@ -244,7 +279,9 @@ bool shouldShowReadableRecordEntry(
       entry.key == 'reviewed_by' ||
       entry.key == 'approved_by' ||
       entry.key == 'created_by' ||
-      entry.key == 'requested_by') {
+      entry.key == 'requested_by' ||
+      entry.key == 'assigned_to' ||
+      entry.key == 'reported_by') {
     return readableRelatedValue(row, entry.key) != null ||
         !readableUuidPattern.hasMatch('$value');
   }

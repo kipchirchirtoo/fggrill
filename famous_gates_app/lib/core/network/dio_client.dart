@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,8 +49,8 @@ final pythonDioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: AppConfig.pythonServicesBaseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 30),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(minutes: 2),
       headers: const {'Content-Type': 'application/json'},
     ),
   );
@@ -67,6 +69,27 @@ final pythonDioProvider = Provider<Dio>((ref) {
         responseBody: true,
       ),
   ]);
+
+  Future<void> keepAlive() async {
+    try {
+      await dio.get(
+        '/health',
+        options: Options(
+          receiveTimeout: const Duration(seconds: 10),
+          sendTimeout: const Duration(seconds: 10),
+          extra: const {'disable_retry': true},
+        ),
+      );
+    } catch (_) {
+      // Best-effort warm ping only. User-facing requests still surface errors.
+    }
+  }
+
+  unawaited(keepAlive());
+  final timer = Timer.periodic(const Duration(minutes: 4), (_) {
+    unawaited(keepAlive());
+  });
+  ref.onDispose(timer.cancel);
 
   return dio;
 });

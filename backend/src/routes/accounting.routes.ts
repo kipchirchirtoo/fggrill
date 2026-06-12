@@ -7,6 +7,9 @@ import {
   getJournalEntries,
   createInvoice,
   getInvoices,
+  getBookingInvoiceQueue,
+  createInvoiceFromBookingSource,
+  downloadInvoicePdf,
   createBill,
   getBills,
   recordInvoicePayment,
@@ -69,9 +72,24 @@ router.get('/invoices',
   getInvoices
 );
 
+router.get('/booking-invoice-queue',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getBookingInvoiceQueue
+);
+
 router.post('/invoices',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.RECEPTIONIST, UserRole.CASHIER, UserRole.FRONT_DESK_SUPERVISOR]),
   createInvoice
+);
+
+router.post('/booking-invoice-queue/:sourceType/:sourceId/invoice',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  createInvoiceFromBookingSource
+);
+
+router.get('/invoices/:id/pdf',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR, UserRole.RECEPTIONIST, UserRole.CASHIER, UserRole.FRONT_DESK_SUPERVISOR]),
+  downloadInvoicePdf
 );
 
 router.post('/invoices/:id/payments',

@@ -18,7 +18,9 @@ class RetryInterceptor extends Interceptor {
     var requestOptions = err.requestOptions;
     int attempt = requestOptions.extra['retry_attempt'] ?? 0;
 
-    if (_shouldRetry(err) && attempt < maxRetries) {
+    if (_shouldRetry(err) &&
+        _canRetry(requestOptions) &&
+        attempt < maxRetries) {
       attempt++;
       requestOptions.extra['retry_attempt'] = attempt;
 
@@ -34,6 +36,12 @@ class RetryInterceptor extends Interceptor {
       }
     }
     return handler.next(err);
+  }
+
+  bool _canRetry(RequestOptions options) {
+    if (options.extra['disable_retry'] == true) return false;
+    final method = options.method.toUpperCase();
+    return method == 'GET' || method == 'HEAD' || method == 'OPTIONS';
   }
 
   bool _shouldRetry(DioException err) {

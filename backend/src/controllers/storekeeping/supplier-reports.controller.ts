@@ -481,9 +481,41 @@ export const getSupplierLedger = async (
 
         if (error) throw error;
 
+        const { data: grns, error: grnError } = await supabase
+            .from('store_grn')
+            .select('id, grn_number, grn_date, created_at, total_value, total_quantity, status, invoice_number, po_id, purchase_order:store_purchase_orders(po_number)')
+            .eq('supplier_id', supplierId)
+            .order('grn_date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (grnError) throw grnError;
+
+        const grnHistory = (grns || []).map((grn: any) => ({
+            id: `grn:${grn.id}`,
+            source_type: 'grn',
+            grn_id: grn.id,
+            transaction_date: grn.grn_date || grn.created_at,
+            transaction_type: 'goods_received',
+            reference_number: grn.grn_number,
+            description: `GRN received${grn.purchase_order?.po_number ? ` for PO ${grn.purchase_order.po_number}` : ''}${grn.invoice_number ? ` / Invoice ${grn.invoice_number}` : ''}`,
+            debit_amount: 0,
+            credit_amount: Number(grn.total_value || 0),
+            running_balance: null,
+            status: grn.status,
+            quantity: grn.total_quantity
+        }));
+
+        const combined = [...(ledger || []), ...grnHistory].sort((a: any, b: any) => {
+            const dateA = Date.parse(a.transaction_date || a.created_at || '') || 0;
+            const dateB = Date.parse(b.transaction_date || b.created_at || '') || 0;
+            if (dateA !== dateB) return dateB - dateA;
+            return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+        });
+
         res.status(200).json({
             success: true,
-            data: ledger || []
+            data: combined
         });
     } catch (error) {
         logger.error('Error fetching supplier ledger:', error);

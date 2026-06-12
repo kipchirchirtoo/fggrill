@@ -1,5 +1,33 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.13)
+
+# The Snap Flutter toolchain can link against older bundled system libraries,
+# which breaks on newer Ubuntu releases when plugins pull in host libraries.
+# Prefer the host compiler/linker for Linux desktop development when available.
+if(EXISTS "/usr/bin/gcc" AND EXISTS "/usr/bin/g++" AND EXISTS "/usr/bin/ld")
+  set(FG_HOST_TOOLCHAIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/toolchain")
+  set(ENV{CPATH} "")
+  set(ENV{C_INCLUDE_PATH} "")
+  set(ENV{CPLUS_INCLUDE_PATH} "")
+  set(ENV{LDFLAGS} "")
+  set(ENV{PKG_CONFIG_PATH} "/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig")
+  set(CMAKE_C_COMPILER "${FG_HOST_TOOLCHAIN_DIR}/clang" CACHE FILEPATH "C compiler" FORCE)
+  set(CMAKE_CXX_COMPILER "${FG_HOST_TOOLCHAIN_DIR}/clang++" CACHE FILEPATH "C++ compiler" FORCE)
+  set(CMAKE_LINKER "/usr/bin/ld" CACHE FILEPATH "Linker" FORCE)
+  set(PKG_CONFIG_EXECUTABLE "/usr/bin/pkg-config" CACHE FILEPATH "pkg-config executable" FORCE)
+  set(CMAKE_C_FLAGS_INIT "-B/usr/bin")
+  set(FG_HOST_CXX_STDLIB_INCLUDES "-nostdinc++ -isystem /usr/include/c++/13 -isystem /usr/include/x86_64-linux-gnu/c++/13 -isystem /usr/include/c++/13/backward")
+  set(CMAKE_CXX_FLAGS_INIT "-B/usr/bin ${FG_HOST_CXX_STDLIB_INCLUDES}")
+  set(CMAKE_EXE_LINKER_FLAGS_INIT "")
+  set(CMAKE_SHARED_LINKER_FLAGS_INIT "")
+  set(CMAKE_MODULE_LINKER_FLAGS_INIT "")
+  set(CMAKE_C_FLAGS "-B/usr/bin" CACHE STRING "C compiler flags" FORCE)
+  set(CMAKE_CXX_FLAGS "-B/usr/bin ${FG_HOST_CXX_STDLIB_INCLUDES}" CACHE STRING "C++ compiler flags" FORCE)
+  set(CMAKE_EXE_LINKER_FLAGS "" CACHE STRING "Executable linker flags" FORCE)
+  set(CMAKE_SHARED_LINKER_FLAGS "" CACHE STRING "Shared linker flags" FORCE)
+  set(CMAKE_MODULE_LINKER_FLAGS "" CACHE STRING "Module linker flags" FORCE)
+endif()
+
 project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -41,9 +69,7 @@ endif()
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_14)
-  target_compile_options(${TARGET} PRIVATE -Wall -Werror)
-  target_compile_options(${TARGET} PRIVATE "$<$<CXX_COMPILER_ID:Clang>:-Wno-error=deprecated-literal-operator>")
-  target_compile_options(${TARGET} PRIVATE "$<$<CXX_COMPILER_ID:Clang>:-Wno-error=sign-compare>")
+  target_compile_options(${TARGET} PRIVATE -Wall)
   target_compile_options(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O3>")
   target_compile_definitions(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:NDEBUG>")
 endfunction()

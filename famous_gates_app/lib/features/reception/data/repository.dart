@@ -259,7 +259,7 @@ class ReceptionRepository {
 
   Future<Map<String, dynamic>> getGuest(String id) async {
     final response = await _dio.get('/guests/$id');
-    return _payload(response.data);
+    return _payload(response.data, entityKeys: const ['guest', 'profile']);
   }
 
   Future<Map<String, dynamic>> createGuest(Map<String, dynamic> data) async {
@@ -277,12 +277,13 @@ class ReceptionRepository {
 
   Future<List<Map<String, dynamic>>> getGuestHistory(String id) async {
     final response = await _dio.get('/guests/$id/history');
-    return _mapList(response.data);
+    return _mapList(response.data,
+        preferredKeys: const ['history', 'stays', 'bookings', 'reservations']);
   }
 
   Future<Map<String, dynamic>> getGuestLoyalty(String id) async {
     final response = await _dio.get('/guests/$id/loyalty');
-    return _payload(response.data);
+    return _payload(response.data, entityKeys: const ['loyalty', 'profile']);
   }
 
   Future<List<Map<String, dynamic>>> getConferenceHalls() async {
@@ -448,7 +449,12 @@ class ReceptionRepository {
     final response = await _pythonDio.post(
       '/api/reports/generate/checkout-bill',
       data: data,
-      options: Options(responseType: ResponseType.bytes),
+      options: Options(
+        responseType: ResponseType.bytes,
+        receiveTimeout: const Duration(minutes: 2),
+        sendTimeout: const Duration(seconds: 30),
+        extra: const {'disable_retry': true},
+      ),
     );
     return _saveBytes(response.data ?? const <int>[],
         'checkout_bill_${DateTime.now().millisecondsSinceEpoch}.pdf');

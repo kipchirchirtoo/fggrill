@@ -39,11 +39,13 @@ class AdminRepository {
     String endpoint, {
     required String filename,
     Map<String, dynamic> queryParameters = const {},
+    Options? options,
   }) async {
     final response = await _dio.get<List<int>>(
       endpoint,
       queryParameters: queryParameters,
-      options: Options(responseType: ResponseType.bytes),
+      options:
+          (options ?? Options()).copyWith(responseType: ResponseType.bytes),
     );
     return _saveBytes(response.data ?? const <int>[], filename);
   }
@@ -1006,7 +1008,15 @@ class AdminRepository {
   }
 
   Future<Map<String, dynamic>> createGRN(Map<String, dynamic> data) async {
-    final response = await _dio.post('/procurement/grn', data: data);
+    final response = await _dio.post(
+      '/procurement/grn',
+      data: data,
+      options: Options(
+        sendTimeout: const Duration(minutes: 2),
+        receiveTimeout: const Duration(minutes: 3),
+        extra: const {'disable_retry': true},
+      ),
+    );
     return _parseMap(response.data);
   }
 
@@ -1017,6 +1027,10 @@ class AdminRepository {
     return _downloadGet(
       '/procurement/grn/$id/pdf',
       filename: '$baseName.pdf',
+      options: Options(
+        receiveTimeout: const Duration(minutes: 2),
+        extra: const {'disable_retry': true},
+      ),
     );
   }
 

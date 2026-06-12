@@ -4,9 +4,11 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/branch_sales_payments_view.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/record_detail_screen.dart';
+import '../../kitchen_operations/presentation/kitchen_operations_dashboard.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
 import '../../kitchen/presentation/kds_screen.dart';
@@ -49,6 +51,11 @@ enum BranchManagerSection {
   wastage,
   reports,
   reviews,
+  kitchenStock,
+  kitchenRequisitions,
+  kitchenRecipes,
+  kitchenUsage,
+  kitchenWastage,
 }
 
 class BranchManagerDashboard extends ConsumerStatefulWidget {
@@ -75,6 +82,9 @@ class _BranchManagerDashboardState
   String _search = '';
   String _status = 'all';
   String _period = 'today';
+  int _staffPerformancePeriod = 30;
+  String _leaveTab = 'active';
+  bool _leaveDateFilter = false;
   DateTime _date = DateTime.now();
   DateTime _from = DateTime.now().subtract(const Duration(days: 6));
   DateTime _to = DateTime.now();
@@ -144,7 +154,6 @@ class _BranchManagerDashboardState
           _feed = List<Map<String, dynamic>>.from(results[2] as List);
           break;
         case BranchManagerSection.salesPayments:
-          // Self-contained view fetches its own data.
           break;
         case BranchManagerSection.analytics:
           _summary = await _repo.branchSalesAnalytics(
@@ -175,7 +184,10 @@ class _BranchManagerDashboardState
               _summary['data']);
           break;
         case BranchManagerSection.waiterSales:
-          _rows = await _repo.waiterSales(period: _period, date: _ymd(_date));
+          _summary =
+              await _repo.waiterSalesReport(period: _period, date: _ymd(_date));
+          _rows = _listFrom(
+              _summary['waiter_sales'] ?? _summary['rows'] ?? _summary['data']);
           break;
         case BranchManagerSection.reservations:
           _rows = await _repo.bookings(status: _status, search: _search);
@@ -219,15 +231,23 @@ class _BranchManagerDashboardState
           );
           break;
         case BranchManagerSection.staffPerformance:
-          _rows = await _repo.staffPerformance(
-              period: _period, department: _status);
+          _summary = await _repo.staffPerformanceReport(
+            period: _staffPerformancePeriod,
+            department: _status,
+          );
+          _rows = _listFrom(_summary['performance'] ??
+              _summary['rows'] ??
+              _summary['staff'] ??
+              _summary['data']);
           break;
         case BranchManagerSection.staffDetail:
           await _loadStaffDetail();
           break;
         case BranchManagerSection.staffAttendance:
           _rows = await _repo.staffAttendance(
-            date: _ymd(_date),
+            date: _period == 'today' ? _ymd(_date) : null,
+            startDate: _period == 'today' ? null : _attendanceStartDate(),
+            endDate: _period == 'today' ? null : _ymd(_date),
             staffId: _recordId,
           );
           break;
@@ -245,10 +265,18 @@ class _BranchManagerDashboardState
               : await _repo.staffDocuments(_recordId!);
           break;
         case BranchManagerSection.attendance:
-          _rows = await _repo.staffAttendance(date: _ymd(_date));
+          _rows = await _repo.staffAttendance(
+            date: _period == 'today' ? _ymd(_date) : null,
+            startDate: _period == 'today' ? null : _attendanceStartDate(),
+            endDate: _period == 'today' ? null : _ymd(_date),
+          );
           break;
         case BranchManagerSection.leave:
           _rows = await _repo.leaveRequests(status: _status);
+          _secondaryRows = await _safe(
+            () => _repo.staff(search: _search),
+            <Map<String, dynamic>>[],
+          );
           break;
         case BranchManagerSection.stock:
           _rows = await _repo.branchStock(search: _search, status: _status);
@@ -297,6 +325,12 @@ class _BranchManagerDashboardState
           _rows = _reportCards;
           break;
         case BranchManagerSection.reviews:
+          break;
+        case BranchManagerSection.kitchenStock:
+        case BranchManagerSection.kitchenRequisitions:
+        case BranchManagerSection.kitchenRecipes:
+        case BranchManagerSection.kitchenUsage:
+        case BranchManagerSection.kitchenWastage:
           break;
       }
     } catch (error) {
@@ -383,192 +417,162 @@ class _BranchManagerDashboardState
     );
   }
 
-  // Grouped to mirror the Next.js branch-manager sidebar:
-  // Analytics & Reports → Front Desk Operations → Guest Management →
-  // Restaurant Operations → Facility Management → Stock Management →
-  // Staff Management → Reports.
   List<MasterNavItem<BranchManagerSection>> get _navItems => [
-        // ── Analytics & Reports ──
         const MasterNavItem(
           section: BranchManagerSection.overview,
           label: 'Executive Dashboard',
           icon: Icons.dashboard_outlined,
-          group: 'Analytics & Reports',
+          group: null,
         ),
         MasterNavItem(
           section: BranchManagerSection.analytics,
           label: 'Sales Analytics',
           icon: PhosphorIcons.chartLine(),
-          group: 'Analytics & Reports',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.salesPayments,
-          label: 'Sales & Payments',
-          icon: PhosphorIcons.creditCard(),
-          group: 'Analytics & Reports',
+          group: 'Financial Performance',
         ),
         MasterNavItem(
           section: BranchManagerSection.cashierClearance,
           label: 'Cashier Clearance',
           icon: PhosphorIcons.receipt(),
-          group: 'Analytics & Reports',
+          group: 'Financial Performance',
         ),
-        MasterNavItem(
-          section: BranchManagerSection.soldItems,
-          label: 'Sold Items',
-          icon: PhosphorIcons.shoppingBag(),
-          group: 'Analytics & Reports',
-        ),
-        // ── Front Desk Operations ──
         MasterNavItem(
           section: BranchManagerSection.checkin,
           label: 'Check-in/Check-out',
           icon: PhosphorIcons.signIn(),
-          group: 'Front Desk Operations',
+          group: 'Guest Services',
         ),
         MasterNavItem(
           section: BranchManagerSection.reservations,
           label: 'Reservations',
           icon: PhosphorIcons.calendarCheck(),
-          group: 'Front Desk Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.newReservation,
-          label: 'New Reservation',
-          icon: PhosphorIcons.plus(),
-          group: 'Front Desk Operations',
+          group: 'Guest Services',
         ),
         const MasterNavItem(
           section: BranchManagerSection.arrivals,
           label: 'Expected Arrivals',
           icon: Icons.flight_land,
-          group: 'Front Desk Operations',
+          group: 'Guest Services',
         ),
         const MasterNavItem(
           section: BranchManagerSection.departures,
           label: 'Expected Departures',
           icon: Icons.flight_takeoff,
-          group: 'Front Desk Operations',
+          group: 'Guest Services',
         ),
-        // ── Guest Management ──
         MasterNavItem(
           section: BranchManagerSection.guests,
           label: 'Guest Directory',
           icon: PhosphorIcons.identificationCard(),
-          group: 'Guest Management',
+          group: 'Guest Services',
         ),
         MasterNavItem(
           section: BranchManagerSection.rooms,
           label: 'Room Status',
           icon: PhosphorIcons.bed(),
-          group: 'Guest Management',
+          group: 'Guest Services',
         ),
-        // ── Restaurant Operations ──
         MasterNavItem(
           section: BranchManagerSection.restaurant,
           label: 'Restaurant Overview',
           icon: PhosphorIcons.forkKnife(),
-          group: 'Restaurant Operations',
+          group: 'Food & Beverage',
         ),
         const MasterNavItem(
           section: BranchManagerSection.waiterSales,
           label: 'Waiter Performance',
           icon: Icons.groups_outlined,
-          group: 'Restaurant Operations',
+          group: 'Food & Beverage',
         ),
-        const MasterNavItem(
-          section: BranchManagerSection.orderIntelligence,
-          label: 'Order Intelligence',
-          icon: Icons.insights_outlined,
-          group: 'Restaurant Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.menu,
-          label: 'Restaurant Menu',
-          icon: PhosphorIcons.listChecks(),
-          group: 'Restaurant Operations',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.barMenu,
-          label: 'Bar Menu',
-          icon: PhosphorIcons.wine(),
-          group: 'Restaurant Operations',
-        ),
-        // ── Facility Management ──
         const MasterNavItem(
           section: BranchManagerSection.housekeeping,
           label: 'Housekeeping',
           icon: Icons.cleaning_services_outlined,
-          group: 'Facility Management',
+          group: 'Facilities & Operations',
         ),
         MasterNavItem(
           section: BranchManagerSection.maintenance,
           label: 'Maintenance',
           icon: PhosphorIcons.wrench(),
-          group: 'Facility Management',
+          group: 'Facilities & Operations',
         ),
-        // ── Stock Management ──
         MasterNavItem(
           section: BranchManagerSection.stock,
           label: 'Stock Overview',
           icon: PhosphorIcons.package(),
-          group: 'Stock Management',
+          group: 'Inventory Control',
         ),
         MasterNavItem(
           section: BranchManagerSection.stockAnalytics,
           label: 'Stock Analytics',
           icon: PhosphorIcons.trendUp(),
-          group: 'Stock Management',
+          group: 'Inventory Control',
         ),
         MasterNavItem(
           section: BranchManagerSection.stockOut,
           label: 'Stock Issuance',
           icon: PhosphorIcons.trendDown(),
-          group: 'Stock Management',
+          group: 'Inventory Control',
         ),
         MasterNavItem(
           section: BranchManagerSection.wastage,
           label: 'Wastage Tracking',
           icon: PhosphorIcons.trash(),
-          group: 'Stock Management',
+          group: 'Inventory Control',
         ),
-        // ── Staff Management ──
         MasterNavItem(
           section: BranchManagerSection.staff,
           label: 'Staff Directory',
           icon: PhosphorIcons.users(),
-          group: 'Staff Management',
+          group: 'Human Resources',
         ),
         MasterNavItem(
           section: BranchManagerSection.attendance,
           label: 'Attendance',
           icon: PhosphorIcons.clock(),
-          group: 'Staff Management',
+          group: 'Human Resources',
         ),
         MasterNavItem(
           section: BranchManagerSection.leave,
           label: 'Leave Requests',
           icon: PhosphorIcons.paperPlaneTilt(),
-          group: 'Staff Management',
+          group: 'Human Resources',
         ),
         const MasterNavItem(
           section: BranchManagerSection.staffPerformance,
           label: 'Performance',
           icon: Icons.speed_outlined,
-          group: 'Staff Management',
-        ),
-        // ── Reports ──
-        MasterNavItem(
-          section: BranchManagerSection.reports,
-          label: 'Reports',
-          icon: PhosphorIcons.filePdf(),
-          group: 'Reports',
+          group: 'Human Resources',
         ),
         MasterNavItem(
-          section: BranchManagerSection.reviews,
-          label: 'Review Management',
-          icon: PhosphorIcons.chatCircle(),
-          group: 'Reports',
+          section: BranchManagerSection.kitchenStock,
+          label: 'Stock Ledger',
+          icon: PhosphorIcons.bookOpen(),
+          group: 'Kitchen Ops',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenRequisitions,
+          label: 'Request Stock',
+          icon: PhosphorIcons.shoppingCart(),
+          group: 'Kitchen Ops',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenRecipes,
+          label: 'Recipes & BOM',
+          icon: PhosphorIcons.cookingPot(),
+          group: 'Kitchen Ops',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenUsage,
+          label: 'Usage Tracking',
+          icon: PhosphorIcons.clipboardText(),
+          group: 'Kitchen Ops',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenWastage,
+          label: 'Record Wastage',
+          icon: PhosphorIcons.trash(),
+          group: 'Kitchen Ops',
         ),
       ];
 
@@ -609,8 +613,17 @@ class _BranchManagerDashboardState
         return const MobileManagerReviewsScreen();
       case BranchManagerSection.orderIntelligence:
         return const KitchenOrderIntelligencePanel();
+      case BranchManagerSection.waiterSales:
+        return _waiterPerformance();
+      case BranchManagerSection.attendance:
+      case BranchManagerSection.staffAttendance:
+        return _attendanceDashboard();
       case BranchManagerSection.stockAnalytics:
         return _stockAnalytics();
+      case BranchManagerSection.staffPerformance:
+        return _staffPerformance();
+      case BranchManagerSection.leave:
+        return _leaveManagement();
       case BranchManagerSection.staffDocuments:
         return _genericPage(
           title: 'Staff Documents',
@@ -620,6 +633,31 @@ class _BranchManagerDashboardState
             _miniButton('View', () => _showRow(row)),
             _miniButton('Download', () => _snack('Download queued')),
           ],
+        );
+      case BranchManagerSection.kitchenStock:
+        return const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.stock,
+          embedded: true,
+        );
+      case BranchManagerSection.kitchenRequisitions:
+        return const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.requisitions,
+          embedded: true,
+        );
+      case BranchManagerSection.kitchenRecipes:
+        return const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.recipes,
+          embedded: true,
+        );
+      case BranchManagerSection.kitchenUsage:
+        return const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.usage,
+          embedded: true,
+        );
+      case BranchManagerSection.kitchenWastage:
+        return const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.wastage,
+          embedded: true,
         );
       default:
         return _genericPage(
@@ -653,59 +691,50 @@ class _BranchManagerDashboardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _metric('Today Revenue', _money(_stats.todayRevenue),
-                  PhosphorIcons.money(), AppColors.kSuccess),
-              _metric('Active Orders', '${_stats.activeOrders}',
-                  PhosphorIcons.shoppingCart(), AppColors.kWarning),
-              _metric(
-                  'Occupancy',
-                  '${_stats.occupancyRate.toStringAsFixed(1)}%',
-                  PhosphorIcons.bed(),
-                  AppColors.kPrimary),
-              _metric('Low Stock', '${_stats.lowStockItems}',
-                  PhosphorIcons.warning(), AppColors.kError),
-            ],
-          ),
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            _metric('Today Revenue', _money(_stats.todayRevenue),
+                PhosphorIcons.money(), AppColors.kSuccess),
+            _metric('Active Orders', '${_stats.activeOrders}',
+                PhosphorIcons.shoppingCart(), AppColors.kWarning),
+            _metric('Occupancy', '${_stats.occupancyRate.toStringAsFixed(1)}%',
+                PhosphorIcons.bed(), AppColors.kPrimary),
+            _metric('Low Stock', '${_stats.lowStockItems}',
+                PhosphorIcons.warning(), AppColors.kError),
+          ]),
           const SizedBox(height: 18),
           LayoutBuilder(builder: (context, constraints) {
             final twoCols = constraints.maxWidth > 980;
             final quick = _panel(
-              'Quick Actions',
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _quick('Reservations', BranchManagerSection.reservations),
-                  _quick('Stock Request', BranchManagerSection.stock),
-                  _quick('Staff KPIs', BranchManagerSection.staffPerformance),
-                  _quick('Clearance', BranchManagerSection.cashierClearance),
-                  _quick('Attendance', BranchManagerSection.attendance),
-                  _quick('Reports', BranchManagerSection.reports),
-                ],
-              ),
-            );
+                'Quick Actions',
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _quick('Reservations', BranchManagerSection.reservations),
+                    _quick('Stock Request', BranchManagerSection.stock),
+                    _quick('Staff KPIs', BranchManagerSection.staffPerformance),
+                    _quick('Clearance', BranchManagerSection.cashierClearance),
+                    _quick('Attendance', BranchManagerSection.attendance),
+                    _quick('Reports', BranchManagerSection.reports),
+                  ],
+                ));
             final alerts = _panel(
-              'Alerts & Activity',
-              Column(
-                children: [
-                  ..._feed.take(8).map((row) => _compactRow(row)),
-                  if (_feed.isEmpty) const _EmptyNotice('No branch alerts.'),
-                ],
-              ),
-            );
+                'Alerts & Activity',
+                Column(
+                  children: [
+                    ..._feed.take(8).map((row) => _compactRow(row)),
+                    if (_feed.isEmpty) const _EmptyNotice('No branch alerts.'),
+                  ],
+                ));
             final activity = _panel(
-              'Recent Activity',
-              Column(
-                children: [
-                  ..._rows.take(8).map((row) => _compactRow(row)),
-                  if (_rows.isEmpty) const _EmptyNotice('No recent activity.'),
-                ],
-              ),
-            );
+                'Recent Activity',
+                Column(
+                  children: [
+                    ..._rows.take(8).map((row) => _compactRow(row)),
+                    if (_rows.isEmpty)
+                      const _EmptyNotice('No recent activity.'),
+                  ],
+                ));
             if (!twoCols) {
               return Column(children: [quick, alerts, activity]);
             }
@@ -730,7 +759,7 @@ class _BranchManagerDashboardState
     return _page(
       title: 'Sales Analytics',
       subtitle:
-          'Branch sales analytics with web parity for date range filters, payment/order/category breakdowns, and exports.',
+          'Branch sales analytics with date range filters, payment/order/category breakdowns, and exports.',
       trailing: [
         _dateRangeButton(),
         _periodButton(),
@@ -819,10 +848,9 @@ class _BranchManagerDashboardState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _panel(
-            'Available Rooms',
-            _dataList(_secondaryRows,
-                const ['room_number', 'number', 'type', 'rate', 'status']),
-          ),
+              'Available Rooms',
+              _dataList(_secondaryRows,
+                  const ['room_number', 'number', 'type', 'status'])),
           const SizedBox(height: 16),
           _panel('Guest Search',
               _dataList(_rows, _fieldsFor(BranchManagerSection.guests))),
@@ -832,12 +860,14 @@ class _BranchManagerDashboardState
   }
 
   Widget _detailPage() {
-    final title = _recordId == null
-        ? _label(_section)
-        : '${_label(_section)} #$_recordId';
+    final detail = _detail == null ? null : _normalizeRecord(_detail!);
+    final title = detail == null ? _label(_section) : _titleFor(detail);
     return _page(
       title: title,
-      subtitle: 'Detail view with related workflow history and actions.',
+      subtitle: detail == null
+          ? 'Detail view with related workflow history and actions.'
+          : _subtitleForRow(detail).ifEmpty(
+              'Readable ${_label(_section).toLowerCase()} summary and history.'),
       trailing: [
         OutlinedButton.icon(
           onPressed: _load,
@@ -847,7 +877,7 @@ class _BranchManagerDashboardState
       ],
       child: Column(
         children: [
-          if (_detail != null) _detailCard(_detail!),
+          if (detail != null) _detailCard(detail),
           const SizedBox(height: 16),
           _dataList(_rows, _fieldsFor(_section), actionsBuilder: _actionsFor),
         ],
@@ -874,8 +904,8 @@ class _BranchManagerDashboardState
           ]),
           const SizedBox(height: 16),
           _panel(
-            'Reorder Suggestions',
-            _dataList(
+              'Reorder Suggestions',
+              _dataList(
                 _rows,
                 const [
                   'item_name',
@@ -885,17 +915,969 @@ class _BranchManagerDashboardState
                   'suggested_quantity',
                   'priority'
                 ],
-                actionsBuilder: _actionsFor),
-          ),
+                actionsBuilder: _actionsFor,
+              )),
           const SizedBox(height: 16),
           _panel(
-            'Trends & Wastage',
-            _dataList(_secondaryRows,
-                const ['date', 'item_name', 'quantity', 'variance', 'reason']),
-          ),
+              'Trends & Wastage',
+              _dataList(_secondaryRows, const [
+                'date',
+                'item_name',
+                'quantity',
+                'variance',
+                'reason'
+              ])),
         ],
       ),
     );
+  }
+
+  Widget _waiterPerformance() {
+    final summary = _summaryMap();
+    final rows = _rankWaiters(_rows.map(_normalizeRecord).toList());
+    return _page(
+      title: 'Waiter Performance',
+      subtitle:
+          'Ranked by completed orders, total orders, revenue, and items served.',
+      trailing: [
+        _periodButton(),
+        _dateButton(),
+        OutlinedButton.icon(
+          onPressed: () => _exportRows('waiter_performance', rows),
+          icon: const Icon(Icons.download, size: 16),
+          label: const Text('Export'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Refresh'),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            _metric(
+                'Waiters',
+                _summaryValue(summary, ['total_waiters'], rows.length),
+                PhosphorIcons.users(),
+                AppColors.kPrimary),
+            _metric(
+                'Completed Orders',
+                _summaryValue(summary, ['total_orders'],
+                    _sumRows(rows, ['completed_orders', 'total_orders'])),
+                PhosphorIcons.checkCircle(),
+                AppColors.kSuccess),
+            _metric('Revenue', _money(_num(summary, ['total_revenue'])),
+                PhosphorIcons.money(), AppColors.kWarning),
+            _metric(
+                'Average Order',
+                _money(_num(summary, ['average_order_value'])),
+                PhosphorIcons.chartBar(),
+                AppColors.kAccent),
+          ]),
+          const SizedBox(height: 18),
+          _panel(
+            'Top Waiters',
+            rows.isEmpty
+                ? const _EmptyNotice('No waiter activity found.')
+                : Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: rows
+                        .take(5)
+                        .map((row) => _waiterRankCard(row))
+                        .toList(),
+                  ),
+          ),
+          const SizedBox(height: 18),
+          _waiterTable(rows),
+        ],
+      ),
+    );
+  }
+
+  Widget _waiterRankCard(Map<String, dynamic> row) {
+    final rank = _text(row, ['rank']);
+    final orders =
+        _text(row, ['completed_orders', 'total_orders']).ifEmpty('0');
+    return SizedBox(
+      width: 290,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.65)),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: AppColors.kPrimary,
+              child: Text('#$rank',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w900)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_titleFor(row),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text('$orders completed orders',
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+            Text(_money(_num(row, ['total_revenue'])),
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _waiterTable(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return const _EmptyNotice('No waiter sales found.');
+    return Card(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor:
+              WidgetStatePropertyAll(AppColors.kSurface.withValues(alpha: 0.8)),
+          columns: const [
+            DataColumn(label: Text('Rank')),
+            DataColumn(label: Text('Waiter')),
+            DataColumn(label: Text('Completed Orders')),
+            DataColumn(label: Text('Items Sold')),
+            DataColumn(label: Text('Revenue')),
+            DataColumn(label: Text('Average Order')),
+            DataColumn(label: Text('Tips')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: rows.map((row) {
+            return DataRow(cells: [
+              DataCell(Text('#${_text(row, ['rank'])}',
+                  style: const TextStyle(fontWeight: FontWeight.w900))),
+              DataCell(_staffCell(row)),
+              DataCell(Text(_text(row, ['completed_orders', 'total_orders'])
+                  .ifEmpty('0'))),
+              DataCell(Text(_text(row, ['total_items_sold']).ifEmpty('0'))),
+              DataCell(Text(_money(_num(row, ['total_revenue'])))),
+              DataCell(Text(_money(_num(row, ['average_order_value'])))),
+              DataCell(Text(_money(_num(row, ['total_tips'])))),
+              DataCell(IconButton(
+                tooltip: 'View waiter',
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                onPressed: () => _showRow(row),
+              )),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _attendanceDashboard() {
+    final rows = _rankAttendance(_rows.map(_normalizeRecord).toList());
+    final present =
+        rows.where((row) => _attendanceStatus(row) == 'present').length;
+    final late = rows.where((row) => _attendanceStatus(row) == 'late').length;
+    final absent =
+        rows.where((row) => _attendanceStatus(row) == 'absent').length;
+    return _page(
+      title: 'Attendance',
+      subtitle:
+          'Daily, weekly, and monthly branch attendance with staff ranking.',
+      trailing: [
+        DropdownButton<String>(
+          value: _period,
+          items: const [
+            DropdownMenuItem(value: 'today', child: Text('Today')),
+            DropdownMenuItem(value: 'week', child: Text('This Week')),
+            DropdownMenuItem(value: 'month', child: Text('This Month')),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            _period = value;
+            _load();
+          },
+        ),
+        _dateButton(),
+        OutlinedButton.icon(
+          onPressed: () => _exportRows('attendance', rows),
+          icon: const Icon(Icons.download, size: 16),
+          label: const Text('Export'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Refresh'),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            _metric('Records', '${rows.length}', PhosphorIcons.clock(),
+                AppColors.kPrimary),
+            _metric('Present', '$present', PhosphorIcons.checkCircle(),
+                AppColors.kSuccess),
+            _metric('Late', '$late', PhosphorIcons.warningCircle(),
+                AppColors.kWarning),
+            _metric(
+                'Absent', '$absent', PhosphorIcons.xCircle(), AppColors.kError),
+          ]),
+          const SizedBox(height: 18),
+          _attendanceTable(rows),
+        ],
+      ),
+    );
+  }
+
+  Widget _attendanceTable(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return const _EmptyNotice('No attendance records found.');
+    return Card(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor:
+              WidgetStatePropertyAll(AppColors.kSurface.withValues(alpha: 0.8)),
+          columns: const [
+            DataColumn(label: Text('Rank')),
+            DataColumn(label: Text('Staff Member')),
+            DataColumn(label: Text('Date')),
+            DataColumn(label: Text('Clock In')),
+            DataColumn(label: Text('Clock Out')),
+            DataColumn(label: Text('Hours')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: rows.map((row) {
+            return DataRow(cells: [
+              DataCell(Text('#${_text(row, ['rank'])}',
+                  style: const TextStyle(fontWeight: FontWeight.w900))),
+              DataCell(_staffCell(row)),
+              DataCell(Text(_formatDate(
+                  row['attendance_date'] ?? row['date'] ?? row['created_at']))),
+              DataCell(Text(_timeOnly(row['clock_in']))),
+              DataCell(Text(_timeOnly(row['clock_out']))),
+              DataCell(Text(
+                  _text(row, ['hours_worked', 'total_hours']).ifEmpty('—'))),
+              DataCell(_statusChip(_attendanceStatus(row))),
+              DataCell(IconButton(
+                tooltip: 'View attendance',
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                onPressed: () => _showRow(row),
+              )),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _staffPerformance() {
+    final summary = _summaryMap();
+    final rows = _rows.map(_normalizeRecord).where((row) {
+      final query = _search.trim().toLowerCase();
+      if (query.isEmpty) return true;
+      return [
+        'staff_name',
+        'full_name',
+        'email',
+        'role',
+        'department',
+      ].any((key) => _text(row, [key]).toLowerCase().contains(query));
+    }).toList();
+    final topPerformers = _performanceTopRows(summary, rows);
+    return _page(
+      title: 'Staff Performance',
+      subtitle: _text(summary, ['branch_name', 'branch'])
+          .ifEmpty('Current branch staff performance'),
+      trailing: [
+        DropdownButton<int>(
+          value: _staffPerformancePeriod,
+          items: const [
+            DropdownMenuItem(value: 7, child: Text('Last 7 Days')),
+            DropdownMenuItem(value: 30, child: Text('Last 30 Days')),
+            DropdownMenuItem(value: 90, child: Text('Last 90 Days')),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            _staffPerformancePeriod = value;
+            _load();
+          },
+        ),
+        OutlinedButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Refresh'),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            _metric(
+                'Total Staff',
+                _summaryValue(summary, ['total_staff'], rows.length),
+                PhosphorIcons.users(),
+                AppColors.kPrimary),
+            _metric(
+                'Avg Attendance',
+                _percentText(summary, ['average_attendance']),
+                PhosphorIcons.checkCircle(),
+                AppColors.kSuccess),
+            _metric(
+                'Avg Punctuality',
+                _percentText(summary, ['average_punctuality']),
+                PhosphorIcons.clock(),
+                AppColors.kAccent),
+            _metric(
+                'Task Completion',
+                _percentText(summary, ['average_task_completion']),
+                PhosphorIcons.target(),
+                AppColors.kWarning),
+            _metric(
+                'Need Improvement',
+                _summaryValue(
+                    summary,
+                    ['needs_improvement'],
+                    rows
+                        .where((row) => _num(row, ['performance_score']) < 60)
+                        .length),
+                PhosphorIcons.warningCircle(),
+                AppColors.kError),
+            _metric(
+                'Avg Performance',
+                _percentText(summary, ['average_performance']),
+                PhosphorIcons.trendUp(),
+                AppColors.kPrimary),
+          ]),
+          if (topPerformers.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            _panel(
+              'Top Performers',
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (var i = 0; i < topPerformers.length; i++)
+                    _topPerformerCard(topPerformers[i], i + 1),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 18),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        prefixIcon: Icon(Icons.search, size: 18),
+                        hintText: 'Search staff by name or email...',
+                      ),
+                      onChanged: (value) => setState(() => _search = value),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  DropdownButton<String>(
+                    value: _statusOptions(_section).contains(_status)
+                        ? _status
+                        : 'all',
+                    items: _statusOptions(_section)
+                        .map((option) => DropdownMenuItem(
+                              value: option,
+                              child: Text(option == 'all'
+                                  ? 'All Departments'
+                                  : _pretty(option)),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      _status = value;
+                      _load();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _performanceTable(rows),
+        ],
+      ),
+    );
+  }
+
+  Widget _topPerformerCard(Map<String, dynamic> row, int rank) {
+    final score = _num(row, ['performance_score']);
+    return SizedBox(
+      width: 290,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFFDE68A)),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: const Color(0xFFF59E0B),
+              child: Text('#$rank',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w900)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_titleFor(row),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text(_text(row, ['role', 'department']).toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.kTextSecondary)),
+                ],
+              ),
+            ),
+            Text(_score(score),
+                style: const TextStyle(
+                    color: Color(0xFFD97706),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _performanceTable(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) {
+      return const _EmptyNotice('No staff members match your filters.');
+    }
+    return Card(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor:
+              WidgetStatePropertyAll(AppColors.kSurface.withValues(alpha: 0.8)),
+          columns: const [
+            DataColumn(label: Text('Staff Member')),
+            DataColumn(label: Text('Attendance')),
+            DataColumn(label: Text('Punctuality')),
+            DataColumn(label: Text('Task Completion')),
+            DataColumn(label: Text('Performance Score')),
+            DataColumn(label: Text('Revenue')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: rows.map((row) {
+            final id = _text(row, ['staff_id', 'id']);
+            final score = _num(row, ['performance_score']);
+            return DataRow(cells: [
+              DataCell(_staffCell(row)),
+              DataCell(_metricCell(
+                _num(row, ['attendance_rate']),
+                '${_text(row, ['present_days']).ifEmpty('0')}/${_text(row, [
+                      'period_days'
+                    ]).ifEmpty('0')} days',
+              )),
+              DataCell(_metricCell(
+                _num(row, ['punctuality_score']),
+                '${_text(row, ['late_days']).ifEmpty('0')} late',
+              )),
+              DataCell(_metricCell(
+                _num(row, ['task_completion_rate']),
+                '${_text(row, ['completed_tasks']).ifEmpty('0')}/${_text(row, [
+                      'total_tasks'
+                    ]).ifEmpty('0')} tasks',
+              )),
+              DataCell(Text(_score(score),
+                  style: TextStyle(
+                      color: _scoreColor(score),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900))),
+              DataCell(Text(_num(row, ['revenue_contribution']) > 0
+                  ? _money(_num(row, ['revenue_contribution']))
+                  : 'N/A')),
+              DataCell(_statusChip(_performanceStatus(score))),
+              DataCell(IconButton(
+                tooltip: 'View staff',
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                onPressed: id.isEmpty
+                    ? null
+                    : () => _openDetail(BranchManagerSection.staffDetail, id),
+              )),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _staffCell(Map<String, dynamic> row) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: AppColors.kPrimary.withValues(alpha: 0.12),
+          child: Text(_initials(_titleFor(row)),
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.kPrimary,
+                  fontWeight: FontWeight.w900)),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_titleFor(row),
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text('${_text(row, ['role'])} • ${_text(row, ['department'])}',
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.kTextSecondary)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _metricCell(num value, String detail) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(_score(value),
+            style: TextStyle(
+                color: _scoreColor(value), fontWeight: FontWeight.w900)),
+        Text(detail,
+            style:
+                const TextStyle(fontSize: 10, color: AppColors.kTextSecondary)),
+      ],
+    );
+  }
+
+  Widget _leaveManagement() {
+    final rows = _leaveRows();
+    final stats = {
+      'total': _rows.length,
+      'pending':
+          _rows.where((row) => _text(row, ['status']) == 'pending').length,
+      'approved':
+          _rows.where((row) => _text(row, ['status']) == 'approved').length,
+      'rejected':
+          _rows.where((row) => _text(row, ['status']) == 'rejected').length,
+    };
+    return _page(
+      title: 'Leave Management',
+      subtitle: 'Manage staff leave requests for the current branch.',
+      trailing: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _load,
+          icon: const Icon(Icons.refresh),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _exportRows('leave_management', rows),
+          icon: const Icon(Icons.download, size: 16),
+          label: const Text('Export'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _createHandler(BranchManagerSection.leave),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('New Request'),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(spacing: 10, children: [
+            _tabButton('Active Leaves', 'active', Icons.schedule),
+            _tabButton('History', 'history', Icons.history),
+          ]),
+          const SizedBox(height: 18),
+          Wrap(spacing: 12, runSpacing: 12, children: [
+            _metric('Total Requests', '${stats['total']}',
+                PhosphorIcons.fileText(), AppColors.kTextSecondary),
+            _metric('Pending', '${stats['pending']}', PhosphorIcons.clock(),
+                AppColors.kWarning),
+            _metric('Approved', '${stats['approved']}',
+                PhosphorIcons.checkCircle(), AppColors.kSuccess),
+            _metric('Rejected', '${stats['rejected']}', PhosphorIcons.xCircle(),
+                AppColors.kError),
+          ]),
+          const SizedBox(height: 18),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        prefixIcon: Icon(Icons.search, size: 18),
+                        hintText: 'Search by name or employee ID...',
+                      ),
+                      onChanged: (value) => setState(() => _search = value),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  DropdownButton<String>(
+                    value: _statusOptions(_section).contains(_status)
+                        ? _status
+                        : 'all',
+                    items: _statusOptions(_section)
+                        .map((option) => DropdownMenuItem(
+                              value: option,
+                              child: Text(option == 'all'
+                                  ? 'All Status'
+                                  : _pretty(option)),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _status = value);
+                      _load();
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        setState(() => _leaveDateFilter = !_leaveDateFilter),
+                    icon: const Icon(Icons.filter_list, size: 16),
+                    label: Text(_leaveDateFilter ? 'Date On' : 'Date Filter'),
+                  ),
+                  if (_leaveDateFilter) ...[
+                    const SizedBox(width: 12),
+                    _dateRangeButton(),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          _leaveTable(rows),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabButton(String label, String value, IconData icon) {
+    final selected = _leaveTab == value;
+    return TextButton.icon(
+      onPressed: () => setState(() => _leaveTab = value),
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: TextButton.styleFrom(
+        foregroundColor:
+            selected ? AppColors.kPrimary : AppColors.kTextSecondary,
+        backgroundColor:
+            selected ? AppColors.kPrimary.withValues(alpha: 0.08) : null,
+      ),
+    );
+  }
+
+  Widget _leaveTable(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return const _EmptyNotice('No leave requests found.');
+    return Card(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor:
+              WidgetStatePropertyAll(AppColors.kSurface.withValues(alpha: 0.8)),
+          columns: const [
+            DataColumn(label: Text('Employee')),
+            DataColumn(label: Text('Leave Type')),
+            DataColumn(label: Text('Duration')),
+            DataColumn(label: Text('Days')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Requested')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: rows.map((row) {
+            final id = _id(row);
+            final status = _text(row, ['status']);
+            return DataRow(cells: [
+              DataCell(_staffCell(row)),
+              DataCell(_leaveTypeChip(_text(row, ['leave_type', 'type']))),
+              DataCell(Text(
+                  '${_formatDate(row['start_date'])}\nto ${_formatDate(row['end_date'])}')),
+              DataCell(Text('${_leaveDays(row)} days')),
+              DataCell(_statusChip(status)),
+              DataCell(Text(_formatDate(row['created_at']))),
+              DataCell(Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'View',
+                    onPressed: () => _showRow(row),
+                    icon: const Icon(Icons.visibility_outlined, size: 18),
+                  ),
+                  if (id.isNotEmpty && status == 'pending')
+                    TextButton(
+                        onPressed: () => _leaveAction(id, 'approve'),
+                        child: const Text('Approve')),
+                  if (id.isNotEmpty && status == 'pending')
+                    TextButton(
+                        onPressed: () => _leaveAction(id, 'reject'),
+                        child: const Text('Reject')),
+                  if (id.isNotEmpty && status == 'approved')
+                    TextButton(
+                        onPressed: () => _leaveAction(id, 'duty'),
+                        child: const Text('Report duty')),
+                ],
+              )),
+            ]);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _summaryMap() {
+    final summary = _summary['summary'];
+    if (summary is Map) return Map<String, dynamic>.from(summary);
+    return _summary;
+  }
+
+  String _summaryValue(
+      Map<String, dynamic> summary, List<String> keys, Object fallback) {
+    final value = _text(summary, keys);
+    return value.isEmpty ? '$fallback' : value;
+  }
+
+  int _sumRows(List<Map<String, dynamic>> rows, List<String> keys) {
+    return rows.fold<int>(0, (sum, row) => sum + _num(row, keys).round());
+  }
+
+  List<Map<String, dynamic>> _rankWaiters(List<Map<String, dynamic>> rows) {
+    final ranked = rows.map((row) {
+      final completed = _num(
+          row, ['completed_orders', 'completed_order_count', 'total_orders']);
+      return {
+        ...row,
+        'completed_orders': completed.round(),
+      };
+    }).toList();
+    ranked.sort((a, b) {
+      final completed = _num(b, ['completed_orders'])
+          .compareTo(_num(a, ['completed_orders']));
+      if (completed != 0) return completed;
+      final orders =
+          _num(b, ['total_orders']).compareTo(_num(a, ['total_orders']));
+      if (orders != 0) return orders;
+      return _num(b, ['total_revenue']).compareTo(_num(a, ['total_revenue']));
+    });
+    for (var i = 0; i < ranked.length; i++) {
+      ranked[i]['rank'] = i + 1;
+    }
+    return ranked;
+  }
+
+  List<Map<String, dynamic>> _rankAttendance(List<Map<String, dynamic>> rows) {
+    final ranked = rows.map((row) {
+      final status = _attendanceStatus(row);
+      final score = status == 'present'
+          ? 3
+          : status == 'late'
+              ? 2
+              : status == 'approved'
+                  ? 1
+                  : 0;
+      return {...row, 'attendance_score': score};
+    }).toList();
+    ranked.sort((a, b) {
+      final score = _num(b, ['attendance_score'])
+          .compareTo(_num(a, ['attendance_score']));
+      if (score != 0) return score;
+      return _titleFor(a).compareTo(_titleFor(b));
+    });
+    for (var i = 0; i < ranked.length; i++) {
+      ranked[i]['rank'] = i + 1;
+    }
+    return ranked;
+  }
+
+  String _attendanceStatus(Map<String, dynamic> row) {
+    final status = _text(row, ['status']).toLowerCase();
+    if (status.isNotEmpty) return status;
+    if (_text(row, ['clock_in']).isNotEmpty) return 'present';
+    return 'absent';
+  }
+
+  String _attendanceStartDate() {
+    final days = _period == 'month' ? 29 : 6;
+    return _ymd(_date.subtract(Duration(days: days)));
+  }
+
+  String _timeOnly(dynamic value) {
+    final parsed = DateTime.tryParse('$value');
+    if (parsed != null) {
+      final local = parsed.toLocal();
+      return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    }
+    final text = '$value'.trim();
+    if (text.isEmpty || text == 'null') return '—';
+    return text.length > 5 ? text.substring(0, 5) : text;
+  }
+
+  String _percentText(Map<String, dynamic> row, List<String> keys) {
+    final value = _num(row, keys);
+    return _score(value);
+  }
+
+  String _score(num value) => '${value.toStringAsFixed(1)}%';
+
+  Color _scoreColor(num score) {
+    if (score >= 80) return AppColors.kSuccess;
+    if (score >= 60) return AppColors.kWarning;
+    return AppColors.kError;
+  }
+
+  String _performanceStatus(num score) {
+    if (score >= 80) return 'Excellent';
+    if (score >= 60) return 'Good';
+    return 'Needs Improvement';
+  }
+
+  List<Map<String, dynamic>> _performanceTopRows(
+    Map<String, dynamic> summary,
+    List<Map<String, dynamic>> rows,
+  ) {
+    final top = summary['top_performers'];
+    if (top is List && top.isNotEmpty) {
+      return top
+          .whereType<Map>()
+          .map((row) => _normalizeRecord(Map<String, dynamic>.from(row)))
+          .take(5)
+          .toList();
+    }
+    final sorted = [...rows];
+    sorted.sort((a, b) => _num(b, ['performance_score'])
+        .compareTo(_num(a, ['performance_score'])));
+    return sorted.take(5).toList();
+  }
+
+  Widget _statusChip(String status) {
+    final color = _statusColor(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        readableStatus(status).toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _leaveTypeChip(String type) {
+    final color = switch (type.toLowerCase()) {
+      'annual' => AppColors.kPrimary,
+      'sick' => AppColors.kError,
+      'maternity' || 'paternity' => AppColors.kAccent,
+      'emergency' => AppColors.kWarning,
+      _ => AppColors.kTextSecondary,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        readableStatus(type.isEmpty ? 'Leave' : type),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _leaveRows() {
+    final query = _search.trim().toLowerCase();
+    final today = DateTime.now();
+    return _rows.map(_normalizeRecord).where((row) {
+      final status = _text(row, ['status']);
+      if (_status != 'all' && status != _status) return false;
+      final end = DateTime.tryParse('${row['end_date'] ?? ''}');
+      final isActive = end == null ||
+          !end.isBefore(DateTime(
+            today.year,
+            today.month,
+            today.day,
+          ));
+      if (_leaveTab == 'active' && !isActive) return false;
+      if (_leaveTab == 'history' && isActive) return false;
+      if (query.isNotEmpty) {
+        final haystack = [
+          _titleFor(row),
+          _text(row, ['id_number', 'employee_number', 'staff_number']),
+          _text(row, ['department', 'role']),
+        ].join(' ').toLowerCase();
+        if (!haystack.contains(query)) return false;
+      }
+      final created = DateTime.tryParse('${row['created_at'] ?? ''}');
+      if (_leaveDateFilter && created != null) {
+        final start = DateTime(_from.year, _from.month, _from.day);
+        final endRange = DateTime(_to.year, _to.month, _to.day, 23, 59, 59);
+        if (created.isBefore(start) || created.isAfter(endRange)) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  int _leaveDays(Map<String, dynamic> row) {
+    final explicit = int.tryParse(_text(row, ['days', 'duration_days']));
+    if (explicit != null && explicit > 0) return explicit;
+    final start = DateTime.tryParse('${row['start_date'] ?? ''}');
+    final end = DateTime.tryParse('${row['end_date'] ?? ''}');
+    if (start == null || end == null) return 0;
+    return end.difference(start).inDays.abs() + 1;
+  }
+
+  String _formatDate(dynamic value) {
+    final parsed = DateTime.tryParse('$value');
+    if (parsed == null) {
+      final text = '$value'.trim();
+      return text.isEmpty || text == 'null' ? '—' : text;
+    }
+    return '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+  }
+
+  String _initials(String name) {
+    final parts = name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'BM';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
   Widget _reports() {
@@ -1053,38 +2035,52 @@ class _BranchManagerDashboardState
         itemCount: rows.length,
         separatorBuilder: (_, __) => const Divider(height: 1),
         itemBuilder: (context, index) {
-          final row = rows[index];
+          final row = _normalizeRecord(rows[index]);
           final title = _titleFor(row);
+          final subtitle = _subtitleForRow(row);
+          final chips = _rowChips(row, fields).take(6).toList();
+          final status = _text(row, [
+            'status',
+            'approval_status',
+            'payment_status',
+            'housekeeping_status',
+            'workflow_status',
+          ]);
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: _statusColor(_text(row, ['status']))
-                    .withValues(alpha: 0.12),
+                backgroundColor: _statusColor(status).withValues(alpha: 0.12),
                 child: Icon(_iconFor(_section),
-                    size: 19, color: _statusColor(_text(row, ['status']))),
+                    size: 19, color: _statusColor(status)),
               ),
               title: Text(title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: fields
-                      .where((field) => _text(row, [field]).isNotEmpty)
-                      .take(6)
-                      .map((field) => _pill(
-                            '${_pretty(field)}: ${_text(row, [field])}',
-                            color: field.contains('status')
-                                ? _statusColor(_text(row, [field]))
-                                : AppColors.kTextSecondary,
-                          ))
-                      .toList(),
-                ),
-              ),
+              subtitle: subtitle.isEmpty && chips.isEmpty
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (subtitle.isNotEmpty)
+                            Text(
+                              subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.kTextSecondary,
+                              ),
+                            ),
+                          if (chips.isNotEmpty) ...[
+                            if (subtitle.isNotEmpty) const SizedBox(height: 6),
+                            Wrap(spacing: 8, runSpacing: 6, children: chips),
+                          ],
+                        ],
+                      ),
+                    ),
               trailing: Wrap(
                 spacing: 4,
                 children: actionsBuilder?.call(row) ??
@@ -1153,38 +2149,130 @@ class _BranchManagerDashboardState
   }
 
   Widget _compactRow(Map<String, dynamic> row) {
+    final record = _normalizeRecord(row);
+    final amount = _text(record, [
+      'amount',
+      'total_amount',
+      'grand_total',
+      'quantity',
+      'current_stock',
+    ]);
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
       leading: Icon(_iconFor(_section), size: 18, color: AppColors.kPrimary),
-      title: Text(_titleFor(row),
+      title: Text(_titleFor(record),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(_text(row, ['type', 'status', 'created_at']),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: _text(row, ['amount', 'total_amount', 'quantity']).isEmpty
+      subtitle: Text(
+          _subtitleForRow(record)
+              .ifEmpty(_text(record, ['type', 'status', 'created_at'])),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis),
+      trailing: amount.isEmpty
           ? null
-          : Text(_text(row, ['amount', 'total_amount', 'quantity']),
+          : Text(_formatValue(record, 'amount', amount),
               style: const TextStyle(fontWeight: FontWeight.w700)),
     );
   }
 
   Widget _detailCard(Map<String, dynamic> detail) {
+    final normalized = _normalizeRecord(detail);
+    final lineItems = _lineItems(normalized);
+    final record = _detailRecord(normalized);
+    final title = _titleFor(record);
+    final subtitle = _subtitleForRow(record);
+    final chips = _rowChips(record, _fieldsFor(_section)).take(8).toList();
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: detail.entries
-              .where(
-                  (entry) => entry.value != null && '${entry.value}'.isNotEmpty)
-              .take(24)
-              .map((entry) => _pill('${_pretty(entry.key)}: ${entry.value}',
-                  color: AppColors.kPrimary))
-              .toList(),
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                  child: Icon(_iconFor(_section), color: AppColors.kPrimary),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w900)),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(subtitle,
+                            style: const TextStyle(
+                                color: AppColors.kTextSecondary)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (chips.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Wrap(spacing: 8, runSpacing: 8, children: chips),
+            ],
+            const SizedBox(height: 16),
+            const Text('Details',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            ReadableRecordDetails(record: record, limit: 36, labelWidth: 170),
+            if (lineItems.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              const Text('Items',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              ...lineItems.map(_detailLineItem),
+            ],
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _detailLineItem(Map<String, dynamic> item) {
+    final title = _lineItemTitle(item);
+    final quantity = _text(item, [
+      'quantity',
+      'qty',
+      'quantity_sold',
+      'quantity_received',
+      'quantity_requested',
+    ]);
+    final price = _text(item, ['total_price', 'line_total', 'total', 'price']);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.kSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          ),
+          if (quantity.isNotEmpty)
+            Text('Qty $quantity',
+                style: const TextStyle(color: AppColors.kTextSecondary)),
+          if (price.isNotEmpty) ...[
+            const SizedBox(width: 14),
+            Text(_formatValue(item, 'amount', price),
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ],
       ),
     );
   }
@@ -1214,11 +2302,9 @@ class _BranchManagerDashboardState
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        text,
-        style:
-            TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
-      ),
+      child: Text(text,
+          style: TextStyle(
+              color: color, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -1326,6 +2412,8 @@ class _BranchManagerDashboardState
         return [
           _miniButton('View', () => _showRow(row)),
           _miniButton('Edit', () => _editGeneric(row)),
+          if (id.isNotEmpty)
+            _miniButton('Status', () => _changeRoomStatus(row)),
         ];
       case BranchManagerSection.guests:
         return [
@@ -1374,6 +2462,14 @@ class _BranchManagerDashboardState
           if (id.isNotEmpty && status == 'in_progress')
             _miniButton('Done', () => _housekeepingAction(id, 'completed')),
         ];
+      case BranchManagerSection.maintenance:
+        return [
+          _miniButton('View', () => _showRow(row)),
+          if (id.isNotEmpty && status == 'pending')
+            _miniButton('Start', () => _maintenanceAction(id, 'in_progress')),
+          if (id.isNotEmpty && status == 'in_progress')
+            _miniButton('Complete', () => _maintenanceAction(id, 'completed')),
+        ];
       case BranchManagerSection.waiterSales:
       case BranchManagerSection.staffPerformance:
         return [_miniButton('Detail', () => _showRow(row))];
@@ -1400,13 +2496,7 @@ class _BranchManagerDashboardState
       case BranchManagerSection.rooms:
         return () => _showFormDialog(
               title: 'Add Room',
-              fields: const [
-                'room_number',
-                'room_type',
-                'floor',
-                'rate',
-                'status'
-              ],
+              fields: const ['room_number', 'room_type', 'floor', 'status'],
               onSubmit: _repo.createRoom,
             );
       case BranchManagerSection.guests:
@@ -1482,6 +2572,15 @@ class _BranchManagerDashboardState
               fields: const ['item_id', 'quantity', 'reason', 'notes'],
               onSubmit: _repo.recordWastage,
             );
+      case BranchManagerSection.maintenance:
+        return () => _showFormDialog(
+              title: 'New Maintenance Request',
+              fields: const ['title', 'description', 'priority', 'location'],
+              onSubmit: (data) => _repo.postMap('/maintenance/tasks', data: {
+                ...data,
+                'status': 'pending',
+              }),
+            );
       default:
         return null;
     }
@@ -1495,52 +2594,84 @@ class _BranchManagerDashboardState
   }) async {
     final controllers = {
       for (final field in fields)
-        field: TextEditingController(text: '${initial[field] ?? ''}'),
+        if (!field.endsWith('_id'))
+          field: TextEditingController(text: '${initial[field] ?? ''}'),
     };
+    final idValues = <String, String>{};
+    final idOptions = <String, List<_SelectOption>>{};
+
+    for (final field in fields) {
+      if (field.endsWith('_id')) {
+        idValues[field] = '${initial[field] ?? ''}';
+        final options = await _loadIdOptions(field);
+        idOptions[field] = options;
+      }
+    }
+
+    if (!mounted) return;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 460,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final field in fields) ...[
-                  TextField(
-                    controller: controllers[field],
-                    keyboardType: _numericField(field)
-                        ? const TextInputType.numberWithOptions(decimal: true)
-                        : TextInputType.text,
-                    decoration: InputDecoration(labelText: _pretty(field)),
-                  ),
-                  const SizedBox(height: 10),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final field in fields) ...[
+                    if (field.endsWith('_id'))
+                      _searchableSelectField(
+                        label: readableRecordLabel(field),
+                        value: idValues[field] ?? '',
+                        options: idOptions[field] ?? const [],
+                        onChanged: (value) =>
+                            setDialogState(() => idValues[field] = value),
+                      )
+                    else
+                      TextField(
+                        controller: controllers[field],
+                        keyboardType: _numericField(field)
+                            ? const TextInputType.numberWithOptions(
+                                decimal: true)
+                            : TextInputType.text,
+                        decoration: InputDecoration(
+                            labelText: readableRecordLabel(field)),
+                      ),
+                    const SizedBox(height: 10),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final data = <String, dynamic>{};
+                for (final field in fields) {
+                  if (field.endsWith('_id')) {
+                    if (idValues[field]!.isNotEmpty) {
+                      data[field] = idValues[field];
+                    }
+                  } else {
+                    final value = controllers[field]?.text.trim() ?? '';
+                    if (value.isEmpty) continue;
+                    data[field] = _numericField(field)
+                        ? (num.tryParse(value) ?? value)
+                        : value;
+                  }
+                }
+                Navigator.pop(ctx, data);
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final data = <String, dynamic>{};
-              for (final entry in controllers.entries) {
-                final value = entry.value.text.trim();
-                if (value.isEmpty) continue;
-                data[entry.key] = _numericField(entry.key)
-                    ? (num.tryParse(value) ?? value)
-                    : value;
-              }
-              Navigator.pop(ctx, data);
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
     for (final controller in controllers.values) {
@@ -1553,12 +2684,205 @@ class _BranchManagerDashboardState
     }, success: '$title saved');
   }
 
+  Widget _searchableSelectField({
+    required String label,
+    required String value,
+    required List<_SelectOption> options,
+    required ValueChanged<String> onChanged,
+  }) {
+    _SelectOption? selected;
+    for (final option in options) {
+      if (option.value == value) {
+        selected = option;
+        break;
+      }
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: options.isEmpty
+          ? null
+          : () async {
+              final picked = await _pickOption(label, options);
+              if (picked != null) onChanged(picked.value);
+            },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: const Icon(Icons.search, size: 18),
+        ),
+        child: Text(
+          selected?.label ?? 'Search and select $label',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: selected == null
+                ? AppColors.kTextSecondary
+                : AppColors.kTextPrimary,
+            fontWeight: selected == null ? FontWeight.w400 : FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<_SelectOption?> _pickOption(
+      String title, List<_SelectOption> options) {
+    var query = '';
+    return showDialog<_SelectOption>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final filtered = options.where((option) {
+            final haystack =
+                '${option.label} ${option.subtitle} ${option.value}'
+                    .toLowerCase();
+            return haystack.contains(query.toLowerCase());
+          }).toList();
+          return AlertDialog(
+            title: Text('Select $title'),
+            content: SizedBox(
+              width: 520,
+              height: 460,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      hintText: 'Search $title',
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => query = value.trim()),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text('No matches found',
+                                style:
+                                    TextStyle(color: AppColors.kTextSecondary)),
+                          )
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final option = filtered[index];
+                              return ListTile(
+                                title: Text(option.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800)),
+                                subtitle: option.subtitle.isEmpty
+                                    ? null
+                                    : Text(option.subtitle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
+                                onTap: () => Navigator.pop(ctx, option),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<List<_SelectOption>> _loadIdOptions(String field) async {
+    try {
+      switch (field) {
+        case 'guest_id':
+          final guests = await _repo.guests();
+          return guests.map((g) {
+            final row = _normalizeRecord(g);
+            final name = _titleFor(row);
+            return _SelectOption(
+              value: '${g['id']}',
+              label: name,
+              subtitle: _text(row, ['phone', 'email', 'id_number']),
+            );
+          }).toList();
+        case 'room_id':
+          final rooms = await _repo.rooms();
+          return rooms.map((r) {
+            final row = _normalizeRecord(r);
+            return _SelectOption(
+              value: '${r['id']}',
+              label: _text(row, ['room_number']).ifEmpty(_titleFor(row)),
+              subtitle:
+                  '${_text(row, ['room_type'])} • ${_text(row, ['status'])}',
+            );
+          }).toList();
+        case 'staff_id':
+          final staff = await _repo.staff();
+          return staff.map((s) {
+            final row = _normalizeRecord(s);
+            return _SelectOption(
+              value: '${s['id']}',
+              label: _titleFor(row),
+              subtitle: [
+                _text(row, ['employee_number', 'staff_number', 'id_number']),
+                _text(row, ['department']),
+                _text(row, ['role']),
+              ].where((part) => part.trim().isNotEmpty).join(' • '),
+            );
+          }).toList();
+        case 'item_id':
+          final items = await _repo.branchStock();
+          return items
+              .map((i) {
+                final row = _normalizeRecord(i);
+                return _SelectOption(
+                  value: _text(row, ['item_id', 'id', 'sku', 'item_sku']),
+                  label: _text(row, ['item_name', 'name'])
+                      .ifEmpty(_text(row, ['item_sku', 'sku'])),
+                  subtitle: [
+                    _text(row, ['item_sku', 'sku']),
+                    'Stock ${_text(row, [
+                          'current_stock',
+                          'quantity'
+                        ]).ifEmpty('0')}',
+                    _text(row, ['unit']),
+                  ].where((part) => part.trim().isNotEmpty).join(' • '),
+                );
+              })
+              .where((option) => option.value.isNotEmpty)
+              .toList();
+        case 'category_id':
+          if (_section == BranchManagerSection.barMenu) {
+            final cats = await _repo.barCategories();
+            return cats
+                .map((c) =>
+                    _SelectOption(value: '${c['id']}', label: '${c['name']}'))
+                .toList();
+          }
+          final cats =
+              await _safe(_repo.restaurantCategories, <Map<String, dynamic>>[]);
+          return cats
+              .map((c) =>
+                  _SelectOption(value: '${c['id']}', label: '${c['name']}'))
+              .toList();
+        default:
+          return [];
+      }
+    } catch (_) {
+      return [];
+    }
+  }
+
   void _showRow(Map<String, dynamic> row) {
+    final record = _detailRecord(_normalizeRecord(row));
     openRecordDetailScreen(
       context,
-      title: _titleFor(row),
-      subtitle: _label(_section),
-      record: row,
+      title: _titleFor(record),
+      subtitle: _subtitleForRow(record).ifEmpty(_label(_section)),
+      record: record,
     );
   }
 
@@ -1634,6 +2958,9 @@ class _BranchManagerDashboardState
           case BranchManagerSection.barMenu:
             await _repo.updateBarDrink(id, data);
             break;
+          case BranchManagerSection.maintenance:
+            await _repo.putMap('/maintenance/tasks/$id', data: data);
+            break;
           default:
             break;
         }
@@ -1661,11 +2988,39 @@ class _BranchManagerDashboardState
         case BranchManagerSection.barMenu:
           await _repo.deleteBarDrink(id);
           break;
+        case BranchManagerSection.maintenance:
+          await _repo.delete('/maintenance/tasks/$id');
+          break;
         default:
           break;
       }
       await _load();
     }, success: 'Record deleted');
+  }
+
+  Future<void> _changeRoomStatus(Map<String, dynamic> row) async {
+    final id = _id(row);
+    if (id.isEmpty) return;
+    final currentStatus = _text(row, ['status']).toLowerCase();
+    final options = ['available', 'occupied', 'maintenance', 'cleaning'];
+    final newStatus = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Change Room Status'),
+        children: options
+            .where((o) => o != currentStatus)
+            .map((o) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(ctx, o),
+                  child: Text(_pretty(o)),
+                ))
+            .toList(),
+      ),
+    );
+    if (newStatus == null) return;
+    await _run(() async {
+      await _repo.patchMap('/rooms/$id/status', data: {'status': newStatus});
+      await _load();
+    }, success: 'Room status updated');
   }
 
   Future<void> _approveClearance(String id) async {
@@ -1715,6 +3070,13 @@ class _BranchManagerDashboardState
       if (action == 'duty') await _repo.reportToDuty(id);
       await _load();
     }, success: 'Leave updated');
+  }
+
+  Future<void> _maintenanceAction(String id, String newStatus) async {
+    await _run(() async {
+      await _repo.putMap('/maintenance/tasks/$id', data: {'status': newStatus});
+      await _load();
+    }, success: 'Maintenance task updated');
   }
 
   Future<void> _stockRequest(Map<String, dynamic> row) async {
@@ -1773,9 +3135,17 @@ class _BranchManagerDashboardState
   Future<void> _exportRows(String name, List<Map<String, dynamic>> rows) async {
     if (rows.isEmpty) return _snack('No rows to export');
     await _run(() async {
+      final exportRows = rows
+          .map((row) => _detailRecord(_normalizeRecord(row)))
+          .where((row) => row.isNotEmpty)
+          .toList();
+      if (exportRows.isEmpty) {
+        _snack('No readable rows to export');
+        return;
+      }
       final file = await _repo.exportCurrentRows(
         name: name.toLowerCase().replaceAll(' ', '_'),
-        rows: rows,
+        rows: exportRows,
       );
       _snack('CSV saved to ${file.path}');
     });
@@ -1826,6 +3196,9 @@ class _BranchManagerDashboardState
     _search = '';
     _status = 'all';
     _period = 'today';
+    _staffPerformancePeriod = 30;
+    _leaveTab = 'active';
+    _leaveDateFilter = false;
     _date = DateTime.now();
     _from = DateTime.now().subtract(const Duration(days: 6));
     _to = DateTime.now();
@@ -1854,19 +3227,77 @@ class _BranchManagerDashboardState
   String _id(Map<String, dynamic> row) =>
       _text(row, ['id', 'booking_id', 'guest_id', 'staff_id', 'item_id']);
 
-  String _titleFor(Map<String, dynamic> row) => _text(row, [
-        'guest_name',
-        'full_name',
-        'name',
-        'item_name',
-        'staff_name',
-        'cashier_name',
-        'room_number',
-        'title',
-        'description',
-        'type',
-        'id',
-      ]).ifEmpty('Record');
+  String _titleFor(Map<String, dynamic> row) {
+    final record = _normalizeRecord(row);
+    final keys = <String>[
+      ..._primaryTitleKeys(_section),
+      'display_name',
+      'guest_name',
+      'full_name',
+      'staff_name',
+      'waiter_name',
+      'cashier_name',
+      'item_name',
+      'menu_item_name',
+      'room_number',
+      'order_number',
+      'booking_reference',
+      'confirmation_number',
+      'request_number',
+      'invoice_number',
+      'name',
+      'title',
+      'description',
+      'item_sku',
+      'sku',
+      'type',
+    ];
+    for (final key in keys) {
+      final value = _displayText(record[key]);
+      if (_isUsefulDisplay(value)) return value;
+    }
+    final readable = readableMapName(record);
+    if (_isUsefulDisplay(readable)) return readable!;
+    return _label(_section);
+  }
+
+  List<String> _primaryTitleKeys(BranchManagerSection section) {
+    switch (section) {
+      case BranchManagerSection.reservations:
+      case BranchManagerSection.reservationDetail:
+      case BranchManagerSection.checkin:
+      case BranchManagerSection.arrivals:
+      case BranchManagerSection.departures:
+        return const ['guest_name', 'room_number', 'booking_reference'];
+      case BranchManagerSection.rooms:
+        return const ['room_number', 'name'];
+      case BranchManagerSection.guests:
+      case BranchManagerSection.guestDetail:
+        return const ['full_name', 'guest_name', 'phone'];
+      case BranchManagerSection.staff:
+      case BranchManagerSection.staffDetail:
+      case BranchManagerSection.staffPerformance:
+      case BranchManagerSection.staffKpis:
+      case BranchManagerSection.staffAttendance:
+      case BranchManagerSection.attendance:
+      case BranchManagerSection.leave:
+      case BranchManagerSection.staffLeave:
+        return const ['staff_name', 'full_name', 'employee_number'];
+      case BranchManagerSection.stock:
+      case BranchManagerSection.stockAnalytics:
+      case BranchManagerSection.stockOut:
+      case BranchManagerSection.wastage:
+        return const ['item_name', 'menu_item_name', 'item_sku', 'sku'];
+      case BranchManagerSection.restaurant:
+        return const ['order_number', 'table_number', 'guest_name'];
+      case BranchManagerSection.waiterSales:
+        return const ['waiter_name', 'staff_name', 'full_name'];
+      case BranchManagerSection.cashierClearance:
+        return const ['cashier_name', 'shift', 'date'];
+      default:
+        return const ['name', 'title'];
+    }
+  }
 
   String _text(Map<String, dynamic> row, List<String> keys) {
     for (final key in keys) {
@@ -1874,6 +3305,394 @@ class _BranchManagerDashboardState
       if (value != null && '$value'.trim().isNotEmpty) return '$value';
     }
     return '';
+  }
+
+  String _displayValue(Map<String, dynamic> row, String field) {
+    return _formatValue(row, field, row[field] ?? row['${field}_name'] ?? '');
+  }
+
+  String _formatValue(Map<String, dynamic> row, String field, dynamic value) {
+    final formatted = readableRecordValue(row, field, value);
+    if (formatted == 'Linked record') return '—';
+    if (_moneyField(field)) {
+      final n = value is num ? value : num.tryParse('$value');
+      if (n != null) return _money(n);
+    }
+    return formatted;
+  }
+
+  Map<String, dynamic> _normalizeRecord(Map<String, dynamic> raw) {
+    final row = Map<String, dynamic>.from(raw);
+
+    void alias(String from, String to) {
+      if (_isUsefulDisplay(_displayText(row[from])) &&
+          !_isUsefulDisplay(_displayText(row[to]))) {
+        row[to] = row[from];
+      }
+    }
+
+    void flatten(String sourceKey, Map<String, List<String>> targets) {
+      final source = row[sourceKey];
+      if (source is! Map) return;
+      final map = Map<String, dynamic>.from(source);
+      for (final entry in targets.entries) {
+        final value = _firstNestedText(map, entry.value);
+        if (_isUsefulDisplay(value) &&
+            !_isUsefulDisplay(_displayText(row[entry.key]))) {
+          row[entry.key] = value;
+        }
+      }
+    }
+
+    alias('checkInDate', 'check_in_date');
+    alias('checkOutDate', 'check_out_date');
+    alias('roomNumber', 'room_number');
+    alias('roomType', 'room_type');
+    alias('confirmationNumber', 'confirmation_number');
+    alias('totalAmount', 'total_amount');
+    alias('grandTotal', 'grand_total');
+    alias('amountPaid', 'amount_paid');
+    alias('balanceAmount', 'balance_amount');
+    alias('createdAt', 'created_at');
+    alias('updatedAt', 'updated_at');
+    alias('hk_status', 'housekeeping_status');
+    alias('current_quantity', 'current_stock');
+    alias('stock_quantity', 'current_stock');
+    alias('reorder_level', 'minimum_stock');
+    alias('min_stock', 'minimum_stock');
+
+    final first = _displayText(row['first_name']);
+    final last = _displayText(row['last_name']);
+    final joined = '$first $last'.trim();
+    if (_isUsefulDisplay(joined) &&
+        !_isUsefulDisplay(_displayText(row['full_name']))) {
+      row['full_name'] = joined;
+    }
+
+    flatten('guest', {
+      'guest_name': const ['full_name', 'name', 'guest_name'],
+      'guest_phone': const ['phone', 'mobile', 'phone_number'],
+      'guest_email': const ['email'],
+      'id_number': const ['id_number', 'national_id', 'document_number'],
+    });
+    flatten('room', {
+      'room_number': const ['room_number', 'number', 'name'],
+      'room_type': const ['room_type', 'type', 'name'],
+      'floor': const ['floor'],
+    });
+    flatten('room_type', {
+      'room_type': const ['name', 'type', 'code'],
+      'rate': const ['rate', 'base_rate', 'price'],
+    });
+    flatten('branch', {
+      'branch_name': const ['name', 'branch_name', 'code', 'branch_code'],
+    });
+    flatten('cashier', {
+      'cashier_name': const ['full_name', 'name', 'first_name'],
+      'cashier_email': const ['email'],
+    });
+    flatten('waiter', {
+      'waiter_name': const ['full_name', 'name', 'first_name'],
+      'waiter_email': const ['email'],
+    });
+    flatten('staff', {
+      'staff_name': const ['full_name', 'name', 'first_name'],
+      'department': const ['department'],
+      'role': const ['role'],
+      'email': const ['email'],
+    });
+    flatten('employee', {
+      'staff_name': const ['full_name', 'name', 'first_name'],
+      'department': const ['department'],
+      'role': const ['role'],
+    });
+    flatten('assigned_to_user', {
+      'assigned_to_name': const ['full_name', 'name', 'first_name'],
+    });
+    flatten('assigned_to', {
+      'assigned_to_name': const ['full_name', 'name', 'first_name'],
+    });
+    flatten('reported_by_user', {
+      'reported_by_name': const ['full_name', 'name', 'first_name'],
+    });
+    flatten('reported_by', {
+      'reported_by_name': const ['full_name', 'name', 'first_name'],
+    });
+    flatten('created_by_user', {
+      'created_by_name': const ['full_name', 'name', 'first_name'],
+    });
+    flatten('created_by', {
+      'created_by_name': const ['full_name', 'name', 'first_name'],
+    });
+    flatten('item', {
+      'item_name': const ['item_name', 'name', 'description'],
+      'item_sku': const ['sku', 'item_sku', 'code'],
+      'unit': const ['unit', 'unit_of_measure'],
+      'category_name': const ['category_name', 'category'],
+    });
+    flatten('inventory_item', {
+      'item_name': const ['item_name', 'name', 'description'],
+      'item_sku': const ['sku', 'item_sku', 'code'],
+      'unit': const ['unit', 'unit_of_measure'],
+    });
+    flatten('stock_item', {
+      'item_name': const ['item_name', 'name', 'description'],
+      'item_sku': const ['sku', 'item_sku', 'code'],
+      'unit': const ['unit', 'unit_of_measure'],
+    });
+    flatten('menu_item', {
+      'menu_item_name': const ['name', 'item_name', 'description'],
+      'item_name': const ['name', 'item_name', 'description'],
+      'category_name': const ['category_name', 'category'],
+      'price': const ['price', 'unit_price'],
+    });
+    flatten('category', {
+      'category_name': const ['name', 'category_name', 'title'],
+    });
+
+    if (row['item'] is String && _isUsefulDisplay('${row['item']}')) {
+      row['item_name'] ??= row['item'];
+    }
+    if (row['branch'] is String && _isUsefulDisplay('${row['branch']}')) {
+      row['branch_name'] ??= row['branch'];
+    }
+    if (row['items'] is List) {
+      row['items_summary'] = readableListValue(row['items'] as List);
+      row['items_count'] ??= (row['items'] as List).length;
+    }
+    if (row['waiter_sales'] is List) {
+      row['waiter_sales_summary'] =
+          readableListValue(row['waiter_sales'] as List);
+    }
+    row['display_name'] ??= readableMapName(row);
+    return row;
+  }
+
+  Map<String, dynamic> _detailRecord(Map<String, dynamic> raw) {
+    final row = _normalizeRecord(raw);
+    final cleaned = <String, dynamic>{};
+    for (final entry in row.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      if (_hideDetailKey(row, key, value)) continue;
+      if (value is Map || value is List) continue;
+      cleaned[key] = value;
+    }
+    return cleaned;
+  }
+
+  bool _hideDetailKey(Map<String, dynamic> row, String key, dynamic value) {
+    final lower = key.toLowerCase();
+    if (lower.startsWith('_')) return true;
+    if (lower == 'id' || lower == 'uuid') return true;
+    if (_section == BranchManagerSection.rooms &&
+        const {'rate', 'base_rate', 'room_rate', 'price'}.contains(lower)) {
+      return true;
+    }
+    if (lower.contains('password') || lower.contains('token')) return true;
+    final text = _displayText(value);
+    if (!_isUsefulDisplay(text)) return true;
+    if (key.endsWith('_id') && readableRelatedValue(row, key) != null) {
+      return true;
+    }
+    if (_isUuid(text) && readableRelatedValue(row, key) == null) return true;
+    return false;
+  }
+
+  List<Widget> _rowChips(Map<String, dynamic> row, List<String> fields) {
+    final seen = <String>{};
+    final widgets = <Widget>[];
+    for (final field in [
+      ...fields,
+      'branch_name',
+      'guest_phone',
+      'items_count',
+    ]) {
+      if (!seen.add(field)) continue;
+      if (_isTitleField(field)) continue;
+      final value = _displayValue(row, field);
+      if (!_isUsefulDisplay(value)) continue;
+      if (value == '—') continue;
+      final label = readableRecordLabel(field);
+      final color = field.contains('status')
+          ? _statusColor(value)
+          : AppColors.kTextSecondary;
+      widgets.add(_pill('$label: $value', color: color));
+    }
+    return widgets;
+  }
+
+  bool _isTitleField(String field) {
+    const fields = {
+      'display_name',
+      'guest_name',
+      'full_name',
+      'first_name',
+      'last_name',
+      'staff_name',
+      'waiter_name',
+      'cashier_name',
+      'item_name',
+      'menu_item_name',
+      'name',
+      'title',
+      'description',
+      'room_number',
+    };
+    return fields.contains(field);
+  }
+
+  String _subtitleForRow(Map<String, dynamic> raw) {
+    final row = _normalizeRecord(raw);
+    final parts = <String>[];
+    void addField(String key) {
+      final value = _displayValue(row, key);
+      if (_isUsefulDisplay(value) && value != '—' && !parts.contains(value)) {
+        parts.add(value);
+      }
+    }
+
+    switch (_section) {
+      case BranchManagerSection.reservations:
+      case BranchManagerSection.reservationDetail:
+      case BranchManagerSection.checkin:
+      case BranchManagerSection.arrivals:
+      case BranchManagerSection.departures:
+        addField('room_number');
+        addField('check_in_date');
+        addField('check_out_date');
+        addField('total_amount');
+        addField('status');
+        break;
+      case BranchManagerSection.rooms:
+        addField('room_type');
+        addField('floor');
+        addField('housekeeping_status');
+        addField('status');
+        break;
+      case BranchManagerSection.guests:
+      case BranchManagerSection.guestDetail:
+        addField('phone');
+        addField('email');
+        addField('id_number');
+        break;
+      case BranchManagerSection.staff:
+      case BranchManagerSection.staffDetail:
+      case BranchManagerSection.staffPerformance:
+      case BranchManagerSection.staffKpis:
+      case BranchManagerSection.staffAttendance:
+      case BranchManagerSection.attendance:
+      case BranchManagerSection.leave:
+      case BranchManagerSection.staffLeave:
+        addField('role');
+        addField('department');
+        addField('email');
+        addField('status');
+        break;
+      case BranchManagerSection.stock:
+      case BranchManagerSection.stockAnalytics:
+        addField('item_sku');
+        addField('current_stock');
+        addField('minimum_stock');
+        addField('unit');
+        break;
+      case BranchManagerSection.stockOut:
+      case BranchManagerSection.wastage:
+        addField('item_name');
+        addField('quantity');
+        addField('reason');
+        addField('created_at');
+        break;
+      case BranchManagerSection.restaurant:
+        addField('table_number');
+        addField('waiter_name');
+        addField('items_count');
+        addField('total_amount');
+        addField('status');
+        break;
+      case BranchManagerSection.waiterSales:
+        addField('orders_count');
+        addField('total_sales');
+        addField('average_order_value');
+        break;
+      case BranchManagerSection.cashierClearance:
+        addField('date');
+        addField('expected_amount');
+        addField('actual_amount');
+        addField('variance');
+        addField('status');
+        break;
+      default:
+        addField('category_name');
+        addField('created_at');
+        addField('status');
+    }
+    return parts.take(5).join(' • ');
+  }
+
+  List<Map<String, dynamic>> _lineItems(Map<String, dynamic> row) {
+    final values = row['items'] ?? row['order_items'] ?? row['line_items'];
+    if (values is! List) return const [];
+    return values
+        .whereType<Map>()
+        .map((item) => _normalizeRecord(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  String _lineItemTitle(Map<String, dynamic> item) {
+    return _text(item, [
+      'item_name',
+      'menu_item_name',
+      'name',
+      'description',
+      'item_sku',
+      'sku',
+    ]).ifEmpty('Item');
+  }
+
+  String _firstNestedText(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      final value = row[key];
+      if (value is Map) {
+        final name = readableMapName(value);
+        if (_isUsefulDisplay(name)) return name!;
+      }
+      final text = _displayText(value);
+      if (_isUsefulDisplay(text)) return text;
+    }
+    final name = readableMapName(row);
+    return _isUsefulDisplay(name) ? name! : '';
+  }
+
+  String _displayText(dynamic value) {
+    if (value == null) return '';
+    if (value is Map) return readableMapName(value) ?? '';
+    if (value is List) return value.isEmpty ? '' : readableListValue(value);
+    final text = '$value'.trim();
+    return text == 'null' ? '' : text;
+  }
+
+  bool _isUsefulDisplay(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty || text == 'null' || text == '[]') return false;
+    if (_isUuid(text)) return false;
+    return true;
+  }
+
+  bool _isUuid(String value) => readableUuidPattern.hasMatch(value.trim());
+
+  bool _moneyField(String field) {
+    final lower = field.toLowerCase();
+    return lower.contains('amount') ||
+        lower.contains('price') ||
+        lower.contains('cost') ||
+        lower.contains('cash') ||
+        lower.contains('revenue') ||
+        lower.contains('sales') ||
+        lower.contains('variance') ||
+        lower.contains('balance') ||
+        lower.contains('rate') ||
+        lower.contains('profit');
   }
 
   num _num(Map<String, dynamic> row, List<String> keys) {
@@ -1949,6 +3768,16 @@ class _BranchManagerDashboardState
         return Icons.cleaning_services_outlined;
       case BranchManagerSection.maintenance:
         return PhosphorIcons.wrench();
+      case BranchManagerSection.kitchenStock:
+        return PhosphorIcons.cookingPot();
+      case BranchManagerSection.kitchenRequisitions:
+        return PhosphorIcons.clipboardText();
+      case BranchManagerSection.kitchenRecipes:
+        return PhosphorIcons.notebook();
+      case BranchManagerSection.kitchenUsage:
+        return PhosphorIcons.chartBar();
+      case BranchManagerSection.kitchenWastage:
+        return PhosphorIcons.trash();
       default:
         return PhosphorIcons.list();
     }
@@ -1957,7 +3786,6 @@ class _BranchManagerDashboardState
 
 class _EmptyNotice extends StatelessWidget {
   const _EmptyNotice(this.message);
-
   final String message;
 
   @override
@@ -1972,6 +3800,18 @@ class _EmptyNotice extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SelectOption {
+  const _SelectOption({
+    required this.value,
+    required this.label,
+    this.subtitle = '',
+  });
+
+  final String value;
+  final String label;
+  final String subtitle;
 }
 
 extension _EmptyString on String {
@@ -2085,6 +3925,16 @@ String _label(BranchManagerSection section) {
       return 'Reports';
     case BranchManagerSection.reviews:
       return 'Reviews';
+    case BranchManagerSection.kitchenStock:
+      return 'Kitchen Stock';
+    case BranchManagerSection.kitchenRequisitions:
+      return 'Kitchen Requisitions';
+    case BranchManagerSection.kitchenRecipes:
+      return 'Kitchen Recipes';
+    case BranchManagerSection.kitchenUsage:
+      return 'Kitchen Usage';
+    case BranchManagerSection.kitchenWastage:
+      return 'Kitchen Wastage';
   }
 }
 
@@ -2125,7 +3975,7 @@ String _subtitle(BranchManagerSection section) {
     case BranchManagerSection.housekeeping:
       return 'Housekeeping task queue with start and completion actions.';
     case BranchManagerSection.maintenance:
-      return 'Maintenance work-order board for branch manager visibility.';
+      return 'Maintenance work-order board with create, update, and status management.';
     case BranchManagerSection.wastage:
       return 'Wastage reports by period and reason with record and export actions.';
     default:
@@ -2188,7 +4038,6 @@ List<String> _fieldsFor(BranchManagerSection section) {
         'room_number',
         'room_type',
         'floor',
-        'rate',
         'status',
         'housekeeping_status'
       ];
@@ -2261,7 +4110,7 @@ List<String> _fieldsFor(BranchManagerSection section) {
         'quantity',
         'unit',
         'reason',
-        'created_by'
+        'created_by_name'
       ];
     case BranchManagerSection.restaurant:
       return const [
@@ -2292,7 +4141,7 @@ List<String> _fieldsFor(BranchManagerSection section) {
       return const [
         'room_number',
         'task_type',
-        'assigned_to',
+        'assigned_to_name',
         'priority',
         'status',
         'due_date'
@@ -2303,7 +4152,7 @@ List<String> _fieldsFor(BranchManagerSection section) {
         'room_number',
         'priority',
         'status',
-        'reported_by',
+        'reported_by_name',
         'created_at'
       ];
     case BranchManagerSection.wastage:
@@ -2323,7 +4172,7 @@ List<String> _fieldsFor(BranchManagerSection section) {
 List<String> _editFields(BranchManagerSection section) {
   switch (section) {
     case BranchManagerSection.rooms:
-      return const ['room_number', 'room_type', 'floor', 'rate', 'status'];
+      return const ['room_number', 'room_type', 'floor', 'status'];
     case BranchManagerSection.guests:
       return const ['first_name', 'last_name', 'email', 'phone', 'id_number'];
     case BranchManagerSection.staff:
@@ -2339,6 +4188,8 @@ List<String> _editFields(BranchManagerSection section) {
     case BranchManagerSection.menu:
     case BranchManagerSection.barMenu:
       return const ['name', 'category_id', 'price', 'description', 'available'];
+    case BranchManagerSection.maintenance:
+      return const ['title', 'description', 'priority', 'status'];
     default:
       return _fieldsFor(section).take(6).toList();
   }
@@ -2364,6 +4215,8 @@ String? _createLabel(BranchManagerSection section) {
       return 'Drink';
     case BranchManagerSection.wastage:
       return 'Record';
+    case BranchManagerSection.maintenance:
+      return 'New Request';
     default:
       return null;
   }
@@ -2388,12 +4241,13 @@ List<String> _statusOptions(BranchManagerSection section) {
     case BranchManagerSection.staffPerformance:
       return const [
         'all',
-        'front_office',
-        'restaurant',
+        'front_desk',
         'housekeeping',
+        'restaurant',
+        'bar',
+        'kitchen',
         'maintenance',
-        'store',
-        'bar'
+        'store'
       ];
     case BranchManagerSection.leave:
       return const ['all', 'pending', 'approved', 'rejected', 'completed'];

@@ -49,21 +49,46 @@ class BranchManagerRepository {
 
   List<Map<String, dynamic>> unwrapList(dynamic data) {
     final map = data is Map ? data : null;
-    final payload = map == null
-        ? data
-        : map['data'] ??
-            map['items'] ??
-            map['rows'] ??
-            map['records'] ??
-            map['results'] ??
-            map['bookings'] ??
-            map['guests'] ??
-            map['staff'] ??
-            map['rooms'] ??
-            map['tasks'] ??
-            map['requests'] ??
-            map['orders'] ??
-            map['clearances'];
+    const listKeys = [
+      'data',
+      'items',
+      'rows',
+      'records',
+      'results',
+      'bookings',
+      'guests',
+      'staff',
+      'rooms',
+      'tasks',
+      'requests',
+      'orders',
+      'clearances',
+      'movements',
+      'transactions',
+      'sales',
+      'stock',
+      'stocks',
+      'inventory',
+      'inventory_items',
+      'stock_items',
+      'menu_items',
+      'waiter_sales',
+      'drinks',
+      'categories',
+      'attendances',
+      'leave_requests',
+    ];
+    dynamic payload = data;
+    if (map != null) {
+      payload = null;
+      for (final key in listKeys) {
+        if (map[key] != null) {
+          payload = map[key];
+          break;
+        }
+      }
+      payload ??= map;
+    }
     if (payload is List) {
       return payload
           .whereType<Map>()
@@ -71,27 +96,17 @@ class BranchManagerRepository {
           .toList();
     }
     if (payload is Map) {
-      for (final key in const [
-        'data',
-        'items',
-        'rows',
-        'records',
-        'results',
-        'bookings',
-        'guests',
-        'staff',
-        'rooms',
-        'tasks',
-        'requests',
-        'orders',
-        'clearances',
-      ]) {
+      for (final key in listKeys) {
         final nested = payload[key];
         if (nested is List) {
           return nested
               .whereType<Map>()
               .map((item) => Map<String, dynamic>.from(item))
               .toList();
+        }
+        if (nested is Map) {
+          final nestedRows = unwrapList(nested);
+          if (nestedRows.isNotEmpty) return nestedRows;
         }
       }
       return [Map<String, dynamic>.from(payload)];
@@ -266,7 +281,17 @@ class BranchManagerRepository {
     String? date,
   }) {
     return getList('/restaurant/waiter-sales', query: {
-      'period': period,
+      'period': _periodDays(period),
+      if (date != null) 'date': date,
+    });
+  }
+
+  Future<Map<String, dynamic>> waiterSalesReport({
+    String period = 'today',
+    String? date,
+  }) {
+    return getMap('/restaurant/waiter-sales', query: {
+      'period': _periodDays(period),
       if (date != null) 'date': date,
     });
   }
@@ -389,12 +414,26 @@ class BranchManagerRepository {
     });
   }
 
+  Future<Map<String, dynamic>> staffPerformanceReport({
+    int period = 30,
+    String? department,
+  }) {
+    return getMap('/staff/performance', query: {
+      'period': period,
+      if (department != null && department != 'all') 'department': department,
+    });
+  }
+
   Future<List<Map<String, dynamic>>> staffAttendance({
     String? date,
+    String? startDate,
+    String? endDate,
     String? staffId,
   }) {
     return getList('/staff/attendance', query: {
       if (date != null) 'date': date,
+      if (startDate != null) 'startDate': startDate,
+      if (endDate != null) 'endDate': endDate,
       if (staffId != null) 'staff_id': staffId,
     });
   }
@@ -453,7 +492,8 @@ class BranchManagerRepository {
   }
 
   Future<Map<String, dynamic>> stockAnalytics({String period = 'month'}) {
-    return getMap('/store/consumption-trends', query: {'period': period});
+    return getMap('/store/consumption-trends',
+        query: {'period': _periodDays(period)});
   }
 
   Future<List<Map<String, dynamic>>> stockOut() {
@@ -609,6 +649,26 @@ class BranchManagerRepository {
   }
 
   String _csv(String value) => '"${value.replaceAll('"', '""')}"';
+
+  int _periodDays(String period) {
+    final numeric = int.tryParse(period);
+    if (numeric != null && numeric > 0) return numeric;
+    switch (period.toLowerCase()) {
+      case 'today':
+      case 'day':
+        return 1;
+      case 'week':
+        return 7;
+      case 'month':
+        return 30;
+      case 'quarter':
+        return 90;
+      case 'year':
+        return 365;
+      default:
+        return 30;
+    }
+  }
 
   Future<File> _saveBytes(List<int> bytes, String filename) async {
     final dir = await getApplicationDocumentsDirectory();

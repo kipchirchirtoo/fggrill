@@ -4,6 +4,12 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { supabase } from '../config/supabase';
 
+const readText = (body: any, keys: string[]): string =>
+  keys
+    .map((key) => body?.[key])
+    .find((value) => typeof value === 'string' && value.trim().length > 0)
+    ?.trim() || '';
+
 // @desc    Get all guests
 // @route   GET /api/guests
 // @access  Private
@@ -74,6 +80,11 @@ export const createGuest = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const idNumber = readText(req.body, ['idNumber', 'id_number', 'identification_number']);
+    if (!idNumber) {
+      throw new AppError('Guest ID number is required', 400);
+    }
+
     const guest = new Guest(req.body);
     const savedGuest = await guest.save();
 
@@ -86,6 +97,10 @@ export const createGuest = async (
   } catch (error: any) {
     logger.error('Error creating guest:', error);
     logger.error('Request body:', req.body);
+    if (error instanceof AppError) {
+      next(error);
+      return;
+    }
     next(new AppError(`Failed to create guest: ${error.message || JSON.stringify(error)}`, 500));
   }
 };
@@ -103,6 +118,15 @@ export const updateGuest = async (
 
     if (!existingGuest) {
       throw new AppError('Guest not found', 404);
+    }
+
+    if (
+      ['idNumber', 'id_number', 'identification_number'].some((key) =>
+        Object.prototype.hasOwnProperty.call(req.body, key)
+      ) &&
+      !readText(req.body, ['idNumber', 'id_number', 'identification_number'])
+    ) {
+      throw new AppError('Guest ID number is required', 400);
     }
 
     // Merge existing data with updates

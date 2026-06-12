@@ -9,6 +9,7 @@ export interface IGuest {
   phone?: string;
   idType?: string;
   idNumber?: string;
+  carNumberPlate?: string;
   address?: string;
   city?: string;
   country?: string;
@@ -31,6 +32,7 @@ export class Guest implements IGuest {
   phone?: string;
   idType?: string;
   idNumber?: string;
+  carNumberPlate?: string;
   address?: string;
   city?: string;
   country?: string;
@@ -44,26 +46,32 @@ export class Guest implements IGuest {
   createdAt: Date;
   updatedAt: Date;
 
-  constructor(data: Partial<IGuest>) {
+  constructor(data: Partial<IGuest> & Record<string, any>) {
     this.id = data.id || crypto.randomUUID();
-    this.firstName = data.firstName || '';
-    this.lastName = data.lastName || '';
+    this.firstName = data.firstName || data.first_name || '';
+    this.lastName = data.lastName || data.last_name || '';
     this.email = data.email;
     this.phone = data.phone;
-    this.idType = data.idType;
-    this.idNumber = data.idNumber;
+    this.idType = data.idType || data.id_type;
+    this.idNumber = data.idNumber || data.id_number || data.identification_number;
+    this.carNumberPlate =
+      data.carNumberPlate ||
+      data.car_number_plate ||
+      data.vehiclePlate ||
+      data.vehicle_plate ||
+      data.number_plate;
     this.address = data.address;
     this.nationality = data.nationality;
     this.city = data.city;
     this.country = data.country;
-    this.dateOfBirth = data.dateOfBirth;
-    this.isVip = data.isVip || false;
+    this.dateOfBirth = data.dateOfBirth || data.date_of_birth;
+    this.isVip = data.isVip || data.is_vip || data.vip_status || false;
     this.notes = data.notes;
     this.preferences = data.preferences || {};
-    this.blacklistStatus = data.blacklistStatus || false;
-    this.blacklistReason = data.blacklistReason;
-    this.createdAt = data.createdAt || new Date();
-    this.updatedAt = data.updatedAt || new Date();
+    this.blacklistStatus = data.blacklistStatus || data.blacklist_status || false;
+    this.blacklistReason = data.blacklistReason || data.blacklist_reason;
+    this.createdAt = data.createdAt || data.created_at || new Date();
+    this.updatedAt = data.updatedAt || data.updated_at || new Date();
   }
 
   // ===========================================================
@@ -113,7 +121,7 @@ export class Guest implements IGuest {
 
     // 1. Filter by search query if provided
     if (query) {
-      guestQuery = guestQuery.or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%,id_number.ilike.%${query}%`);
+      guestQuery = guestQuery.or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%,id_number.ilike.%${query}%,car_number_plate.ilike.%${query}%`);
     }
 
     // 2. Filter by branchId if provided (via reservations)
@@ -185,6 +193,7 @@ export class Guest implements IGuest {
           phone: this.phone,
           id_type: this.idType,
           id_number: this.idNumber,
+          car_number_plate: this.carNumberPlate,
           address: this.address,
           nationality: this.nationality,
           city: this.city,
@@ -223,6 +232,7 @@ export class Guest implements IGuest {
       phone: data.phone,
       idType: data.id_type,
       idNumber: data.id_number,
+      carNumberPlate: data.car_number_plate,
       address: data.address,
       nationality: data.nationality,
       city: data.city,

@@ -69,8 +69,8 @@ export class DirectorTasksController {
         .select(`
           *,
           branches(name),
-          director:director_id(first_name, last_name),
-          assignee:assigned_to_user_id(first_name, last_name)
+          director:staff_profiles!director_review_tasks_director_id_fkey(first_name, last_name),
+          assignee:staff_profiles!director_review_tasks_assigned_to_user_id_fkey(first_name, last_name)
         `)
         .order('created_at', { ascending: false });
 
@@ -173,7 +173,7 @@ export class DirectorTasksController {
       const { branch_id, role } = req.query;
 
       let query = supabase
-        .from('profiles')
+        .from('staff_profiles')
         .select('id, first_name, last_name, role, branch_id')
         .order('first_name');
 

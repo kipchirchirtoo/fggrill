@@ -9,10 +9,12 @@ class CreateReservationScreen extends ConsumerStatefulWidget {
   const CreateReservationScreen({super.key});
 
   @override
-  ConsumerState<CreateReservationScreen> createState() => _CreateReservationScreenState();
+  ConsumerState<CreateReservationScreen> createState() =>
+      _CreateReservationScreenState();
 }
 
-class _CreateReservationScreenState extends ConsumerState<CreateReservationScreen> {
+class _CreateReservationScreenState
+    extends ConsumerState<CreateReservationScreen> {
   final _formKey = GlobalKey<FormState>();
   late final ReceptionRepository _repository;
 
@@ -26,6 +28,7 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _idNumberController = TextEditingController();
+  final _carNumberPlateController = TextEditingController();
   String _idType = 'National ID';
 
   // Room selection
@@ -77,6 +80,7 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
     _phoneController.dispose();
     _emailController.dispose();
     _idNumberController.dispose();
+    _carNumberPlateController.dispose();
     _specialRequestsController.dispose();
     _internalNotesController.dispose();
     super.dispose();
@@ -150,9 +154,13 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
           'phone': _phoneController.text.trim(),
-          if (_emailController.text.trim().isNotEmpty) 'email': _emailController.text.trim(),
+          if (_emailController.text.trim().isNotEmpty)
+            'email': _emailController.text.trim(),
           if (_idType.isNotEmpty) 'id_type': _idType,
-          if (_idNumberController.text.trim().isNotEmpty) 'id_number': _idNumberController.text.trim(),
+          'id_number': _idNumberController.text.trim(),
+          if (_carNumberPlateController.text.trim().isNotEmpty)
+            'car_number_plate':
+                _carNumberPlateController.text.trim().toUpperCase(),
         });
         guestId = guestData['id'].toString();
       }
@@ -234,7 +242,8 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
                       backgroundColor: AppColors.kPrimary,
                       foregroundColor: Colors.white,
                     ),
-                    child: Text(_currentStep == 3 ? 'Create Reservation' : 'Continue'),
+                    child: Text(
+                        _currentStep == 3 ? 'Create Reservation' : 'Continue'),
                   ),
                   const SizedBox(width: 12),
                   TextButton(
@@ -334,9 +343,19 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
         TextFormField(
           controller: _idNumberController,
           decoration: const InputDecoration(
-            labelText: 'ID Number',
+            labelText: 'ID Number *',
             border: OutlineInputBorder(),
           ),
+          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _carNumberPlateController,
+          decoration: const InputDecoration(
+            labelText: 'Car Number Plate (optional)',
+            border: OutlineInputBorder(),
+          ),
+          textCapitalization: TextCapitalization.characters,
         ),
       ],
     );
@@ -361,7 +380,8 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
             if (date != null) {
               setState(() {
                 _checkInDate = date;
-                if (_checkOutDate.isBefore(_checkInDate.add(const Duration(days: 1)))) {
+                if (_checkOutDate
+                    .isBefore(_checkInDate.add(const Duration(days: 1)))) {
                   _checkOutDate = _checkInDate.add(const Duration(days: 1));
                 }
               });
@@ -391,19 +411,23 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
         Row(
           children: [
             Expanded(
-              child: _buildCounter('Adults', _adults, (v) => setState(() => _adults = v)),
+              child: _buildCounter(
+                  'Adults', _adults, (v) => setState(() => _adults = v)),
             ),
             Expanded(
-              child: _buildCounter('Children', _children, (v) => setState(() => _children = v)),
+              child: _buildCounter(
+                  'Children', _children, (v) => setState(() => _children = v)),
             ),
             Expanded(
-              child: _buildCounter('Infants', _infants, (v) => setState(() => _infants = v)),
+              child: _buildCounter(
+                  'Infants', _infants, (v) => setState(() => _infants = v)),
             ),
           ],
         ),
         const Divider(),
         // Room selection
-        const Text('Available Rooms', style: TextStyle(fontWeight: FontWeight.bold)),
+        const Text('Available Rooms',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         if (_loadingRooms)
           const Center(child: CircularProgressIndicator())
@@ -413,15 +437,19 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
           ..._availableRooms.map((room) {
             final isSelected = _selectedRoom?.id == room.id;
             return Card(
-              color: isSelected ? AppColors.kPrimary.withValues(alpha: 0.1) : null,
+              color:
+                  isSelected ? AppColors.kPrimary.withValues(alpha: 0.1) : null,
               child: ListTile(
                 leading: Icon(
                   Icons.bed,
                   color: isSelected ? AppColors.kPrimary : null,
                 ),
                 title: Text('Room ${room.number}'),
-                subtitle: Text('${room.type ?? "Standard"} • KES ${room.pricePerNight?.toStringAsFixed(0) ?? "0"}/night'),
-                trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.kPrimary) : null,
+                subtitle: Text(
+                    '${room.type ?? "Standard"} • KES ${room.pricePerNight?.toStringAsFixed(0) ?? "0"}/night'),
+                trailing: isSelected
+                    ? const Icon(Icons.check_circle, color: AppColors.kPrimary)
+                    : null,
                 onTap: () {
                   setState(() {
                     _selectedRoom = room;
@@ -482,7 +510,8 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
           maxLines: 2,
         ),
         const Divider(height: 32),
-        const Text('Pricing Summary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const Text('Pricing Summary',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 8),
         if (_loadingPrice)
           const Center(child: CircularProgressIndicator())
@@ -491,9 +520,11 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
           _pricingRow('Room Rate', 'KES ${_roomRate.toStringAsFixed(2)}/night'),
           _pricingRow('Subtotal', 'KES ${_subtotal.toStringAsFixed(2)}'),
           _pricingRow('Tax (16%)', 'KES ${_taxAmount.toStringAsFixed(2)}'),
-          _pricingRow('Service Charge (10%)', 'KES ${_serviceCharge.toStringAsFixed(2)}'),
+          _pricingRow('Service Charge (10%)',
+              'KES ${_serviceCharge.toStringAsFixed(2)}'),
           const Divider(),
-          _pricingRow('Total Amount', 'KES ${_totalAmount.toStringAsFixed(2)}', bold: true),
+          _pricingRow('Total Amount', 'KES ${_totalAmount.toStringAsFixed(2)}',
+              bold: true),
         ],
       ],
     );
@@ -503,7 +534,8 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Deposit Payment', style: TextStyle(fontWeight: FontWeight.bold)),
+        const Text('Deposit Payment',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         TextFormField(
           decoration: const InputDecoration(
@@ -512,7 +544,8 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
             prefixText: 'KES ',
           ),
           keyboardType: TextInputType.number,
-          onChanged: (v) => setState(() => _depositAmount = double.tryParse(v) ?? 0),
+          onChanged: (v) =>
+              setState(() => _depositAmount = double.tryParse(v) ?? 0),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
@@ -536,9 +569,11 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Total: KES ${_totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Total: KES ${_totalAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('Deposit: KES ${_depositAmount.toStringAsFixed(2)}'),
-              Text('Balance: KES ${(_totalAmount - _depositAmount).toStringAsFixed(2)}'),
+              Text(
+                  'Balance: KES ${(_totalAmount - _depositAmount).toStringAsFixed(2)}'),
             ],
           ),
         ),
@@ -557,7 +592,9 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
               icon: const Icon(Icons.remove_circle_outline),
               onPressed: value > 0 ? () => onChanged(value - 1) : null,
             ),
-            Text('$value', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('$value',
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
               onPressed: () => onChanged(value + 1),
@@ -574,8 +611,12 @@ class _CreateReservationScreenState extends ConsumerState<CreateReservationScree
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
-          Text(value, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text(label,
+              style: TextStyle(
+                  fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
     );

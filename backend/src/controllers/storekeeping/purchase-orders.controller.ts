@@ -437,7 +437,7 @@ export const receivePurchaseOrder = async (
             throw new AppError('Purchase order not found', 404);
         }
 
-        if (po.status === 'RECEIVED' || po.status === 'received') {
+        if (po.status === 'fully_received') {
             throw new AppError('Purchase order is already received', 400);
         }
 
@@ -508,11 +508,11 @@ export const receivePurchaseOrder = async (
                 });
         }
 
-        // Update PO status to RECEIVED
+        // Update PO status to the valid po_status enum value.
         const { data: updatedPO, error: updateError } = await supabase
             .from('store_purchase_orders')
             .update({
-                status: 'RECEIVED',
+                status: 'fully_received',
                 received_by_id: userId,
                 received_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
