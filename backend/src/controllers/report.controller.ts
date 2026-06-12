@@ -1114,23 +1114,29 @@ export const generateAsyncReport = async (
   try {
     const { reportType, filters, useRealData, data } = req.body;
     logger.info(`Starting async report generation: ${reportType}`);
-    
-    const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
-    
+
     const response = await axios.post(`${PYTHON_SERVICE_URL}/api/reports/generate/branded-pdf/async`, {
       reportType,
       filters,
       useRealData,
       data
-    });
+    }, { timeout: 15000 });
 
     res.status(202).json({
       success: true,
       data: response.data
     });
   } catch (error: any) {
-    logger.error(`Error starting async report: ${error.message}`);
-    next(new AppError(error.response?.data?.error || 'Failed to start async report generation', 500));
+    const pythonError =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.response?.data ||
+      error.message;
+    const message = typeof pythonError === 'string'
+      ? pythonError
+      : JSON.stringify(pythonError);
+    logger.error(`Error starting async report via ${PYTHON_SERVICE_URL}: ${message}`);
+    next(new AppError(`Failed to start async report generation: ${message}`, error.response?.status || 500));
   }
 };
 
@@ -1144,10 +1150,10 @@ export const getReportJobStatus = async (
 ): Promise<void> => {
   try {
     const jobId = req.params.id;
-    
-    const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5001';
-    
-    const response = await axios.get(`${PYTHON_SERVICE_URL}/api/reports/jobs/${jobId}`);
+
+    const response = await axios.get(`${PYTHON_SERVICE_URL}/api/reports/jobs/${jobId}`, {
+      timeout: 15000
+    });
 
     res.status(200).json({
       success: true,
@@ -1158,7 +1164,15 @@ export const getReportJobStatus = async (
       next(new AppError('Report job not found', 404));
       return;
     }
-    logger.error(`Error checking report job status: ${error.message}`);
-    next(new AppError('Failed to check report job status', 500));
+    const pythonError =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.response?.data ||
+      error.message;
+    const message = typeof pythonError === 'string'
+      ? pythonError
+      : JSON.stringify(pythonError);
+    logger.error(`Error checking report job status via ${PYTHON_SERVICE_URL}: ${message}`);
+    next(new AppError(`Failed to check report job status: ${message}`, error.response?.status || 500));
   }
 };

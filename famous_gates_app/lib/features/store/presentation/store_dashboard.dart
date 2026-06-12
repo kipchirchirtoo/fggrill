@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart' hide DataColumn, DataRow;
 import '../../../core/widgets/permission_guard.dart';
+import '../../../core/widgets/record_detail_screen.dart';
 import '../../../core/config/permissions.dart';
 import '../data/repository.dart';
 import '../domain/providers.dart';
@@ -334,45 +335,22 @@ class _InventoryTab extends ConsumerWidget {
   }
 
   void _showItemDetail(BuildContext context, InventoryItem item) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(item.name),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _dr('SKU', item.sku ?? '--'),
-            _dr('Category', item.category ?? '--'),
-            _dr('Unit', item.unit ?? '--'),
-            _dr('Current Stock', item.currentStock.toStringAsFixed(0)),
-            _dr('Min Stock', item.minStock?.toStringAsFixed(0) ?? '--'),
-            _dr('Max Stock', item.maxStock?.toStringAsFixed(0) ?? '--'),
-            if (item.isLowStock)
-              const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text('⚠ Low stock alert!',
-                      style: TextStyle(
-                          color: AppColors.kError,
-                          fontWeight: FontWeight.bold))),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title: item.name,
+      subtitle: 'Inventory Item',
+      record: {
+        'sku': item.sku,
+        'category': item.category,
+        'unit': item.unit,
+        'current_stock': item.currentStock,
+        'min_stock': item.minStock,
+        'max_stock': item.maxStock,
+        if (item.isLowStock) 'stock_alert': 'Low stock — below minimum level',
+      },
     );
   }
 
-  Widget _dr(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child:
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(label, style: const TextStyle(color: AppColors.kTextSecondary)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ]),
-      );
 }
 
 class _CentralStoreOverviewTab extends ConsumerWidget {
@@ -915,7 +893,7 @@ class _StoreResourceTabState extends ConsumerState<_StoreResourceTab> {
                     ElevatedButton.styleFrom(minimumSize: const Size(132, 42)),
                 onPressed: () => _showCreateDialog(context, ref, resourceKey),
                 icon: const Icon(Icons.add, size: 16),
-                label: Text(widget.actionLabel ?? 'New'),
+                label: const Text('New'),
               ),
             ],
           ),
@@ -1007,7 +985,7 @@ class _StoreResourceTabState extends ConsumerState<_StoreResourceTab> {
     final body = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(widget.actionLabel ?? 'New ${widget.title}'),
+        title: Text('New ${widget.title}'),
         content: SizedBox(
           width: 420,
           child: SingleChildScrollView(
@@ -2137,79 +2115,19 @@ class _PurchaseOrdersTabState extends ConsumerState<_PurchaseOrdersTab> {
   }
 
   void _showPurchaseOrderDetail(Map<String, dynamic> order) {
-    final items = order['items'];
-    final itemList = items is List
-        ? items.whereType<Map>().map((e) => Map<String, dynamic>.from(e))
-        : const Iterable<Map<String, dynamic>>.empty();
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${order['po_number'] ?? 'Purchase Order'}'),
-        content: SizedBox(
-          width: 720,
-          child: SingleChildScrollView(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _poDetailLine('Supplier',
-                  '${order['supplier_name'] ?? (order['supplier'] is Map ? order['supplier']['name'] : '')}'),
-              _poDetailLine('Status', '${order['status'] ?? 'draft'}'),
-              _poDetailLine('PO Date', '${order['po_date'] ?? '--'}'),
-              _poDetailLine('Expected Delivery',
-                  '${order['expected_delivery_date'] ?? '--'}'),
-              _poDetailLine(
-                  'Total', _storeMoney(_storeNum(order['total_amount']))),
-              const SizedBox(height: 12),
-              const Text('Items',
-                  style: TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 8),
-              if (itemList.isEmpty)
-                const Text('No item lines loaded',
-                    style: TextStyle(color: AppColors.kTextSecondary))
-              else
-                ...itemList.map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(children: [
-                        Expanded(
-                          child: Text(
-                            '${item['item_name'] ?? item['item_id'] ?? 'Item'}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(
-                          '${item['quantity_ordered'] ?? item['quantity'] ?? 0} x ${_storeMoney(_storeNum(item['unit_price']))}',
-                          style: const TextStyle(
-                              color: AppColors.kTextSecondary, fontSize: 12),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(_storeMoney(_storeNum(item['total_price'])),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w800)),
-                      ]),
-                    )),
-            ]),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
-      ),
+    final supplierName = order['supplier_name'] ??
+        (order['supplier'] is Map ? order['supplier']['name'] : null);
+    openRecordDetailScreen(
+      context,
+      title: '${order['po_number'] ?? 'Purchase Order'}',
+      subtitle: 'Purchase Order',
+      record: {
+        ...order,
+        if (supplierName != null) 'supplier_name': supplierName,
+      },
     );
   }
 
-  Widget _poDetailLine(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Row(children: [
-          SizedBox(
-            width: 150,
-            child: Text(label,
-                style: const TextStyle(color: AppColors.kTextSecondary)),
-          ),
-          Expanded(
-              child: Text(value,
-                  style: const TextStyle(fontWeight: FontWeight.w700))),
-        ]),
-      );
 
   void _resetCreateForm() {
     _selectedSupplierId = null;
@@ -2707,73 +2625,12 @@ class _StockRequestsTabState extends ConsumerState<_StockRequestsTab> {
   }
 
   void _showRequestDetail(BuildContext context, Map<String, dynamic> request) {
-    final items = request['items'];
-    final itemList = items is List
-        ? items
-            .whereType<Map>()
-            .map((i) => Map<String, dynamic>.from(i))
-            .toList()
-        : <Map<String, dynamic>>[];
-    final status = '${request['status'] ?? ''}';
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-            'Request ${request['request_number'] ?? _storeDisplayName(request['id'])}'),
-        content: SizedBox(
-          width: 600,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  Chip(
-                      label: Text(status.toUpperCase(),
-                          style: const TextStyle(fontSize: 10))),
-                  Chip(
-                      label: Text('Branch: ${_storeBranchName(request)}',
-                          style: const TextStyle(fontSize: 10))),
-                  if (request['priority'] != null)
-                    Chip(
-                        label: Text('Priority: ${request['priority']}',
-                            style: const TextStyle(fontSize: 10))),
-                ]),
-                const SizedBox(height: 12),
-                const Text('Items',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                ...itemList.map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(children: [
-                        Expanded(
-                            child: Text(
-                                '${item['item_name'] ?? item['item_sku']}')),
-                        Text('Req: ${item['requested_quantity'] ?? 0}',
-                            style: const TextStyle(fontSize: 12)),
-                        const SizedBox(width: 8),
-                        if (item['approved_quantity'] != null)
-                          Text('App: ${item['approved_quantity']}',
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.kSuccess)),
-                      ]),
-                    )),
-                if (request['review_notes'] != null) ...[
-                  const SizedBox(height: 12),
-                  Text('Notes: ${request['review_notes']}',
-                      style: const TextStyle(
-                          color: AppColors.kTextSecondary, fontSize: 12)),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title:
+          'Request ${request['request_number'] ?? _storeDisplayName(request['id'])}',
+      subtitle: 'Stock Request — ${_storeBranchName(request)}',
+      record: request,
     );
   }
 }

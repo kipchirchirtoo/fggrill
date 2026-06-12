@@ -1,11 +1,14 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
+import '../../../core/widgets/record_detail_screen.dart';
+import '../../../core/widgets/notification_button.dart';
 import '../data/branch_storekeeper_repository.dart';
 
 enum BranchStorekeeperSection {
@@ -20,6 +23,7 @@ enum BranchStorekeeperSection {
   kitchenUsage,
   stockOut,
   reports,
+  notifications,
 }
 
 class BranchStorekeeperDashboard extends ConsumerStatefulWidget {
@@ -46,8 +50,26 @@ class _BranchStorekeeperDashboardState
   String _search = '';
   String _statusFilter = 'ALL';
   String _catalogFilter = 'all';
+  String? _poSupplierFilter;
   String? _selectedStockTakeId;
   String? _selectedRequestId;
+  final _receiveBarcodeCtrl = TextEditingController();
+  final _receiveManualSearchCtrl = TextEditingController();
+  final _receiveInvoiceCtrl = TextEditingController();
+  final _receiveDeliveryNoteCtrl = TextEditingController();
+  final _receiveRemarksCtrl = TextEditingController();
+  final _receiveScannerFocus = FocusNode();
+  String? _receiveSupplierId;
+  String? _receivePoId;
+  String? _receivePoNumber;
+  bool _receiveScannerMode = true;
+  bool _receiveScanning = false;
+  bool _receiveLoadingPo = false;
+  bool _receiveSubmitting = false;
+  String _receiveScanStatus = 'Scanner ready';
+  String? _receiveLastScan;
+  List<Map<String, dynamic>> _receiveManualResults = [];
+  final List<Map<String, dynamic>> _receiveLines = [];
 
   Map<String, dynamic> _dashboard = {};
   List<Map<String, dynamic>> _stock = [];
@@ -61,8 +83,13 @@ class _BranchStorekeeperDashboardState
   List<Map<String, dynamic>> _kitchenUsage = [];
   List<Map<String, dynamic>> _trackableItems = [];
   List<Map<String, dynamic>> _stockMovements = [];
+  List<Map<String, dynamic>> _departmentAccounts = [];
+  List<Map<String, dynamic>> _departmentConsumption = [];
+  Map<String, dynamic> _inventoryAnalytics = {};
   Map<String, dynamic>? _stockTakeDetail;
   List<Map<String, dynamic>> _stockTakeItems = [];
+  String _analyticsPeriod = 'month';
+  bool _analyticsLoading = false;
 
   static const _categories = [
     'all',
@@ -81,6 +108,14 @@ class _BranchStorekeeperDashboardState
     'foodstuffs': 'Foodstuffs',
     'bar_store': 'Bar Store',
     'store_items': 'General Store Items',
+    'main_bar': 'Main Bar',
+    'executive_bar': 'Executive Bar',
+    'kitchen_shift_a': 'Kitchen Shift A',
+    'kitchen_shift_b': 'Kitchen Shift B',
+    'housekeeping': 'Housekeeping',
+    'spa_sauna': 'Spa & Sauna',
+    'pos_outlet': 'POS Outlet',
+    'general': 'General Stock',
   };
 
   static const _barOutlets = {
@@ -102,6 +137,17 @@ class _BranchStorekeeperDashboardState
       _section = BranchStorekeeperSection.requests;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll());
+  }
+
+  @override
+  void dispose() {
+    _receiveBarcodeCtrl.dispose();
+    _receiveManualSearchCtrl.dispose();
+    _receiveInvoiceCtrl.dispose();
+    _receiveDeliveryNoteCtrl.dispose();
+    _receiveRemarksCtrl.dispose();
+    _receiveScannerFocus.dispose();
+    super.dispose();
   }
 
   BranchStorekeeperRepository get _repo =>
@@ -130,6 +176,9 @@ class _BranchStorekeeperDashboardState
       _safe(_repo.kitchenUsageRecords, <Map<String, dynamic>>[]),
       _safe(_repo.trackableItems, <Map<String, dynamic>>[]),
       _safe(_repo.stockMovements, <Map<String, dynamic>>[]),
+      _safe(_repo.departmentAccounts, <Map<String, dynamic>>[]),
+      _safe(_repo.departmentConsumption, <Map<String, dynamic>>[]),
+      _safe(_repo.enterpriseInventoryAnalytics, <String, dynamic>{}),
     ]);
     if (!mounted) return;
     setState(() {
@@ -146,6 +195,11 @@ class _BranchStorekeeperDashboardState
       _kitchenUsage = List<Map<String, dynamic>>.from(results[9] as List);
       _trackableItems = List<Map<String, dynamic>>.from(results[10] as List);
       _stockMovements = List<Map<String, dynamic>>.from(results[11] as List);
+      _departmentAccounts =
+          List<Map<String, dynamic>>.from(results[12] as List);
+      _departmentConsumption =
+          List<Map<String, dynamic>>.from(results[13] as List);
+      _inventoryAnalytics = results[14] as Map<String, dynamic>;
       _loading = false;
     });
     if (_selectedStockTakeId != null) {
@@ -213,12 +267,346 @@ class _BranchStorekeeperDashboardState
         (item) => '${item['item_sku'] ?? item['sku'] ?? ''}',
       );
 
+  String _optionSku(Map<String, dynamic> item) =>
+      '${item['item_sku'] ?? item['sku'] ?? item['item_code'] ?? ''}'.trim();
+
+  String _catalogOptionSku(Map<String, dynamic> item) =>
+      '${item['sku'] ?? item['item_sku'] ?? item['item_code'] ?? ''}'.trim();
+
+  String _itemSearchText(Map<String, dynamic> item) => [
+        _optionSku(item),
+        _catalogOptionSku(item),
+        _itemName(item),
+        item['barcode'],
+        item['bar_code'],
+        item['category'],
+        item['item_category'],
+        item['unit'],
+        item['unit_of_measure'],
+      ]
+          .where((value) => value != null && '$value'.trim().isNotEmpty)
+          .join(' ')
+          .toLowerCase();
+
+  String _supplierLabel(Map<String, dynamic> supplier) {
+    final name =
+        '${supplier['name'] ?? supplier['supplier_name'] ?? ''}'.trim();
+    final code =
+        '${supplier['supplier_code'] ?? supplier['code'] ?? ''}'.trim();
+    final phone = '${supplier['phone'] ?? ''}'.trim();
+    return [name, code, phone].where((part) => part.isNotEmpty).join(' | ');
+  }
+
+  String _supplierSearchText(Map<String, dynamic> supplier) => [
+        supplier['name'],
+        supplier['supplier_name'],
+        supplier['supplier_code'],
+        supplier['code'],
+        supplier['phone'],
+        supplier['email'],
+        supplier['contact_person'],
+      ]
+          .where((value) => value != null && '$value'.trim().isNotEmpty)
+          .join(' ')
+          .toLowerCase();
+
+  void _focusReceiveScanner() {
+    if (!mounted ||
+        _section != BranchStorekeeperSection.receive ||
+        !_receiveScannerMode) {
+      return;
+    }
+    _receiveScannerFocus.requestFocus();
+  }
+
+  String _cleanScanCode(String value) => value
+      .replaceAll(RegExp(r'[\r\n\t]'), '')
+      .replaceAll(RegExp(r'\s+'), '')
+      .trim();
+
+  String _catalogSku(Map<String, dynamic> item) =>
+      '${item['sku'] ?? item['item_sku'] ?? item['item_code'] ?? item['id'] ?? ''}'
+          .trim();
+
+  bool _matchesCatalogCode(Map<String, dynamic> item, String code) {
+    final needle = code.toLowerCase();
+    const keys = [
+      'barcode',
+      'bar_code',
+      'sku',
+      'item_sku',
+      'item_code',
+      'code',
+      'id',
+    ];
+    return keys
+        .any((key) => '${item[key] ?? ''}'.trim().toLowerCase() == needle);
+  }
+
+  Map<String, dynamic>? _findLoadedCatalogItem(String code) {
+    for (final item in _catalogOptions) {
+      if (_matchesCatalogCode(item, code)) return item;
+    }
+    return null;
+  }
+
+  Future<void> _scanBranchReceiptBarcode() async {
+    final code = _cleanScanCode(_receiveBarcodeCtrl.text);
+    if (code.isEmpty || _receiveScanning) return;
+    setState(() {
+      _receiveScanning = true;
+      _receiveScanStatus = 'Scanning $code';
+      _receiveLastScan = code;
+    });
+    try {
+      var item = _findLoadedCatalogItem(code);
+      if (item == null) {
+        final rows = await _repo.masterCatalog(search: code, limit: 30);
+        for (final row in rows) {
+          if (_matchesCatalogCode(row, code)) {
+            item = row;
+            break;
+          }
+        }
+        item ??= rows.length == 1 ? rows.first : null;
+      }
+      if (item == null) {
+        if (mounted) {
+          setState(() => _receiveScanStatus = 'No item found for $code');
+          _showSnack('No catalog item found for $code', error: true);
+        }
+        return;
+      }
+      final name = _addReceiveLine(item, viaScan: true);
+      if (mounted) setState(() => _receiveScanStatus = 'Added $name');
+    } catch (error) {
+      if (mounted) {
+        setState(() => _receiveScanStatus = 'Scan failed');
+        _showSnack('Scan failed: $error', error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _receiveScanning = false);
+      _receiveBarcodeCtrl.clear();
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _focusReceiveScanner());
+    }
+  }
+
+  Future<void> _searchReceiveManual() async {
+    final query = _receiveManualSearchCtrl.text.trim();
+    if (query.isEmpty) return;
+    final rows = await _safe(
+      () => _repo.masterCatalog(search: query, limit: 25),
+      <Map<String, dynamic>>[],
+    );
+    if (mounted) setState(() => _receiveManualResults = rows);
+  }
+
+  String _addReceiveLine(Map<String, dynamic> item, {required bool viaScan}) {
+    final sku = _catalogSku(item);
+    if (sku.isEmpty) return 'item';
+    final name =
+        '${item['item_name'] ?? item['name'] ?? item['description'] ?? sku}';
+    setState(() {
+      final index =
+          _receiveLines.indexWhere((line) => '${line['item_sku']}' == sku);
+      if (index >= 0) {
+        _receiveLines[index]['quantity'] =
+            _num(_receiveLines[index]['quantity']) + 1;
+        _receiveLines[index]['added_via'] = viaScan ? 'scan' : 'manual';
+      } else {
+        _receiveLines.add({
+          'item_sku': sku,
+          'item_name': name,
+          'quantity': 1,
+          'unit_price': item['cost_price'] ?? item['unit_price'] ?? 0,
+          'unit_of_measure': item['unit_of_measure'] ?? item['unit'] ?? 'units',
+          'barcode': item['barcode'] ?? item['bar_code'] ?? '',
+          'added_via': viaScan ? 'scan' : 'manual',
+        });
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusReceiveScanner());
+    return name;
+  }
+
+  void _removeReceiveLine(int index) {
+    setState(() => _receiveLines.removeAt(index));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusReceiveScanner());
+  }
+
+  Future<void> _loadBranchReceiptFromPo() async {
+    setState(() => _receiveLoadingPo = true);
+    try {
+      final selectable = _purchaseOrders.where((po) {
+        final status = '${po['status'] ?? ''}'.toLowerCase();
+        return !status.contains('cancel') &&
+            !status.contains('receiv') &&
+            !status.contains('closed');
+      }).toList();
+      if (selectable.isEmpty) {
+        _showSnack('No open branch purchase orders to receive', error: true);
+        return;
+      }
+      final chosen = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: const Text('Receive against Branch Purchase Order'),
+          children: selectable
+              .map((po) => SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, po),
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(PhosphorIcons.fileText()),
+                      title: Text('${po['po_number'] ?? po['id'] ?? 'PO'}'),
+                      subtitle: Text(
+                        '${po['supplier_name'] ?? po['supplier']?['name'] ?? 'Supplier'} | ${po['status'] ?? ''}',
+                      ),
+                      trailing: Text(_money(_num(po['total_amount']))),
+                    ),
+                  ))
+              .toList(),
+        ),
+      );
+      if (chosen == null) return;
+      await _applyBranchReceiptPo('${chosen['id'] ?? ''}', fallback: chosen);
+    } catch (error) {
+      _showSnack('Could not load purchase orders: $error', error: true);
+    } finally {
+      if (mounted) setState(() => _receiveLoadingPo = false);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _focusReceiveScanner());
+    }
+  }
+
+  Future<void> _applyBranchReceiptPo(
+    String poId, {
+    Map<String, dynamic>? fallback,
+  }) async {
+    if (poId.isEmpty) return;
+    setState(() => _receiveLoadingPo = true);
+    try {
+      final po = await _safe(
+        () => _repo.purchaseOrder(poId),
+        fallback ?? <String, dynamic>{},
+      );
+      final items = _listFrom(po['items']);
+      final lines = items
+          .map((item) {
+            final quantity = _num(
+              item['quantity_pending'] ??
+                  item['quantity_ordered'] ??
+                  item['ordered_quantity'] ??
+                  item['quantity'] ??
+                  0,
+            );
+            final sku =
+                '${item['item_id'] ?? item['item_sku'] ?? item['sku'] ?? ''}';
+            return <String, dynamic>{
+              'item_id': sku,
+              'item_sku': sku,
+              'item_name':
+                  '${item['item_name'] ?? item['name'] ?? item['item']?['name'] ?? sku}',
+              'quantity': quantity <= 0 ? 1 : quantity,
+              'quantity_ordered': _num(
+                item['quantity_ordered'] ??
+                    item['ordered_quantity'] ??
+                    quantity,
+              ),
+              'unit_price': item['unit_price'] ?? item['cost_price'] ?? 0,
+              'unit_of_measure':
+                  item['unit_of_measure'] ?? item['unit'] ?? 'units',
+              'po_item_id': item['id'],
+              'added_via': 'po',
+            };
+          })
+          .where((line) => '${line['item_sku']}'.trim().isNotEmpty)
+          .toList();
+      if (lines.isEmpty) {
+        _showSnack('Selected PO has no receivable items', error: true);
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _receivePoId = poId;
+        _receivePoNumber = '${po['po_number'] ?? poId}';
+        _receiveSupplierId =
+            '${po['supplier_id'] ?? po['supplier']?['id'] ?? _receiveSupplierId ?? ''}';
+        if (_receiveSupplierId == 'null' || _receiveSupplierId!.isEmpty) {
+          _receiveSupplierId = null;
+        }
+        _receiveLines
+          ..clear()
+          ..addAll(lines);
+        _receiveScanStatus =
+            'Loaded ${lines.length} item(s) from $_receivePoNumber';
+      });
+      _showSnack('Loaded ${lines.length} item(s) from $_receivePoNumber');
+    } catch (error) {
+      _showSnack('Could not load PO: $error', error: true);
+    } finally {
+      if (mounted) setState(() => _receiveLoadingPo = false);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _focusReceiveScanner());
+    }
+  }
+
+  Future<void> _submitBranchSupplierReceipt() async {
+    if (_receiveSupplierId == null || _receiveSupplierId!.isEmpty) {
+      _showSnack('Select a supplier first', error: true);
+      return;
+    }
+    if (_receiveLines.isEmpty) {
+      _showSnack('Scan or add at least one item', error: true);
+      return;
+    }
+    setState(() => _receiveSubmitting = true);
+    try {
+      await _repo.receiveFromSupplier({
+        'supplier_id': _receiveSupplierId,
+        if (_receivePoId != null) 'po_id': _receivePoId,
+        'delivery_note_number': _receiveDeliveryNoteCtrl.text.trim(),
+        'invoice_number': _receiveInvoiceCtrl.text.trim(),
+        'remarks': _receiveRemarksCtrl.text.trim(),
+        'items': _receiveLines
+            .map((line) => {
+                  ...line,
+                  if (line['po_item_id'] != null)
+                    'po_item_id': line['po_item_id'],
+                })
+            .toList(),
+      });
+      setState(() {
+        _receiveLines.clear();
+        _receiveInvoiceCtrl.clear();
+        _receiveDeliveryNoteCtrl.clear();
+        _receiveRemarksCtrl.clear();
+        _receivePoId = null;
+        _receivePoNumber = null;
+        _receiveScanStatus = 'Scanner ready';
+        _receiveLastScan = null;
+      });
+      await _loadAll();
+      _showSnack('Supplier receipt finalized');
+    } catch (error) {
+      _showSnack('Receipt failed: $error', error: true);
+    } finally {
+      if (mounted) setState(() => _receiveSubmitting = false);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _focusReceiveScanner());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MasterDashboardShell<BranchStorekeeperSection>(
       title: 'Branch Store',
       subtitle: 'Famous Gates',
       initials: 'B',
+      sidebarTitle: 'Famous Gates Hotels',
+      sidebarSubtitle: 'Management System',
+      sidebarInitials: 'FG',
       breadcrumbRoot: 'Branch Storekeeper',
       currentSection: _section,
       items: _navItems,
@@ -229,7 +617,12 @@ class _BranchStorekeeperDashboardState
           _selectedRequestId = null;
           _search = '';
           _statusFilter = 'ALL';
+          _poSupplierFilter = null;
         });
+        if (section == BranchStorekeeperSection.receive) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _focusReceiveScanner());
+        }
       },
       child: KeyedSubtree(
         key: ValueKey('${_section.name}-${_selectedStockTakeId ?? ''}'),
@@ -305,6 +698,12 @@ class _BranchStorekeeperDashboardState
           icon: PhosphorIcons.filePdf(),
           group: 'Reporting',
         ),
+        MasterNavItem(
+          section: BranchStorekeeperSection.notifications,
+          label: 'Notifications',
+          icon: PhosphorIcons.bell(),
+          group: 'System',
+        ),
       ];
 
   Widget _buildSection() {
@@ -334,6 +733,8 @@ class _BranchStorekeeperDashboardState
         return _stockOutPage();
       case BranchStorekeeperSection.reports:
         return _reportsPage();
+      case BranchStorekeeperSection.notifications:
+        return _notificationsPage();
     }
   }
 
@@ -542,10 +943,13 @@ class _BranchStorekeeperDashboardState
   }
 
   Widget _receivePage() {
+    final incoming = _incomingDispatches
+        .where((d) => '${d['status']}' == 'IN_TRANSIT')
+        .length;
     return _Page(
       title: 'Receive Goods',
       subtitle:
-          'Confirm central store dispatches and record direct supplier receipts.',
+          'Scan supplier deliveries, confirm central dispatches, and update branch stock.',
       actions: [
         _RefreshButton(onPressed: _loadAll),
         OutlinedButton.icon(
@@ -553,24 +957,18 @@ class _BranchStorekeeperDashboardState
           icon: Icon(PhosphorIcons.download()),
           label: const Text('Export Delivery PDF'),
         ),
-        FilledButton.icon(
-          onPressed: _showSupplierReceipt,
-          icon: Icon(PhosphorIcons.plus()),
-          label: const Text('Direct Supplier Receipt'),
-        ),
       ],
       children: [
         _StatGrid(cards: [
           _StatCardData('Incoming', '${_incomingDispatches.length}',
               PhosphorIcons.truck(), AppColors.kPrimary),
-          _StatCardData(
-              'In Transit',
-              '${_incomingDispatches.where((d) => '${d['status']}' == 'IN_TRANSIT').length}',
-              PhosphorIcons.clock(),
+          _StatCardData('In Transit', '$incoming', PhosphorIcons.clock(),
               AppColors.kWarning),
           _StatCardData('Local Vendors', '${_suppliers.length}',
               PhosphorIcons.buildings(), AppColors.kSuccess),
         ]),
+        _branchReceiptHeader(),
+        _branchReceivingStation(),
         _SectionCard(
           title: 'Central Store Dispatches',
           child: _RecordList(
@@ -602,6 +1000,408 @@ class _BranchStorekeeperDashboardState
           ),
         ),
       ],
+    );
+  }
+
+  Widget _branchReceiptHeader() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(
+          flex: 2,
+          child: Autocomplete<Map<String, dynamic>>(
+            key: ValueKey('receive_supplier_${_receiveSupplierId ?? ''}'),
+            initialValue: TextEditingValue(
+              text: _receiveSupplierId == null
+                  ? ''
+                  : _supplierLabel(_supplierOptions.firstWhere(
+                      (supplier) => '${supplier['id']}' == _receiveSupplierId,
+                      orElse: () => <String, dynamic>{},
+                    )),
+            ),
+            displayStringForOption: _supplierLabel,
+            optionsBuilder: (value) {
+              final query = value.text.trim().toLowerCase();
+              return _supplierOptions
+                  .where((supplier) =>
+                      query.isEmpty ||
+                      _supplierSearchText(supplier).contains(query))
+                  .take(30);
+            },
+            onSelected: (supplier) {
+              setState(() => _receiveSupplierId = '${supplier['id']}');
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => _focusReceiveScanner());
+            },
+            fieldViewBuilder:
+                (context, controller, focusNode, onFieldSubmitted) {
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                decoration: const InputDecoration(
+                  labelText: 'Supplier',
+                  hintText: 'Search supplier, code, phone or contact',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (_) {
+                  if (_receiveSupplierId != null) {
+                    setState(() => _receiveSupplierId = null);
+                  }
+                },
+              );
+            },
+            optionsViewBuilder: (context, onSelected, options) =>
+                _SupplierOptionsOverlay(
+              options: options.toList(),
+              onSelected: onSelected,
+              labelFor: _supplierLabel,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextField(
+            controller: _receiveInvoiceCtrl,
+            decoration: const InputDecoration(labelText: 'Invoice #'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextField(
+            controller: _receiveDeliveryNoteCtrl,
+            decoration: const InputDecoration(labelText: 'Delivery Note'),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 12),
+      Row(children: [
+        OutlinedButton.icon(
+          onPressed: _receiveLoadingPo ? null : _loadBranchReceiptFromPo,
+          icon: _receiveLoadingPo
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(PhosphorIcons.fileText(), size: 16),
+          label: Text(_receiveLoadingPo ? 'Loading...' : 'Load from PO'),
+        ),
+        const SizedBox(width: 10),
+        if (_receivePoId != null)
+          Chip(
+            avatar: const Icon(Icons.link, size: 16),
+            label: Text('Linked: ${_receivePoNumber ?? _receivePoId}'),
+            onDeleted: () => setState(() {
+              _receivePoId = null;
+              _receivePoNumber = null;
+            }),
+          )
+        else
+          const Text(
+            "Auto-load a branch PO's supplier & items into this receipt",
+            style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
+          ),
+      ]),
+    ]);
+  }
+
+  Widget _branchReceivingStation() {
+    return LayoutBuilder(builder: (context, constraints) {
+      final form = _branchReceiptFormCard();
+      final session = _branchReceiptSessionCard();
+      if (constraints.maxWidth < 980) {
+        return Column(children: [
+          form,
+          const SizedBox(height: 16),
+          session,
+        ]);
+      }
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: form),
+        const SizedBox(width: 16),
+        Expanded(child: session),
+      ]);
+    });
+  }
+
+  Widget _branchReceiptFormCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: true,
+                label: Text('Scanner'),
+                icon: Icon(Icons.qr_code_scanner),
+              ),
+              ButtonSegment(
+                value: false,
+                label: Text('Manual'),
+                icon: Icon(Icons.search),
+              ),
+            ],
+            selected: {_receiveScannerMode},
+            onSelectionChanged: (value) {
+              setState(() => _receiveScannerMode = value.first);
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => _focusReceiveScanner());
+            },
+          ),
+          const SizedBox(height: 16),
+          if (_receiveScannerMode) ...[
+            _scannerStatusBanner(),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _receiveBarcodeCtrl,
+              focusNode: _receiveScannerFocus,
+              autofocus: true,
+              enabled: !_receiveScanning,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [
+                FilteringTextInputFormatter.deny(RegExp(r'[\r\n\t]')),
+              ],
+              onChanged: (value) {
+                if (value.contains('\n') || value.contains('\r')) {
+                  _scanBranchReceiptBarcode();
+                }
+              },
+              onSubmitted: (_) => _scanBranchReceiptBarcode(),
+              decoration: InputDecoration(
+                labelText: 'Scan barcode or enter SKU',
+                prefixIcon: const Icon(Icons.qr_code_2),
+                suffixIcon: IconButton(
+                  onPressed:
+                      _receiveScanning ? null : _scanBranchReceiptBarcode,
+                  icon: _receiveScanning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.add),
+                ),
+              ),
+            ),
+          ] else ...[
+            TextField(
+              controller: _receiveManualSearchCtrl,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _searchReceiveManual(),
+              decoration: InputDecoration(
+                labelText: 'Search item name or SKU',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  onPressed: _searchReceiveManual,
+                  icon: const Icon(Icons.search),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            ..._receiveManualResults.take(8).map((item) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${item['item_name'] ?? item['name'] ?? 'Item'}'),
+                  subtitle: Text(_catalogSku(item)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () => _addReceiveLine(item, viaScan: false),
+                  ),
+                )),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _receiveRemarksCtrl,
+            decoration: const InputDecoration(labelText: 'Remarks'),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _scannerStatusBanner() {
+    final received = _receiveLines.fold<num>(
+      0,
+      (sum, line) => sum + _num(line['quantity']),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+      ),
+      child: Row(children: [
+        Icon(
+          _receiveScanning ? Icons.sync : Icons.qr_code_scanner,
+          color: AppColors.kPrimary,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            _receiveScanStatus,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.kPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        if (_receiveLastScan != null)
+          Text(
+            _receiveLastScan!,
+            style: const TextStyle(
+              color: AppColors.kTextSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        const SizedBox(width: 12),
+        Chip(label: Text('${_receiveLines.length} lines')),
+        const SizedBox(width: 6),
+        Chip(label: Text('${_qtyText(received)} received')),
+      ]),
+    );
+  }
+
+  Widget _branchReceiptSessionCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Receiving Session',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Review scanned items before posting to branch stock',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.kTextSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.icon(
+              onPressed:
+                  _receiveSubmitting ? null : _submitBranchSupplierReceipt,
+              icon: _receiveSubmitting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save, size: 16),
+              label: const Text('Post Receipt'),
+            ),
+          ]),
+          const SizedBox(height: 14),
+          if (_receiveLines.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: const Center(child: Text('No items scanned yet')),
+            )
+          else
+            Column(
+              children: _receiveLines
+                  .asMap()
+                  .entries
+                  .map((entry) => _receiveLineTile(entry.key, entry.value))
+                  .toList(),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _receiveLineTile(int index, Map<String, dynamic> line) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.kPrimary.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            line['added_via'] == 'scan'
+                ? Icons.qr_code_scanner
+                : PhosphorIcons.package(),
+            color: AppColors.kPrimary,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${line['item_name'] ?? 'Item'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '${line['item_sku'] ?? ''} | ${line['unit_of_measure'] ?? 'units'} | ${_money(_num(line['unit_price']))}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.kTextSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 96,
+          child: TextFormField(
+            initialValue: _qtyText(line['quantity']),
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.right,
+            decoration: const InputDecoration(labelText: 'Qty'),
+            onChanged: (value) {
+              line['quantity'] = num.tryParse(value) ?? 0;
+              setState(() {});
+            },
+          ),
+        ),
+        const SizedBox(width: 6),
+        IconButton(
+          tooltip: 'Remove',
+          onPressed: () => _removeReceiveLine(index),
+          icon: Icon(PhosphorIcons.trash()),
+        ),
+      ]),
     );
   }
 
@@ -747,8 +1547,18 @@ class _BranchStorekeeperDashboardState
         OutlinedButton.icon(
           onPressed: () =>
               _downloadStockTakeWorksheet(id: _selectedStockTakeId),
-          icon: Icon(PhosphorIcons.download()),
-          label: const Text('Download PDF'),
+          icon: Icon(PhosphorIcons.clipboardText()),
+          label: const Text('Count Sheet'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _downloadStockTakeReport(_selectedStockTakeId!),
+          icon: Icon(PhosphorIcons.filePdf()),
+          label: const Text('Report (PDF)'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _downloadStockTakeWorkbook(_selectedStockTakeId!),
+          icon: Icon(PhosphorIcons.fileSpreadsheet()),
+          label: const Text('Excel'),
         ),
         if (editable)
           OutlinedButton.icon(
@@ -844,7 +1654,7 @@ class _BranchStorekeeperDashboardState
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: SizedBox(
-          width: 1320,
+          width: 1840,
           child: Column(children: [
             _stockTakeWorksheetHeader(),
             ..._stockTakeItems.map(
@@ -870,28 +1680,37 @@ class _BranchStorekeeperDashboardState
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Row(children: [
-        SizedBox(width: 280, child: Text('ITEM', style: style)),
-        SizedBox(width: 150, child: Text('SKU', style: style)),
+        SizedBox(width: 310, child: Text('ITEM', style: style)),
+        SizedBox(width: 20),
+        SizedBox(width: 190, child: Text('SKU', style: style)),
+        SizedBox(width: 20),
         SizedBox(
-            width: 82,
+            width: 92,
             child: Text('OPENING', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 20),
         SizedBox(
-            width: 82,
+            width: 92,
             child: Text('ADDED', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 20),
         SizedBox(
-            width: 82,
+            width: 92,
             child: Text('ISSUED', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 20),
         SizedBox(
-            width: 95,
+            width: 110,
             child: Text('SYSTEM', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 130, child: Text('PHYSICAL COUNT', style: style)),
+        SizedBox(width: 20),
+        SizedBox(width: 170, child: Text('PHYSICAL COUNT', style: style)),
+        SizedBox(width: 20),
         SizedBox(
-            width: 90,
+            width: 120,
             child: Text('VARIANCE', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 20),
         SizedBox(
-            width: 100,
+            width: 120,
             child: Text('COST', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 260, child: Text('VARIANCE NOTES', style: style)),
+        SizedBox(width: 20),
+        SizedBox(width: 340, child: Text('VARIANCE NOTES', style: style)),
       ]),
     );
   }
@@ -925,7 +1744,7 @@ class _BranchStorekeeperDashboardState
       ),
       child: Row(children: [
         SizedBox(
-          width: 280,
+          width: 310,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('$name',
@@ -940,22 +1759,28 @@ class _BranchStorekeeperDashboardState
                     color: AppColors.kTextSecondary, fontSize: 11)),
           ]),
         ),
+        const SizedBox(width: 20),
         SizedBox(
-            width: 150,
+            width: 190,
             child: Text('${item['item_sku'] ?? item['sku'] ?? '—'}',
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12))),
+        const SizedBox(width: 20),
         _worksheetNumberCell(_num(item['opening_stock'])),
+        const SizedBox(width: 20),
         _worksheetNumberCell(_num(item['additions'])),
+        const SizedBox(width: 20),
         _worksheetNumberCell(_num(item['issued_quantity'])),
+        const SizedBox(width: 20),
         SizedBox(
-          width: 95,
+          width: 110,
           child: Text(_qtyText(system),
               textAlign: TextAlign.right,
               style: const TextStyle(fontWeight: FontWeight.w800)),
         ),
+        const SizedBox(width: 20),
         SizedBox(
-          width: 130,
+          width: 170,
           child: _StockTakeInlineInput(
             key:
                 ValueKey('${item['id'] ?? item['item_sku']}-storekeeper-count'),
@@ -968,28 +1793,23 @@ class _BranchStorekeeperDashboardState
             }),
           ),
         ),
+        const SizedBox(width: 20),
         SizedBox(
-          width: 90,
-          child: Text(
-            actual == null ? '—' : _qtyText(variance),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              color: actual == null
-                  ? AppColors.kTextSecondary
-                  : variance == 0
-                      ? AppColors.kSuccess
-                      : AppColors.kWarning,
-            ),
+          width: 120,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _stockTakeVarianceBadge(actual == null ? null : variance),
           ),
         ),
+        const SizedBox(width: 20),
         SizedBox(
-          width: 100,
+          width: 120,
           child: Text(_money(_num(item['cost_price'] ?? item['unit_cost'])),
               textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
         ),
+        const SizedBox(width: 20),
         SizedBox(
-          width: 260,
+          width: 340,
           child: _StockTakeInlineInput(
             key: ValueKey('${item['id'] ?? item['item_sku']}-storekeeper-note'),
             initialValue: _reasonIncludingDraft(item),
@@ -1004,24 +1824,87 @@ class _BranchStorekeeperDashboardState
     );
   }
 
+  Widget _stockTakeVarianceBadge(num? variance) {
+    if (variance == null) {
+      return const Text(
+        '-',
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          color: AppColors.kTextSecondary,
+          fontWeight: FontWeight.w800,
+        ),
+      );
+    }
+    final isZero = variance == 0;
+    final isPositive = variance > 0;
+    final color = isZero
+        ? AppColors.kSuccess
+        : isPositive
+            ? Colors.blue
+            : AppColors.kWarning;
+    final label =
+        isZero ? '0' : '${isPositive ? '+' : ''}${_qtyText(variance)}';
+    return Container(
+      constraints: const BoxConstraints(minWidth: 68),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: .35)),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
   Widget _worksheetNumberCell(num value) {
     return SizedBox(
-      width: 82,
+      width: 92,
       child: Text(_qtyText(value),
           textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
     );
   }
 
   Widget _purchaseOrdersPage() {
+    final supplierOptions = _uniqueRows(_purchaseOrders, (po) {
+      final direct = '${po['supplier_id'] ?? po['supplier']?['id'] ?? ''}';
+      return direct == 'null' ? '' : direct;
+    });
     final filtered = _purchaseOrders.where((po) {
-      final statusOk =
-          _statusFilter == 'ALL' || '${po['status']}' == _statusFilter;
+      final status = '${po['status'] ?? ''}'.toUpperCase();
+      final supplierId = '${po['supplier_id'] ?? po['supplier']?['id'] ?? ''}';
+      final statusOk = _statusFilter == 'ALL' || status == _statusFilter;
+      final supplierOk = _poSupplierFilter == null ||
+          _poSupplierFilter!.isEmpty ||
+          supplierId == _poSupplierFilter;
       final q = _search.toLowerCase();
       return statusOk &&
+          supplierOk &&
           (q.isEmpty ||
               '${po['po_number'] ?? ''}'.toLowerCase().contains(q) ||
-              '${po['supplier']?['name'] ?? ''}'.toLowerCase().contains(q));
+              '${po['supplier_name'] ?? po['supplier']?['name'] ?? ''}'
+                  .toLowerCase()
+                  .contains(q));
     }).toList();
+    final pending = _purchaseOrders.where((po) {
+      final status = '${po['status'] ?? ''}'.toLowerCase();
+      return status == 'pending' || status == 'draft';
+    }).length;
+    final open = filtered.where((po) {
+      final status = '${po['status'] ?? ''}'.toLowerCase();
+      return !const {'received', 'cancelled', 'closed'}.contains(status);
+    }).length;
+    final totalValue = filtered.fold<num>(
+      0,
+      (sum, po) => sum + _num(po['total_amount'] ?? po['total']),
+    );
     return _Page(
       title: 'Purchase Orders',
       subtitle: 'Create, approve, receive, cancel, and review branch POs.',
@@ -1035,54 +1918,118 @@ class _BranchStorekeeperDashboardState
       ],
       children: [
         _StatGrid(cards: [
-          _poStat('Pending', 'PENDING', PhosphorIcons.clock()),
-          _poStat('Approved', 'APPROVED', PhosphorIcons.checkCircle()),
-          _poStat('On Order', 'ORDERED', PhosphorIcons.truck()),
-          _poStat('Received', 'RECEIVED', PhosphorIcons.package()),
+          _StatCardData('Open POs', '$open', PhosphorIcons.fileText(),
+              AppColors.kPrimary),
+          _StatCardData('Pending Approval', '$pending', PhosphorIcons.clock(),
+              Colors.orange),
+          _StatCardData(
+              'Approved',
+              '${_purchaseOrders.where((po) => '${po['status']}'.toUpperCase() == 'APPROVED').length}',
+              PhosphorIcons.checkCircle(),
+              AppColors.kSuccess),
+          _StatCardData('Total Value', _money(totalValue),
+              PhosphorIcons.currencyDollar(), Colors.green),
         ]),
-        _FiltersBar(
-          search: _search,
-          searchHint: 'Search purchase orders...',
-          onSearchChanged: (value) => setState(() => _search = value),
-          trailing: _statusDropdown([
-            'ALL',
-            'PENDING',
-            'APPROVED',
-            'ORDERED',
-            'RECEIVED',
-            'CANCELLED'
-          ]),
+        _SectionCard(
+          title: 'Filters',
+          child: LayoutBuilder(builder: (context, constraints) {
+            final compact = constraints.maxWidth < 820;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: compact ? constraints.maxWidth : 520,
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Search PO, supplier, branch',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (value) => setState(() => _search = value),
+                  ),
+                ),
+                SizedBox(
+                  width: compact ? constraints.maxWidth : 190,
+                  child: _statusDropdown([
+                    'ALL',
+                    'PENDING',
+                    'DRAFT',
+                    'APPROVED',
+                    'ORDERED',
+                    'SENT',
+                    'RECEIVED',
+                    'CANCELLED'
+                  ]),
+                ),
+                SizedBox(
+                  width: compact ? constraints.maxWidth : 260,
+                  child: DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _poSupplierFilter,
+                    decoration: const InputDecoration(labelText: 'Supplier'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('All suppliers'),
+                      ),
+                      ...supplierOptions.map((po) {
+                        final supplierId =
+                            '${po['supplier_id'] ?? po['supplier']?['id'] ?? ''}';
+                        final supplierName =
+                            '${po['supplier_name'] ?? po['supplier']?['name'] ?? 'Supplier'}';
+                        return DropdownMenuItem<String?>(
+                          value: supplierId,
+                          child: Text(
+                            supplierName,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _poSupplierFilter = value),
+                  ),
+                ),
+              ],
+            );
+          }),
         ),
         _SectionCard(
-          title: 'Orders',
+          title: 'Purchase Orders',
           child: _RecordList(
             emptyText: 'No purchase orders found',
             children: filtered.map((po) {
               final status = '${po['status'] ?? ''}';
+              final statusLower = status.toLowerCase();
               return _RecordTile(
-                icon: PhosphorIcons.shoppingCart(),
+                icon: PhosphorIcons.fileText(),
                 title: '${po['po_number'] ?? po['id']}',
                 subtitle:
-                    '${po['supplier']?['name'] ?? 'Supplier'} | Expected ${_date(po['expected_delivery'] ?? po['expected_delivery_date'])}',
+                    '${po['supplier_name'] ?? po['supplier']?['name'] ?? 'Supplier'} | ${_date(po['created_at'] ?? po['po_date'])} | Expected ${_date(po['expected_delivery'] ?? po['expected_delivery_date'])}',
                 trailing: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     _StatusChip(status, success: status == 'RECEIVED'),
-                    Text('KES ${_num(po['total_amount']).toStringAsFixed(0)}'),
+                    Text(
+                      _money(_num(po['total_amount'] ?? po['total'])),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ],
                 ),
                 actions: [
-                  TextButton(
+                  OutlinedButton(
                     onPressed: () => _showJsonDetail('Purchase Order', po),
                     child: const Text('View'),
                   ),
-                  if (status == 'PENDING')
-                    TextButton(
+                  if (statusLower == 'pending' || statusLower == 'draft')
+                    FilledButton(
                       onPressed: () => _poAction(po, 'approve'),
                       child: const Text('Approve'),
                     ),
-                  if (status == 'APPROVED')
-                    TextButton(
+                  if (const {'APPROVED', 'ORDERED', 'SENT'}
+                      .contains(status.toUpperCase()))
+                    OutlinedButton(
                       onPressed: () => _poAction(po, 'receive'),
                       child: const Text('Receive'),
                     ),
@@ -1430,23 +2377,217 @@ class _BranchStorekeeperDashboardState
     );
   }
 
+  Widget _movementGroup(
+      String label, List<Map<String, dynamic>> rows, Color color, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text('$label (${rows.length})',
+                  style: TextStyle(fontWeight: FontWeight.w800, color: color)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(left: 22, bottom: 4),
+              child: Text('No items', style: TextStyle(color: Colors.grey)),
+            )
+          else
+            ...rows.take(8).map((row) {
+              final item = Map<String, dynamic>.from((row['item'] as Map?) ?? {});
+              final sku = '${row['item_sku'] ?? row['sku'] ?? item['sku'] ?? ''}';
+              return _RecordTile(
+                icon: icon,
+                title: _itemName(row),
+                subtitle:
+                    '$sku | On hand ${_num(row['quantity']).toStringAsFixed(0)}'
+                    ' | Moved ${_num(row['movement_quantity']).toStringAsFixed(0)}',
+                trailing: Text(
+                  _money(_num(row['stock_value'])),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
   Widget _reportsPage() {
+    final analyticsSummary = Map<String, dynamic>.from(
+      (_inventoryAnalytics['summary'] as Map?) ?? const {},
+    );
+    final departmentRows = _listFrom(
+      _inventoryAnalytics['department_consumption'] ?? _departmentConsumption,
+    );
+    final lowStockRows = _listFrom(_inventoryAnalytics['low_stock'] ?? []);
+    final deadStockRows = _listFrom(_inventoryAnalytics['dead_stock'] ?? []);
+    final fastRows = _listFrom(_inventoryAnalytics['fast_moving'] ?? []);
+    final slowRows = _listFrom(_inventoryAnalytics['slow_moving'] ?? []);
+    const periodLabels = {
+      'today': 'Today',
+      'week': 'This Week',
+      'month': 'This Month',
+      'year': 'This Year',
+    };
     return _Page(
       title: 'Branch Store Reports',
       subtitle:
-          'Generate stock, receiving, requests, purchase, usage, and stock-out reports.',
+          'Inventory valuation, department consumption, movement analytics, stock-take exceptions, and exports.',
       actions: [_RefreshButton(onPressed: _loadAll)],
       children: [
+        _SectionCard(
+          title: 'Reporting Period',
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ...periodLabels.entries.map((entry) => ChoiceChip(
+                    label: Text(entry.value),
+                    selected: _analyticsPeriod == entry.key,
+                    onSelected: _analyticsLoading
+                        ? null
+                        : (_) => _reloadAnalytics(entry.key),
+                  )),
+              if (_analyticsLoading)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+            ],
+          ),
+        ),
         _StatGrid(cards: [
           _StatCardData('Stock SKUs', '${_stock.length}',
               PhosphorIcons.package(), AppColors.kPrimary),
-          _StatCardData('Requests', '${_stockRequests.length}',
-              PhosphorIcons.gitPullRequest(), Colors.indigo),
-          _StatCardData('Usage Records', '${_kitchenUsage.length}',
-              PhosphorIcons.forkKnife(), AppColors.kSuccess),
-          _StatCardData('Purchase Orders', '${_purchaseOrders.length}',
-              PhosphorIcons.shoppingCart(), AppColors.kWarning),
+          _StatCardData(
+              'Stock Value',
+              _money(_num(analyticsSummary['total_stock_value'])),
+              PhosphorIcons.coins(),
+              Colors.teal),
+          _StatCardData(
+              'Consumption',
+              _money(_num(analyticsSummary['total_consumption_cost'])),
+              PhosphorIcons.forkKnife(),
+              AppColors.kSuccess),
+          _StatCardData(
+              'Exceptions',
+              '${_num(analyticsSummary['low_stock_count']) + _num(analyticsSummary['out_of_stock_count']) + _num(analyticsSummary['dead_stock_count'])}',
+              PhosphorIcons.warning(),
+              AppColors.kWarning),
         ]),
+        _SectionCard(
+          title: 'Inventory Analytics',
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _InfoPill(
+                  'Low stock', '${analyticsSummary['low_stock_count'] ?? 0}'),
+              _InfoPill('Out of stock',
+                  '${analyticsSummary['out_of_stock_count'] ?? 0}'),
+              _InfoPill('Fast moving',
+                  '${analyticsSummary['fast_moving_count'] ?? 0}'),
+              _InfoPill('Slow moving',
+                  '${analyticsSummary['slow_moving_count'] ?? 0}'),
+              _InfoPill(
+                  'Dead stock', '${analyticsSummary['dead_stock_count'] ?? 0}'),
+              _InfoPill('Pending stock takes',
+                  '${analyticsSummary['pending_stock_take_count'] ?? 0}'),
+            ],
+          ),
+        ),
+        _SectionCard(
+          title: 'Movement Analysis (${periodLabels[_analyticsPeriod] ?? ''})',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _movementGroup('Fast moving', fastRows, AppColors.kSuccess,
+                  PhosphorIcons.trendUp()),
+              _movementGroup('Slow moving', slowRows, AppColors.kWarning,
+                  PhosphorIcons.chartLine()),
+              _movementGroup('Dead stock', deadStockRows, AppColors.kError,
+                  PhosphorIcons.clockCounterClockwise()),
+            ],
+          ),
+        ),
+        _SectionCard(
+          title: 'Department Consumption',
+          child: _RecordList(
+            emptyText: 'No department consumption found for the period',
+            children: departmentRows.take(8).map((row) {
+              final account =
+                  Map<String, dynamic>.from((row['account'] as Map?) ?? row);
+              final code = '${account['department_code'] ?? row['department_code'] ?? ''}';
+              final name =
+                  '${account['department_name'] ?? row['department_name'] ?? row['department_code'] ?? 'Department'}';
+              return _RecordTile(
+                icon: PhosphorIcons.buildings(),
+                title: name,
+                subtitle:
+                    '${row['movement_count'] ?? row['movement_type'] ?? 'movement'}'
+                    ' | Qty ${_num(row['quantity']).toStringAsFixed(2)}',
+                trailing: Text(
+                  _money(_num(row['total_cost'])),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                actions: [
+                  if (code.isNotEmpty)
+                    TextButton(
+                      onPressed: () => _showDepartmentHistory(code, name),
+                      child: const Text('History'),
+                    ),
+                  TextButton(
+                    onPressed: () => _showJsonDetail('Consumption', row),
+                    child: const Text('View'),
+                  )
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+        _SectionCard(
+          title: 'Stock Exceptions',
+          child: _RecordList(
+            emptyText: 'No stock exceptions found',
+            children: [
+              ...lowStockRows.take(5).map((row) => _RecordTile(
+                    icon: PhosphorIcons.warning(),
+                    title: _itemName(row),
+                    subtitle: 'Low stock | ${row['item_sku'] ?? row['sku']}',
+                    trailing: Text(_qty(row)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => _showJsonDetail('Low Stock', row),
+                        child: const Text('View'),
+                      )
+                    ],
+                  )),
+              ...deadStockRows.take(5).map((row) => _RecordTile(
+                    icon: PhosphorIcons.clockCounterClockwise(),
+                    title: _itemName(row),
+                    subtitle: 'Dead stock | ${row['item_sku'] ?? row['sku']}',
+                    trailing: Text(_qty(row)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => _showJsonDetail('Dead Stock', row),
+                        child: const Text('View'),
+                      )
+                    ],
+                  )),
+            ],
+          ),
+        ),
         _SectionCard(
           title: 'Export Center',
           child: Wrap(
@@ -1472,12 +2613,48 @@ class _BranchStorekeeperDashboardState
     );
   }
 
-  _StatCardData _poStat(String label, String status, IconData icon) {
-    return _StatCardData(
-      label,
-      '${_purchaseOrders.where((po) => '${po['status']}' == status).length}',
-      icon,
-      AppColors.kPrimary,
+  Widget _notificationsPage() {
+    return _Page(
+      title: 'Notifications',
+      subtitle:
+          'Review system alerts, approvals, stock exceptions, and updates.',
+      actions: [
+        FilledButton.icon(
+          onPressed: () => showAppNotificationPanel(context, ref),
+          icon: Icon(PhosphorIcons.bell()),
+          label: const Text('Open Notifications'),
+        ),
+      ],
+      children: [
+        _SectionCard(
+          title: 'Notification Center',
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(PhosphorIcons.bell(), color: AppColors.kPrimary, size: 28),
+                const SizedBox(height: 12),
+                const Text(
+                  'Branch store notifications open in the notification panel.',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Use this area for stock alerts, requisition updates, receipt approvals, and audit messages.',
+                  style: TextStyle(color: AppColors.kTextSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1507,6 +2684,133 @@ class _BranchStorekeeperDashboardState
       _showSnack('Worksheet downloaded: ${file.path}');
     } catch (error) {
       _showSnack('Worksheet download failed: $error', error: true);
+    }
+  }
+
+  ({String start, String end}) _periodRange(String period) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    String fmt(DateTime d) => d.toIso8601String().split('T').first;
+    switch (period) {
+      case 'today':
+        return (start: fmt(today), end: fmt(today));
+      case 'week':
+        return (start: fmt(today.subtract(Duration(days: today.weekday - 1))), end: fmt(today));
+      case 'year':
+        return (start: fmt(DateTime(now.year, 1, 1)), end: fmt(today));
+      case 'month':
+      default:
+        return (start: fmt(DateTime(now.year, now.month, 1)), end: fmt(today));
+    }
+  }
+
+  Future<void> _reloadAnalytics(String period) async {
+    setState(() {
+      _analyticsPeriod = period;
+      _analyticsLoading = true;
+    });
+    final range = _periodRange(period);
+    try {
+      final results = await Future.wait([
+        _safe(
+            () => _repo.enterpriseInventoryAnalytics(
+                startDate: range.start, endDate: range.end),
+            <String, dynamic>{}),
+        _safe(
+            () => _repo.departmentConsumption(
+                startDate: range.start, endDate: range.end),
+            <Map<String, dynamic>>[]),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _inventoryAnalytics = results[0] as Map<String, dynamic>;
+        _departmentConsumption =
+            List<Map<String, dynamic>>.from(results[1] as List);
+        _analyticsLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _analyticsLoading = false);
+      _showSnack('Analytics refresh failed: ${_errorText(error)}', error: true);
+    }
+  }
+
+  Future<void> _showDepartmentHistory(
+      String departmentCode, String departmentName) async {
+    final range = _periodRange(_analyticsPeriod);
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await _repo.departmentIssueJournals(
+        departmentCode: departmentCode,
+        startDate: range.start,
+        endDate: range.end,
+      );
+    } catch (error) {
+      _showSnack('Could not load history: ${_errorText(error)}', error: true);
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$departmentName — Issue History'),
+        content: SizedBox(
+          width: 560,
+          child: rows.isEmpty
+              ? const Text('No issues recorded for this period.')
+              : _RecordList(
+                  emptyText: 'No issues recorded',
+                  children: rows.take(60).map((row) {
+                    final event = '${row['event_name'] ?? ''}'.trim();
+                    final paxValue = _num(row['pax_count']);
+                    final meta = [
+                      if (row['shift_code'] != null &&
+                          '${row['shift_code']}'.isNotEmpty)
+                        'Shift ${row['shift_code']}',
+                      if (event.isNotEmpty) event,
+                      if (paxValue > 0) '${paxValue.toStringAsFixed(0)} pax',
+                    ].join(' · ');
+                    return _RecordTile(
+                      icon: PhosphorIcons.trendDown(),
+                      title: _itemName(row),
+                      subtitle: [
+                        _date(row['created_at']),
+                        if (meta.isNotEmpty) meta,
+                      ].join(' | '),
+                      trailing: Text(
+                        '-${_num(row['quantity']).abs().toStringAsFixed(0)}'
+                        '  ${_money(_num(row['total_cost']))}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    );
+                  }).toList(),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _downloadStockTakeReport(String id) async {
+    try {
+      final file = await _repo.downloadStockTakeReportPdf(id);
+      _showSnack('Stock take report downloaded: ${file.path}');
+    } catch (error) {
+      _showSnack('Report download failed: $error', error: true);
+    }
+  }
+
+  Future<void> _downloadStockTakeWorkbook(String id) async {
+    try {
+      final file = await _repo.downloadStockTakeReportWorkbook(id);
+      _showSnack('Stock take workbook downloaded: ${file.path}');
+    } catch (error) {
+      _showSnack('Workbook download failed: $error', error: true);
     }
   }
 
@@ -1576,13 +2880,23 @@ class _BranchStorekeeperDashboardState
   Future<void> _startStockTake() async {
     String storeType = 'foodstuffs';
     String outletCode = 'main_bar';
+    bool pickItems = false;
+    final selectedSkus = <String>{};
+    String itemSearch = '';
     showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
+        final catalog = _catalog.isNotEmpty ? _catalog : _stockOptions;
+        final filtered = itemSearch.trim().isEmpty
+            ? catalog
+            : catalog
+                .where((item) =>
+                    _itemSearchText(item).contains(itemSearch.trim().toLowerCase()))
+                .toList();
         return AlertDialog(
           title: const Text('Start Daily Stock Take'),
           content: SizedBox(
-            width: 420,
+            width: 480,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1617,6 +2931,69 @@ class _BranchStorekeeperDashboardState
                         setDialogState(() => outletCode = value ?? 'main_bar'),
                   ),
                 ],
+                const SizedBox(height: 4),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Pick specific items'),
+                  subtitle: Text(pickItems
+                      ? '${selectedSkus.length} item(s) selected'
+                      : 'Off = include all items for this type'),
+                  value: pickItems,
+                  onChanged: (value) => setDialogState(() => pickItems = value),
+                ),
+                if (pickItems) ...[
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Search master inventory',
+                      prefixIcon: Icon(Icons.search),
+                      isDense: true,
+                    ),
+                    onChanged: (value) => setDialogState(() => itemSearch = value),
+                  ),
+                  const SizedBox(height: 8),
+                  if (selectedSkus.isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            setDialogState(() => selectedSkus.clear()),
+                        icon: const Icon(Icons.clear_all, size: 18),
+                        label: const Text('Clear selection'),
+                      ),
+                    ),
+                  SizedBox(
+                    height: 260,
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('No catalog items found'))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final item = filtered[index];
+                              final sku = _catalogOptionSku(item);
+                              if (sku.isEmpty) return const SizedBox.shrink();
+                              return CheckboxListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                value: selectedSkus.contains(sku),
+                                title: Text(_itemName(item),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
+                                    '$sku${item['category'] != null ? ' · ${item['category']}' : ''}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                onChanged: (checked) => setDialogState(() {
+                                  if (checked == true) {
+                                    selectedSkus.add(sku);
+                                  } else {
+                                    selectedSkus.remove(sku);
+                                  }
+                                }),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1625,12 +3002,15 @@ class _BranchStorekeeperDashboardState
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
+              onPressed: pickItems && selectedSkus.isEmpty
+                  ? null
+                  : () async {
                 Navigator.pop(context);
                 try {
                   final result = await _repo.createStockTake(
                     storeType: storeType,
                     outletCode: storeType == 'bar_store' ? outletCode : null,
+                    itemSkus: pickItems ? selectedSkus.toList() : null,
                   );
                   final id = '${result['id'] ?? result['data']?['id'] ?? ''}';
                   if (id.isNotEmpty) {
@@ -1846,102 +3226,6 @@ class _BranchStorekeeperDashboardState
                 }
               },
               child: const Text('Confirm Receipt'),
-            ),
-          ],
-        );
-      }),
-    );
-  }
-
-  void _showSupplierReceipt() {
-    String? supplierId;
-    final deliveryNoteController = TextEditingController();
-    final invoiceController = TextEditingController();
-    final remarksController = TextEditingController();
-    final lines = <Map<String, dynamic>>[];
-    showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
-        return AlertDialog(
-          title: const Text('Direct Supplier Receipt'),
-          content: SizedBox(
-            width: 760,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: supplierId,
-                    decoration: const InputDecoration(labelText: 'Supplier'),
-                    items: _supplierOptions
-                        .map((supplier) => DropdownMenuItem(
-                              value: '${supplier['id']}',
-                              child: Text('${supplier['name']}'),
-                            ))
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => supplierId = value),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: deliveryNoteController,
-                          decoration:
-                              const InputDecoration(labelText: 'Delivery Note'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: invoiceController,
-                          decoration:
-                              const InputDecoration(labelText: 'Invoice No.'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _LineEditor(
-                    catalog: _catalog,
-                    lines: lines,
-                    onChanged: () => setDialogState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: remarksController,
-                    decoration: const InputDecoration(labelText: 'Remarks'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel')),
-            FilledButton(
-              onPressed: supplierId == null || lines.isEmpty
-                  ? null
-                  : () async {
-                      Navigator.pop(context);
-                      try {
-                        await _repo.receiveFromSupplier({
-                          'supplier_id': supplierId,
-                          'delivery_note_number': deliveryNoteController.text,
-                          'invoice_number': invoiceController.text,
-                          'remarks': remarksController.text,
-                          'items': lines,
-                        });
-                        await _loadAll();
-                        _showSnack('Supplier receipt finalized');
-                      } catch (error) {
-                        _showSnack('Receipt failed: $error', error: true);
-                      }
-                    },
-              child: const Text('Finalize Receipt'),
             ),
           ],
         );
@@ -2179,20 +3463,44 @@ class _BranchStorekeeperDashboardState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: sku,
-                  decoration: const InputDecoration(labelText: 'Item'),
-                  items: _catalogOptions
-                      .map((item) => DropdownMenuItem(
-                            value: '${item['sku'] ?? item['item_sku']}',
-                            child: Text(
-                              '${item['item_name'] ?? item['name'] ?? item['sku']}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => sku = value),
+                Autocomplete<Map<String, dynamic>>(
+                  displayStringForOption: (item) =>
+                      '${_itemName(item)} - ${_catalogOptionSku(item)}',
+                  optionsBuilder: (value) {
+                    final query = value.text.trim().toLowerCase();
+                    return _catalogOptions
+                        .where((item) =>
+                            query.isEmpty ||
+                            _itemSearchText(item).contains(query))
+                        .take(40);
+                  },
+                  onSelected: (item) =>
+                      setDialogState(() => sku = _catalogOptionSku(item)),
+                  fieldViewBuilder:
+                      (context, controller, focusNode, onFieldSubmitted) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Search item',
+                        hintText: 'Type item name, SKU, barcode or category',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (_) {
+                        if (sku != null) setDialogState(() => sku = null);
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) =>
+                      _ItemOptionsOverlay(
+                    options: options.toList(),
+                    onSelected: onSelected,
+                    skuFor: _catalogOptionSku,
+                    nameFor: _itemName,
+                    qtyFor: _qty,
+                    priceFor: (item) =>
+                        _num(item['cost_price'] ?? item['unit_price']),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -2271,18 +3579,53 @@ class _BranchStorekeeperDashboardState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: supplierId,
-                          decoration:
-                              const InputDecoration(labelText: 'Supplier'),
-                          items: _supplierOptions
-                              .map((supplier) => DropdownMenuItem(
-                                  value: '${supplier['id']}',
-                                  child: Text('${supplier['name']}')))
-                              .toList(),
-                          onChanged: (value) =>
-                              setDialogState(() => supplierId = value),
+                        child: Autocomplete<Map<String, dynamic>>(
+                          key: ValueKey('po_supplier_${supplierId ?? ''}'),
+                          initialValue: TextEditingValue(
+                            text: supplierId == null
+                                ? ''
+                                : _supplierLabel(_supplierOptions.firstWhere(
+                                    (supplier) =>
+                                        '${supplier['id']}' == supplierId,
+                                    orElse: () => <String, dynamic>{},
+                                  )),
+                          ),
+                          displayStringForOption: _supplierLabel,
+                          optionsBuilder: (value) {
+                            final query = value.text.trim().toLowerCase();
+                            return _supplierOptions
+                                .where((supplier) =>
+                                    query.isEmpty ||
+                                    _supplierSearchText(supplier)
+                                        .contains(query))
+                                .take(30);
+                          },
+                          onSelected: (supplier) => setDialogState(
+                              () => supplierId = '${supplier['id']}'),
+                          fieldViewBuilder: (context, controller, focusNode,
+                              onFieldSubmitted) {
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              decoration: const InputDecoration(
+                                labelText: 'Search supplier',
+                                hintText:
+                                    'Type supplier name, code, phone or contact',
+                                prefixIcon: Icon(Icons.search),
+                              ),
+                              onChanged: (_) {
+                                if (supplierId != null) {
+                                  setDialogState(() => supplierId = null);
+                                }
+                              },
+                            );
+                          },
+                          optionsViewBuilder: (context, onSelected, options) =>
+                              _SupplierOptionsOverlay(
+                            options: options.toList(),
+                            onSelected: onSelected,
+                            labelFor: _supplierLabel,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -2310,6 +3653,7 @@ class _BranchStorekeeperDashboardState
                     lines: lines,
                     onChanged: () => setDialogState(() {}),
                     itemIdKey: 'item_id',
+                    priceEnabled: false,
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -2346,7 +3690,12 @@ class _BranchStorekeeperDashboardState
                               : expectedDate.text,
                           'special_instructions': notes.text,
                           'auto_approve': autoApprove,
-                          'items': lines,
+                          'items': lines
+                              .map((line) => {
+                                    ...line,
+                                    'unit_price': 0,
+                                  })
+                              .toList(),
                         });
                         await _loadAll();
                         _showSnack('Purchase order created');
@@ -2552,79 +3901,71 @@ class _BranchStorekeeperDashboardState
   }
 
   void _showKitchenIssueForm() {
-    String? sku;
-    final quantity = TextEditingController(text: '1');
     final date = TextEditingController(
         text: DateTime.now().toIso8601String().substring(0, 10));
-    final unitCost = TextEditingController(text: '0');
     final revenue = TextEditingController(text: '0');
+    final lines = <Map<String, dynamic>>[];
     showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
-        final selected = _trackableOptions.firstWhere(
-          (item) => '${item['item_sku'] ?? item['sku']}' == sku,
-          orElse: () => <String, dynamic>{},
+        final totalQuantity =
+            lines.fold<num>(0, (sum, line) => sum + _num(line['quantity']));
+        final totalCost = lines.fold<num>(
+          0,
+          (sum, line) =>
+              sum + (_num(line['quantity']) * _num(line['unit_price'])),
         );
         return AlertDialog(
           title: const Text('Issue Items to Kitchen'),
           content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: sku,
-                  decoration: const InputDecoration(labelText: 'Item'),
-                  items: _trackableOptions
-                      .map((item) => DropdownMenuItem(
-                            value: '${item['item_sku'] ?? item['sku']}',
-                            child: Text(
-                              '${item['item_name'] ?? item['name'] ?? item['item_sku'] ?? item['sku']} (${item['quantity'] ?? 0})',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => sku = value),
-                ),
-                if (selected.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: _InfoPill('Available',
-                        '${selected['quantity'] ?? 0} ${selected['unit'] ?? 'units'}'),
+            width: 760,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _LineEditor(
+                    catalog: _trackableOptions,
+                    lines: lines,
+                    onChanged: () => setDialogState(() {}),
+                    quantityKey: 'quantity',
                   ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: quantity,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Quantity'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: date,
-                  decoration:
-                      const InputDecoration(labelText: 'Issue Date YYYY-MM-DD'),
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: unitCost,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Unit Cost'),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: date,
+                        decoration: const InputDecoration(
+                          labelText: 'Issue Date',
+                          hintText: 'YYYY-MM-DD',
+                          prefixIcon: Icon(Icons.calendar_today),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: revenue,
-                      keyboardType: TextInputType.number,
-                      decoration:
-                          const InputDecoration(labelText: 'Expected Revenue'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: revenue,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Expected Revenue',
+                          prefixIcon: Icon(Icons.payments_outlined),
+                        ),
+                      ),
                     ),
+                  ]),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _InfoPill('Lines', '${lines.length}'),
+                      _InfoPill('Total Qty', _qtyText(totalQuantity)),
+                      _InfoPill('Total Cost', _money(totalCost)),
+                    ],
                   ),
-                ]),
-              ],
+                ],
+              ),
             ),
           ),
           actions: [
@@ -2632,20 +3973,22 @@ class _BranchStorekeeperDashboardState
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel')),
             FilledButton(
-              onPressed: sku == null
+              onPressed: lines.isEmpty
                   ? null
                   : () async {
                       Navigator.pop(context);
                       try {
-                        await _repo.createKitchenUsageRecord({
-                          'item_sku': sku,
-                          'received_quantity': num.tryParse(quantity.text) ?? 0,
-                          'usage_date': date.text,
-                          'unit_cost': num.tryParse(unitCost.text) ?? 0,
-                          'expected_revenue': num.tryParse(revenue.text) ?? 0,
-                        });
+                        for (final line in lines) {
+                          await _repo.createKitchenUsageRecord({
+                            'item_sku': line['item_sku'],
+                            'received_quantity': _num(line['quantity']),
+                            'usage_date': date.text,
+                            'unit_cost': _num(line['unit_price']),
+                            'expected_revenue': _num(revenue.text),
+                          });
+                        }
                         await _loadAll();
-                        _showSnack('Items issued to kitchen');
+                        _showSnack('${lines.length} item(s) issued to kitchen');
                       } catch (error) {
                         _showSnack('Kitchen issue failed: $error', error: true);
                       }
@@ -2746,82 +4089,217 @@ class _BranchStorekeeperDashboardState
     _showJsonDetail('Kitchen Usage Detail', record);
   }
 
+  // Departments that represent a one-off service event and therefore need a
+  // name (and, except breakfast, a pax count) recorded against each issue.
+  static const _eventDepartments = {
+    'buffet': (label: 'Buffet Name', pax: true),
+    'outside_catering': (label: 'Event Name', pax: true),
+    'accommodation_breakfast': (label: 'Guest / Room', pax: false),
+  };
+
   void _showStockOutForm() {
-    String? sku;
-    final qty = TextEditingController(text: '1');
     final notes = TextEditingController();
-    String department = 'Main Kitchen - Shift A';
+    final eventName = TextEditingController();
+    final pax = TextEditingController();
+    final lines = <Map<String, dynamic>>[];
+    String departmentCode = _departmentAccounts.isNotEmpty
+        ? '${_departmentAccounts.first['department_code']}'
+        : 'main_kitchen';
+    String shiftCode = 'A';
     showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
-        final selected = _stockOptions.firstWhere(
-          (item) => '${item['item_sku'] ?? item['sku']}' == sku,
-          orElse: () => <String, dynamic>{},
-        );
+        final eventConfig = _eventDepartments[departmentCode];
+        final eventName0 = eventName.text.trim();
+        final eventNameMissing = eventConfig != null && eventName0.isEmpty;
+        Map<String, dynamic> stockForLine(Map<String, dynamic> line) {
+          return _stockOptions.firstWhere(
+            (item) => _optionSku(item) == '${line['item_sku']}',
+            orElse: () => <String, dynamic>{},
+          );
+        }
+
+        final invalidLines = lines.where((line) {
+          final stock = stockForLine(line);
+          final qty = _num(line['quantity']);
+          return stock.isEmpty || qty <= 0 || qty > _num(stock['quantity']);
+        }).toList();
+        final totalQuantity =
+            lines.fold<num>(0, (sum, line) => sum + _num(line['quantity']));
+        final departmentOptions = _departmentAccounts.isNotEmpty
+            ? _departmentAccounts
+            : const [
+                {
+                  'department_code': 'main_kitchen',
+                  'department_name': 'Main Kitchen'
+                },
+                {
+                  'department_code': 'choma_zone_kitchen',
+                  'department_name': 'Choma Zone Kitchen'
+                },
+                {
+                  'department_code': 'pastries_kitchen',
+                  'department_name': 'Pastries Kitchen'
+                },
+                {'department_code': 'buffet', 'department_name': 'Buffets'},
+                {
+                  'department_code': 'outside_catering',
+                  'department_name': 'Outside Catering'
+                },
+                {
+                  'department_code': 'accommodation_breakfast',
+                  'department_name': 'Accommodation Breakfast'
+                },
+                {'department_code': 'main_bar', 'department_name': 'Main Bar'},
+                {
+                  'department_code': 'executive_bar',
+                  'department_name': 'Executive Bar'
+                },
+                {
+                  'department_code': 'housekeeping',
+                  'department_name': 'Housekeeping & Maintenance'
+                },
+                {
+                  'department_code': 'spa_sauna',
+                  'department_name': 'Spa & Sauna'
+                },
+                {
+                  'department_code': 'back_office',
+                  'department_name': 'Back Office'
+                },
+              ];
         return AlertDialog(
           title: const Text('Issue Stock to Department'),
           content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: sku,
-                  decoration: const InputDecoration(labelText: 'Item'),
-                  items: _stockOptions
-                      .map((item) => DropdownMenuItem(
-                            value: '${item['item_sku'] ?? item['sku']}',
-                            child: Text(
-                              '${_itemName(item)} (${_qty(item)})',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => sku = value),
-                ),
-                if (selected.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: _InfoPill('Available', _qty(selected)),
+            width: 680,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _LineEditor(
+                    catalog: _stockOptions,
+                    lines: lines,
+                    onChanged: () => setDialogState(() {}),
+                    quantityKey: 'quantity',
+                    priceEnabled: false,
                   ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: qty,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Quantity'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: department,
-                  decoration: const InputDecoration(labelText: 'Department'),
-                  items: const [
-                    'Housekeeping',
-                    'Buffet',
-                    'Breakfast',
-                    'Outside Catering',
-                    'Pastries Kitchen',
-                    'Chomazone Kitchen',
-                    'Main Kitchen - Shift A',
-                    'Main Kitchen - Shift B',
-                    'Executive Bar',
-                    'Main Bar',
-                    'Maintenance',
-                    'Other',
-                  ]
-                      .map((item) =>
-                          DropdownMenuItem(value: item, child: Text(item)))
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => department = value!),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: notes,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _InfoPill('Lines', '${lines.length}'),
+                      _InfoPill('Total Qty', _qtyText(totalQuantity)),
+                      if (invalidLines.isNotEmpty)
+                        _InfoPill('Invalid', '${invalidLines.length}'),
+                    ],
+                  ),
+                  if (invalidLines.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Fix quantities that are zero or exceed available stock before issuing.',
+                        style: TextStyle(
+                          color: AppColors.kError,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: departmentCode,
+                          decoration: const InputDecoration(
+                            labelText: 'Department',
+                            prefixIcon: Icon(Icons.business),
+                          ),
+                          items: departmentOptions
+                              .map((item) => DropdownMenuItem(
+                                    value: '${item['department_code']}',
+                                    child: Text(
+                                      '${item['department_name'] ?? item['department_code']}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ))
+                              .toList(),
+                          onChanged: (value) =>
+                              setDialogState(() => departmentCode = value!),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: shiftCode,
+                          decoration: const InputDecoration(
+                            labelText: 'Shift',
+                            prefixIcon: Icon(Icons.schedule),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'A', child: Text('Shift A')),
+                            DropdownMenuItem(
+                                value: 'B', child: Text('Shift B')),
+                            DropdownMenuItem(
+                                value: '', child: Text('No shift')),
+                          ],
+                          onChanged: (value) =>
+                              setDialogState(() => shiftCode = value ?? ''),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (eventConfig != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: eventName,
+                            onChanged: (_) => setDialogState(() {}),
+                            decoration: InputDecoration(
+                              labelText: '${eventConfig.label} *',
+                              prefixIcon: const Icon(Icons.event),
+                              errorText:
+                                  eventNameMissing ? 'Required' : null,
+                            ),
+                          ),
+                        ),
+                        if (eventConfig.pax) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: pax,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Pax',
+                                prefixIcon: Icon(Icons.groups),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notes,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes',
+                      prefixIcon: Icon(Icons.notes),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -2829,30 +4307,35 @@ class _BranchStorekeeperDashboardState
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel')),
             FilledButton(
-              onPressed: sku == null
+              onPressed: lines.isEmpty || invalidLines.isNotEmpty || eventNameMissing
                   ? null
                   : () async {
-                      final quantity = num.tryParse(qty.text) ?? 0;
-                      if (quantity <= 0 ||
-                          (selected.isNotEmpty &&
-                              quantity > _num(selected['quantity']))) {
-                        _showSnack('Quantity exceeds available stock',
-                            error: true);
-                        return;
-                      }
                       Navigator.pop(context);
                       try {
-                        await _repo.recordStockOut({
-                          'item_sku': sku,
-                          'quantity': quantity,
-                          'reason': department,
-                          'notes': notes.text,
-                          'movement_type': 'STOCK_OUT',
-                        });
+                        final paxValue = int.tryParse(pax.text.trim());
+                        for (final line in lines) {
+                          await _repo.recordDepartmentIssue({
+                            'item_sku': line['item_sku'],
+                            'quantity': _num(line['quantity']),
+                            'department_code': departmentCode,
+                            if (shiftCode.isNotEmpty) 'shift_code': shiftCode,
+                            'destination_type':
+                                eventConfig != null ? departmentCode : 'department_issue',
+                            if (eventConfig != null && eventName0.isNotEmpty)
+                              'event_name': eventName0,
+                            if (eventConfig != null &&
+                                eventConfig.pax &&
+                                paxValue != null)
+                              'pax_count': paxValue,
+                            'notes': notes.text,
+                          });
+                        }
                         await _loadAll();
-                        _showSnack('Stock issued to department');
+                        _showSnack(
+                            '${lines.length} item(s) issued to department');
                       } catch (error) {
-                        _showSnack('Stock out failed: $error', error: true);
+                        _showSnack('Stock out failed: ${_errorText(error)}',
+                            error: true);
                       }
                     },
               child: const Text('Issue & Approve'),
@@ -2864,23 +4347,7 @@ class _BranchStorekeeperDashboardState
   }
 
   void _showJsonDetail(String title, Map<String, dynamic> data) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 680,
-          child: SingleChildScrollView(
-            child: ReadableRecordDetails(record: data),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close')),
-        ],
-      ),
-    );
+    openRecordDetailScreen(context, title: title, record: data);
   }
 
   Future<bool> _confirm(String message) async {
@@ -2913,6 +4380,22 @@ class _BranchStorekeeperDashboardState
         backgroundColor: error ? AppColors.kError : AppColors.kPrimary,
       ),
     );
+  }
+
+  String _errorText(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        final message = data['message'] ?? data['error'];
+        if (message != null && '$message'.trim().isNotEmpty) {
+          return '$message';
+        }
+      }
+      if (error.message != null && error.message!.trim().isNotEmpty) {
+        return error.message!;
+      }
+    }
+    return '$error';
   }
 
   String _itemName(Map<String, dynamic> item) {
@@ -2978,6 +4461,125 @@ extension on String {
   String take(int count) => length <= count ? this : substring(0, count);
 }
 
+class _ItemOptionsOverlay extends StatelessWidget {
+  const _ItemOptionsOverlay({
+    required this.options,
+    required this.onSelected,
+    required this.skuFor,
+    required this.nameFor,
+    required this.qtyFor,
+    required this.priceFor,
+  });
+
+  final List<Map<String, dynamic>> options;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+  final String Function(Map<String, dynamic>) skuFor;
+  final String Function(Map<String, dynamic>) nameFor;
+  final String Function(Map<String, dynamic>) qtyFor;
+  final num Function(Map<String, dynamic>) priceFor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680, maxHeight: 320),
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            itemCount: options.length,
+            separatorBuilder: (_, __) =>
+                const Divider(height: 1, indent: 16, endIndent: 16),
+            itemBuilder: (context, index) {
+              final item = options[index];
+              final price = priceFor(item);
+              return ListTile(
+                dense: true,
+                leading: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                  child: const Icon(Icons.inventory_2,
+                      size: 18, color: AppColors.kPrimary),
+                ),
+                title: Text(
+                  nameFor(item),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  '${skuFor(item)} | ${qtyFor(item)}${price > 0 ? ' | Cost KES ${price.toStringAsFixed(2)}' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => onSelected(item),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SupplierOptionsOverlay extends StatelessWidget {
+  const _SupplierOptionsOverlay({
+    required this.options,
+    required this.onSelected,
+    required this.labelFor,
+  });
+
+  final List<Map<String, dynamic>> options;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+  final String Function(Map<String, dynamic>) labelFor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640, maxHeight: 300),
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            itemCount: options.length,
+            separatorBuilder: (_, __) =>
+                const Divider(height: 1, indent: 16, endIndent: 16),
+            itemBuilder: (context, index) {
+              final supplier = options[index];
+              return ListTile(
+                dense: true,
+                leading: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                  child: const Icon(Icons.business,
+                      size: 18, color: AppColors.kPrimary),
+                ),
+                title: Text(
+                  '${supplier['name'] ?? supplier['supplier_name'] ?? 'Supplier'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  labelFor(supplier),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => onSelected(supplier),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LineEditor extends StatefulWidget {
   const _LineEditor({
     required this.catalog,
@@ -3001,6 +4603,7 @@ class _LineEditor extends StatefulWidget {
 
 class _LineEditorState extends State<_LineEditor> {
   String? _selectedSku;
+  Map<String, dynamic> _selectedItem = {};
 
   List<Map<String, dynamic>> get _catalogOptions {
     final seen = <String>{};
@@ -3012,6 +4615,35 @@ class _LineEditorState extends State<_LineEditor> {
     }).toList();
   }
 
+  String _sku(Map<String, dynamic> item) =>
+      '${item['sku'] ?? item['item_sku'] ?? item['item_code'] ?? ''}'.trim();
+
+  String _name(Map<String, dynamic> item) =>
+      '${item['item_name'] ?? item['name'] ?? item['description'] ?? _sku(item)}';
+
+  num _num(dynamic value) {
+    if (value is num) return value;
+    return num.tryParse('$value') ?? 0;
+  }
+
+  String _qty(Map<String, dynamic> item) {
+    final quantity = _num(item['quantity'] ?? item['available_quantity']);
+    final unit = item['unit_of_measure'] ?? item['unit'] ?? 'units';
+    return '${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 2)} $unit';
+  }
+
+  String _searchText(Map<String, dynamic> item) => [
+        _sku(item),
+        _name(item),
+        item['barcode'],
+        item['bar_code'],
+        item['category'],
+        item['item_category'],
+      ]
+          .where((value) => value != null && '$value'.trim().isNotEmpty)
+          .join(' ')
+          .toLowerCase();
+
   @override
   Widget build(BuildContext context) {
     final catalog = _catalogOptions;
@@ -3021,20 +4653,58 @@ class _LineEditorState extends State<_LineEditor> {
         Row(
           children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: _selectedSku,
-                decoration: const InputDecoration(labelText: 'Add Item'),
-                items: catalog
-                    .map((item) => DropdownMenuItem(
-                          value: '${item['sku'] ?? item['item_sku']}',
-                          child: Text(
-                            '${item['item_name'] ?? item['name'] ?? item['sku']}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => _selectedSku = value),
+              child: Autocomplete<Map<String, dynamic>>(
+                key: ValueKey('line_editor_${_selectedSku ?? ''}'),
+                initialValue: TextEditingValue(
+                  text: _selectedSku == null
+                      ? ''
+                      : '${_name(_selectedItem)} - $_selectedSku',
+                ),
+                displayStringForOption: (item) =>
+                    '${_name(item)} - ${_sku(item)}',
+                optionsBuilder: (value) {
+                  final query = value.text.trim().toLowerCase();
+                  return catalog
+                      .where((item) =>
+                          query.isEmpty || _searchText(item).contains(query))
+                      .take(40);
+                },
+                onSelected: (item) => setState(() {
+                  _selectedItem = item;
+                  _selectedSku = _sku(item);
+                }),
+                fieldViewBuilder:
+                    (context, controller, focusNode, onFieldSubmitted) {
+                  return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Search item',
+                      hintText: 'Type item name, SKU, barcode or category',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (_) {
+                      if (_selectedSku != null) {
+                        setState(() {
+                          _selectedSku = null;
+                          _selectedItem = {};
+                        });
+                      }
+                    },
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) =>
+                    _ItemOptionsOverlay(
+                  options: options.toList(),
+                  onSelected: onSelected,
+                  skuFor: _sku,
+                  nameFor: _name,
+                  qtyFor: _qty,
+                  priceFor: (item) => _num(item['cost_price'] ??
+                      item['unit_cost'] ??
+                      item['last_purchase_price'] ??
+                      item['unit_price']),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -3121,22 +4791,26 @@ class _LineEditorState extends State<_LineEditor> {
 
   void _addLine() {
     final item = _catalogOptions.firstWhere(
-      (element) => '${element['sku'] ?? element['item_sku']}' == _selectedSku,
+      (element) => _sku(element) == _selectedSku,
       orElse: () => <String, dynamic>{},
     );
     if (item.isEmpty) return;
     if (widget.lines.any((line) => line['item_sku'] == _selectedSku)) return;
     setState(() {
       widget.lines.add({
-        if (widget.itemIdKey != null)
-          widget.itemIdKey!: item['sku'] ?? item['item_sku'],
-        'item_sku': item['sku'] ?? item['item_sku'],
-        'item_name': item['item_name'] ?? item['name'] ?? item['sku'],
+        if (widget.itemIdKey != null) widget.itemIdKey!: _sku(item),
+        'item_sku': _sku(item),
+        'item_name': _name(item),
         widget.quantityKey: 1,
         if (widget.priceEnabled)
-          'unit_price': item['cost_price'] ?? item['unit_price'] ?? 0,
+          'unit_price': item['cost_price'] ??
+              item['unit_cost'] ??
+              item['last_purchase_price'] ??
+              item['unit_price'] ??
+              0,
       });
       _selectedSku = null;
+      _selectedItem = {};
     });
     widget.onChanged();
   }

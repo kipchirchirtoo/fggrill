@@ -238,7 +238,8 @@ class BranchAccountantRepository {
   }
 
   // ── Outbound branch payments (vendors / essentials / payouts) ──────────────
-  Future<Map<String, dynamic>> getOutboundPayments({String status = 'all'}) async {
+  Future<Map<String, dynamic>> getOutboundPayments(
+      {String status = 'all'}) async {
     final branchId = await getBranchId();
     final res = await _dio.get('/branch-payments', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
@@ -259,7 +260,8 @@ class BranchAccountantRepository {
     });
   }
 
-  Future<void> approveBranchPayment(String id, {bool asDirector = false}) async {
+  Future<void> approveBranchPayment(String id,
+      {bool asDirector = false}) async {
     await _dio.put('/branch-payments/$id/approve',
         data: {'role': asDirector ? 'director' : 'manager'});
   }
@@ -865,11 +867,40 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
-  /// Approve a submitted stock take and POST variances to the branch ledger:
-  /// positive variance → STOCK_ADJUSTMENT (credit +), negative → STOCK_WRITE_OFF
-  /// (debit −). Returns the posting summary from the backend.
-  Future<Map<String, dynamic>> approveStockTake(String id) async {
-    final res = await _dio.post('/stock-takes/$id/approve');
+  /// Approve a storekeeper-submitted stock take and submit it to auditor.
+  Future<Map<String, dynamic>> approveStockTake(String id,
+      {String? notes}) async {
+    final res =
+        await _dio.post('/store/stock-takes/$id/accountant-review', data: {
+      'approved': true,
+      'action': 'approve',
+      'notes': notes?.trim().isNotEmpty == true
+          ? notes!.trim()
+          : 'Approved by branch accountant from Flutter app',
+    });
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> rejectStockTake(String id, String notes) async {
+    final res =
+        await _dio.post('/store/stock-takes/$id/accountant-review', data: {
+      'approved': false,
+      'action': 'reject',
+      'notes': notes.trim(),
+    });
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> requestStockTakeClarification(
+    String id,
+    String notes,
+  ) async {
+    final res =
+        await _dio.post('/store/stock-takes/$id/accountant-review', data: {
+      'approved': false,
+      'action': 'request_clarification',
+      'notes': notes.trim(),
+    });
     return _asMap(res.data);
   }
 
@@ -889,6 +920,75 @@ class BranchAccountantRepository {
       res.data ?? const [],
       'Stock_Take_Worksheet_${stockTakeId ?? DateTime.now().millisecondsSinceEpoch}.pdf',
     );
+  }
+
+  /// FG-branded branch accountant review report (PDF). Highlights variances,
+  /// valuation and the review chain for the accountant's sign-off.
+  Future<File> downloadStockTakeReviewReport(
+    String stockTakeId, {
+    String variant = 'accountant_review',
+  }) async {
+    final res = await _dio.get<List<int>>(
+      '/stock-takes/$stockTakeId/report.pdf',
+      queryParameters: {'variant': variant},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(
+      res.data ?? const [],
+      'FG_StockTakeReview_$stockTakeId.pdf',
+    );
+  }
+
+  /// FG-branded multi-sheet stock take Excel workbook.
+  Future<File> downloadStockTakeWorkbook(
+    String stockTakeId, {
+    String variant = 'accountant_review',
+  }) async {
+    final res = await _dio.get<List<int>>(
+      '/stock-takes/$stockTakeId/report.xlsx',
+      queryParameters: {'variant': variant},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return _saveBytes(
+      res.data ?? const [],
+      'FG_StockTakeWorkbook_$stockTakeId.xlsx',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getDepartmentIssueJournals({
+    String? startDate,
+    String? endDate,
+    String? departmentCode,
+  }) async {
+    final branchId = await getBranchId();
+    if (branchId.isEmpty) return [];
+    return _getList('/store/department-issue-journals', query: {
+      'branch_id': branchId,
+      if (startDate != null && startDate.isNotEmpty) 'start_date': startDate,
+      if (endDate != null && endDate.isNotEmpty) 'end_date': endDate,
+      if (departmentCode != null &&
+          departmentCode.isNotEmpty &&
+          departmentCode != 'all')
+        'department_code': departmentCode,
+      'limit': 300,
+    });
+  }
+
+  Future<Map<String, dynamic>> getDepartmentIssueJournalDetail(
+    String ledgerId,
+  ) async {
+    final branchId = await getBranchId();
+    return _getMap('/store/department-issue-journals/$ledgerId', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getDepartmentAccounts() async {
+    final branchId = await getBranchId();
+    if (branchId.isEmpty) return [];
+    return _getList('/store/department-accounts', query: {
+      'branch_id': branchId,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getPurchaseOrders({String? status}) {

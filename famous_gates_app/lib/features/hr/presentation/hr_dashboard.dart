@@ -6,6 +6,7 @@ import 'dart:io';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart' hide Badge, DataColumn, DataRow;
 import '../../../core/widgets/permission_guard.dart';
+import '../../../core/widgets/record_detail_screen.dart';
 import '../../../core/config/permissions.dart';
 import '../../../core/config/user_roles.dart';
 import '../../auth/domain/auth_notifier.dart';
@@ -627,52 +628,28 @@ class _StaffDirectoryViewState extends ConsumerState<_StaffDirectoryView> {
   }
 
   void _showStaffDetailDialog(BuildContext context, StaffMember member) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(member.name),
-        content: SizedBox(
-          width: 420,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _detailRow('Role', member.role ?? '—'),
-            _detailRow('Department', member.department ?? '—'),
-            _detailRow('Position', member.position ?? member.role ?? '—'),
-            _detailRow('Branch', member.branchName ?? '—'),
-            _detailRow('Email', member.email ?? '—'),
-            _detailRow('Phone', member.phone ?? '—'),
-            _detailRow('National ID', member.nationalId ?? '—'),
-            _detailRow('Staff ID', member.employeeId ?? '—'),
-            _detailRow('Shift', member.shift ?? '—'),
-            _detailRow('Basic Salary', '${member.basicSalary ?? '—'}'),
-            _detailRow(
-                'Statutory',
-                [
-                  if (member.nssfEnabled) 'NSSF',
-                  if (member.shifEnabled) 'SHIF',
-                  if (member.housingFundEnabled) 'Housing'
-                ].join(', ')),
-            _detailRow('Status', member.isActive ? 'Active' : 'Inactive'),
-          ]),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(children: [
-        SizedBox(
-            width: 90,
-            child: Text(label,
-                style: const TextStyle(fontWeight: FontWeight.w700))),
-        Expanded(child: Text(value)),
-      ]),
+    openRecordDetailScreen(
+      context,
+      title: member.name,
+      subtitle: 'Staff Member',
+      record: {
+        'role': member.role,
+        'department': member.department,
+        'position': member.position ?? member.role,
+        'branch': member.branchName,
+        'email': member.email,
+        'phone': member.phone,
+        'national_id': member.nationalId,
+        'employee_id': member.employeeId,
+        'shift': member.shift,
+        'basic_salary': member.basicSalary,
+        'statutory_deductions': [
+          if (member.nssfEnabled) 'NSSF',
+          if (member.shifEnabled) 'SHIF',
+          if (member.housingFundEnabled) 'Housing'
+        ].join(', '),
+        'status': member.isActive ? 'Active' : 'Inactive',
+      },
     );
   }
 

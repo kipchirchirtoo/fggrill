@@ -24,7 +24,7 @@ class AppNotificationButton extends ConsumerWidget {
           IconButton(
             onPressed: () => showAppNotificationPanel(context, ref),
             icon: Icon(
-              count > 0 ? PhosphorIcons.bellRinging() : PhosphorIcons.bell(),
+              PhosphorIcons.bell(),
               color: count > 0 ? AppColors.kAccent : iconColor,
               size: 21,
             ),

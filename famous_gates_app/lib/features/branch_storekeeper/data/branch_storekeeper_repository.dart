@@ -133,6 +133,77 @@ class BranchStorekeeperRepository {
     });
   }
 
+  Future<void> recordDepartmentIssue(Map<String, dynamic> data) async {
+    await _dio.post('/store/department-issues', data: {
+      ...data,
+      ...await _branchQuery(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> departmentAccounts() async {
+    final response = await _dio.get(
+      '/store/department-accounts',
+      queryParameters: await _branchQuery(),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> departmentConsumption({
+    String? startDate,
+    String? endDate,
+    String? departmentCode,
+  }) async {
+    final response = await _dio.get(
+      '/store/department-consumption',
+      queryParameters: await _branchQuery({
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+        if (departmentCode != null && departmentCode.isNotEmpty)
+          'department_code': departmentCode,
+      }),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> departmentIssueJournals({
+    String? departmentCode,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final response = await _dio.get(
+      '/store/department-issue-journals',
+      queryParameters: await _branchQuery({
+        if (departmentCode != null && departmentCode.isNotEmpty)
+          'department_code': departmentCode,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+      }),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> departmentIssueJournalDetail(String id) async {
+    final response = await _dio.get(
+      '/store/department-issue-journals/$id',
+      queryParameters: await _branchQuery(),
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> enterpriseInventoryAnalytics({
+    String? startDate,
+    String? endDate,
+  }) async {
+    final response = await _dio.get(
+      '/store/enterprise-inventory/analytics',
+      queryParameters: await _branchQuery({
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+      }),
+    );
+    return _unwrapMap(response.data);
+  }
+
   Future<List<Map<String, dynamic>>> stockMovements({
     String? movementType,
   }) async {
@@ -205,6 +276,7 @@ class BranchStorekeeperRepository {
     String countType = 'daily',
     String storeType = 'foodstuffs',
     String? outletCode,
+    List<String>? itemSkus,
   }) async {
     final response = await _dio.post('/stock-takes', data: {
       ...await _branchQuery(),
@@ -212,6 +284,7 @@ class BranchStorekeeperRepository {
       'store_type': storeType,
       if (outletCode != null && outletCode.isNotEmpty)
         'outlet_code': outletCode,
+      if (itemSkus != null && itemSkus.isNotEmpty) 'item_skus': itemSkus,
     });
     return _unwrapMap(response.data);
   }
@@ -238,7 +311,7 @@ class BranchStorekeeperRepository {
   }
 
   Future<void> completeStockTake(String id, {String? notes}) {
-    return _dio.post('/stock-takes/$id/submit', data: {
+    return _dio.post('/store/stock-takes/$id/submit-accountant', data: {
       if (notes != null && notes.isNotEmpty) 'notes': notes,
     });
   }
@@ -266,6 +339,31 @@ class BranchStorekeeperRepository {
     );
   }
 
+  /// FG-branded executive stock take report (variance/audit).
+  /// [variant] is one of: storekeeper | accountant_review | audit.
+  Future<File> downloadStockTakeReportPdf(
+    String id, {
+    String variant = 'storekeeper',
+  }) {
+    return _downloadGet(
+      '/stock-takes/$id/report.pdf',
+      filename: 'FG_StockTakeReport_${id}_${_today()}.pdf',
+      queryParameters: {'variant': variant},
+    );
+  }
+
+  /// FG-branded multi-sheet stock take Excel workbook.
+  Future<File> downloadStockTakeReportWorkbook(
+    String id, {
+    String variant = 'storekeeper',
+  }) {
+    return _downloadGet(
+      '/stock-takes/$id/report.xlsx',
+      filename: 'FG_StockTakeWorkbook_${id}_${_today()}.xlsx',
+      queryParameters: {'variant': variant},
+    );
+  }
+
   Future<List<Map<String, dynamic>>> purchaseOrders({
     String? status,
   }) async {
@@ -282,6 +380,14 @@ class BranchStorekeeperRepository {
       queryParameters: {'source_module': 'branch_store'},
       data: data,
     );
+  }
+
+  Future<Map<String, dynamic>> purchaseOrder(String id) async {
+    final response = await _dio.get(
+      '/store/purchase-orders/$id',
+      queryParameters: {'source_module': 'branch_store'},
+    );
+    return _unwrapMap(response.data);
   }
 
   Future<void> updatePurchaseOrder(String id, Map<String, dynamic> data) async {
@@ -464,13 +570,43 @@ class BranchStorekeeperRepository {
     Map<String, dynamic> filters = const {},
   }) async {
     final branchId = await _branchId;
+    final requestFilters = {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...filters,
+    };
+
+    try {
+      return await _exportBrandedPdfAsync(reportType, requestFilters);
+    } on DioException {
+      return _downloadPost(
+        '/reports/export',
+        filename: '${reportType}_${_today()}.pdf',
+        data: {
+          'reportType': reportType,
+          'format': 'pdf',
+          'filters': requestFilters,
+        },
+      );
+    } on StateError {
+      return _downloadPost(
+        '/reports/export',
+        filename: '${reportType}_${_today()}.pdf',
+        data: {
+          'reportType': reportType,
+          'format': 'pdf',
+          'filters': requestFilters,
+        },
+      );
+    }
+  }
+
+  Future<File> _exportBrandedPdfAsync(
+    String reportType,
+    Map<String, dynamic> filters,
+  ) async {
     final response = await _dio.post('/reports/generate/async', data: {
       'reportType': reportType,
-      'filters': {
-        if (branchId.isNotEmpty)
-          'branch_id': int.tryParse(branchId) ?? branchId,
-        ...filters,
-      },
+      'filters': filters,
       'useRealData': true,
     });
     final init = _unwrapMap(response.data);

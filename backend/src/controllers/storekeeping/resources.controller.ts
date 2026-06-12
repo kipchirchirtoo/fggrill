@@ -701,9 +701,20 @@ const resolveStockCountBranchId = async (stockCountId: string): Promise<number |
 
 const normalizeStoreType = (value: any): string => {
   const raw = `${value || 'foodstuffs'}`.toLowerCase();
+  if (['restaurant', 'restaurant_store', 'restaurant_inventory'].includes(raw)) return 'restaurant_store';
   if (['bar', 'bars', 'bar_store', 'executive_bar', 'main_bar', 'sports_bar'].includes(raw)) {
     return 'bar_store';
   }
+  if (['sports_bar', 'sports_bar_stock_take'].includes(raw)) return 'sports_bar';
+  if (['main_bar_stock_take'].includes(raw)) return 'main_bar';
+  if (['executive_bar_stock_take'].includes(raw)) return 'executive_bar';
+  if (['kitchen_shift_a', 'shift_a', 'kitchen_a'].includes(raw)) return 'kitchen_shift_a';
+  if (['kitchen_shift_b', 'shift_b', 'kitchen_b'].includes(raw)) return 'kitchen_shift_b';
+  if (['kitchen_production', 'production'].includes(raw)) return 'kitchen_production';
+  if (['housekeeping', 'housekeeping_stock_take'].includes(raw)) return 'housekeeping';
+  if (['spa', 'spa_sauna', 'spa_stock_take'].includes(raw)) return 'spa_sauna';
+  if (['pos', 'pos_outlet', 'pos_outlet_stock_take'].includes(raw)) return 'pos_outlet';
+  if (['general', 'general_stock_take'].includes(raw)) return 'general';
   if (['store', 'store_items', 'general_store'].includes(raw)) return 'store_items';
   return 'foodstuffs';
 };
@@ -724,9 +735,29 @@ const itemMatchesStoreType = (item: any, storeType: string): boolean => {
     name.includes('gin') ||
     name.includes('brandy');
 
-  if (storeType === 'bar_store') return isBarItem;
-  if (storeType === 'foodstuffs') return !isBarItem;
+  if (['bar_store', 'main_bar', 'executive_bar', 'sports_bar'].includes(storeType)) return isBarItem;
+  if (storeType === 'foodstuffs' || storeType === 'restaurant_store') return !isBarItem;
   return true;
+};
+
+const editableStockCountStatuses = new Set(['draft']);
+const submittedStockCountStatuses = new Set(['submitted', 'submitted_to_accountant']);
+const accountantReviewStatuses = new Set(['submitted', 'submitted_to_accountant', 'under_review']);
+const auditorReviewStatuses = new Set(['accountant_approved', 'auditor_review', 'submitted']);
+
+const stockTakeStatusLabel = (status: any): string => {
+  const value = `${status || ''}`.toLowerCase();
+  if (value === 'submitted_to_accountant') return 'submitted';
+  if (value === 'approved') return 'auditor_approved';
+  if (value === 'rejected') return 'accountant_rejected';
+  return value || 'draft';
+};
+
+const varianceSeverity = (variancePct: number): string => {
+  const abs = Math.abs(variancePct);
+  if (abs >= 10) return 'red';
+  if (abs >= 5) return 'amber';
+  return 'green';
 };
 
 const getDayBounds = (date?: string) => {
@@ -742,8 +773,15 @@ const seedStockCountItemsFromBranchStock = async (
   stockCountId: string,
   branchId: number,
   storeType = 'foodstuffs',
-  countDate?: string
+  countDate?: string,
+  selectedSkus?: string[] | null
 ): Promise<void> => {
+  // When the storekeeper hand-picks which master-inventory items belong on the
+  // sheet, restrict the seed to those SKUs and bypass the store_type matcher
+  // (the explicit selection is authoritative).
+  const selectedSet = (selectedSkus && selectedSkus.length)
+    ? new Set(selectedSkus.map((s) => `${s}`.trim()).filter(Boolean))
+    : null;
   const { data: existing, error: existingError } = await supabase
     .from('stock_count_items')
     .select('id')
@@ -810,6 +848,26 @@ const seedStockCountItemsFromBranchStock = async (
     }));
   }
 
+  // Explicit selection: guarantee every chosen SKU appears on the sheet (with a
+  // 0 quantity if the branch has no stock row for it yet), and pull in any
+  // catalog details that weren't already loaded.
+  if (selectedSet) {
+    const quantityBySku = new Map(stockRows.map((item: any) => [item.item_sku, item.quantity]));
+    const missingDetailSkus = [...selectedSet].filter((sku) => !simpleBySku.has(sku));
+    if (missingDetailSkus.length > 0) {
+      const { data: extraItems, error: extraError } = await supabase
+        .from('simple_items')
+        .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
+        .in('sku', missingDetailSkus);
+      if (extraError) throw extraError;
+      (extraItems || []).forEach((item: any) => simpleBySku.set(item.sku, item));
+    }
+    stockRows = [...selectedSet].map((sku) => ({
+      item_sku: sku,
+      quantity: toNumber(quantityBySku.get(sku)),
+    }));
+  }
+
   if (stockRows.length === 0) return;
 
   const skus = stockRows.map((item: any) => item.item_sku).filter(Boolean);
@@ -836,6 +894,7 @@ const seedStockCountItemsFromBranchStock = async (
 
   let rows = stockRows
     .filter((item: any) => {
+      if (selectedSet) return selectedSet.has(item.item_sku);
       const detail = simpleBySku.get(item.item_sku);
       return itemMatchesStoreType(detail || item, normalizedStoreType);
     })
@@ -946,7 +1005,7 @@ const recalculateStockCountTotals = async (stockCountId: string): Promise<void> 
   try {
     const { data: items, error } = await supabase
       .from('stock_count_items')
-      .select('physical_quantity, system_quantity, system_closing_stock, cost_price, unit_cost, issued_quantity')
+      .select('item_sku, physical_quantity, system_quantity, system_closing_stock, cost_price, unit_cost, issued_quantity')
       .eq('stock_count_id', stockCountId);
 
     if (error) {
@@ -970,6 +1029,23 @@ const recalculateStockCountTotals = async (stockCountId: string): Promise<void> 
       { total_stock_value: 0, total_cogs_value: 0, total_variance_value: 0 }
     );
 
+    for (const item of items || []) {
+      const systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
+      const physical = item.physical_quantity === null || item.physical_quantity === undefined
+        ? systemClosing
+        : toNumber(item.physical_quantity);
+      const variance = physical - systemClosing;
+      const percentage = systemClosing === 0 ? (variance === 0 ? 0 : 100) : (variance / systemClosing) * 100;
+      await supabase
+        .from('stock_count_items')
+        .update({
+          variance_percentage: Number(percentage.toFixed(2)),
+          variance_severity: varianceSeverity(percentage),
+        })
+        .eq('stock_count_id', stockCountId)
+        .eq('item_sku', (item as any).item_sku);
+    }
+
     const { error: updateError } = await supabase
       .from('stock_counts')
       .update(totals)
@@ -983,7 +1059,7 @@ const recalculateStockCountTotals = async (stockCountId: string): Promise<void> 
   }
 };
 
-const getEnrichedStockCountItems = async (
+export const getEnrichedStockCountItems = async (
   stockCountId: string,
   branchId?: number | null
 ): Promise<any[]> => {
@@ -1054,6 +1130,12 @@ const getEnrichedStockCountItems = async (
     const counted = physical === null || physical === undefined ? null : toNumber(physical);
     const systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
     const unitCost = toNumber(item.unit_cost ?? simple?.cost_price);
+    const variance = counted === null ? null : counted - systemClosing;
+    const variancePct = variance === null
+      ? null
+      : systemClosing === 0
+        ? (variance === 0 ? 0 : 100)
+        : (variance / systemClosing) * 100;
     const itemSku = item.item_sku || store?.item_code || item.item_id;
     const itemName = simple?.item_name || store?.name || itemSku || 'Unknown Item';
 
@@ -1071,9 +1153,12 @@ const getEnrichedStockCountItems = async (
       physical_quantity: counted,
       counted_quantity: counted,
       actual_quantity: counted,
-      variance: counted === null ? null : counted - systemClosing,
-      variance_value: counted === null ? null : (counted - systemClosing) * unitCost,
+      variance,
+      variance_value: variance === null ? null : variance * unitCost,
+      variance_percentage: variancePct === null ? null : Number(variancePct.toFixed(2)),
+      variance_severity: variancePct === null ? 'pending' : varianceSeverity(variancePct),
       cost_price: unitCost,
+      selling_price: toNumber(item.selling_price),
       cogs_value: toNumber(item.issued_quantity) * unitCost,
       variance_reason: item.variance_reason || item.reason || null,
       status: counted === null ? 'PENDING' : 'COUNTED',
@@ -1155,6 +1240,7 @@ export const getStockTakes = async (req: Request, res: Response) => {
 
       return {
         ...item,
+        workflow_status: stockTakeStatusLabel(item.status),
         take_number: item.count_number,
         take_type: item.count_type,
         store_type: item.store_type || 'foodstuffs',
@@ -1163,7 +1249,7 @@ export const getStockTakes = async (req: Request, res: Response) => {
         completed_by: completed_by_name,
         // Aligned with what frontend might expect
         started_at: item.created_at,
-        completed_at: item.status === 'submitted' ? item.updated_at : null
+        completed_at: submittedStockCountStatuses.has(`${item.status}`) ? item.updated_at : null
       };
     });
 
@@ -1236,6 +1322,7 @@ export const getStockTake = async (req: Request, res: Response) => {
 
     const enrichedResult = {
       ...data,
+      workflow_status: stockTakeStatusLabel((data as any).status),
       take_number: (data as any).count_number || (data as any).take_number,
       take_type: (data as any).count_type || (data as any).take_type,
       total_variance_value: totalVarianceValue,
@@ -1244,7 +1331,7 @@ export const getStockTake = async (req: Request, res: Response) => {
       started_by: started_by_name,
       completed_by: completed_by_name,
       started_at: (data as any).created_at,
-      completed_at: data.status === 'submitted' ? (data as any).updated_at : null,
+      completed_at: submittedStockCountStatuses.has(`${(data as any).status}`) ? (data as any).updated_at : null,
       items: enrichedItems
     };
 
@@ -1268,6 +1355,12 @@ export const createStockTake = async (req: Request, res: Response) => {
     const storeType = normalizeStoreType(req.body.store_type);
     const countDate = req.body.count_date || new Date().toISOString().split('T')[0];
     const userId = user?.id;
+    // Optional: storekeeper hand-picks which master-inventory items go on the
+    // sheet. Accept `item_skus` (preferred) or `selected_skus`.
+    const rawSelected = req.body.item_skus ?? req.body.selected_skus;
+    const selectedSkus: string[] | null = Array.isArray(rawSelected)
+      ? rawSelected.map((s: any) => `${s}`.trim()).filter(Boolean)
+      : null;
 
     // Enforce branch from user profile for non-admins
     if (user && user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.GENERAL_MANAGER) {
@@ -1285,7 +1378,14 @@ export const createStockTake = async (req: Request, res: Response) => {
       .eq('count_date', countDate)
       .eq('store_type', storeType)
       .eq('count_type', count_type || 'daily')
-      .in('status', ['draft', 'submitted_to_accountant', 'submitted']);
+      .in('status', [
+        'draft',
+        'submitted',
+        'under_review',
+        'accountant_approved',
+        'auditor_review',
+        'submitted_to_accountant',
+      ]);
 
     const { data: existingCounts, error: existingError } = outlet_code
       ? await existingQuery.eq('outlet_code', outlet_code)
@@ -1316,7 +1416,7 @@ export const createStockTake = async (req: Request, res: Response) => {
     if (countError) throw countError;
 
     try {
-      await seedStockCountItemsFromBranchStock(count.id, Number(branch_id), storeType, countDate);
+      await seedStockCountItemsFromBranchStock(count.id, Number(branch_id), storeType, countDate, selectedSkus);
       await recalculateStockCountTotals(count.id);
     } catch (seedErr: any) {
       // Non-fatal: stock take header was created; items can be seeded on next GET
@@ -1357,6 +1457,29 @@ export const updateStockTakeItem = async (req: Request, res: Response) => {
     // Support both field names for flexibility
     const newQuantity = physical_quantity !== undefined ? physical_quantity : actual_quantity;
 
+    const { data: current, error: currentError } = await supabase
+      .from('stock_count_items')
+      .select('id, stock_count_id')
+      .eq('id', id)
+      .single();
+
+    if (currentError) throw currentError;
+
+    const { data: parentCount, error: parentError } = await supabase
+      .from('stock_counts')
+      .select('status')
+      .eq('id', current.stock_count_id)
+      .single();
+
+    if (parentError) throw parentError;
+    const parentStatus = `${parentCount?.status || ''}`;
+    if (!editableStockCountStatuses.has(parentStatus)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Submitted stock takes are read-only and cannot be edited.',
+      });
+    }
+
     const { data, error } = await supabase
       .from('stock_count_items')
       .update({
@@ -1382,6 +1505,24 @@ export const updateStockTake = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status, notes, items } = req.body;
     const userId = (req as any).user?.id;
+
+    const { data: existingCount, error: existingCountError } = await supabase
+      .from('stock_counts')
+      .select('id, status')
+      .eq('id', id)
+      .single();
+
+    if (existingCountError) throw existingCountError;
+    if (!existingCount) {
+      return res.status(404).json({ success: false, message: 'Stock take not found' });
+    }
+
+    if (!editableStockCountStatuses.has(`${existingCount.status}`)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Submitted stock takes are read-only. Request accountant/auditor action instead of editing counts.',
+      });
+    }
 
     const updateData: any = {};
     if (status) {
@@ -1653,13 +1794,20 @@ export const completeStockTake = async (req: Request, res: Response) => {
 
     await recalculateStockCountTotals(id);
 
+    if (!editableStockCountStatuses.has(`${count.status}`)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Only draft stock takes can be submitted by the storekeeper.',
+      });
+    }
+
     const nextStatus = 'submitted';
     const updatePayload: any = {
       status: nextStatus,
       counted_by: userId,
       updated_at: new Date().toISOString(),
-      accountant_submitted_by: userId,
-      accountant_submitted_at: new Date().toISOString()
+      submitted_to_accountant_by: userId,
+      submitted_to_accountant_at: new Date().toISOString()
     };
 
     const { data: updatedCounts, error: updateError } = await supabase
@@ -1677,8 +1825,8 @@ export const completeStockTake = async (req: Request, res: Response) => {
       status: 'pending',
       branch_id: count.branch_id,
       requested_by: userId,
-      description: `Auditor review required for ${count.store_type || 'branch'} stock take: ${count.count_number || id}`,
-      metadata: { stock_count_id: id, review_stage: 'auditor' }
+      description: `Branch accountant review required for ${count.store_type || 'branch'} stock take: ${count.count_number || id}`,
+      metadata: { stock_count_id: id, review_stage: 'accountant' }
     });
 
     if (error) {
@@ -1691,22 +1839,22 @@ export const completeStockTake = async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: 'Stock take submitted to auditor',
+      message: 'Stock take submitted to branch accountant',
       data: updatedCount
     });
 
     logger.info(`Stock count ${id} submitted with status ${nextStatus} by ${userId}`);
 
     notificationService.notifyRole(
-      'auditor',
-      'Stock Take Ready for Audit',
-      `A ${count.store_type || 'branch'} stock take (${count.count_number || id}) has been submitted.`,
+      'branch_accountant',
+      'Stock Take Ready for Accountant Review',
+      `A ${count.store_type || 'branch'} stock take (${count.count_number || id}) has been submitted for accountant review.`,
       {
         type: 'warning',
         category: 'audit',
         priority: 'medium',
         actionUrl: `/dashboard/branch-store/stock-takes/${id}`,
-        metadata: { stock_count_id: id, type: 'stock_take', review_stage: 'auditor' }
+        metadata: { stock_count_id: id, type: 'stock_take', review_stage: 'accountant' }
       }
     ).catch(e => logger.error('Failed to notify stock take reviewer', e));
   } catch (error: any) {

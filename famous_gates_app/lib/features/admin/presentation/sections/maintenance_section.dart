@@ -5,6 +5,7 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
+import '../../../../core/widgets/record_detail_screen.dart';
 import '../../../../core/services/maintenance_service.dart';
 import '../../domain/admin_providers.dart';
 import '../widgets/stat_card.dart';
@@ -307,50 +308,11 @@ class _MaintenanceSectionState extends ConsumerState<MaintenanceSection> {
   }
 
   void _showDetailsDialog(BuildContext context, Map<String, dynamic> order) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(order['title'] ?? 'Work Order'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _detailRow('Status', order['status'] ?? ''),
-              _detailRow('Priority', order['priority'] ?? ''),
-              _detailRow('Location',
-                  order['location'] ?? order['room_number'] ?? 'N/A'),
-              _detailRow('Description', order['description'] ?? ''),
-              _detailRow('Assigned To',
-                  order['assigned_to'] ?? order['assignedTo'] ?? 'Unassigned'),
-              _detailRow('Created', (order['created_at'] ?? '').toString()),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text('$label:',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.kTextSecondary)),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title: order['title'] ?? 'Work Order',
+      subtitle: 'Maintenance Work Order',
+      record: order,
     );
   }
 

@@ -6,6 +6,7 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/branch_sales_payments_view.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
+import '../../../core/widgets/record_detail_screen.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
 import '../../kitchen/presentation/kds_screen.dart';
@@ -1553,16 +1554,11 @@ class _BranchManagerDashboardState
   }
 
   void _showRow(Map<String, dynamic> row) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(_titleFor(row)),
-        content: SizedBox(width: 520, child: _detailCard(row)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title: _titleFor(row),
+      subtitle: _label(_section),
+      record: row,
     );
   }
 

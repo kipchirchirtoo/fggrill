@@ -695,18 +695,25 @@ String _firstText(Map<String, dynamic> row, List<String> keys) {
 }
 
 String _intText(dynamic value) {
-  if (value is num) return value.round().toString();
+  if (value is num) return _groupedWhole(value);
   final parsed = num.tryParse('$value');
-  return (parsed ?? 0).round().toString();
+  return _groupedWhole(parsed ?? 0);
 }
 
 String _money(dynamic value) {
   final amount = value is num ? value : num.tryParse('$value') ?? 0;
-  if (amount.abs() >= 1000000) {
-    return 'KES ${(amount / 1000000).toStringAsFixed(1)}M';
+  return 'KES ${_groupedWhole(amount)}';
+}
+
+String _groupedWhole(num value) {
+  final rounded = value.round();
+  final sign = rounded < 0 ? '-' : '';
+  final digits = rounded.abs().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    final fromEnd = digits.length - i;
+    buffer.write(digits[i]);
+    if (fromEnd > 1 && fromEnd % 3 == 1) buffer.write(',');
   }
-  if (amount.abs() >= 1000) {
-    return 'KES ${(amount / 1000).toStringAsFixed(1)}K';
-  }
-  return 'KES ${amount.toStringAsFixed(0)}';
+  return '$sign$buffer';
 }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart' hide DataColumn, DataRow;
+import '../../../core/widgets/record_detail_screen.dart';
 import '../data/repository.dart';
 
 enum KitchenOperationsSection {
@@ -1246,33 +1247,11 @@ class _KitchenOperationsDashboardState
   Future<void> _showRequisitionDetail(Map<String, dynamic> row) async {
     final detail = await _safe(_repo.getRequisition('${row['id']}'), row);
     if (!mounted) return;
-    final items = _rows(detail['items']);
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(_value(detail, ['requisition_number', 'id'])),
-        content: SizedBox(
-          width: 680,
-          child: _SimpleRows(
-            rows: items,
-            empty: 'No requisition lines found.',
-            title: (line) => _value(line, ['item_name', 'item_sku']),
-            subtitle: (line) => 'Requested ${_value(line, [
-                  'requested_quantity'
-                ])}, Approved ${_value(line, [
-                  'approved_quantity'
-                ])}, Issued ${_value(line, [
-                  'issued_quantity'
-                ])} ${_value(line, ['unit_of_measure'])}',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title: 'Requisition ${_value(detail, ['requisition_number', 'id'])}',
+      subtitle: 'Kitchen Requisition',
+      record: detail,
     );
   }
 

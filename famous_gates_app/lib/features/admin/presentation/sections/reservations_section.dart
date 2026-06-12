@@ -5,6 +5,7 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
+import '../../../../core/widgets/record_detail_screen.dart';
 import '../../../../core/services/booking_service.dart';
 import '../../domain/admin_providers.dart';
 import '../widgets/admin_table.dart';
@@ -237,64 +238,12 @@ class _ReservationsSectionState extends ConsumerState<ReservationsSection> {
   }
 
   void _showDetailsDialog(BuildContext context, Map<String, dynamic> booking) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-            'Booking: ${booking['guest_name'] ?? booking['guestName'] ?? ''}'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _detailRow('Status', booking['status'] ?? ''),
-              _detailRow(
-                  'Room',
-                  (booking['room_number'] ?? booking['room'] ?? 'N/A')
-                      .toString()),
-              _detailRow('Check-in',
-                  _formatDate(booking['check_in'] ?? booking['checkIn'] ?? '')),
-              _detailRow(
-                  'Check-out',
-                  _formatDate(
-                      booking['check_out'] ?? booking['checkOut'] ?? '')),
-              _detailRow(
-                  'Guests',
-                  (booking['adults'] ?? booking['num_guests'] ?? '')
-                      .toString()),
-              _detailRow('Total',
-                  'KES ${_fmtAmount(booking['total_amount'] ?? booking['total'] ?? 0)}'),
-              _detailRow(
-                  'Notes',
-                  (booking['special_requests'] ?? booking['notes'] ?? '')
-                      .toString()),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text('$label:',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.kTextSecondary)),
-          ),
-          Expanded(child: Text(value.isEmpty ? '—' : value)),
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title:
+          'Booking: ${booking['guest_name'] ?? booking['guestName'] ?? ''}',
+      subtitle: 'Room Booking',
+      record: booking,
     );
   }
 

@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/record_detail_screen.dart';
 import '../../../core/utils/api_error_message.dart';
 import '../../admin/domain/admin_providers.dart';
 import '../data/repository.dart';
@@ -1921,14 +1922,6 @@ Future<String?> _showNotesDialog(BuildContext context, _AuditorRowAction action,
 
 void _showDetailDialog(BuildContext context, Map<String, dynamic> row) {
   final detailRow = _normalizeRow(Map<String, dynamic>.from(row));
-  final visibleEntries = _detailEntries(detailRow, limit: 40)
-      .where((entry) => entry.value is! List)
-      .toList();
-  final itemLists = detailRow.entries
-      .where((entry) => entry.value is List)
-      .map((entry) => MapEntry(entry.key, (entry.value as List)))
-      .where((entry) => entry.value.isNotEmpty)
-      .toList();
   final title = detailRow['title'] ??
       detailRow['request_number'] ??
       detailRow['dispatch_number'] ??
@@ -1937,64 +1930,10 @@ void _showDetailDialog(BuildContext context, Map<String, dynamic> row) {
       detailRow['name'] ??
       detailRow['id'] ??
       'Record';
-  showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: Row(
-        children: [
-          Expanded(child: Text(_format(title))),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: Icon(PhosphorIcons.x(), size: 18),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final entry in visibleEntries)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 170,
-                        child: Text(
-                          _detailLabel(entry.key),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 12),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          _formatDetailValue(detailRow, entry.key, entry.value),
-                          style: const TextStyle(
-                              color: AppColors.kTextSecondary, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              for (final entry in itemLists) ...[
-                const SizedBox(height: 14),
-                _detailItemsBlock(_label(entry.key), entry.value),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
+  openRecordDetailScreen(
+    context,
+    title: _format(title),
+    record: detailRow,
   );
 }
 
@@ -2096,77 +2035,6 @@ bool _canLoadAuditorDetail(String type) =>
 
 bool _canVerifyAuditorEntity(String type) =>
     _auditorVerificationEntityTypes.contains(_normalizeAuditEntityType(type));
-
-Widget _detailItemsBlock(String title, List<dynamic> items) {
-  final rows = items.whereType<Map>().map(Map<String, dynamic>.from).toList();
-  if (rows.isEmpty) {
-    return Text('$title: ${items.length} items',
-        style: const TextStyle(color: AppColors.kTextSecondary));
-  }
-  return Card(
-    elevation: 0,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(10),
-      side: BorderSide(color: AppColors.kDivider.withValues(alpha: 0.5)),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        for (final item in rows.take(20))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(children: [
-              Expanded(
-                flex: 3,
-                child: Text(
-                  _format(_nestedName(item['item']) ??
-                      _nestedName(item['inventory_item']) ??
-                      _nestedName(item['drink']) ??
-                      item['item_name'] ??
-                      item['name'] ??
-                      item['item_sku'] ??
-                      item['item_id'] ??
-                      'Item'),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  'System ${_format(item['system_quantity'] ?? item['system_closing_stock'] ?? item['expected_quantity'] ?? '—')}',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.kTextSecondary),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  'Physical ${_format(item['physical_quantity'] ?? item['physical_count'] ?? item['quantity'] ?? '—')}',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.kTextSecondary),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  'Var ${_format(item['variance'] ?? '—')}',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.kTextSecondary),
-                ),
-              ),
-            ]),
-          ),
-        if (rows.length > 20)
-          Text('+${rows.length - 20} more items',
-              style: const TextStyle(color: AppColors.kTextSecondary)),
-      ]),
-    ),
-  );
-}
 
 const _viewAction = _AuditorRowAction(
   label: 'View',
@@ -4257,63 +4125,11 @@ class _AuditorBranchOrdersSectionState
   }
 
   void _showRequestDetail(Map<String, dynamic> request) {
-    final items = _requestItems(request);
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(_requestNumber(request)),
-        content: SizedBox(
-          width: 620,
-          child: SingleChildScrollView(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _detailLine('Branch', _branchName(request)),
-              _detailLine(
-                  'Department', '${request['department'] ?? 'General'}'),
-              _detailLine('Status', '${request['status'] ?? '—'}'),
-              _detailLine('Created', _shortDate(request['created_at'])),
-              const SizedBox(height: 12),
-              const Text('Items',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              if (items.isEmpty)
-                const Text('No items attached',
-                    style: TextStyle(color: AppColors.kTextSecondary))
-              else
-                for (final item in items)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('${item['item_name'] ?? item['item_sku']}'),
-                    subtitle: Text('${item['item_category'] ?? ''}'),
-                    trailing: Text(
-                        '${item['requested_quantity'] ?? item['quantity'] ?? 0} ${item['item_unit'] ?? ''}'),
-                  ),
-            ]),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailLine(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-          width: 100,
-          child: Text(label,
-              style: const TextStyle(color: AppColors.kTextSecondary)),
-        ),
-        Expanded(
-            child: Text(value,
-                style: const TextStyle(fontWeight: FontWeight.w600))),
-      ]),
+    openRecordDetailScreen(
+      context,
+      title: _requestNumber(request),
+      subtitle: 'Stock Request — ${_branchName(request)}',
+      record: request,
     );
   }
 

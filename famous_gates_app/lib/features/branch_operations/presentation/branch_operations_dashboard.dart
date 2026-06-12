@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../core/widgets/record_detail_screen.dart';
 import '../domain/providers.dart';
 import '../data/repository.dart';
 
@@ -300,38 +301,11 @@ class _OverviewTab extends ConsumerWidget {
   }
 
   void _showReservationDetail(BuildContext context, Map<String, dynamic> r) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(r['guest_name']?.toString() ?? 'Reservation Detail'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _DetailRow('Reservation ID', (r['id'] ?? '—').toString()),
-                _DetailRow('Status', (r['status'] ?? '—').toString()),
-                _DetailRow('Room',
-                    (r['room_number'] ?? r['room_name'] ?? '—').toString()),
-                _DetailRow('Check-in', (r['check_in_date'] ?? '—').toString()),
-                _DetailRow(
-                    'Check-out', (r['check_out_date'] ?? '—').toString()),
-                _DetailRow('Adults', (r['adults'] ?? '—').toString()),
-                _DetailRow('Children', (r['children'] ?? '0').toString()),
-                _DetailRow('Special Requests',
-                    (r['special_requests'] ?? 'None').toString()),
-                _DetailRow('Source', (r['source'] ?? '—').toString()),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title: r['guest_name']?.toString() ?? 'Reservation Detail',
+      subtitle: 'Reservation',
+      record: r,
     );
   }
 }
@@ -473,32 +447,6 @@ class _FinanceTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(child: Text('Finance (see Accounting dashboard)'));
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _DetailRow(this.label, this.value);
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-              width: 130,
-              child: Text(label,
-                  style: const TextStyle(
-                      color: AppColors.kTextSecondary, fontSize: 13))),
-          Expanded(
-              child: Text(value,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 13))),
-        ],
-      ),
-    );
   }
 }
 

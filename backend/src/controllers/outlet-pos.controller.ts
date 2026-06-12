@@ -5,6 +5,10 @@ import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
 import { ensureShiftAutomationOpened, runShiftCloseAutomation } from '../services/cashier-automation.service';
 import {
+  assertPosStockAvailable,
+  postPosInventorySale
+} from '../services/enterprise-inventory.service';
+import {
   assignedOutletIds,
   canAccessPosOutlet,
   isCashierStationRole,
@@ -1416,6 +1420,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
     if (!items.length) throw new AppError('At least one item is required', 400);
 
     const normalizedItems = normalizeOrderItems(items);
+    await assertPosStockAvailable(Number(shift.branch_id), shift.outlet_id, normalizedItems);
 
     const totalAmount = numberValue(req.body.total_amount) ||
       normalizedItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
@@ -1485,6 +1490,7 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     const existingItems = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
     const normalizedItems = normalizeOrderItems(items);
     const nextItems = appendItems ? [...existingItems, ...normalizedItems] : normalizedItems;
+    await assertPosStockAvailable(Number(shift.branch_id), shift.outlet_id, appendItems ? normalizedItems : nextItems);
     const totalAmount = orderItemsTotal(nextItems);
     const amountPaid = numberValue(order.amount_paid);
     if (totalAmount + 0.01 < amountPaid) {
@@ -1889,6 +1895,17 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
 
     if (approved) {
       await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+      if (order.inventory_posted_at && !order.inventory_reversed_at) {
+        await postPosInventorySale({
+          branchId: Number(requestRow.branch_id),
+          outletId: requestRow.outlet_id,
+          shiftId: requestRow.shift_id,
+          orderId: requestRow.order_id,
+          items: Array.isArray(order.items) ? order.items : [],
+          actorId: req.user.id,
+          reverse: true
+        });
+      }
       const voidedItems = Array.isArray(order.items)
         ? order.items.map((item: any) => ({ ...item, kitchen_status: 'voided' }))
         : order.items;
@@ -1904,6 +1921,8 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
           voided_at: new Date().toISOString(),
           voided_by: req.user.id,
           void_reason: requestRow.reason,
+          inventory_reversed_at: order.inventory_posted_at ? new Date().toISOString() : order.inventory_reversed_at || null,
+          inventory_reversed_by: order.inventory_posted_at ? req.user.id : order.inventory_reversed_by || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', requestRow.order_id);
@@ -2068,6 +2087,14 @@ export const payShiftOrder = async (req: Request, res: Response, next: NextFunct
       ? method === 'credit_bill' ? 'credit_bill' : 'paid'
       : 'open';
 
+    if (isCleared && !order.inventory_posted_at) {
+      await assertPosStockAvailable(
+        Number(shift.branch_id),
+        shift.outlet_id,
+        Array.isArray(order.items) ? order.items as Array<Record<string, any>> : []
+      );
+    }
+
     const { error: updateError } = await supabase
       .from('pos_shift_orders')
       .update({
@@ -2080,6 +2107,25 @@ export const payShiftOrder = async (req: Request, res: Response, next: NextFunct
       })
       .eq('id', orderId);
     if (updateError) throw updateError;
+
+    if (isCleared && !order.inventory_posted_at) {
+      await postPosInventorySale({
+        branchId: Number(shift.branch_id),
+        outletId: shift.outlet_id,
+        shiftId,
+        orderId,
+        items: Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [],
+        actorId: req.user.id
+      });
+
+      await supabase
+        .from('pos_shift_orders')
+        .update({
+          inventory_posted_at: new Date().toISOString(),
+          inventory_posted_by: req.user.id
+        })
+        .eq('id', orderId);
+    }
 
     res.json({
       success: true,

@@ -9,6 +9,10 @@ import {
     generateWorksheet
 } from '../controllers/storekeeping/resources.controller';
 import { generateBranchStockTakeWorksheet } from '../controllers/stock-take.controller';
+import {
+    downloadBranchStockTakeReportPDF,
+    downloadBranchStockTakeWorkbook
+} from '../controllers/storekeeping/stock-take-reports.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
@@ -26,6 +30,13 @@ const AUDIT_ROLES = [
     UserRole.BRANCH_MANAGER,
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.BRANCH_STOREKEEPER
+];
+
+const STOREKEEPER_ROLES = [
+    UserRole.SUPER_ADMIN,
+    UserRole.GENERAL_MANAGER,
+    UserRole.BRANCH_STOREKEEPER,
+    UserRole.BRANCH_MANAGER
 ];
 
 // Get all stock takes
@@ -54,21 +65,21 @@ router.get('/:id/items',
 
 // Create stock take
 router.post('/',
-    authorize(AUDIT_ROLES),
+    authorize(STOREKEEPER_ROLES),
     createStockTake
 );
 
 // Update stock take (Bulk items update / Progress save)
 // Frontend uses PUT /api/stock-takes/:id
 router.put('/:id',
-    authorize(AUDIT_ROLES),
+    authorize(STOREKEEPER_ROLES),
     updateStockTake
 );
 
 // Submit stock take to auditor
 // Frontend uses POST /api/stock-takes/:id/submit
 router.post('/:id/submit',
-    authorize(AUDIT_ROLES),
+    authorize(STOREKEEPER_ROLES),
     completeStockTake
 );
 
@@ -82,6 +93,18 @@ router.get('/:id/worksheet',
 router.get('/:id/worksheet-categorized',
     authorize(AUDIT_ROLES),
     generateBranchStockTakeWorksheet
+);
+
+// Executive branch stock take reports (variance/audit) — FG branded.
+// Variant query param: storekeeper (default) | accountant_review | audit
+router.get('/:id/report.pdf',
+    authorize(AUDIT_ROLES),
+    downloadBranchStockTakeReportPDF
+);
+
+router.get('/:id/report.xlsx',
+    authorize(AUDIT_ROLES),
+    downloadBranchStockTakeWorkbook
 );
 
 export default router;

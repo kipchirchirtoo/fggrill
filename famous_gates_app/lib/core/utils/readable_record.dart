@@ -9,7 +9,57 @@ final RegExp readableUuidPattern = RegExp(
 
 String readableRecordLabel(String key) {
   const overrides = {
-    'id': 'Record',
+    'id': 'Reference',
+    'uuid': 'Reference',
+    'created_at': 'Created',
+    'updated_at': 'Last Updated',
+    'deleted_at': 'Deleted',
+    'count_date': 'Stock Take Date',
+    'entry_date': 'Entry Date',
+    'request_date': 'Request Date',
+    'payment_date': 'Payment Date',
+    'pay_period': 'Pay Period',
+    'item_sku': 'Item',
+    'sku': 'Item Code',
+    'item_id': 'Item',
+    'item_name': 'Item Name',
+    'unit_of_measure': 'Unit',
+    'quantity_requested': 'Requested Quantity',
+    'requested_quantity': 'Requested Quantity',
+    'quantity_approved': 'Approved Quantity',
+    'approved_quantity': 'Approved Quantity',
+    'quantity_received': 'Received Quantity',
+    'current_stock': 'Current Stock',
+    'opening_stock': 'Opening Stock',
+    'closing_stock': 'Closing Stock',
+    'system_quantity': 'System Quantity',
+    'physical_quantity': 'Counted Quantity',
+    'variance_percentage': 'Variance %',
+    'variance_severity': 'Variance Level',
+    'total_variance_value': 'Variance Value',
+    'unit_cost': 'Unit Cost',
+    'cost_price': 'Cost Price',
+    'selling_price': 'Selling Price',
+    'total_amount': 'Total Amount',
+    'grand_total': 'Grand Total',
+    'net_salary': 'Net Salary',
+    'gross_salary': 'Gross Salary',
+    'expected_cash': 'Expected Cash',
+    'actual_cash': 'Actual Cash',
+    'payment_method': 'Payment Method',
+    'payment_status': 'Payment Status',
+    'approval_status': 'Approval Status',
+    'workflow_status': 'Workflow Status',
+    'count_type': 'Stock Take Type',
+    'store_type': 'Store Area',
+    'request_number': 'Request Number',
+    'po_number': 'Purchase Order',
+    'grn_number': 'Goods Received Note',
+    'invoice_number': 'Invoice Number',
+    'receipt_number': 'Receipt Number',
+    'order_number': 'Order Number',
+    'count_number': 'Stock Take Number',
+    'take_number': 'Stock Take Number',
     'request_id': 'Request',
     'branch_id': 'Branch',
     'requesting_branch_id': 'Requesting Branch',
@@ -21,6 +71,7 @@ String readableRecordLabel(String key) {
     'approved_by_id': 'Approved By',
     'auditor_id': 'Auditor',
     'created_by': 'Created By',
+    'created_by_id': 'Created By',
     'requested_by': 'Requested By',
     'requested_by_id': 'Requested By',
     'requested_by_user': 'Requested By',
@@ -57,6 +108,15 @@ String readableDateTime(dynamic value) {
   final time =
       '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   return '$date $time';
+}
+
+String readableBoolean(dynamic value) {
+  if (value == true) return 'Yes';
+  if (value == false) return 'No';
+  final text = '$value'.trim().toLowerCase();
+  if (text == 'true' || text == '1') return 'Yes';
+  if (text == 'false' || text == '0') return 'No';
+  return '$value';
 }
 
 String? readableMapName(Map<dynamic, dynamic> value) {
@@ -97,9 +157,9 @@ String readableListValue(List<dynamic> values) {
       final quantityText = quantity == null || '$quantity'.trim().isEmpty
           ? ''
           : ' — Qty $quantity${'$unit'.trim().isNotEmpty ? ' $unit' : ''}';
-      return '$name$quantityText';
+      return '• $name$quantityText';
     }
-    return '$value';
+    return '• $value';
   }).join('\n');
 }
 
@@ -150,6 +210,9 @@ String readableRecordValue(
     return readableMapName(value) ?? 'Linked record';
   }
   if (value is List) return readableListValue(value);
+  if (value is bool || '$value' == 'true' || '$value' == 'false') {
+    return readableBoolean(value);
+  }
   if (key.endsWith('_at') ||
       key.endsWith('_date') ||
       key == 'date' ||
@@ -165,6 +228,7 @@ String readableRecordValue(
   }
 
   final text = '$value'.trim();
+  if (text.isEmpty || text == 'null') return '—';
   if (readableUuidPattern.hasMatch(text)) return 'Linked record';
   return text;
 }
@@ -187,6 +251,26 @@ bool shouldShowReadableRecordEntry(
   return true;
 }
 
+List<MapEntry<String, dynamic>> readableRecordEntries(
+  Map<String, dynamic> row, {
+  int limit = 80,
+}) {
+  const hiddenKeys = {
+    'password',
+    'password_hash',
+    'token',
+    'access_token',
+    'refresh_token',
+    'supabase_uid',
+    'service_role_key',
+  };
+  return row.entries
+      .where((entry) => !hiddenKeys.contains(entry.key.toLowerCase()))
+      .where((entry) => shouldShowReadableRecordEntry(row, entry))
+      .take(limit)
+      .toList();
+}
+
 class ReadableRecordDetails extends StatelessWidget {
   const ReadableRecordDetails({
     super.key,
@@ -201,10 +285,7 @@ class ReadableRecordDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = record.entries
-        .where((entry) => shouldShowReadableRecordEntry(record, entry))
-        .take(limit)
-        .toList();
+    final entries = readableRecordEntries(record, limit: limit);
 
     if (entries.isEmpty) {
       return const Text(

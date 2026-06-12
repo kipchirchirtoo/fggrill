@@ -5,6 +5,7 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
+import '../../../../core/widgets/record_detail_screen.dart';
 import '../../domain/admin_providers.dart';
 import '../widgets/admin_table.dart';
 import '../../../../features/hr/domain/providers.dart';
@@ -230,46 +231,20 @@ class _HrPayrollSectionState extends ConsumerState<HrPayrollSection> {
   }
 
   void _showPayrollDetails(dynamic r) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(r.staffName ?? 'Payroll Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _detailRow('Pay Period', r.payPeriod ?? '—'),
-            _detailRow('Gross Salary',
-                'KES ${r.grossSalary?.toStringAsFixed(2) ?? '0.00'}'),
-            _detailRow('Deductions',
-                'KES ${r.deductions?.toStringAsFixed(2) ?? '0.00'}'),
-            _detailRow('Net Salary',
-                'KES ${r.netSalary?.toStringAsFixed(2) ?? '0.00'}'),
-            _detailRow('Status', r.status ?? 'pending'),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
-        ],
-      ),
+    openRecordDetailScreen(
+      context,
+      title: r.staffName ?? 'Payroll Details',
+      subtitle: 'Salary, deductions, net pay, and approval status.',
+      record: {
+        'staff_name': r.staffName,
+        'pay_period': r.payPeriod,
+        'gross_salary': r.grossSalary,
+        'deductions': r.deductions,
+        'net_salary': r.netSalary,
+        'status': r.status ?? 'pending',
+      },
     );
   }
-
-  Widget _detailRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label,
-                style: const TextStyle(
-                    color: AppColors.kTextSecondary, fontSize: 13)),
-            Text(value,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          ],
-        ),
-      );
 
   Widget _salariesView() {
     final staffAsync = ref.watch(adminStaffProvider);

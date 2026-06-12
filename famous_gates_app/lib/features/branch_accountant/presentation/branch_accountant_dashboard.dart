@@ -16,6 +16,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../core/state/app_refresh.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
+import '../../../core/widgets/record_detail_screen.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../branch_search/presentation/branch_search_screen.dart';
 import '../data/repository.dart';
@@ -45,6 +46,7 @@ enum BranchAccountantSection {
   shiftPnl,
   bookingsInvoices,
   stockTake,
+  inventoryJournals,
   supplierFinance,
   buffet,
   catering,
@@ -162,6 +164,8 @@ class _BranchAccountantDashboardState
         return const _BookingsInvoicesSection();
       case BranchAccountantSection.stockTake:
         return const _StockTakeSection();
+      case BranchAccountantSection.inventoryJournals:
+        return const _InventoryJournalsSection();
       case BranchAccountantSection.supplierFinance:
         return const _PurchasesSection();
       case BranchAccountantSection.buffet:
@@ -231,6 +235,8 @@ const _navItems = [
   // ── Inventory & operations ──
   _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
   _NavItem(BranchAccountantSection.stockTake, 'Stock Takes', Icons.inventory),
+  _NavItem(BranchAccountantSection.inventoryJournals, 'Inventory Journals',
+      Icons.account_tree),
   _NavItem(BranchAccountantSection.supplierFinance, 'Supplier Finance',
       Icons.account_balance_wallet),
 ];
@@ -1100,9 +1106,12 @@ class _CashierClearanceSectionState
   }
 
   void _showDetails(Map<String, dynamic> item) {
-    showDialog(
-      context: context,
-      builder: (_) => _ClearanceDetailsDialog(clearance: item),
+    openRecordDetailScreen(
+      context,
+      title:
+          'Cashier Clearance — ${_text(item, ['cashier_name', 'cashier', 'user_name'])}',
+      subtitle: 'Expected cash, actual cash, variance, and payment breakdown.',
+      record: item,
     );
   }
 }
@@ -1212,54 +1221,6 @@ class _InfoRow extends StatelessWidget {
         ),
         Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
       ]),
-    );
-  }
-}
-
-class _ClearanceDetailsDialog extends StatelessWidget {
-  const _ClearanceDetailsDialog({required this.clearance});
-  final Map<String, dynamic> clearance;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = clearance;
-    return AlertDialog(
-      title: Text(
-          'Clearance — ${_text(c, ['cashier_name', 'cashier', 'user_name'])}'),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _InfoRow('Shift', _text(c, ['shift_time', 'shift_id', 'id'])),
-              _InfoRow('Date', _text(c, ['created_at', 'date'])),
-              _InfoRow('Expected Cash',
-                  _money(_num(c['expected_cash'] ?? c['expected_amount']))),
-              _InfoRow('Actual Cash',
-                  _money(_num(c['actual_cash'] ?? c['actual_amount']))),
-              _InfoRow('Variance', _money(_num(c['variance']))),
-              _InfoRow('Status', _text(c, ['status'])),
-              if (c['notes'] != null && '${c['notes']}'.isNotEmpty)
-                _InfoRow('Notes', '${c['notes']}'),
-              if (c['flag_reason'] != null)
-                _InfoRow('Flag Reason', '${c['flag_reason']}'),
-              const Divider(height: 24),
-              if (c['payment_breakdown'] != null) ...[
-                const Text('Payment Breakdown',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                _KeyValueList(_map(c['payment_breakdown'])),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close')),
-      ],
     );
   }
 }
@@ -9271,7 +9232,6 @@ class _StockTakeSection extends ConsumerStatefulWidget {
 class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getStockTakes();
-  bool _creating = false;
 
   void _refresh() {
     final nextFuture =
@@ -9279,26 +9239,6 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
     setState(() {
       _future = nextFuture;
     });
-  }
-
-  Future<void> _createStockTake() async {
-    if (_creating) return;
-    setState(() => _creating = true);
-    try {
-      await ref.read(branchAccountantRepositoryProvider).createStockTake(
-            countType: 'monthly',
-            notes: 'Generated from Branch Accounting',
-          );
-      if (mounted) _notify(context, 'New stock take started');
-      _refresh();
-    } catch (e) {
-      if (mounted) {
-        _notify(context,
-            'Failed to start stock take: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
-      }
-    } finally {
-      if (mounted) setState(() => _creating = false);
-    }
   }
 
   Future<void> _downloadWorksheet() async {
@@ -9316,6 +9256,23 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
     }
   }
 
+  Future<void> _downloadStockTakeReport(Map<String, dynamic> record) async {
+    final id = '${record['id'] ?? ''}';
+    if (id.isEmpty) return;
+    try {
+      if (mounted) _notify(context, 'Preparing stock take report…');
+      final file = await ref
+          .read(branchAccountantRepositoryProvider)
+          .downloadStockTakeReviewReport(id);
+      if (mounted) _notify(context, 'Report saved to ${file.path}');
+    } catch (e) {
+      if (mounted) {
+        _notify(context,
+            'Failed to download report: ${e is DioException ? (e.message ?? 'network error') : e}');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -9324,9 +9281,9 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
         snapshot: snap,
         onRefresh: _refresh,
         builder: (items) => _Page(
-          title: 'Stock Takes',
+          title: 'Stock Take Review',
           subtitle:
-              'Daily branch stock takes submitted by storekeepers for accountant review and auditor flow.',
+              'Review storekeeper-submitted counts, variance explanations, missing stock takes, and approval history.',
           actions: [
             OutlinedButton.icon(
               onPressed: _downloadWorksheet,
@@ -9334,38 +9291,37 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
               label: const Text('Download Worksheet'),
             ),
             _RefreshButton(onPressed: _refresh),
-            FilledButton.icon(
-              onPressed: _creating ? null : _createStockTake,
-              icon: _creating
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.add),
-              label: const Text('Start New Stock Take'),
-            ),
           ],
           children: [
             _ResponsiveGrid(children: [
               _MetricCard(
                   'Sessions', '${items.length}', Icons.inventory, Colors.blue),
               _MetricCard(
-                  'Draft',
-                  '${items.where((e) => _text(e, [
+                  'Pending Review',
+                  '${items.where((e) => _text(e, ['status']).toLowerCase() == 'submitted' || _text(e, [
                             'status'
-                          ]).toLowerCase() == 'draft').length}',
-                  Icons.edit_note,
+                          ]).toLowerCase() == 'submitted_to_accountant').length}',
+                  Icons.rate_review,
                   Colors.orange),
               _MetricCard(
-                  'Submitted',
+                  'Accountant Approved',
                   '${items.where((e) => _text(e, [
                             'status'
-                          ]).toLowerCase().contains('submit')).length}',
-                  Icons.send,
+                          ]).toLowerCase() == 'accountant_approved').length}',
+                  Icons.verified,
                   Colors.green),
+              _MetricCard(
+                  'Rejected / Clarification',
+                  '${items.where((e) {
+                    final status = _text(e, ['status']).toLowerCase();
+                    return status == 'accountant_rejected' ||
+                        status == 'under_review';
+                  }).length}',
+                  Icons.report_problem,
+                  Colors.red),
             ]),
             _SectionCard(
-              title: 'Stock Take Register',
+              title: 'Review Queue and Approval History',
               child: _SimpleTable(
                 columns: const [
                   'Date',
@@ -9388,12 +9344,27 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
                             TextButton(
                                 onPressed: () => _showRecord(context, e),
                                 child: const Text('Review')),
+                            TextButton(
+                                onPressed: () => _downloadStockTakeReport(e),
+                                child: const Text('Report')),
                             if (_isApprovableStockTake(e))
                               FilledButton(
                                 style: FilledButton.styleFrom(
                                     visualDensity: VisualDensity.compact),
-                                onPressed: () => _approveAndPost(e),
-                                child: const Text('Approve & Post'),
+                                onPressed: () => _approveStockTake(e),
+                                child: const Text('Approve'),
+                              ),
+                            if (_isApprovableStockTake(e))
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact),
+                                onPressed: () => _requestClarification(e),
+                                child: const Text('Clarify'),
+                              ),
+                            if (_isApprovableStockTake(e))
+                              TextButton(
+                                onPressed: () => _rejectStockTake(e),
+                                child: const Text('Reject'),
                               ),
                           ]),
                         ])
@@ -9408,29 +9379,26 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
 
   bool _isApprovableStockTake(Map<String, dynamic> e) {
     final status = _text(e, ['status']).toLowerCase();
-    return status.contains('submitted');
+    return status == 'submitted' || status == 'submitted_to_accountant';
   }
 
-  /// Approve a submitted count: posts Variance = Physical − System to the
-  /// branch ledger (positive → Credit Stock Adjustment, negative → Debit
-  /// Stock Write-off) with unalterable movement entries.
-  Future<void> _approveAndPost(Map<String, dynamic> e) async {
+  Future<void> _approveStockTake(Map<String, dynamic> e) async {
+    final notes =
+        await _textDialog(context, 'Approve Stock Take', hint: 'Review notes');
+    if (notes == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Approve & Post Variances'),
+        title: const Text('Approve Stock Take'),
         content: const Text(
-            'This will post all counted variances to the branch stock ledger:\n\n'
-            '• Positive variance → Credit Stock Adjustment (stock +)\n'
-            '• Negative variance → Debit Stock Write-off (stock −)\n\n'
-            'Every line writes a permanent stock movement entry. This cannot be undone.'),
+            'This approves the storekeeper count and sends it to auditor final review. Stock is not rolled forward until auditor approval.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Approve & Post')),
+              child: const Text('Approve')),
         ],
       ),
     );
@@ -9438,15 +9406,15 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
     try {
       final res = await ref
           .read(branchAccountantRepositoryProvider)
-          .approveStockTake('${e['id']}');
+          .approveStockTake('${e['id']}', notes: notes);
       final summary = _map(_map(res['data'])['posting_summary']);
       if (mounted) {
         _notify(
             context,
             summary.isEmpty
-                ? 'Stock take approved and variances posted'
-                : 'Posted: ${summary['adjustments'] ?? 0} adjustment(s) credited, '
-                    '${summary['write_offs'] ?? 0} write-off(s) debited');
+                ? 'Stock take approved and submitted to auditor'
+                : 'Submitted to auditor: ${summary['adjustments'] ?? 0} adjustment(s), '
+                    '${summary['write_offs'] ?? 0} write-off(s)');
       }
       _refresh();
     } catch (err) {
@@ -9455,6 +9423,392 @@ class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
             'Approve failed: ${err is DioException ? (err.response?.data is Map ? (err.response?.data['message'] ?? err.message) : err.message) : err}');
       }
     }
+  }
+
+  Future<void> _rejectStockTake(Map<String, dynamic> e) async {
+    final notes = await _textDialog(context, 'Reject Stock Take',
+        hint: 'Reason required');
+    if (notes == null || notes.trim().isEmpty) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .rejectStockTake('${e['id']}', notes);
+    _toast('Stock take rejected');
+    _refresh();
+  }
+
+  Future<void> _requestClarification(Map<String, dynamic> e) async {
+    final notes = await _textDialog(context, 'Request Clarification',
+        hint: 'Clarification required');
+    if (notes == null || notes.trim().isEmpty) return;
+    await ref
+        .read(branchAccountantRepositoryProvider)
+        .requestStockTakeClarification('${e['id']}', notes);
+    _toast('Clarification requested');
+    _refresh();
+  }
+}
+
+class _InventoryJournalsSection extends ConsumerStatefulWidget {
+  const _InventoryJournalsSection();
+
+  @override
+  ConsumerState<_InventoryJournalsSection> createState() =>
+      _InventoryJournalsSectionState();
+}
+
+class _InventoryJournalsSectionState
+    extends ConsumerState<_InventoryJournalsSection> {
+  late String _startDate =
+      _date(DateTime.now().subtract(const Duration(days: 30)));
+  late String _endDate = _today();
+  String _departmentCode = 'all';
+  late Future<Map<String, dynamic>> _future = _load();
+
+  Future<Map<String, dynamic>> _load() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final rows = await repo.getDepartmentIssueJournals(
+      startDate: _startDate,
+      endDate: _endDate,
+      departmentCode: _departmentCode,
+    );
+    var accounts = <Map<String, dynamic>>[];
+    try {
+      accounts = await repo.getDepartmentAccounts();
+    } catch (_) {}
+    return {'rows': rows, 'accounts': accounts};
+  }
+
+  void _refresh() {
+    setState(() => _future = _load());
+  }
+
+  Future<void> _openDetail(Map<String, dynamic> row) async {
+    final ledger = _map(row['ledger']);
+    final ledgerId = _text(ledger, const ['id']);
+    var detail = row;
+    try {
+      if (ledgerId.isNotEmpty) {
+        detail = await ref
+            .read(branchAccountantRepositoryProvider)
+            .getDepartmentIssueJournalDetail(ledgerId);
+      }
+    } catch (e) {
+      if (mounted) _notify(context, 'Could not load full detail: $e');
+    }
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _DepartmentIssueJournalDetailScreen(record: detail),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (data) {
+          final rows = _list(data['rows']);
+          final accounts = _list(data['accounts']);
+          final departmentValues = [
+            'all',
+            ...accounts
+                .map((e) => _text(e, const ['department_code']))
+                .where((code) => code.isNotEmpty)
+          ];
+          final departmentLabels = {
+            for (final account in accounts)
+              _text(account, const ['department_code']):
+                  _text(account, const ['department_name']),
+            'all': 'All Departments',
+          };
+          final totalCost =
+              rows.fold<num>(0, (sum, row) => sum + _num(row['total_cost']));
+          final inventoryCost = rows
+              .where((row) =>
+                  _text(row, const ['accounting_treatment']) == 'inventory')
+              .fold<num>(0, (sum, row) => sum + _num(row['total_cost']));
+          final expenseCost = rows
+              .where((row) =>
+                  _text(row, const ['accounting_treatment']) == 'expense')
+              .fold<num>(0, (sum, row) => sum + _num(row['total_cost']));
+          final postedCount =
+              rows.where((row) => _map(row['journal']).isNotEmpty).length;
+
+          return _Page(
+            title: 'Inventory Journals',
+            subtitle:
+                'Department stock issues posted from branch store into accounting journals, stock movements and audit trail.',
+            actions: [
+              _DateField(
+                value: _startDate,
+                onChanged: (value) {
+                  _startDate = value.trim();
+                  _refresh();
+                },
+              ),
+              _DateField(
+                value: _endDate,
+                onChanged: (value) {
+                  _endDate = value.trim();
+                  _refresh();
+                },
+              ),
+              if (departmentValues.length > 1)
+                _Dropdown(
+                  value: departmentValues.contains(_departmentCode)
+                      ? _departmentCode
+                      : 'all',
+                  values: departmentValues.toSet().toList(),
+                  labels: departmentLabels,
+                  onChanged: (value) {
+                    _departmentCode = value;
+                    _refresh();
+                  },
+                ),
+              _RefreshButton(onPressed: _refresh),
+            ],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Issue Journals', '${rows.length}',
+                    Icons.receipt_long, Colors.blue),
+                _MetricCard('Posted Journals', '$postedCount',
+                    Icons.account_balance, Colors.green),
+                _MetricCard('Total Cost', _money(totalCost),
+                    Icons.payments_outlined, Colors.indigo),
+                _MetricCard('Department Inventory', _money(inventoryCost),
+                    Icons.inventory_2, Colors.teal),
+                _MetricCard('Department Expense', _money(expenseCost),
+                    Icons.trending_down, Colors.orange),
+              ]),
+              _SectionCard(
+                title: 'Department Issue Movement Register',
+                child: _SimpleTable(
+                  columns: const [
+                    'Date',
+                    'Department',
+                    'Item',
+                    'Qty',
+                    'Value',
+                    'Treatment',
+                    'Journal',
+                    'Stock Move',
+                    'Action',
+                  ],
+                  rows: rows.map((row) {
+                    final ledger = _map(row['ledger']);
+                    final account = _map(row['account']).isNotEmpty
+                        ? _map(row['account'])
+                        : _map(ledger['account']);
+                    final journal = _map(row['journal']);
+                    final movement = _map(row['stock_movement']);
+                    final treatment =
+                        _text(row, const ['accounting_treatment']);
+                    return [
+                      _formatCompactDateTime(_text(row, const ['created_at'])),
+                      _text(account, const ['department_name']).isEmpty
+                          ? _text(account, const ['department_code'])
+                          : _text(account, const ['department_name']),
+                      _text(ledger, const ['item_sku']),
+                      _num(ledger['quantity']).toStringAsFixed(2),
+                      _money(_num(row['total_cost'])),
+                      _StatusPill(treatment.isEmpty
+                          ? 'UNKNOWN'
+                          : treatment.toUpperCase()),
+                      journal.isEmpty
+                          ? 'Not posted'
+                          : _text(journal,
+                              const ['journal_number', 'reference', 'id']),
+                      movement.isEmpty
+                          ? 'No stock move'
+                          : '${_num(movement['previous_stock'])} → ${_num(movement['new_stock'])}',
+                      _CompactAction(
+                        label: 'View',
+                        icon: Icons.open_in_new,
+                        onPressed: () => _openDetail(row),
+                      ),
+                    ];
+                  }).toList(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DepartmentIssueJournalDetailScreen extends StatelessWidget {
+  const _DepartmentIssueJournalDetailScreen({required this.record});
+
+  final Map<String, dynamic> record;
+
+  @override
+  Widget build(BuildContext context) {
+    final ledger = _map(record['ledger']);
+    final account = _map(record['account']).isNotEmpty
+        ? _map(record['account'])
+        : _map(ledger['account']);
+    final journal = _map(record['journal']);
+    final movement = _map(record['stock_movement']);
+    final audit = _map(record['audit_log']);
+    final metadata = _map(audit['metadata']);
+    final lines = _list(journal['lines']);
+    final departmentName = _text(account, const ['department_name']).isEmpty
+        ? _text(account, const ['department_code'])
+        : _text(account, const ['department_name']);
+    final title = departmentName.isEmpty
+        ? 'Inventory Journal Detail'
+        : 'Inventory Journal - $departmentName';
+
+    return Scaffold(
+      backgroundColor: AppColors.kSurface,
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard(
+                  'Total Cost',
+                  _money(_num(record['total_cost'])),
+                  Icons.payments_outlined,
+                  Colors.indigo,
+                ),
+                _MetricCard(
+                  'Quantity',
+                  _num(ledger['quantity']).toStringAsFixed(2),
+                  Icons.scale,
+                  Colors.blueGrey,
+                ),
+                _MetricCard(
+                  'Debit Account',
+                  _text(record, const ['debit_account_code']).isEmpty
+                      ? _text(metadata, const ['debit_account_code'])
+                      : _text(record, const ['debit_account_code']),
+                  Icons.call_received,
+                  Colors.green,
+                ),
+                _MetricCard(
+                  'Credit Account',
+                  _text(record, const ['credit_account_code']).isEmpty
+                      ? _text(metadata, const ['credit_account_code'])
+                      : _text(record, const ['credit_account_code']),
+                  Icons.call_made,
+                  Colors.orange,
+                ),
+              ]),
+              const SizedBox(height: 16),
+              _TwoColumn(
+                left: _SectionCard(
+                  title: 'Department Ledger',
+                  child: _KeyValueList({
+                    'Department': departmentName,
+                    'Treatment':
+                        _text(record, const ['accounting_treatment']).isEmpty
+                            ? _text(account, const ['accounting_treatment'])
+                            : _text(record, const ['accounting_treatment']),
+                    'Item SKU': _text(ledger, const ['item_sku']),
+                    'Movement Type': _text(ledger, const ['movement_type']),
+                    'Quantity': _num(ledger['quantity']),
+                    'Unit Cost': _money(_num(ledger['unit_cost'])),
+                    'Total Cost': _money(_num(ledger['total_cost'])),
+                    'Posted At': _formatCompactDateTime(
+                        _text(ledger, const ['created_at'])),
+                  }),
+                ),
+                right: _SectionCard(
+                  title: 'Accounting Journal',
+                  child: _KeyValueList(journal.isEmpty
+                      ? const {'Status': 'No journal linked'}
+                      : {
+                          'Journal Number': _text(journal,
+                              const ['journal_number', 'reference', 'id']),
+                          'Status': _text(journal, const ['status']),
+                          'Reference Type':
+                              _text(journal, const ['reference_type']),
+                          'Reference ID':
+                              _text(journal, const ['reference_id']),
+                          'Total Debit': _money(_num(journal['total_debit'])),
+                          'Total Credit': _money(_num(journal['total_credit'])),
+                          'Posted At': _formatCompactDateTime(_text(
+                              journal, const ['entry_date', 'created_at'])),
+                        }),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _SectionCard(
+                title: 'Journal Lines',
+                child: _SimpleTable(
+                  columns: const ['Account', 'Debit', 'Credit', 'Memo'],
+                  rows: lines.map((line) {
+                    final coa = _map(line['account']);
+                    final code = _text(coa, const ['account_code']).isEmpty
+                        ? _text(line, const ['account_code'])
+                        : _text(coa, const ['account_code']);
+                    final name = _text(coa, const ['account_name']).isEmpty
+                        ? _text(line, const ['account_name'])
+                        : _text(coa, const ['account_name']);
+                    return [
+                      [code, name].where((part) => part.isNotEmpty).join(' - '),
+                      _money(_num(line['debit'] ?? line['debit_amount'])),
+                      _money(_num(line['credit'] ?? line['credit_amount'])),
+                      _text(line, const ['memo', 'description', 'notes']),
+                    ];
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _TwoColumn(
+                left: _SectionCard(
+                  title: 'Branch Stock Movement',
+                  child: _KeyValueList(movement.isEmpty
+                      ? const {'Status': 'No stock movement linked'}
+                      : {
+                          'Movement Type':
+                              _text(movement, const ['movement_type']),
+                          'Item SKU': _text(movement, const ['item_sku']),
+                          'Quantity': _num(movement['quantity']),
+                          'Previous Stock': _num(movement['previous_stock']),
+                          'New Stock': _num(movement['new_stock']),
+                          'Reference': _text(movement,
+                              const ['reference_id', 'reference', 'source_id']),
+                          'Created At': _formatCompactDateTime(
+                              _text(movement, const ['created_at'])),
+                        }),
+                ),
+                right: _SectionCard(
+                  title: 'Audit Trail',
+                  child: _KeyValueList(audit.isEmpty
+                      ? const {'Status': 'No audit entry linked'}
+                      : {
+                          'Action': _text(audit, const ['action']),
+                          'Entity': _text(audit, const ['entity_type']),
+                          'Entity ID': _text(audit, const ['entity_id']),
+                          'Actor': _text(audit,
+                              const ['actor_id', 'user_id', 'created_by']),
+                          'Device': _text(audit, const ['device']),
+                          'Timestamp': _formatCompactDateTime(
+                              _text(audit, const ['created_at'])),
+                        }),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _SectionCard(
+                title: 'Audit Metadata',
+                child: _KeyValueList(metadata),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -10282,12 +10636,6 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                     icon: const Icon(Icons.account_balance, size: 18),
                     label: const Text('Print Ledger'),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        _createPurchaseOrder(supplierId: supplierId),
-                    icon: const Icon(Icons.add_shopping_cart, size: 18),
-                    label: const Text('New PO'),
-                  ),
                   FilledButton.icon(
                     onPressed: () => _recordPayment(
                       suppliers: suppliers,
@@ -10296,6 +10644,12 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                     ),
                     icon: const Icon(Icons.payments, size: 18),
                     label: const Text('Make Payment'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _createPurchaseOrder(supplierId: supplierId),
+                    icon: const Icon(Icons.add_shopping_cart, size: 18),
+                    label: const Text('New PO'),
                   ),
                 ],
               ),
@@ -10592,172 +10946,26 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
   }
 
   void _showPurchaseOrderDetail(Map<String, dynamic> po) {
-    final items = _list(po['items']);
     final poNumber = _text(po, ['po_number', 'purchase_order_number', 'id']);
     final supplierName = _recordSupplierName(po);
-    final status = _text(po, ['status']);
-    final total = _num(po['total_amount'] ?? po['total']);
-    final subTotal = _num(po['subtotal'] ?? po['sub_total']);
-    final taxAmount = _num(po['tax_amount'] ?? po['vat_amount']);
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 8),
-        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-        actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
-        title: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.kPrimary.withValues(alpha: .10),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.receipt_long, color: AppColors.kPrimary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Purchase Order $poNumber',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  Text(
-                    supplierName.isEmpty
-                        ? 'Supplier not specified'
-                        : supplierName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 13, color: AppColors.kTextSecondary),
-                  ),
-                ],
-              ),
-            ),
-            _StatusPill(status),
-          ],
+    openRecordDetailScreen(
+      context,
+      title: 'Purchase Order $poNumber',
+      subtitle: supplierName.isEmpty ? 'Purchase Order' : supplierName,
+      record: po,
+      actions: [
+        IconButton(
+          tooltip: 'Download PDF',
+          icon: const Icon(Icons.download),
+          onPressed: () => _downloadPoPdf(po),
         ),
-        content: SizedBox(
-          width: 900,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ResponsiveGrid(children: [
-                  _MetricCard(
-                      'PO Total', _money(total), Icons.payments, Colors.green),
-                  _MetricCard('Items', '${items.length}',
-                      Icons.inventory_2_outlined, Colors.blue),
-                  _MetricCard(
-                      'Expected Delivery',
-                      _cleanDate(_text(
-                          po, ['expected_delivery_date', 'delivery_date'])),
-                      Icons.event_available,
-                      Colors.orange),
-                  _MetricCard(
-                      'Payment Terms',
-                      _title(_text(po, ['payment_terms', 'terms'])),
-                      Icons.schedule,
-                      Colors.blueGrey),
-                ]),
-                const SizedBox(height: 12),
-                _TwoColumn(
-                  left: _BreakdownCard(
-                    title: 'Order Details',
-                    values: {
-                      'PO Number': poNumber,
-                      'Status': status,
-                      'Created': _cleanDate(
-                          _text(po, ['created_at', 'order_date', 'po_date'])),
-                      'Expected Delivery': _cleanDate(_text(
-                          po, ['expected_delivery_date', 'delivery_date'])),
-                      'Sent To Supplier': _yesNo(po['sent_to_supplier']),
-                      'Requires GRN': _yesNo(po['requires_grn']),
-                    },
-                  ),
-                  right: _BreakdownCard(
-                    title: 'Amount Summary',
-                    values: {
-                      'Subtotal': subTotal == 0 ? total : subTotal,
-                      'Tax Rate': '${_num(po['tax_rate'] ?? po['vat_rate'])}%',
-                      'Tax Amount': taxAmount,
-                      'Discount': _num(po['discount_amount']),
-                      'Shipping': _num(po['shipping_cost']),
-                      'Other Charges': _num(po['other_charges']),
-                      'Total': total,
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _SectionCard(
-                  title: 'Items Ordered',
-                  child: _SimpleTable(
-                    columns: const [
-                      'Item',
-                      'SKU',
-                      'Qty Ordered',
-                      'Qty Received',
-                      'Unit Price',
-                      'VAT',
-                      'Total'
-                    ],
-                    rows: items.map(_poItemDetailRow).toList(),
-                  ),
-                ),
-                if (_text(po, ['special_instructions', 'notes']).isNotEmpty)
-                  _SectionCard(
-                    title: 'Notes & Instructions',
-                    child: Text(_text(po, ['special_instructions', 'notes'])),
-                  ),
-              ],
-            ),
-          ),
+        IconButton(
+          tooltip: 'Print PO',
+          icon: const Icon(Icons.print),
+          onPressed: () => _printPoPdf(po),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Close'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _downloadPoPdf(po),
-            icon: const Icon(Icons.download, size: 18),
-            label: const Text('Download PDF'),
-          ),
-          FilledButton.icon(
-            onPressed: () => _printPoPdf(po),
-            icon: const Icon(Icons.print, size: 18),
-            label: const Text('Print PO'),
-          ),
-        ],
-      ),
+      ],
     );
-  }
-
-  List<Object> _poItemDetailRow(Map<String, dynamic> item) {
-    final nested = _map(item['item']);
-    final name = _text(item, ['item_name', 'description']).isEmpty
-        ? _text(nested, ['name', 'item_name'])
-        : _text(item, ['item_name', 'description']);
-    final sku = _text(item, ['sku', 'item_code']).isEmpty
-        ? _text(nested, ['sku', 'item_code', 'code'])
-        : _text(item, ['sku', 'item_code']);
-    return [
-      name.isEmpty ? '-' : name,
-      sku.isEmpty ? '-' : sku,
-      '${_num(item['quantity_ordered'] ?? item['quantity'])}',
-      '${_num(item['quantity_received'])}',
-      _money(_num(item['unit_price'])),
-      _money(_num(item['tax_amount'] ?? item['vat_amount'])),
-      _money(_num(item['total_price'] ?? item['total'])),
-    ];
   }
 
   String _cleanDate(String value) {
@@ -10766,15 +10974,6 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     return parsed == null ? value : DateFormat('yyyy-MM-dd').format(parsed);
   }
 
-  String _yesNo(dynamic value) {
-    if (value is bool) return value ? 'Yes' : 'No';
-    final text = '$value'.toLowerCase().trim();
-    if (text == 'true' || text == 'yes' || text == '1') return 'Yes';
-    if (text == 'false' || text == 'no' || text == '0' || text == 'null') {
-      return 'No';
-    }
-    return text.isEmpty ? '-' : _title(text);
-  }
 
   void _openPoHistory(String supplierId, String supplierName) {
     if (supplierId.isEmpty && supplierName.isEmpty) return;
@@ -11893,23 +12092,13 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
 
   String _itemId(Map<String, dynamic> it) => _purchaseOrderItemId(it);
 
-  num get _total => _lines.fold<num>(0, (sum, l) {
-        final q = _num(l['quantity']);
-        final p = _num(l['unit_price']);
-        final vat = _num(l['vat_rate']);
-        return sum + (q * p) * (1 + vat / 100);
-      });
-
   Future<void> _save() async {
     if (_supplierId == null) {
       _notify(context, 'Please select a supplier');
       return;
     }
     final validLines = _lines
-        .where((l) =>
-            l['item_id'] != null &&
-            _num(l['quantity']) > 0 &&
-            _num(l['unit_price']) > 0)
+        .where((l) => l['item_id'] != null && _num(l['quantity']) > 0)
         .toList();
     if (validLines.isEmpty) {
       _notify(context, 'Add at least one valid item');
@@ -11925,7 +12114,7 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
             .map((l) => {
                   'item_id': l['item_id'],
                   'quantity': _num(l['quantity']),
-                  'unit_price': _num(l['unit_price']),
+                  'unit_price': 0,
                   'vat_rate': _num(l['vat_rate']),
                 })
             .toList(),
@@ -12012,15 +12201,6 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
                         onSelected: (item) {
                           setState(() {
                             line['item_id'] = _itemId(item);
-                            final cost = _num(item['last_purchase_price'] ??
-                                item['average_cost'] ??
-                                item['cost_price'] ??
-                                item['unit_cost'] ??
-                                item['retail_price'] ??
-                                item['unit_price']);
-                            if (cost > 0 && _num(line['unit_price']) == 0) {
-                              line['unit_price'] = cost;
-                            }
                           });
                         },
                         onCleared: () {
@@ -12039,19 +12219,6 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
                             line['quantity'] = num.tryParse(v) ?? 0,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Price'),
-                        controller: TextEditingController(
-                            text: '${_num(line['unit_price'])}'),
-                        onChanged: (v) {
-                          line['unit_price'] = num.tryParse(v) ?? 0;
-                          setState(() {});
-                        },
-                      ),
-                    ),
                     IconButton(
                       icon: const Icon(Icons.close, size: 18),
                       onPressed: _lines.length > 1
@@ -12064,7 +12231,7 @@ class _PurchaseOrderDialogState extends ConsumerState<_PurchaseOrderDialog> {
               const Divider(),
               Align(
                 alignment: Alignment.centerRight,
-                child: Text('Total (incl VAT): ${_money(_total)}',
+                child: Text('${_lines.length} line item(s)',
                     style: const TextStyle(fontWeight: FontWeight.w800)),
               ),
             ],
@@ -15313,49 +15480,11 @@ Future<bool> _confirm(BuildContext context, String message) async {
 
 void _showRecord(BuildContext context, Map<String, dynamic> record,
     {String title = 'Record Details'}) {
-  Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => _RecordDetailScreen(record: record, title: title),
-    ),
+  openRecordDetailScreen(
+    context,
+    title: title,
+    record: record,
   );
-}
-
-/// Full-screen record detail (replaces the old "Record Details" dialog).
-class _RecordDetailScreen extends StatelessWidget {
-  const _RecordDetailScreen(
-      {required this.record, this.title = 'Record Details'});
-
-  final Map<String, dynamic> record;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.kSurface,
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: ReadableRecordDetails(record: record),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 dynamic _firstRaw(Map<String, dynamic> row, List<String> keys) {
@@ -15518,6 +15647,8 @@ String _shortLabel(BranchAccountantSection section) {
       return 'Variance';
     case BranchAccountantSection.shiftPnl:
       return 'P&L';
+    case BranchAccountantSection.inventoryJournals:
+      return 'Journals';
     case BranchAccountantSection.supplierFinance:
       return 'Suppliers';
     case BranchAccountantSection.budgets:
@@ -16069,8 +16200,9 @@ class _OutboundPaymentsSectionState
   String _status = 'all';
   late Future<Map<String, dynamic>> _future = _load();
 
-  Future<Map<String, dynamic>> _load() =>
-      ref.read(branchAccountantRepositoryProvider).getOutboundPayments(status: _status);
+  Future<Map<String, dynamic>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .getOutboundPayments(status: _status);
   void _refresh() => setState(() => _future = _load());
 
   String get _role =>
@@ -16141,10 +16273,16 @@ class _OutboundPaymentsSectionState
             ],
             children: [
               _ResponsiveGrid(children: [
-                _MetricCard('Total Outflow', _money(_num(summary['total_outflow'])),
-                    Icons.trending_down, Colors.red),
-                _MetricCard('Pending Value', _money(_num(summary['pending_value'])),
-                    Icons.hourglass_top, Colors.orange),
+                _MetricCard(
+                    'Total Outflow',
+                    _money(_num(summary['total_outflow'])),
+                    Icons.trending_down,
+                    Colors.red),
+                _MetricCard(
+                    'Pending Value',
+                    _money(_num(summary['pending_value'])),
+                    Icons.hourglass_top,
+                    Colors.orange),
                 _MetricCard('Pending', '${_num(summary['pending']).toInt()}',
                     Icons.pending_actions, Colors.blueGrey),
                 _MetricCard(
@@ -16161,7 +16299,8 @@ class _OutboundPaymentsSectionState
                         child: Text('No outbound payments yet.'))
                     : Column(
                         children: payments
-                            .map((p) => _paymentRow(Map<String, dynamic>.from(p)))
+                            .map((p) =>
+                                _paymentRow(Map<String, dynamic>.from(p)))
                             .toList(),
                       ),
               ),
@@ -16184,21 +16323,30 @@ class _OutboundPaymentsSectionState
     final isFinal = status == 'released' || status == 'rejected';
     if (!isFinal && !isCreator) {
       if (status == 'pending' && _canApprove) {
-        actions.add(_act('Approve', Colors.green,
-            () => _do(() => ref.read(branchAccountantRepositoryProvider)
+        actions.add(_act(
+            'Approve',
+            Colors.green,
+            () => _do(() => ref
+                .read(branchAccountantRepositoryProvider)
                 .approveBranchPayment('${p['id']}'))));
       }
       if (status == 'manager_approved' && requiresDirector && _canDirector) {
-        actions.add(_act('Director sign-off', Colors.purple,
-            () => _do(() => ref.read(branchAccountantRepositoryProvider)
+        actions.add(_act(
+            'Director sign-off',
+            Colors.purple,
+            () => _do(() => ref
+                .read(branchAccountantRepositoryProvider)
                 .approveBranchPayment('${p['id']}', asDirector: true))));
       }
       final readyToRelease = requiresDirector
           ? status == 'director_approved'
           : status == 'manager_approved';
       if (readyToRelease && _canRelease) {
-        actions.add(_act('Release', AppColors.kPrimary,
-            () => _do(() => ref.read(branchAccountantRepositoryProvider)
+        actions.add(_act(
+            'Release',
+            AppColors.kPrimary,
+            () => _do(() => ref
+                .read(branchAccountantRepositoryProvider)
                 .releaseBranchPayment('${p['id']}'))));
       }
       if (_canApprove) {
@@ -16208,7 +16356,8 @@ class _OutboundPaymentsSectionState
     }
 
     return InkWell(
-      onTap: () => _showRecord(context, p, title: _txt(p, ['payment_number'], 'Payment')),
+      onTap: () => _showRecord(context, p,
+          title: _txt(p, ['payment_number'], 'Payment')),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
@@ -16216,7 +16365,8 @@ class _OutboundPaymentsSectionState
             CircleAvatar(
               radius: 18,
               backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
-              child: const Icon(Icons.payments, size: 18, color: AppColors.kPrimary),
+              child: const Icon(Icons.payments,
+                  size: 18, color: AppColors.kPrimary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -16226,8 +16376,12 @@ class _OutboundPaymentsSectionState
                   Text(_txt(p, ['payee_name'], 'Payee'),
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   Text(
-                    '${_payCategories[_txt(p, ['category'])] ?? _txt(p, ['category'])}'
-                    ' · ${_payMethods[_txt(p, ['payment_method'])] ?? _txt(p, ['payment_method'])}'
+                    '${_payCategories[_txt(p, ['category'])] ?? _txt(p, [
+                              'category'
+                            ])}'
+                    ' · ${_payMethods[_txt(p, ['payment_method'])] ?? _txt(p, [
+                              'payment_method'
+                            ])}'
                     '${when != null ? ' · ${DateFormat('MMM d').format(when)}' : ''}',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
@@ -16290,7 +16444,8 @@ class _OutboundPaymentsSectionState
           decoration: const InputDecoration(labelText: 'Reason'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
               child: const Text('Reject')),
@@ -16298,8 +16453,9 @@ class _OutboundPaymentsSectionState
       ),
     );
     if (reason == null) return;
-    await _do(() =>
-        ref.read(branchAccountantRepositoryProvider).rejectBranchPayment(id, reason));
+    await _do(() => ref
+        .read(branchAccountantRepositoryProvider)
+        .rejectBranchPayment(id, reason));
   }
 
   Future<void> _newPayment() async {
@@ -16352,12 +16508,14 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
         'category': _category,
         'payment_method': _method,
         'payee_name': _payee.text.trim(),
-        if (_account.text.trim().isNotEmpty) 'payee_account': _account.text.trim(),
+        if (_account.text.trim().isNotEmpty)
+          'payee_account': _account.text.trim(),
         'amount': amt,
         'currency': _currency,
         if (_desc.text.trim().isNotEmpty) 'description': _desc.text.trim(),
         if (_ref.text.trim().isNotEmpty) 'reference': _ref.text.trim(),
-        if (_receipt.text.trim().isNotEmpty) 'receipt_url': _receipt.text.trim(),
+        if (_receipt.text.trim().isNotEmpty)
+          'receipt_url': _receipt.text.trim(),
       });
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -16378,7 +16536,8 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
                 controller: _payee,
-                decoration: const InputDecoration(labelText: 'Payee / Vendor name')),
+                decoration:
+                    const InputDecoration(labelText: 'Payee / Vendor name')),
             const SizedBox(height: 10),
             Row(children: [
               Expanded(
@@ -16387,7 +16546,8 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Category'),
                   items: _payCategories.entries
-                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .map((e) =>
+                          DropdownMenuItem(value: e.key, child: Text(e.value)))
                       .toList(),
                   onChanged: (v) => setState(() => _category = v!),
                 ),
@@ -16399,7 +16559,8 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Method'),
                   items: _payMethods.entries
-                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .map((e) =>
+                          DropdownMenuItem(value: e.key, child: Text(e.value)))
                       .toList(),
                   onChanged: (v) => setState(() => _method = v!),
                 ),
@@ -16485,7 +16646,8 @@ class _PayStatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(status.replaceAll('_', ' ').toUpperCase(),
-          style: TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
+          style:
+              TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
     );
   }
 }

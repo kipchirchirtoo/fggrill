@@ -59,6 +59,9 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
     this.palette,
     this.initialSidebarCollapsed = false,
     this.allowSidebarCollapse = false,
+    this.sidebarTitle,
+    this.sidebarSubtitle,
+    this.sidebarInitials,
   });
 
   final String title;
@@ -73,6 +76,9 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
   final ShellPalette? palette;
   final bool initialSidebarCollapsed;
   final bool allowSidebarCollapse;
+  final String? sidebarTitle;
+  final String? sidebarSubtitle;
+  final String? sidebarInitials;
 
   @override
   ConsumerState<MasterDashboardShell<T>> createState() =>
@@ -121,6 +127,9 @@ class _MasterDashboardShellState<T>
               title: widget.title,
               subtitle: widget.subtitle,
               initials: widget.initials,
+              sidebarTitle: widget.sidebarTitle,
+              sidebarSubtitle: widget.sidebarSubtitle,
+              sidebarInitials: widget.sidebarInitials,
               currentSection: widget.currentSection,
               items: widget.items,
               onSectionSelected: widget.onSectionSelected,
@@ -194,6 +203,9 @@ class _MasterSideNav<T> extends ConsumerWidget {
     required this.onSectionSelected,
     this.palette,
     this.onToggleCollapsed,
+    this.sidebarTitle,
+    this.sidebarSubtitle,
+    this.sidebarInitials,
   });
 
   final double width;
@@ -207,6 +219,9 @@ class _MasterSideNav<T> extends ConsumerWidget {
   final ValueChanged<T> onSectionSelected;
   final ShellPalette? palette;
   final VoidCallback? onToggleCollapsed;
+  final String? sidebarTitle;
+  final String? sidebarSubtitle;
+  final String? sidebarInitials;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -218,57 +233,53 @@ class _MasterSideNav<T> extends ConsumerWidget {
       decoration: BoxDecoration(
         color: palette?.surface ?? Colors.white,
         border: Border(right: BorderSide(color: borderColor)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(2, 0),
+          ),
+        ],
       ),
       child: SafeArea(
         right: false,
         child: Column(
           children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                isCollapsed ? 10 : 18,
-                18,
-                isCollapsed ? 10 : 12,
-                14,
-              ),
+            Container(
+              height: 60,
+              padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 16),
               child: isCollapsed
                   ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _Logo(initials: initials),
-                        if (canToggle) ...[
-                          const SizedBox(height: 12),
-                          IconButton.outlined(
-                            tooltip: 'Expand sidebar',
-                            onPressed: onToggleCollapsed,
-                            icon: const Icon(Icons.keyboard_double_arrow_right,
-                                size: 20),
-                          ),
-                        ],
+                        _Logo(initials: sidebarInitials ?? initials),
                       ],
                     )
                   : Row(
                       children: [
-                        _Logo(initials: initials),
+                        _Logo(initials: sidebarInitials ?? initials),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                title,
+                                sidebarTitle ?? title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               Text(
-                                subtitle,
+                                sidebarSubtitle ?? subtitle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
+                                  fontSize: 10,
+                                  color: AppColors.kTextSecondary,
                                 ),
                               ),
                             ],
@@ -289,7 +300,7 @@ class _MasterSideNav<T> extends ConsumerWidget {
             Divider(height: 1, color: borderColor),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.only(bottom: 16),
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final item = items[index];
@@ -303,13 +314,13 @@ class _MasterSideNav<T> extends ConsumerWidget {
                     children: [
                       if (showGroup)
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 14, 16, 6),
+                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
                           child: Text(
-                            item.group!,
+                            item.group!.toUpperCase(),
                             style: TextStyle(
                               fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.3,
                               color: Colors.grey.shade500,
                             ),
                           ),
@@ -375,18 +386,28 @@ class _NavTile<T> extends StatelessWidget {
     final idle = palette?.mutedText ?? Colors.grey.shade600;
     final tile = Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: isCollapsed ? 10 : 12,
-        vertical: 3,
+        horizontal: isCollapsed ? 8 : 8,
+        vertical: 1,
       ),
-      child: Material(
-        color: isActive ? accent.withValues(alpha: 0.12) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isActive ? accent.withValues(alpha: 0.08) : null,
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            height: 48,
-            padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 0 : 12),
+            height: 38,
+            padding: EdgeInsets.only(
+              left: isActive && !isCollapsed ? 9 : 12,
+              right: 12,
+            ),
+            decoration: BoxDecoration(
+              border: isActive && !isCollapsed
+                  ? Border(left: BorderSide(color: accent, width: 3))
+                  : null,
+            ),
             child: Row(
               mainAxisAlignment: isCollapsed
                   ? MainAxisAlignment.center
@@ -394,23 +415,23 @@ class _NavTile<T> extends StatelessWidget {
               children: [
                 Icon(
                   item.icon,
-                  size: 21,
+                  size: 18,
                   color: isActive ? accent : idle,
                 ),
                 if (!isCollapsed) ...[
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       item.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight:
-                            isActive ? FontWeight.w700 : FontWeight.w500,
+                            isActive ? FontWeight.w600 : FontWeight.w400,
                         color: isActive
                             ? accent
-                            : (palette?.text ?? Colors.grey.shade700),
+                            : (palette?.text ?? AppColors.kTextSecondary),
                       ),
                     ),
                   ),
@@ -743,11 +764,11 @@ class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 32,
+      height: 32,
       decoration: BoxDecoration(
         color: AppColors.kPrimary,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Center(
         child: Text(
@@ -755,7 +776,7 @@ class _Logo extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: 12,
           ),
         ),
       ),

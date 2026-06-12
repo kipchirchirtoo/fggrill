@@ -450,7 +450,6 @@ class _DispatchListTile extends StatelessWidget {
     final number = dispatch['dispatch_number'] ?? dispatch['id'] ?? '—';
     final destination =
         dispatch['to_branch'] ?? dispatch['destination_branch'] ?? '—';
-    final driver = dispatch['driver_name'] ?? dispatch['assigned_driver'] ?? '';
     final vehicle = dispatch['vehicle'] ?? dispatch['vehicle_reg'] ?? '';
     final items = dispatch['dispatch_items'] as List? ?? [];
     final itemCount = dispatch['items_count'] ?? items.length;

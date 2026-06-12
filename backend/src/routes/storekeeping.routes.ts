@@ -132,6 +132,22 @@ import {
 } from '../controllers/storekeeping/kitchen-usage.controller';
 
 import {
+  finalizeStockTakeByAuditor,
+  getDepartmentConsumption,
+  getDepartmentAccounts,
+  getDepartmentIssueJournalDetail,
+  getDepartmentIssueJournals,
+  getEnterpriseInventoryAnalytics,
+  getInventoryAuditLog,
+  listPosInventoryMappings,
+  recordDepartmentIssue,
+  reviewStockTakeByAccountant,
+  seedDepartmentAccounts,
+  submitStockTakeToAccountant,
+  upsertPosInventoryMapping
+} from '../controllers/storekeeping/enterprise-inventory.controller';
+
+import {
   convertStock,
   getYieldRules
 } from '../controllers/storekeeping/conversions.controller';
@@ -181,6 +197,21 @@ const managerRoles = [
   UserRole.BRANCH_ACCOUNTANT,
   UserRole.AUDITOR
 ]; // Management level access
+
+const accountantRoles = [
+  UserRole.SUPER_ADMIN,
+  UserRole.GENERAL_MANAGER,
+  UserRole.BRANCH_ACCOUNTANT,
+  UserRole.ACCOUNTANT
+];
+const stockTakeOwnerRoles = [
+  UserRole.SUPER_ADMIN,
+  UserRole.GENERAL_MANAGER,
+  UserRole.BRANCH_STOREKEEPER,
+  UserRole.BRANCH_MANAGER
+];
+
+const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR];
 
 // =====================================================
 // ITEMS ROUTES
@@ -267,7 +298,17 @@ router.post('/branch-stock/receive-supplier', authorize(branchRoles), receiveFro
 router.get('/stock-movements', authorize(branchRoles), getStockMovements);
 router.post('/stock-ledger/export', authorize(branchRoles), exportStockLedger);
 
-const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR];
+// Enterprise inventory controls
+router.get('/department-accounts', authorize(branchRoles), getDepartmentAccounts);
+router.post('/department-accounts/seed', authorize(managerRoles), seedDepartmentAccounts);
+router.post('/department-issues', authorize(branchRoles), recordDepartmentIssue);
+router.get('/department-consumption', authorize(branchRoles), getDepartmentConsumption);
+router.get('/department-issue-journals', authorize(branchRoles), getDepartmentIssueJournals);
+router.get('/department-issue-journals/:id', authorize(branchRoles), getDepartmentIssueJournalDetail);
+router.get('/enterprise-inventory/analytics', authorize(branchRoles), getEnterpriseInventoryAnalytics);
+router.get('/enterprise-inventory/audit-log', authorize(auditorRoles), getInventoryAuditLog);
+router.get('/pos-inventory-mappings', authorize(managerRoles), listPosInventoryMappings);
+router.put('/pos-inventory-mappings', authorize(managerRoles), upsertPosInventoryMapping);
 
 // Stock requests (Branch → Central)
 // IMPORTANT: Specific routes MUST come before parameterized routes
@@ -344,11 +385,14 @@ router.route('/suppliers/:id')
 
 router.route('/stock-takes')
   .get(authorize(staffRoles), getStockTakes)
-  .post(authorize(managerRoles), createStockTake);
+  .post(authorize(stockTakeOwnerRoles), createStockTake);
 
 router.get('/stock-takes/:id', authorize(staffRoles), getStockTake);
 router.get('/stock-takes/:id/items', authorize(staffRoles), getStockTakeItems);
-router.put('/stock-takes/:id/complete', authorize(managerRoles), completeStockTake);
+router.put('/stock-takes/:id/complete', authorize(stockTakeOwnerRoles), completeStockTake);
+router.post('/stock-takes/:id/submit-accountant', authorize(stockTakeOwnerRoles), submitStockTakeToAccountant);
+router.post('/stock-takes/:id/accountant-review', authorize(accountantRoles), reviewStockTakeByAccountant);
+router.post('/stock-takes/:id/auditor-finalize', authorize(auditorRoles), finalizeStockTakeByAuditor);
 router.put('/stock-take-items/:id', authorize(staffRoles), updateStockTakeItem);
 
 // =====================================================

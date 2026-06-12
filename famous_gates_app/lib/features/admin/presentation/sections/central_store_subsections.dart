@@ -55,7 +55,20 @@ String _date(dynamic value) {
   return '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
 }
 
-String _money(num value) => 'KES ${value.toStringAsFixed(0)}';
+String _money(num value) => 'KES ${_groupedWhole(value)}';
+
+String _groupedWhole(num value) {
+  final rounded = value.round();
+  final sign = rounded < 0 ? '-' : '';
+  final digits = rounded.abs().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    final fromEnd = digits.length - i;
+    buffer.write(digits[i]);
+    if (fromEnd > 1 && fromEnd % 3 == 1) buffer.write(',');
+  }
+  return '$sign$buffer';
+}
 
 String _isoDate(DateTime value) => value.toIso8601String().split('T').first;
 
@@ -630,36 +643,6 @@ Widget _statusChip(String status) {
   );
 }
 
-Widget _detailPill(String label, String value) => Container(
-      width: 170,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.kDivider.withValues(alpha: .7)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.kTextSecondary,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    );
-
 /// Open a full-screen, well-structured detail page for a record (replaces the
 /// old cramped key/value dialog). Used by every "View" across the central store.
 Future<void> _showMapDetails(
@@ -970,10 +953,43 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
   bool _loadingPo = false;
   bool _scannerMode = true;
   bool _isSubmitting = false;
+  bool _isScanning = false;
+  String _scanStatus = 'Scanner ready';
+  String? _lastScannedCode;
   List<Map<String, dynamic>> _manualResults = [];
   final List<Map<String, dynamic>> _scanned = [];
 
   num _gnum(dynamic v) => v is num ? v : num.tryParse('${v ?? 0}') ?? 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusScanner());
+  }
+
+  void _focusScanner() {
+    if (!mounted || !_scannerMode) return;
+    _scannerFocus.requestFocus();
+  }
+
+  String _cleanScanCode(String value) => value
+      .replaceAll(RegExp(r'[\r\n\t]'), '')
+      .replaceAll(RegExp(r'\s+'), '')
+      .trim();
+
+  bool _matchesScanCode(Map<String, dynamic> item, String code) {
+    final needle = code.toLowerCase();
+    const keys = [
+      'barcode',
+      'bar_code',
+      'sku',
+      'item_sku',
+      'item_code',
+      'code',
+      'id',
+    ];
+    return keys.any((key) => _text(item, [key], '').toLowerCase() == needle);
+  }
 
   /// Automation: pick an approved PO; its supplier + line items load straight
   /// into the receiving session, prefilled with ordered quantity and unit cost.
@@ -1093,28 +1109,47 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
   }
 
   Future<void> _scanBarcode() async {
-    final code = _barcodeCtrl.text.trim();
-    if (code.isEmpty) return;
-    final repo = ref.read(adminRepositoryProvider);
-    final items = await repo.getStoreItems(search: code, limit: 20);
-    final needle = code.toLowerCase();
-    final item = items.cast<Map<String, dynamic>?>().firstWhere(
-      (candidate) {
-        if (candidate == null) return false;
-        return _text(candidate, ['barcode'], '').toLowerCase() == needle ||
-            _text(candidate, ['sku'], '').toLowerCase() == needle;
-      },
-      orElse: () => null,
-    );
+    final code = _cleanScanCode(_barcodeCtrl.text);
+    if (code.isEmpty || _isScanning) return;
+    setState(() {
+      _isScanning = true;
+      _scanStatus = 'Scanning $code';
+      _lastScannedCode = code;
+    });
 
-    if (item == null) {
-      if (!mounted) return;
-      await _showCreateItemDialog(code);
-    } else {
-      _addItem(item, viaScan: true);
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      final items = await repo.getStoreItems(search: code, limit: 30);
+      Map<String, dynamic>? item;
+      for (final candidate in items) {
+        if (_matchesScanCode(candidate, code)) {
+          item = candidate;
+          break;
+        }
+      }
+      item ??= items.length == 1 ? items.first : null;
+
+      if (item == null) {
+        if (!mounted) return;
+        setState(() => _scanStatus = 'Unknown barcode $code');
+        await _showCreateItemDialog(code);
+      } else {
+        final addedName = _addItem(item, viaScan: true);
+        if (mounted) setState(() => _scanStatus = 'Added $addedName');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _scanStatus = 'Scan failed');
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(content: Text('Scan failed: ${apiErrorMessage(error)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
+      _barcodeCtrl.clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusScanner());
     }
-    _barcodeCtrl.clear();
-    _scannerFocus.requestFocus();
   }
 
   Future<void> _searchManual() async {
@@ -1127,18 +1162,21 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
     if (mounted) setState(() => _manualResults = rows);
   }
 
-  void _addItem(Map<String, dynamic> item, {required bool viaScan}) {
-    final sku = _text(item, ['sku', 'item_id', 'id'], '');
-    if (sku.isEmpty) return;
+  String _addItem(Map<String, dynamic> item, {required bool viaScan}) {
+    final sku =
+        _text(item, ['sku', 'item_sku', 'item_code', 'item_id', 'id'], '');
+    if (sku.isEmpty) return 'item';
+    final itemName = _text(item, ['item_name', 'name', 'description'], sku);
     setState(() {
       final index = _scanned.indexWhere((row) => row['item_id'] == sku);
       if (index >= 0) {
         _scanned[index]['quantity_received'] =
-            (_scanned[index]['quantity_received'] as num) + 1;
+            _gnum(_scanned[index]['quantity_received']) + 1;
+        _scanned[index]['added_via'] = viaScan ? 'scan' : 'manual';
       } else {
         _scanned.add({
           'item_id': sku,
-          'item_name': _text(item, ['item_name', 'name', 'description']),
+          'item_name': itemName,
           'sku': sku,
           'unit_of_measure': _text(item, ['unit_of_measure', 'unit'], 'units'),
           'quantity_received': 1,
@@ -1149,6 +1187,8 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
         });
       }
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusScanner());
+    return itemName;
   }
 
   Future<void> _showCreateItemDialog(String barcode) async {
@@ -1228,7 +1268,14 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
     costCtrl.dispose();
 
     if (created != null) {
-      _addItem(created, viaScan: false);
+      _addItem(created, viaScan: true);
+      if (mounted) {
+        setState(() => _scanStatus = 'Created ${_text(created, [
+              'item_name',
+              'name',
+              'description'
+            ], barcode)}');
+      }
     }
   }
 
@@ -1424,26 +1471,109 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
                                 icon: Icon(Icons.search)),
                           ],
                           selected: {_scannerMode},
-                          onSelectionChanged: (s) =>
-                              setState(() => _scannerMode = s.first),
+                          onSelectionChanged: (s) {
+                            setState(() => _scannerMode = s.first);
+                            WidgetsBinding.instance
+                                .addPostFrameCallback((_) => _focusScanner());
+                          },
                         ),
                         const SizedBox(height: 16),
-                        if (_scannerMode)
+                        if (_scannerMode) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(10),
+                              border:
+                                  Border.all(color: const Color(0xFFBFDBFE)),
+                            ),
+                            child: Row(children: [
+                              Icon(
+                                _isScanning
+                                    ? Icons.sync
+                                    : Icons.qr_code_scanner,
+                                size: 18,
+                                color: AppColors.kPrimary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _scanStatus,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.kPrimary,
+                                  ),
+                                ),
+                              ),
+                              if (_lastScannedCode != null)
+                                Text(
+                                  _lastScannedCode!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.kTextSecondary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                            ]),
+                          ),
+                          const SizedBox(height: 12),
                           TextField(
                             controller: _barcodeCtrl,
                             focusNode: _scannerFocus,
                             autofocus: true,
+                            enabled: !_isScanning,
                             textInputAction: TextInputAction.done,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(
+                                RegExp(r'[\r\n\t]'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value.contains('\n') ||
+                                  value.contains('\r')) {
+                                _scanBarcode();
+                              }
+                            },
                             onSubmitted: (_) => _scanBarcode(),
                             decoration: InputDecoration(
                               labelText: 'Scan barcode or enter SKU',
+                              prefixIcon: const Icon(Icons.qr_code_2),
                               suffixIcon: IconButton(
-                                onPressed: _scanBarcode,
-                                icon: const Icon(Icons.add),
+                                onPressed: _isScanning ? null : _scanBarcode,
+                                icon: _isScanning
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.add),
                               ),
                             ),
-                          )
-                        else ...[
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              Chip(
+                                avatar: const Icon(Icons.inventory_2, size: 16),
+                                label: Text('${_scanned.length} lines'),
+                              ),
+                              Chip(
+                                avatar: const Icon(Icons.add_task, size: 16),
+                                label: Text(
+                                  '${_plainNum(_scanned.fold<num>(0, (sum, row) => sum + _gnum(row['quantity_received'])))} received',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else ...[
                           TextField(
                             controller: _manualSearchCtrl,
                             textInputAction: TextInputAction.search,
@@ -3566,135 +3696,57 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           await ref.read(adminRepositoryProvider).getPurchaseOrder(_id(row));
       if (!mounted || !context.mounted) return;
       final status = _text(detail, ['status'], _text(row, ['status'], 'draft'));
-      final items =
-          (detail['items'] is List ? detail['items'] as List : const [])
-              .whereType<Map>()
-              .map((item) => item.cast<String, dynamic>())
-              .toList();
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('PO ${_text(detail, ['po_number', 'id'])}'),
-          content: SizedBox(
-            width: 780,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _detailPill(
-                        'Supplier',
-                        _text(detail, ['supplier_name'], 'Supplier'),
-                      ),
-                      _detailPill('Status', status.replaceAll('_', ' ')),
-                      _detailPill(
-                        'Expected',
-                        _date(detail['expected_delivery_date']),
-                      ),
-                      _detailPill(
-                        'Total',
-                        _money(_num(detail, ['total_amount', 'total'])),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  if (items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(
-                          child: Text('No PO items found',
-                              style:
-                                  TextStyle(color: AppColors.kTextSecondary))),
-                    )
-                  else
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('Item')),
-                          DataColumn(label: Text('Qty')),
-                          DataColumn(label: Text('Unit')),
-                          DataColumn(label: Text('Unit Price')),
-                          DataColumn(label: Text('Total')),
-                        ],
-                        rows: items.map((item) {
-                          final qty =
-                              _num(item, ['quantity_ordered', 'quantity']);
-                          final price = _num(item, ['unit_price']);
-                          final total = _num(item, ['total_price', 'total']);
-                          return DataRow(cells: [
-                            DataCell(SizedBox(
-                              width: 280,
-                              child: Text(
-                                _text(item,
-                                    ['item_name', 'description', 'item_id']),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            )),
-                            DataCell(Text(_plainNum(qty))),
-                            DataCell(Text(
-                                _text(item, ['unit_of_measure', 'unit'], ''))),
-                            DataCell(Text(_money(price))),
-                            DataCell(
-                                Text(_money(total == 0 ? qty * price : total))),
-                          ]);
-                        }).toList(),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+      final lower = status.toLowerCase();
+      await _showMapDetails(
+        context,
+        'PO ${_text(detail, ['po_number', 'id'])}',
+        detail,
+        actions: [
+          IconButton(
+            tooltip: 'Print',
+            icon: const Icon(Icons.print_outlined),
+            onPressed: () async => _printPurchaseOrderPdf(detail),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Close')),
-            OutlinedButton(
-                onPressed: () async => _printPurchaseOrderPdf(detail),
-                child: const Text('Print')),
-            if (status.toLowerCase() == 'draft')
-              OutlinedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
+          Builder(
+            builder: (ctx) => PopupMenuButton<String>(
+              tooltip: 'Actions',
+              onSelected: (value) {
+                Navigator.of(ctx).pop();
+                switch (value) {
+                  case 'edit':
                     _editDraftPurchaseOrder(detail);
-                  },
-                  child: const Text('Edit Draft')),
-            if (status.toLowerCase().contains('pending') ||
-                status.toLowerCase() == 'draft')
-              ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
+                    break;
+                  case 'approve':
                     _poAction(context, ref, detail, 'approve');
-                  },
-                  child: const Text('Approve')),
-            if (!status.toLowerCase().contains('cancel'))
-              TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
+                    break;
+                  case 'cancel':
                     _poAction(context, ref, detail, 'cancel');
-                  },
-                  child: const Text('Reject')),
-            if (status.toLowerCase().contains('approved'))
-              OutlinedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
+                    break;
+                  case 'send':
                     _poAction(context, ref, detail, 'send');
-                  },
-                  child: const Text('Send')),
-            if (status.toLowerCase().contains('approved'))
-              ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
+                    break;
+                  case 'receive':
                     ref.read(adminSectionProvider.notifier).state =
                         AdminSection.goodsReceiving;
-                  },
-                  child: const Text('Receive Goods')),
-          ],
-        ),
+                    break;
+                }
+              },
+              itemBuilder: (_) => [
+                if (lower == 'draft')
+                  const PopupMenuItem(value: 'edit', child: Text('Edit Draft')),
+                if (lower.contains('pending') || lower == 'draft')
+                  const PopupMenuItem(value: 'approve', child: Text('Approve')),
+                if (!lower.contains('cancel'))
+                  const PopupMenuItem(value: 'cancel', child: Text('Reject')),
+                if (lower.contains('approved'))
+                  const PopupMenuItem(value: 'send', child: Text('Send')),
+                if (lower.contains('approved'))
+                  const PopupMenuItem(
+                      value: 'receive', child: Text('Receive Goods')),
+              ],
+            ),
+          ),
+        ],
       );
     } catch (error) {
       if (mounted && context.mounted) {
@@ -4513,6 +4565,8 @@ class _CentralStockTakesSectionState
   String? _selectedId;
   Map<String, dynamic>? _detail;
   bool _loadingDetail = false;
+  final Map<String, String> _draftCounts = {};
+  final Map<String, String> _draftReasons = {};
 
   bool get _canEdit {
     final status = _text(_detail ?? {}, ['status'], '').toLowerCase();
@@ -4741,7 +4795,8 @@ class _CentralStockTakesSectionState
       if (context.mounted) {
         AppNotifier.showSnackBar(
           context,
-          SnackBar(content: Text(apiErrorMessage(e, fallback: 'Approve failed'))),
+          SnackBar(
+              content: Text(apiErrorMessage(e, fallback: 'Approve failed'))),
         );
       }
     }
@@ -4848,14 +4903,17 @@ class _CentralStockTakesSectionState
   }
 
   double? _stockActual(Map<String, dynamic> item) {
-    final value = item['counted_quantity'] ?? item['actual_quantity'];
+    final value = item['counted_quantity'] ??
+        item['actual_quantity'] ??
+        item['physical_quantity'];
     if (value == null) return null;
     if (value is num) return value.toDouble();
     return double.tryParse('$value');
   }
 
   double? _stockActualIncludingDraft(Map<String, dynamic> item) {
-    final draft = item['_draft_counted_quantity'];
+    final draft = _draftCounts[_worksheetItemKey(item)] ??
+        item['_draft_counted_quantity'];
     if (draft != null && '$draft'.trim().isNotEmpty) {
       return double.tryParse('$draft');
     }
@@ -4865,13 +4923,21 @@ class _CentralStockTakesSectionState
   double _stockVarianceIncludingDraft(Map<String, dynamic> item) {
     final actual = _stockActualIncludingDraft(item);
     if (actual == null) return 0;
-    return actual - _num(item, ['system_quantity']);
+    return actual - _num(item, ['system_closing_stock', 'system_quantity']);
   }
 
   String _stockReasonIncludingDraft(Map<String, dynamic> item) {
-    final draft = '${item['_draft_variance_reason'] ?? ''}'.trim();
+    final draft =
+        '${_draftReasons[_worksheetItemKey(item)] ?? item['_draft_variance_reason'] ?? ''}'
+            .trim();
     if (draft.isNotEmpty) return draft;
     return _text(item, ['variance_reason', 'reason', 'notes'], '');
+  }
+
+  String _worksheetItemKey(Map<String, dynamic> item) {
+    final id = _id(item);
+    if (id.isNotEmpty && id != 'null') return id;
+    return _text(item, ['item_sku', 'sku', 'item_id'], '');
   }
 
   Widget _stockCountWorksheetCard(
@@ -4935,7 +5001,7 @@ class _CentralStockTakesSectionState
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              width: 1180,
+              width: 1560,
               child: Column(children: [
                 _stockWorksheetHeaderRow(),
                 ...items.map((item) => _stockWorksheetInputRow(item)),
@@ -4956,22 +5022,27 @@ class _CentralStockTakesSectionState
       color: AppColors.kSurface,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: const Row(children: [
-        SizedBox(width: 330, child: Text('ITEM', style: style)),
-        SizedBox(width: 180, child: Text('SKU', style: style)),
+        SizedBox(width: 360, child: Text('ITEM', style: style)),
+        SizedBox(width: 24),
+        SizedBox(width: 230, child: Text('SKU', style: style)),
+        SizedBox(width: 24),
         SizedBox(
-            width: 100,
+            width: 120,
             child: Text('SYSTEM', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 140, child: Text('ACTUAL COUNT', style: style)),
+        SizedBox(width: 24),
+        SizedBox(width: 170, child: Text('ACTUAL COUNT', style: style)),
+        SizedBox(width: 24),
         SizedBox(
-            width: 100,
+            width: 130,
             child: Text('VARIANCE', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 270, child: Text('VARIANCE NOTES', style: style)),
+        SizedBox(width: 24),
+        SizedBox(width: 370, child: Text('VARIANCE NOTES', style: style)),
       ]),
     );
   }
 
   Widget _stockWorksheetInputRow(Map<String, dynamic> item) {
-    final system = _num(item, ['system_quantity']);
+    final system = _num(item, ['system_closing_stock', 'system_quantity']);
     final actual = _stockActualIncludingDraft(item);
     final variance = _stockVarianceIncludingDraft(item);
     final needsReason = actual != null && variance != 0;
@@ -4991,7 +5062,7 @@ class _CentralStockTakesSectionState
       ),
       child: Row(children: [
         SizedBox(
-          width: 330,
+          width: 360,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(
@@ -5010,22 +5081,25 @@ class _CentralStockTakesSectionState
             ),
           ]),
         ),
+        const SizedBox(width: 24),
         SizedBox(
-          width: 180,
+          width: 230,
           child: Text(
             _text(item, ['item_sku', 'sku']),
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12),
           ),
         ),
+        const SizedBox(width: 24),
         SizedBox(
-          width: 100,
+          width: 120,
           child: Text(_plainNum(system),
               textAlign: TextAlign.right,
               style: const TextStyle(fontWeight: FontWeight.w800)),
         ),
+        const SizedBox(width: 24),
         SizedBox(
-          width: 140,
+          width: 170,
           child: _InlineStockInput(
             key: ValueKey('${_id(item)}-central-count'),
             initialValue: _stockActual(item) == null
@@ -5035,38 +5109,74 @@ class _CentralStockTakesSectionState
             hintText: 'Count',
             keyboardType: TextInputType.number,
             onChanged: (value) => setState(() {
-              item['_draft_counted_quantity'] = value;
+              _draftCounts[_worksheetItemKey(item)] = value;
             }),
           ),
         ),
+        const SizedBox(width: 24),
         SizedBox(
-          width: 100,
-          child: Text(
-            actual == null ? '—' : _plainNum(variance),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              color: actual == null
-                  ? AppColors.kTextSecondary
-                  : variance == 0
-                      ? Colors.green
-                      : Colors.deepOrange,
+          width: 130,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _varianceBadge(
+              actual == null ? null : variance,
             ),
           ),
         ),
+        const SizedBox(width: 24),
         SizedBox(
-          width: 270,
+          width: 370,
           child: _InlineStockInput(
             key: ValueKey('${_id(item)}-central-note'),
             initialValue: _stockReasonIncludingDraft(item),
             enabled: _canEdit,
             hintText: needsReason ? 'Required for variance' : 'Optional',
             onChanged: (value) {
-              item['_draft_variance_reason'] = value;
+              _draftReasons[_worksheetItemKey(item)] = value;
             },
           ),
         ),
       ]),
+    );
+  }
+
+  Widget _varianceBadge(double? variance) {
+    if (variance == null) {
+      return const Text(
+        '-',
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          color: AppColors.kTextSecondary,
+          fontWeight: FontWeight.w800,
+        ),
+      );
+    }
+    final isZero = variance == 0;
+    final isPositive = variance > 0;
+    final color = isZero
+        ? Colors.green
+        : isPositive
+            ? Colors.blue
+            : Colors.deepOrange;
+    final label =
+        isZero ? '0' : '${isPositive ? '+' : ''}${_plainNum(variance)}';
+    return Container(
+      constraints: const BoxConstraints(minWidth: 68),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: .35)),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+        ),
+      ),
     );
   }
 
@@ -5076,7 +5186,8 @@ class _CentralStockTakesSectionState
     for (final item in items) {
       final actual = _stockActualIncludingDraft(item);
       if (actual == null) continue;
-      final variance = actual - _num(item, ['system_quantity']);
+      final variance =
+          actual - _num(item, ['system_closing_stock', 'system_quantity']);
       final reason = _stockReasonIncludingDraft(item);
       if (variance != 0 && reason.trim().isEmpty) {
         _snack(
@@ -5104,6 +5215,8 @@ class _CentralStockTakesSectionState
         _selectedId!,
         {'items': payload},
       );
+      _draftCounts.clear();
+      _draftReasons.clear();
       await _openStockTake(ref, _selectedId!);
       if (mounted) _snack(context, 'Worksheet counts saved');
     } catch (error) {
@@ -5116,6 +5229,8 @@ class _CentralStockTakesSectionState
     setState(() {
       _selectedId = id;
       _loadingDetail = true;
+      _draftCounts.clear();
+      _draftReasons.clear();
     });
     try {
       final detail =
