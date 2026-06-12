@@ -70,6 +70,18 @@ const itemQuantity = (item: JsonRecord): number =>
 const outletItemIdFor = (item: JsonRecord): string | null =>
   textValue(item.outlet_item_id ?? item.product_id ?? item.id);
 
+const isMissingPosInventoryMappingTable = (error: any): boolean => {
+  const message = String(error?.message || '');
+  return (
+    error?.code === '42P01' ||
+    error?.code === 'PGRST205' ||
+    error?.code === 'PGRST200' ||
+    message.includes("Could not find the table 'public.pos_inventory_mappings'") ||
+    message.includes('relation "public.pos_inventory_mappings" does not exist') ||
+    message.includes('pos_inventory_mappings')
+  );
+};
+
 const normalizeDepartmentCode = (code: unknown): string => {
   const normalized = String(code || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (!normalized) throw new AppError('Department account is required', 400);
@@ -464,22 +476,30 @@ async function loadPosConsumptionRows(
   const outletItemIds = Array.from(new Set(items.map(outletItemIdFor).filter(Boolean))) as string[];
   if (!outletItemIds.length) return [];
 
-  const [{ data: mappings, error: mappingError }, { data: outletItems, error: outletItemsError }] = await Promise.all([
-    supabase
-      .from('pos_inventory_mappings')
-      .select('*')
-      .eq('branch_id', branchId)
-      .eq('outlet_id', outletId)
-      .eq('is_active', true)
-      .in('outlet_item_id', outletItemIds),
-    supabase
-      .from('pos_outlet_items')
-      .select('id, sku, name, track_stock')
-      .eq('outlet_id', outletId)
-      .in('id', outletItemIds)
-  ]);
+  const { data: mappings, error: mappingError } = await supabase
+    .from('pos_inventory_mappings')
+    .select('*')
+    .eq('branch_id', branchId)
+    .eq('outlet_id', outletId)
+    .eq('is_active', true)
+    .in('outlet_item_id', outletItemIds);
 
-  if (mappingError) throw mappingError;
+  if (mappingError) {
+    if (isMissingPosInventoryMappingTable(mappingError)) {
+      logger.warn(
+        'POS inventory mappings table is missing; skipping enterprise branch-stock posting for this POS order.'
+      );
+      return [];
+    }
+    throw mappingError;
+  }
+
+  const { data: outletItems, error: outletItemsError } = await supabase
+    .from('pos_outlet_items')
+    .select('id, sku, name, track_stock')
+    .eq('outlet_id', outletId)
+    .in('id', outletItemIds);
+
   if (outletItemsError) throw outletItemsError;
 
   const mappingsByItem = new Map<string, JsonRecord[]>();
