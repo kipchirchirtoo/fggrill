@@ -1,0 +1,37 @@
+[
+  {
+    "domain": "Inventory",
+    "missingTables": 72,
+    "missingColumns": 1242,
+    "missingIndexes": 222,
+    "critical": 1238
+  },
+  {
+    "domain": "Procurement/AP",
+    "missingTables": 21,
+    "missingColumns": 315,
+    "missingIndexes": 72,
+    "critical": 281
+  },
+  {
+    "domain": "Finance/Cashier",
+    "missingTables": 44,
+    "missingColumns": 799,
+    "missingIndexes": 98,
+    "critical": 329
+  },
+  {
+    "domain": "POS/Outlet",
+    "missingTables": 44,
+    "missingColumns": 699,
+    "missingIndexes": 126,
+    "critical": 386
+  },
+  {
+    "domain": "Audit/Governance",
+    "missingTables": 26,
+    "missingColumns": 364,
+    "missingIndexes": 51,
+    "critical": 17
+  }
+]

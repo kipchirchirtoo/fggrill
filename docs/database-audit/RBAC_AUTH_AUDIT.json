@@ -1,0 +1,384 @@
+{
+  "expectedRoles": [
+    "accountant",
+    "auditor",
+    "branch_accountant",
+    "branch_manager",
+    "branch_storekeeper",
+    "hr_manager",
+    "receptionist",
+    "super_admin"
+  ],
+  "routeRoles": [
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 103,
+      "roles": [
+        "auditor"
+      ]
+    },
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 104,
+      "roles": [
+        "auditor"
+      ]
+    },
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 105,
+      "roles": [
+        "auditor"
+      ]
+    },
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 106,
+      "roles": [
+        "auditor"
+      ]
+    },
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 155,
+      "roles": [
+        "auditor",
+        "branch_accountant"
+      ]
+    },
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 178,
+      "roles": [
+        "auditor",
+        "branch_accountant"
+      ]
+    },
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 194,
+      "roles": [
+        "branch_accountant"
+      ]
+    },
+    {
+      "file": "backend/src/routes/cashier.routes.ts",
+      "line": 225,
+      "roles": [
+        "auditor"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 21,
+      "roles": [
+        "receptionist"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 22,
+      "roles": [
+        "receptionist"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 23,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 24,
+      "roles": [
+        "receptionist"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 25,
+      "roles": [
+        "receptionist"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 26,
+      "roles": [
+        "receptionist"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 27,
+      "roles": [
+        "receptionist"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 28,
+      "roles": [
+        "super_admin"
+      ]
+    },
+    {
+      "file": "backend/src/routes/catering-bookings.routes.ts",
+      "line": 31,
+      "roles": [
+        "receptionist"
+      ]
+    },
+    {
+      "file": "backend/src/routes/credit.routes.ts",
+      "line": 10,
+      "roles": [
+        "accountant",
+        "auditor",
+        "super_admin"
+      ]
+    },
+    {
+      "file": "backend/src/routes/credit.routes.ts",
+      "line": 13,
+      "roles": [
+        "accountant",
+        "auditor",
+        "super_admin"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 20,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 21,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 24,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 27,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 28,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 29,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 30,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/payroll-enhanced.routes.ts",
+      "line": 33,
+      "roles": [
+        "hr_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 27,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 28,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 29,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 30,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 33,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 34,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 35,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 36,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 39,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 42,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 44,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/shifts.routes.ts",
+      "line": 47,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/staff-audit.routes.ts",
+      "line": 12,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/staff-audit.routes.ts",
+      "line": 15,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/staff-audit.routes.ts",
+      "line": 18,
+      "roles": [
+        "branch_manager"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 22,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 23,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 24,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 25,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 26,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 29,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 30,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 31,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 32,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    },
+    {
+      "file": "backend/src/routes/suppliers.routes.ts",
+      "line": 35,
+      "roles": [
+        "branch_storekeeper"
+      ]
+    }
+  ]
+}

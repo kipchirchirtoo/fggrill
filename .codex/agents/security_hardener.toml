@@ -1,0 +1,8 @@
+Output per issue:
+- File + line number
+- Vulnerability type
+- Exact fix or recommended library
+- Severity: [CRITICAL | HIGH | MEDIUM | LOW]
+
+End with a hardening checklist of everything missing.
+"""

@@ -1,0 +1,4832 @@
+[
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 213,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 213,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 707,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 707,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 746,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 746,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "guests",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 903,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "guests",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 903,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 903,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 903,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 946,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 946,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 986,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_ar_invoices",
+    "target": "accounting_customers",
+    "constraint": "customer_id",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 986,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint customer_id",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_bank_transactions",
+    "target": "accounting_bank_accounts",
+    "constraint": "inner",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 1759,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_bank_transactions",
+    "target": "accounting_bank_accounts",
+    "constraint": "inner",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 1759,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_bank_transactions",
+    "target": "accounting_bank_accounts",
+    "constraint": "inner",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 1915,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "accounting_bank_transactions",
+    "target": "accounting_bank_accounts",
+    "constraint": "inner",
+    "file": "backend/src/controllers/accounting.controller.ts",
+    "line": 1915,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "audit_config_consumption",
+    "target": "simple_items",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 16,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "audit_config_consumption",
+    "target": "simple_items",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 16,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "audit_config_consumption",
+    "target": "restaurant_orders",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 44,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "audit_config_consumption",
+    "target": "restaurant_orders",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 44,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_order_items",
+    "target": "restaurant_orders",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_order_items",
+    "target": "restaurant_orders",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 173,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/auditor-advanced.controller.ts",
+    "line": 173,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 167,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 167,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "bar_orders",
+    "target": "users",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 169,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "bar_orders",
+    "target": "users",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 169,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "expenses",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 360,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "expenses",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 360,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_transactions",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 362,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_transactions",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 362,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 499,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 499,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "inventory_transfers",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 742,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "inventory_transfers",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 742,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "inventory_transfers",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 742,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "inventory_transfers",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/auditor-reports.controller.ts",
+    "line": 742,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_counts",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3309,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_counts",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3309,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_counts",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3309,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_counts",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3309,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3344,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3344,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3344,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3344,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "bar_orders",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3375,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "bar_orders",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3375,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "bar_orders",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3375,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "bar_orders",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3375,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "unpaid_bills",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3386,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "unpaid_bills",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3386,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "unpaid_bills",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3386,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "unpaid_bills",
+    "target": "users",
+    "constraint": "auditor_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3386,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint auditor_id",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "branches",
+    "constraint": "branch_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3601,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "branches",
+    "constraint": "branch_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3601,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3601,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3601,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3601,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3601,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "branches",
+    "constraint": "branch_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3705,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "branches",
+    "constraint": "branch_id",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3705,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3705,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3705,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3705,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/auditor.controller.ts",
+    "line": 3705,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "reconciled_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 433,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reconciled_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "reconciled_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 433,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reconciled_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 433,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 433,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "reconciled_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 476,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reconciled_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "reconciled_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 476,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reconciled_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 476,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "banking_reconciliations",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/banking.controller.ts",
+    "line": 476,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_requested_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 21,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint bar_stock_requests_requested_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_requested_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 21,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint bar_stock_requests_requested_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_reviewed_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 21,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint bar_stock_requests_reviewed_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_reviewed_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 21,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint bar_stock_requests_reviewed_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_fulfilled_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 21,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint bar_stock_requests_fulfilled_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_fulfilled_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 21,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint bar_stock_requests_fulfilled_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_requested_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint bar_stock_requests_requested_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_requested_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint bar_stock_requests_requested_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_reviewed_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint bar_stock_requests_reviewed_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_reviewed_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint bar_stock_requests_reviewed_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_fulfilled_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint bar_stock_requests_fulfilled_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "bar_stock_requests",
+    "target": "users",
+    "constraint": "bar_stock_requests_fulfilled_by_fkey",
+    "file": "backend/src/controllers/bar/stock-requests.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint bar_stock_requests_fulfilled_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/controllers/booking.controller.ts",
+    "line": 523,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/controllers/booking.controller.ts",
+    "line": 523,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "expenses",
+    "target": "budget_expenses",
+    "constraint": "inner",
+    "file": "backend/src/controllers/budget.controller.ts",
+    "line": 96,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "expenses",
+    "target": "budget_expenses",
+    "constraint": "inner",
+    "file": "backend/src/controllers/budget.controller.ts",
+    "line": 96,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "budget_adjustments",
+    "target": "users",
+    "constraint": "adjusted_by",
+    "file": "backend/src/controllers/budget.controller.ts",
+    "line": 118,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint adjusted_by",
+    "risk": "high"
+  },
+  {
+    "table": "budget_adjustments",
+    "target": "users",
+    "constraint": "adjusted_by",
+    "file": "backend/src/controllers/budget.controller.ts",
+    "line": 118,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint adjusted_by",
+    "risk": "high"
+  },
+  {
+    "table": "buffets",
+    "target": "users",
+    "constraint": "buffets_opened_by_fkey",
+    "file": "backend/src/controllers/buffet.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint buffets_opened_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "buffets",
+    "target": "users",
+    "constraint": "buffets_opened_by_fkey",
+    "file": "backend/src/controllers/buffet.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint buffets_opened_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "buffets",
+    "target": "users",
+    "constraint": "buffets_closed_by_fkey",
+    "file": "backend/src/controllers/buffet.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint buffets_closed_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "buffets",
+    "target": "users",
+    "constraint": "buffets_closed_by_fkey",
+    "file": "backend/src/controllers/buffet.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint buffets_closed_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 1219,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 1219,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 1243,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 1243,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "shift_transactions",
+    "target": "branches",
+    "constraint": "shift_transactions_branch_id_fkey",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 2945,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_transactions_branch_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "inner",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 3012,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "inner",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 3012,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "cashier_logbooks",
+    "target": "cashier_logbook_lines",
+    "constraint": "logbook_id",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 5354,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint logbook_id",
+    "risk": "high"
+  },
+  {
+    "table": "cashier_logbooks",
+    "target": "cashier_logbook_lines",
+    "constraint": "logbook_id",
+    "file": "backend/src/controllers/cashier.controller.ts",
+    "line": 5354,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint logbook_id",
+    "risk": "high"
+  },
+  {
+    "table": "catering_events",
+    "target": "users",
+    "constraint": "catering_events_lead_chef_fkey",
+    "file": "backend/src/controllers/catering.controller.ts",
+    "line": 33,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint catering_events_lead_chef_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "catering_events",
+    "target": "users",
+    "constraint": "catering_events_catering_manager_fkey",
+    "file": "backend/src/controllers/catering.controller.ts",
+    "line": 33,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint catering_events_catering_manager_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "catering_events",
+    "target": "users",
+    "constraint": "catering_events_lead_chef_fkey",
+    "file": "backend/src/controllers/catering.controller.ts",
+    "line": 88,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint catering_events_lead_chef_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "catering_events",
+    "target": "users",
+    "constraint": "catering_events_catering_manager_fkey",
+    "file": "backend/src/controllers/catering.controller.ts",
+    "line": 88,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint catering_events_catering_manager_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "catering_events",
+    "target": "users",
+    "constraint": "catering_events_created_by_fkey",
+    "file": "backend/src/controllers/catering.controller.ts",
+    "line": 88,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint catering_events_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "store_dispatches",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/dispatch/tracking.controller.ts",
+    "line": 151,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "store_dispatches",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/dispatch/tracking.controller.ts",
+    "line": 151,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/finance.controller.ts",
+    "line": 1661,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/finance.controller.ts",
+    "line": 1661,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/finance.controller.ts",
+    "line": 1661,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "finance_daily_logs",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/finance.controller.ts",
+    "line": 1661,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/dashboard.controller.ts",
+    "line": 109,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/dashboard.controller.ts",
+    "line": 109,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/dashboard.controller.ts",
+    "line": 216,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/dashboard.controller.ts",
+    "line": 216,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 84,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 84,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 84,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 84,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 141,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 141,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 185,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_guest_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/guest-requests.controller.ts",
+    "line": 185,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_inspections",
+    "target": "hk_staff_profiles",
+    "constraint": "inspected_by",
+    "file": "backend/src/controllers/housekeeping/inspections.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inspected_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_inspections",
+    "target": "hk_staff_profiles",
+    "constraint": "inspected_by",
+    "file": "backend/src/controllers/housekeeping/inspections.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inspected_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_inspections",
+    "target": "hk_staff_profiles",
+    "constraint": "inspected_by",
+    "file": "backend/src/controllers/housekeeping/inspections.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inspected_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_inspections",
+    "target": "hk_staff_profiles",
+    "constraint": "inspected_by",
+    "file": "backend/src/controllers/housekeeping/inspections.controller.ts",
+    "line": 81,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inspected_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/inspections.controller.ts",
+    "line": 324,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/inspections.controller.ts",
+    "line": 324,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_linen_transactions",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/housekeeping/linen.controller.ts",
+    "line": 125,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_linen_transactions",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/housekeeping/linen.controller.ts",
+    "line": 125,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_linen_transactions",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/housekeeping/linen.controller.ts",
+    "line": 167,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_linen_transactions",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/housekeeping/linen.controller.ts",
+    "line": 167,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 82,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 82,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 306,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 306,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 342,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_lost_found",
+    "target": "hk_staff_profiles",
+    "constraint": "found_by",
+    "file": "backend/src/controllers/housekeeping/lost-found.controller.ts",
+    "line": 342,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint found_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_maintenance_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "reported_by",
+    "file": "backend/src/controllers/housekeeping/maintenance.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reported_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_maintenance_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "reported_by",
+    "file": "backend/src/controllers/housekeeping/maintenance.controller.ts",
+    "line": 37,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reported_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_maintenance_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "reported_by",
+    "file": "backend/src/controllers/housekeeping/maintenance.controller.ts",
+    "line": 83,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reported_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_maintenance_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "reported_by",
+    "file": "backend/src/controllers/housekeeping/maintenance.controller.ts",
+    "line": 83,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reported_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_maintenance_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/housekeeping/maintenance.controller.ts",
+    "line": 83,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_maintenance_requests",
+    "target": "hk_staff_profiles",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/housekeeping/maintenance.controller.ts",
+    "line": 83,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 25,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 25,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_tasks",
+    "constraint": "inner",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 25,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_tasks",
+    "constraint": "inner",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 25,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 66,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 66,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 198,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 198,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_room_status_history",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 207,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_room_status_history",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 207,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 241,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 241,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 313,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 313,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 327,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 327,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 355,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_attendant_id",
+    "file": "backend/src/controllers/housekeeping/rooms.controller.ts",
+    "line": 355,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_attendant_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 200,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 200,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 229,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 229,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_leave_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 256,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_leave_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 256,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_profiles",
+    "constraint": "requester_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requester_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_profiles",
+    "constraint": "requester_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requester_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_profiles",
+    "constraint": "target_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint target_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_profiles",
+    "constraint": "target_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint target_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_schedules",
+    "constraint": "requester_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requester_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_schedules",
+    "constraint": "requester_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requester_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_schedules",
+    "constraint": "target_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint target_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_schedules",
+    "target": "hk_staff_schedules",
+    "constraint": "target_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 350,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint target_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_profiles",
+    "constraint": "requester_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requester_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_profiles",
+    "constraint": "requester_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requester_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_profiles",
+    "constraint": "target_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint target_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_profiles",
+    "constraint": "target_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint target_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_schedules",
+    "constraint": "requester_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requester_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_schedules",
+    "constraint": "requester_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requester_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_schedules",
+    "constraint": "target_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint target_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_shift_swaps",
+    "target": "hk_staff_schedules",
+    "constraint": "target_schedule_id",
+    "file": "backend/src/controllers/housekeeping/scheduling.controller.ts",
+    "line": 379,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint target_schedule_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/housekeeping/staff.controller.ts",
+    "line": 23,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/housekeeping/staff.controller.ts",
+    "line": 23,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/housekeeping/staff.controller.ts",
+    "line": 66,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/housekeeping/staff.controller.ts",
+    "line": 66,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/housekeeping/staff.controller.ts",
+    "line": 221,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "hk_staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/housekeeping/staff.controller.ts",
+    "line": 221,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_supply_requests",
+    "target": "staff_profiles",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/housekeeping/supplies.controller.ts",
+    "line": 107,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_supply_requests",
+    "target": "staff_profiles",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/housekeeping/supplies.controller.ts",
+    "line": 107,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 47,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 47,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 47,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 47,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 431,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "hk_tasks",
+    "target": "hk_staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping/tasks.controller.ts",
+    "line": 431,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "rooms",
+    "constraint": "inner",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "rooms",
+    "constraint": "inner",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 20,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "completed_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint completed_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 77,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 361,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "staff_profiles",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 361,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "inner",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 400,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "inner",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 400,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "housekeeping_tasks",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 400,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "housekeeping_tasks",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/housekeeping.controller.ts",
+    "line": 400,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 61,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 61,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 114,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 114,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 149,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 149,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 181,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/hrReports.controller.ts",
+    "line": 181,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 549,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 549,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 549,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 549,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 575,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 575,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 575,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 575,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 606,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 606,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 606,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 606,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 631,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 631,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 631,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 631,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 664,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "created_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 664,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 664,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "purchase_orders",
+    "target": "users",
+    "constraint": "approved_by_id",
+    "file": "backend/src/controllers/inventory.controller.ts",
+    "line": 664,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by_id",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "received_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint received_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "received_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint received_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "received_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 70,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint received_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "received_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 70,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint received_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 70,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_expected_portions",
+    "target": "users",
+    "constraint": "verified_by",
+    "file": "backend/src/controllers/kitchen/expected-portions.controller.ts",
+    "line": 70,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint verified_by",
+    "risk": "high"
+  },
+  {
+    "table": "recipes",
+    "target": "users",
+    "constraint": "changed_by",
+    "file": "backend/src/controllers/kitchen/recipes.controller.ts",
+    "line": 389,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint changed_by",
+    "risk": "high"
+  },
+  {
+    "table": "recipes",
+    "target": "users",
+    "constraint": "changed_by",
+    "file": "backend/src/controllers/kitchen/recipes.controller.ts",
+    "line": 389,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint changed_by",
+    "risk": "high"
+  },
+  {
+    "table": "recipe_change_log",
+    "target": "users",
+    "constraint": "changed_by",
+    "file": "backend/src/controllers/kitchen/recipes.controller.ts",
+    "line": 403,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint changed_by",
+    "risk": "high"
+  },
+  {
+    "table": "recipe_change_log",
+    "target": "users",
+    "constraint": "changed_by",
+    "file": "backend/src/controllers/kitchen/recipes.controller.ts",
+    "line": 403,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint changed_by",
+    "risk": "high"
+  },
+  {
+    "table": "recipe_change_log",
+    "target": "users",
+    "constraint": "changed_by",
+    "file": "backend/src/controllers/kitchen/recipes.controller.ts",
+    "line": 427,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint changed_by",
+    "risk": "high"
+  },
+  {
+    "table": "recipe_change_log",
+    "target": "users",
+    "constraint": "changed_by",
+    "file": "backend/src/controllers/kitchen/recipes.controller.ts",
+    "line": 427,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint changed_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_daily_variance",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/kitchen/reports.controller.ts",
+    "line": 83,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_daily_variance",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/kitchen/reports.controller.ts",
+    "line": 83,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_daily_variance",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/kitchen/variance-reconciliation.controller.ts",
+    "line": 35,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_daily_variance",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/kitchen/variance-reconciliation.controller.ts",
+    "line": 35,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_ledger",
+    "target": "users",
+    "constraint": "recorded_by",
+    "file": "backend/src/controllers/kyogong/petty-cash.controller.ts",
+    "line": 111,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint recorded_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_ledger",
+    "target": "users",
+    "constraint": "recorded_by",
+    "file": "backend/src/controllers/kyogong/petty-cash.controller.ts",
+    "line": 111,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint recorded_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_ledger",
+    "target": "users",
+    "constraint": "authorized_by",
+    "file": "backend/src/controllers/kyogong/petty-cash.controller.ts",
+    "line": 111,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint authorized_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_ledger",
+    "target": "users",
+    "constraint": "authorized_by",
+    "file": "backend/src/controllers/kyogong/petty-cash.controller.ts",
+    "line": 111,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint authorized_by",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 158,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 158,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 192,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 192,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 220,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 220,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 262,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "payroll",
+    "target": "users",
+    "constraint": "payroll_staff_id_fkey",
+    "file": "backend/src/controllers/payroll-enhanced.controller.ts",
+    "line": 262,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint payroll_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_payroll",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll-simple.controller.ts",
+    "line": 424,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_payroll",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll-simple.controller.ts",
+    "line": 424,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_payroll",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll-simple.controller.ts",
+    "line": 484,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_payroll",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll-simple.controller.ts",
+    "line": 484,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_payroll",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll-simple.controller.ts",
+    "line": 572,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_payroll",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll-simple.controller.ts",
+    "line": 572,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "users",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 67,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "users",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 67,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "payroll_runs",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 424,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "payroll_runs",
+    "constraint": "inner",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 424,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_runs",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 524,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_runs",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 524,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "payroll_runs",
+    "constraint": "payroll_run_id",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint payroll_run_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "payroll_runs",
+    "constraint": "payroll_run_id",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint payroll_run_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "payroll_records",
+    "target": "staff_profiles",
+    "constraint": "staff_id",
+    "file": "backend/src/controllers/payroll.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/performance.controller.ts",
+    "line": 19,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/performance.controller.ts",
+    "line": 19,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_transactions",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/petty-cash.controller.ts",
+    "line": 19,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_transactions",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/petty-cash.controller.ts",
+    "line": 19,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_transactions",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/petty-cash.controller.ts",
+    "line": 19,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "petty_cash_transactions",
+    "target": "users",
+    "constraint": "approved_by",
+    "file": "backend/src/controllers/petty-cash.controller.ts",
+    "line": 19,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint approved_by",
+    "risk": "high"
+  },
+  {
+    "table": "receipts",
+    "target": "users",
+    "constraint": "receipts_created_by_fkey",
+    "file": "backend/src/controllers/receipts.controller.ts",
+    "line": 48,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint receipts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "receipts",
+    "target": "users",
+    "constraint": "receipts_created_by_fkey",
+    "file": "backend/src/controllers/receipts.controller.ts",
+    "line": 48,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint receipts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "users",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/report.controller.ts",
+    "line": 161,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "housekeeping_tasks",
+    "target": "users",
+    "constraint": "assigned_to",
+    "file": "backend/src/controllers/report.controller.ts",
+    "line": 161,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint assigned_to",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_bill_payments",
+    "target": "staff_profiles",
+    "constraint": "cashier_id",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 405,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint cashier_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_bill_payments",
+    "target": "staff_profiles",
+    "constraint": "cashier_id",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 405,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint cashier_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_order_items",
+    "target": "users",
+    "constraint": "performed_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 545,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint performed_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_order_items",
+    "target": "users",
+    "constraint": "performed_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 545,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint performed_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_bills",
+    "target": "users",
+    "constraint": "performed_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 559,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint performed_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_bills",
+    "target": "users",
+    "constraint": "performed_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 559,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint performed_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_bill_audit_log",
+    "target": "users",
+    "constraint": "performed_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 593,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint performed_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_bill_audit_log",
+    "target": "users",
+    "constraint": "performed_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 593,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint performed_by",
+    "risk": "high"
+  },
+  {
+    "table": "void_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 802,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "void_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 802,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 816,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 816,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "void_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 849,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "void_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/restaurant-bills.controller.ts",
+    "line": 849,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/restaurant.controller.ts",
+    "line": 790,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/restaurant.controller.ts",
+    "line": 790,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/restaurant.controller.ts",
+    "line": 837,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/restaurant.controller.ts",
+    "line": 837,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "guests",
+    "constraint": "current_guest",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint current_guest",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "guests",
+    "constraint": "current_guest",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 17,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint current_guest",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 79,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 79,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "guests",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 137,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "guests",
+    "constraint": "guest_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 137,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 137,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "reservations",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/controllers/room.controller.ts",
+    "line": 137,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "audit_logs",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/security.controller.ts",
+    "line": 309,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "audit_logs",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/security.controller.ts",
+    "line": 309,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "auth_logs",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/security.controller.ts",
+    "line": 334,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "auth_logs",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/security.controller.ts",
+    "line": 334,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 78,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_shifts_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 78,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_shifts_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_created_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 78,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_shifts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_created_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 78,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_shifts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_shifts_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_shifts_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_created_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_shifts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_templates",
+    "target": "users",
+    "constraint": "staff_shifts_created_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 106,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_shifts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "staff_shifts_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 136,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_shifts_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "staff_shifts_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 136,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_shifts_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "staff_shifts_created_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 136,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint staff_shifts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "staff_shifts_created_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 136,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint staff_shifts_created_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "staff_shifts",
+    "constraint": "shift_swaps_original_shift_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 364,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_original_shift_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "shift_swaps_requesting_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 364,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint shift_swaps_requesting_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "shift_swaps_requesting_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 364,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_requesting_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "shift_swaps_target_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 364,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint shift_swaps_target_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "shift_swaps_target_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 364,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_target_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "shift_swaps_approved_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 364,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint shift_swaps_approved_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_shifts",
+    "target": "users",
+    "constraint": "shift_swaps_approved_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 364,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_approved_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_swaps",
+    "target": "staff_shifts",
+    "constraint": "shift_swaps_original_shift_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 393,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_original_shift_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_swaps",
+    "target": "users",
+    "constraint": "shift_swaps_requesting_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 393,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint shift_swaps_requesting_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_swaps",
+    "target": "users",
+    "constraint": "shift_swaps_requesting_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 393,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_requesting_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_swaps",
+    "target": "users",
+    "constraint": "shift_swaps_target_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 393,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint shift_swaps_target_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_swaps",
+    "target": "users",
+    "constraint": "shift_swaps_target_staff_id_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 393,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_target_staff_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_swaps",
+    "target": "users",
+    "constraint": "shift_swaps_approved_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 393,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint shift_swaps_approved_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "shift_swaps",
+    "target": "users",
+    "constraint": "shift_swaps_approved_by_fkey",
+    "file": "backend/src/controllers/shifts.controller.ts",
+    "line": 393,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint shift_swaps_approved_by_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 194,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 194,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 316,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 316,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 2341,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 2341,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 2353,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/controllers/staff.controller.ts",
+    "line": 2353,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "picker_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint picker_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "picker_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint picker_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "packer_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint packer_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "packer_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint packer_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "dispatcher_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint dispatcher_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "dispatcher_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint dispatcher_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "receiver_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint receiver_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "users",
+    "constraint": "receiver_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 234,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint receiver_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 317,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 317,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 463,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 463,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 463,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 463,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 473,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 473,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 473,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 473,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 553,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 553,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 553,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_items",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 553,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 563,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "from_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 563,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint from_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 563,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "dispatch_notes",
+    "target": "branches",
+    "constraint": "to_branch_id",
+    "file": "backend/src/controllers/storekeeping/dispatch-notes.controller.ts",
+    "line": 563,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint to_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_usage_records",
+    "target": "branches",
+    "constraint": "inner",
+    "file": "backend/src/controllers/storekeeping/kitchen-usage.controller.ts",
+    "line": 29,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "kitchen_usage_records",
+    "target": "branches",
+    "constraint": "inner",
+    "file": "backend/src/controllers/storekeeping/kitchen-usage.controller.ts",
+    "line": 29,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_usage_summary",
+    "target": "users",
+    "constraint": "inner",
+    "file": "backend/src/controllers/storekeeping/kitchen-usage.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_usage_summary",
+    "target": "users",
+    "constraint": "inner",
+    "file": "backend/src/controllers/storekeeping/kitchen-usage.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_usage_summary",
+    "target": "branches",
+    "constraint": "inner",
+    "file": "backend/src/controllers/storekeeping/kitchen-usage.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_usage_summary",
+    "target": "branches",
+    "constraint": "inner",
+    "file": "backend/src/controllers/storekeeping/kitchen-usage.controller.ts",
+    "line": 543,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 190,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 190,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 190,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 190,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 190,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 190,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_request_items",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 312,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_request_items",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 312,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 319,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 319,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 775,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 775,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 775,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 775,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 775,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 775,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 807,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 807,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 807,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "requested_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 807,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requested_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 807,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "users",
+    "constraint": "reviewed_by",
+    "file": "backend/src/controllers/storekeeping/stock-requests.controller.ts",
+    "line": 807,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint reviewed_by",
+    "risk": "high"
+  },
+  {
+    "table": "users",
+    "target": "branches",
+    "constraint": "users_branch_id_fkey",
+    "file": "backend/src/controllers/user.controller.ts",
+    "line": 18,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint users_branch_id_fkey",
+    "risk": "high"
+  },
+  {
+    "table": "void_bills_audit",
+    "target": "staff_profiles",
+    "constraint": "waiter_id",
+    "file": "backend/src/controllers/void-bills.controller.ts",
+    "line": 18,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint waiter_id",
+    "risk": "high"
+  },
+  {
+    "table": "void_bills_audit",
+    "target": "staff_profiles",
+    "constraint": "waiter_id",
+    "file": "backend/src/controllers/void-bills.controller.ts",
+    "line": 18,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint waiter_id",
+    "risk": "high"
+  },
+  {
+    "table": "void_bills_audit",
+    "target": "users",
+    "constraint": "voided_by",
+    "file": "backend/src/controllers/void-bills.controller.ts",
+    "line": 18,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint voided_by",
+    "risk": "high"
+  },
+  {
+    "table": "void_bills_audit",
+    "target": "users",
+    "constraint": "voided_by",
+    "file": "backend/src/controllers/void-bills.controller.ts",
+    "line": 18,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint voided_by",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "guest_profiles",
+    "constraint": "guest_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 85,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "guest_profiles",
+    "constraint": "guest_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 85,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 85,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 85,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "guest_profiles",
+    "constraint": "guest_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 128,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "guest_profiles",
+    "constraint": "guest_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 128,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint guest_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 128,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "rooms",
+    "constraint": "room_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 128,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint room_id",
+    "risk": "high"
+  },
+  {
+    "table": "branch_stock",
+    "target": "inventory_items",
+    "constraint": "item_sku",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 191,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint item_sku",
+    "risk": "high"
+  },
+  {
+    "table": "branch_stock",
+    "target": "inventory_items",
+    "constraint": "item_sku",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 191,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint item_sku",
+    "risk": "high"
+  },
+  {
+    "table": "branch_stock",
+    "target": "branches",
+    "constraint": "branch_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 191,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "branch_stock",
+    "target": "branches",
+    "constraint": "branch_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 191,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 320,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "bookings",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 320,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 330,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 330,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 348,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "staff_profiles",
+    "target": "users",
+    "constraint": "user_id",
+    "file": "backend/src/services/automation.service.ts",
+    "line": 348,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint user_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/services/branch-inventory.service.ts",
+    "line": 480,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "stock_requests",
+    "target": "branches",
+    "constraint": "requesting_branch_id",
+    "file": "backend/src/services/branch-inventory.service.ts",
+    "line": 480,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint requesting_branch_id",
+    "risk": "high"
+  },
+  {
+    "table": "pos_transaction_items",
+    "target": "pos_transactions",
+    "constraint": "inner",
+    "file": "backend/src/services/foodControlService.ts",
+    "line": 537,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "pos_transaction_items",
+    "target": "pos_transactions",
+    "constraint": "inner",
+    "file": "backend/src/services/foodControlService.ts",
+    "line": 537,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_leave",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/services/native-pdf-reports.service.ts",
+    "line": 2108,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "staff_leave",
+    "target": "staff_profiles",
+    "constraint": "inner",
+    "file": "backend/src/services/native-pdf-reports.service.ts",
+    "line": 2108,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "cashier_logbook_lines",
+    "target": "cashier_logbooks",
+    "constraint": "inner",
+    "file": "backend/src/services/payroll.service.ts",
+    "line": 72,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "cashier_logbook_lines",
+    "target": "cashier_logbooks",
+    "constraint": "inner",
+    "file": "backend/src/services/payroll.service.ts",
+    "line": 72,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint inner",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/models/Room.ts",
+    "line": 165,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/models/Room.ts",
+    "line": 165,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/models/Room.ts",
+    "line": 176,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/models/Room.ts",
+    "line": 176,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/models/Room.ts",
+    "line": 187,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "rooms",
+    "target": "room_types",
+    "constraint": "type_id",
+    "file": "backend/src/models/Room.ts",
+    "line": 187,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint type_id",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/jobs/migrate-pending-bills.job.ts",
+    "line": 206,
+    "db": "DATABASE_URL",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  },
+  {
+    "table": "restaurant_orders",
+    "target": "users",
+    "constraint": "created_by",
+    "file": "backend/src/jobs/migrate-pending-bills.job.ts",
+    "line": 206,
+    "db": "DATABASE_URL_NEW",
+    "issue": "Missing hinted FK constraint created_by",
+    "risk": "high"
+  }
+]

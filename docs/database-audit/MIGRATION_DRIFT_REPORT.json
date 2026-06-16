@@ -1,0 +1,4099 @@
+[
+  {
+    "object": "room_status_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "booking_status_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "booking_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_profiles",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_preferences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_schedules",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_leave",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_payroll",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_performance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "housekeeping_task_issues",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "housekeeping_supply_categories",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "housekeeping_supplies",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "housekeeping_supply_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "housekeeping_supply_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_menu_categories",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_menu_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_orders",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_order_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_inventory_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_inventory_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "finance_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "finance_invoices",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "finance_invoice_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "finance_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_work_orders",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_work_order_tasks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_equipment_categories",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_equipment",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_parts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_part_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_schedules",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_departments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_locations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_item_suppliers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_item_batches",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_suppliers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_quotations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_performance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_purchase_requisitions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_requisition_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_purchase_orders",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_po_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_grn",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_grn_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_stock_movements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_stock_issues",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_issue_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_stock_returns",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_return_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_stock_transfers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_transfer_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_stock_adjustments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_adjustment_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_physical_counts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_count_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_sections",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_tables",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_table_assignments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_reservations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_waitlist",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_menu_modifiers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_menu_item_modifiers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_combos",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_combo_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_pricing_tiers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_menu_item_pricing",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_prep_stations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_item_station_routing",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_discounts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_bill_splits",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_split_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_tips",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_voids_refunds",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_suppliers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_purchase_orders",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_purchase_order_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_inventory_batches",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_recipes",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_recipe_ingredients",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_waste_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_customers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_customer_feedback",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_loyalty_tiers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_delivery_zones",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_delivery_drivers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_server_sections",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_server_performance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_bar_inventory",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_cocktail_recipes",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_food_safety_checks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_supplier_quality_ratings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_assets",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_preventive_schedules",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_spare_parts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_parts_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_contractors",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_meter_readings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "maintenance_work_order_attachments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_night_sessions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_exceptions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_trail",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_plans",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_findings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_chart_of_accounts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_journal_entries",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_journal_lines",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_customers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_vendors",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_ar_invoices",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_ap_bills",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_bank_accounts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_bank_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_budgets",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_fiscal_periods",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kenyan_public_holidays",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "attendance_audit_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_pool_token_sales",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_staff_profiles",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_room_status_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_tasks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_checklist_templates",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_task_checklists",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_inspections",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_linen_types",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_linen_inventory",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_linen_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_lost_found",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_maintenance_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_guest_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_shift_definitions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_staff_schedules",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_leave_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_shift_swaps",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_daily_metrics",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_staff_daily_metrics",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_floor_pantry_inventory",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_cart_inventory",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_achievements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_staff_achievements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_staff_points",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_team_challenges",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_guest_service_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_guest_preferences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_sustainability_metrics",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_sustainability_daily",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_green_guests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_demand_forecasts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_staff_predictions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_supply_predictions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_quality_alerts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_inspection_photos",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_defect_types",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_staff_locations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_assignment_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_room_patterns",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_notifications",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hk_booking_sync",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "reports",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "scheduled_reports",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "report_templates",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_stock",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_stock_ledger",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_requisitions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_requisition_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_grn",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_grn_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "recipes",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "recipe_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_usage",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_wastage",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_daily_variance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_food_controls",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_portion_stock",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_portion_ledger",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_variance_reasons",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "cashier_logbooks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "cashier_logbook_lines",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hr_settings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_attendance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_employment_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_documents",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "drivers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "auditor_watchlist",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_ledger_entries",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_store_receipts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_store_receipt_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_portion_tracking",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_variance_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "void_bills_audit",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "user_behavior_profiles",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "anomaly_events",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "auth_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "security_events",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_inventory",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "folio_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_movements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_transfers",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_transfer_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_food_control_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "expenses",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "simple_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_request_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_stock_movements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_stock",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "approval_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "conference_halls",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "outside_catering_bookings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_tabs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_approvals",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_stock_records",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payment_verifications",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_order_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "finance_daily_log_lines",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "_migrations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_advances",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_payroll_adjustments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_loans",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shifts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "director_review_tasks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_payment_receipts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_item_catalog",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_core_batches",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_audit_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_governance_reviews",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_governance_rules",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "lina_memories",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "lina_daily_financial_snapshots",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "lina_variance_findings",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "lina_agent_findings",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "stock_counts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_count_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_shift_order_items",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_production_runs",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_production_inputs",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_production_outputs",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_adjustment_requests",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_adjustment_request_items",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "stock_take_investigations",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "stock_request_sequences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_documents",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "department_request_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "department_request_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_grni_control_account",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_invoices",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_invoice_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_payment_invoice_allocations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_ledger",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_balances",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_bills",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_bill_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_bill_audit_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_expected_portions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_vat_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_vat_control_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_vat_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_procurement_audit_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "sales_points",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_staff_assignments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "spa_services",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pool_tokens_inventory",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "petty_cash_ledger",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "dynamic_services",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_transaction_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_audit_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "cashier_shift_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "cashier_shift_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "conference_daily_attendance",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "banking_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "banking_reconciliations",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "supplier_products",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_templates",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_shifts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_swaps",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payroll_deduction_rates",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "catering_bookings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_supplier_credit_notes",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "store_credit_note_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "float_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_take_audit_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "petty_cash_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payroll_runs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payroll_records",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payroll_policies",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_payroll_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_credit_bill_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "rls_audit_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "security_config",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "blocked_ips",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "daily_financial_records",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "monthly_financial_adjustments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "discrepancy_flags",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "communication_channels",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "channel_members",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "channel_messages",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "message_reactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "message_read_receipts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "vendor_performance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "procurement_orders",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_stock_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_stock_request_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "simple_shop_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "simple_transfer_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "simple_app_config",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "sku_categories",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "order_sequences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "sku_registry",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "dispatch_sequences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "dispatch_notes",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "dispatch_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "purchase_order_sequences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "purchase_order_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "in_transit_stock",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "transfer_batches",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_out_records",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_take_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "simple_sequences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "vehicles",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "vehicle_assignments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "dispatch_tracking",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "delivery_schedules",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "dispatch_returns",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_usage_records",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_usage_entries",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_usage_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "wastage_records",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_drink_categories",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_drinks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_orders",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_tab_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_stock",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "bar_stock_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "employee_announcements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "employee_documents",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "employee_time_clock",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "employee_tasks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "employee_training",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_messages",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_feedback",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_loyalty",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_loyalty_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_saved_preferences",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "hotel_amenities",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "amenity_bookings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_credit_bills",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "staff_loan_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "mpesa_transaction_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "finance_daily_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "recipe_change_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "stock_issues",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "waste_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "buffets",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "buffet_menu_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "catering_events",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "catering_menu_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "catering_stock_allocations",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "food_control_variance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_financials",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_food_control_config",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "financial_workspace_submissions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payroll_batches",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "payroll_batch_lines",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "financial_daily_snapshots",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_performance_metrics",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "compliance_requirements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_compliance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "budgets",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "budget_categories",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "forecasts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "forecast_models",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "procurement_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "procurement_vendors",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "analytics_reports",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "analytics_metrics",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "executive_snapshots",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kpi_definitions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "rate_plans",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "shift_types",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "financial_reports",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "revenue_sources",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "revenue_entries",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_messages",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_notifications",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_announcements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "incoming_shipments",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "incoming_shipment_items",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "service_requests",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "guest_documents",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "room_blocks",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "group_bookings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "reservation_guests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "housekeeping_logs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "ip_blocklist",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "ip_whitelist",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "active_sessions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "security_alerts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "central_spoilage_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "central_stock_take_sessions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "central_stock_take_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "report_jobs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "void_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "loyalty_transactions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "audit_config_consumption",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_outlet_assignments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_outlet_shifts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_shift_orders",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_shift_payments",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_shift_stock_counts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "superadmin_audit_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "feature_flags",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "announcements",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "announcement_reads",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "system_config_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "impersonation_sessions",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "system_config_values",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_void_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "automation_runs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "department_inventory_accounts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "department_inventory_ledger",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "pos_inventory_mappings",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "inventory_audit_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_production_batches",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "kitchen_production_inputs",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "guest_stay_history",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_daily_revenue",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_item_popularity",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_low_stock_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "restaurant_table_occupancy",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "vw_hk_room_status_overview",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "vw_hk_staff_workload",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "vw_hk_daily_summary",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_consumption_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_in_transit_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_inventory_alerts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_low_stock_alerts",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_requisition_summary",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_purchase_order_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_stock_count_variances",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_pending_requests",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_supplier_performance",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_low_stock_by_branch",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_kitchen_usage_details",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_daily_kitchen_usage",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_current_stock_levels",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_expiring_items",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_transfer_status",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_inventory_valuation",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_staff_accountability",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "vw_hk_leaderboard",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "vw_hk_sustainability_summary",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_pending_transfers",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_shop_inventory",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_daily_stock_out",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_dispatch_summary",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_vehicle_utilization",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_driver_performance",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "v_wastage_records",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "branch_profitability_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "notification_stats",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "branch_attendance_summary",
+    "type": "table_or_view",
+    "old": "missing",
+    "next": "missing"
+  },
+  {
+    "object": "branch_revenue_summary",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "user_branch_roles_view",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "v_central_spoilage_log",
+    "type": "table_or_view",
+    "old": "present",
+    "next": "missing"
+  },
+  {
+    "object": "accounting_account_categories",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "accounting_fiscal_periods",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "accounting_periods",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "active_sessions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "analytics_metrics",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "analytics_reports",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "announcement_reads",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "anomaly_events",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "bank_deposits",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "bar_stock_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "booking_history",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "booking_payments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "booking_status_history",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_announcements",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_compliance",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_features",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_inventory",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_messages",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_notifications",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_performance_metrics",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_profitability_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_revenue_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_settings",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branch_transfers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "branches_backup",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "budget_categories",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "cash_drawer_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "central_warehouse_inventory",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "compliance_requirements",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "consumption_records",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "customer_invoice_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "customer_invoice_payments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "daily_revenue_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "delivery_schedules",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "dispatch_items_mobile",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "dispatch_items_web",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "dispatch_returns",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "dispatch_sequences",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "email_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "employee_credit_bills",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "employee_credit_payments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "executive_snapshots",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "expense_categories",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "financial_audit_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "financial_reports",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "forecast_models",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "forecasts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "goods_received_notes",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "grn_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "group_bookings",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "guest_stay_history",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "hk_cart_inventory",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "hk_defect_types",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "hk_floor_pantry_inventory",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "hk_inspection_photos",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "hk_room_patterns",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "hk_schedules",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "housekeeping_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "housekeeping_supply_categories",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "housekeeping_task_issues",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "hr_settings",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inter_branch_transfers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_adjustments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_alerts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_audit_log",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_balances",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_batches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_core_batches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_count_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_counts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_governance_reviews",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_governance_rules",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_item_catalog",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_locations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "inventory_reservations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "ip_blocklist",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "ip_whitelist",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "kitchen_audit_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "kitchen_production_batches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "kitchen_production_inputs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "kitchen_store_issue_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "kitchen_store_issues",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "kitchen_variances",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "kpi_definitions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "license_keys",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "lina_memory",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "maintenance_equipment",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "maintenance_equipment_categories",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "maintenance_part_transactions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "maintenance_parts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "maintenance_schedules",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "maintenance_work_order_tasks",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "menu_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "message_read_receipts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "mpesa_transaction_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "notification_recipients",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "notification_stats",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "payment_callbacks",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "payment_receipts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "procurement_orders",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "procurement_requests",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "procurement_vendors",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "purchase_order_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "purchase_order_sequences",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "quotation_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "report_jobs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "report_templates",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "requisition_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "requisitions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_bill_splits",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_cocktail_recipes",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_combo_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_combos",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_customer_feedback",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_customers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_daily_revenue",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_delivery_drivers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_delivery_zones",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_discounts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_food_safety_checks",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_inventory_batches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_item_station_routing",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_low_stock_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_loyalty_tiers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_menu_item_modifiers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_menu_item_pricing",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_menu_modifiers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_prep_stations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_pricing_tiers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_purchase_order_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_purchase_orders",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_recipe_ingredients",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_recipes",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_sections",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_server_performance",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_server_sections",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_split_payments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_supplier_quality_ratings",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_suppliers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_table_occupancy",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_tips",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_voids_refunds",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_waitlist",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "restaurant_waste_log",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "revenue_entries",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "revenue_sources",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "room_blocks",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "room_status_history",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "sales_payment_reconciliation",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "scheduled_reports",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "schema_migrations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "security_alerts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "shift_staff_assignments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "shift_types",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "shifts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "simple_sequences",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "sku_registry",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "stock_levels",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "stock_request_sequences",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "stock_transfer_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "stock_transfers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "stock_valuation_layers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "stock_valuation_methods",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_adjustment_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_count_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_credit_note_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_departments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_inventory",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_issue_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_item_batches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_item_suppliers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_locations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_physical_counts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_purchase_requisitions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_requisition_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_return_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_stock_adjustments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_stock_issues",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_stock_movements",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_stock_returns",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_stock_transfers",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_supplier_credit_notes",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_supplier_performance",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_supplier_quotations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_supplier_vat_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_transfer_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_vat_control_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "store_vat_transactions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "tax_summaries",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "transfer_batches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "user_behavior_profiles",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "user_branch_access",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "user_branch_roles_view",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_consumption_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_current_stock_levels",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_daily_kitchen_usage",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_expiring_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_in_transit_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_inventory_alerts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_inventory_valuation",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_kitchen_usage_details",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_low_stock_alerts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_low_stock_by_branch",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_pending_requests",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_purchase_order_summary",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_staff_accountability",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_stock_count_variances",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_supplier_performance",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "v_transfer_status",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "variance_alerts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "variance_reasons",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "variance_thresholds",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "vendor_performance",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "warehouse_dispatches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "warehouse_requests",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "waste_logs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL"
+  },
+  {
+    "object": "audit_events",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "bank_reconciliations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "branch_requisition_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "branch_requisitions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "department_request_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "department_requests",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "dispatch_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "goods_receipt_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "goods_receipts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "inventory_alerts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "inventory_balances",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "inventory_batches",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "inventory_locations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "inventory_reservations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "material_issue_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "material_issue_notes",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "menu_items",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "packing_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "packing_sessions",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "pos_order_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "pos_orders",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "pos_payments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "pos_shifts",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "production_recipe_inputs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "production_recipes",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "production_run_inputs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "production_run_outputs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "production_runs",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "purchase_order_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "receipt_verifications",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "stock_take_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "stock_take_variances",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "supplier_invoice_lines",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "supplier_ledger",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "supplier_payment_allocations",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "supplier_payments",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  },
+  {
+    "object": "workflow_tasks",
+    "type": "db_object_without_static_backend_ref",
+    "db": "DATABASE_URL_NEW"
+  }
+]

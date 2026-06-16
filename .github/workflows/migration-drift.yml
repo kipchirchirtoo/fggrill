@@ -1,0 +1,50 @@
+name: Migration Drift Detection
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'backend/supabase/migrations/**'
+      - 'database/migrations/**'
+
+jobs:
+  migration-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install psycopg2-binary
+
+      - name: Run migration drift detector
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python3 backend/scripts/analyze-migrations.py
+
+      - name: Check for NOT APPLIED migrations
+        run: |
+          NOT_APPLIED=$(python3 -c "
+import json
+with open('MIGRATION_DRIFT_REPORT.json') as f:
+    report = json.load(f)
+    canonical = report['recommendation']['canonical']
+    dir_data = report['migrationDirectories'].get(canonical, {})
+    print(len(dir_data.get('tables', []) - set(report['liveSchema']['tables'])))
+          ")
+          if [ "$NOT_APPLIED" -gt 50 ]; then
+            echo "WARNING: $NOT_APPLIED tables in migrations not applied to live DB"
+          fi
+
+      - name: Upload drift report
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-drift-report
+          path: MIGRATION_DRIFT_REPORT.json
+          retention-days: 30

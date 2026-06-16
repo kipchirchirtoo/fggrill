@@ -1,0 +1,49 @@
+{
+  "verdict": "clean_db_not_ready_for_cashier_cutover",
+  "explorers": {
+    "flutter": "complete",
+    "backend_api": "complete",
+    "clean_db_schema": "complete"
+  },
+  "critical_missing_or_mismatched_objects": [
+    "pos_outlet_shifts",
+    "pos_shift_orders",
+    "pos_shift_payments",
+    "cashier_shift_logs",
+    "cashier_shift_transactions",
+    "payments",
+    "receipts",
+    "receipt_items",
+    "cashier_transactions",
+    "cashier_logbooks",
+    "cashier_logbook_lines",
+    "credit_bills",
+    "branch_payment_receipts",
+    "audit_logs"
+  ],
+  "main_route_mounts": [
+    "/api/cashier",
+    "/api/pos",
+    "/api/payments",
+    "/api/payments-verification",
+    "/api/receipts",
+    "/api/credit",
+    "/api/branch-payments",
+    "/api/finance/shift-pnl"
+  ],
+  "top_risks": [
+    "Clean DB uses canonical POS table names while backend uses pos_outlet_shifts, pos_shift_orders, and pos_shift_payments.",
+    "Cashier shift/logbook tables in clean DB do not match backend controller expectations.",
+    "Payments, receipts, and credit bills are missing or too narrow for current cashier workflows.",
+    "Flutter cashier list parsing can render empty screens when backend response keys differ.",
+    "Payment verification mutation routes need stricter role authorization."
+  ],
+  "recommended_sequence": [
+    "Support current backend cashier table names for v1 cutover.",
+    "Add or extend cashier/POS/payment/receipt/logbook tables in clean DB.",
+    "Seed valid branch-specific POS outlets only.",
+    "Normalize Flutter response parsing and payment payload contracts.",
+    "Add missing RBAC checks and fix cashier route ordering.",
+    "Rerun the dual database audit and backend build."
+  ]
+}
