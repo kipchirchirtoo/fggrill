@@ -274,8 +274,13 @@ export class PayrollService {
     }
 
     // Preserve purely static manual entries
-    const customAdditions = (existingAdditions || []).filter(a => a.source === 'manual' && !a.source_table);
-    const customDeductions = (existingDeductions || []).filter(d => d.source === 'manual' && !d.source_table);
+    const normalizeArr = (val: any): any[] => {
+      if (Array.isArray(val)) return val;
+      if (val && typeof val === 'object') return Object.values(val);
+      return [];
+    };
+    const customAdditions = normalizeArr(existingAdditions).filter(a => a.source === 'manual' && !a.source_table);
+    const customDeductions = normalizeArr(existingDeductions).filter(d => d.source === 'manual' && !d.source_table);
 
     const totalAdditions = [...dynamicAdditions, ...customAdditions].reduce((s, i) => s + parseFloat(i.amount), 0);
     const grossPay = basicSalary + totalAdditions;

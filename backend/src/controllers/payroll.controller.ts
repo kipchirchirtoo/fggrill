@@ -78,15 +78,26 @@ export const getDraftPayroll = async (
     if (run.status !== 'draft') {
       let query = supabase
         .from('payroll_records')
-        .select(`*, employee:staff_profiles!staff_id(id, first_name, last_name, employee_number, role)`)
+        .select('*')
         .eq('run_id', run.id);
-        
+
       if (branch_id) query = query.eq('branch_id', branch_id);
-      
+
       const { data: staticRecords, error } = await query;
       if (error) throw error;
-      
-      res.status(200).json({ success: true, data: { run, records: staticRecords } });
+
+      // Enrich with staff profiles separately to avoid schema-cache FK issues
+      const staffIds = [...new Set((staticRecords || []).map(r => r.staff_id).filter(Boolean))];
+      let staffMap = new Map();
+      if (staffIds.length > 0) {
+        try {
+          const { data: profiles } = await supabase.from('staff_profiles').select('id, first_name, last_name, employee_number, role').in('id', staffIds);
+          staffMap = new Map((profiles || []).map(p => [p.id, p]));
+        } catch (_) { /* ignore */ }
+      }
+      const enrichedRecords = (staticRecords || []).map(r => ({ ...r, employee: staffMap.get(r.staff_id) || null }));
+
+      res.status(200).json({ success: true, data: { run, records: enrichedRecords } });
       return;
     }
 
@@ -169,12 +180,23 @@ export const getDraftPayroll = async (
     // 6. Return Draft Response
     let finalQuery = supabase
       .from('payroll_records')
-      .select(`*, employee:staff_profiles!staff_id(id, first_name, last_name, employee_number, role, department, position)`)
+      .select('*')
       .eq('run_id', run.id);
 
     if (branch_id) finalQuery = finalQuery.eq('branch_id', branch_id);
 
     const { data: finalDraftRecords, error: fetchError } = await finalQuery;
+
+    // Enrich with staff profiles separately to avoid schema-cache FK issues
+    const finalStaffIds = [...new Set((finalDraftRecords || []).map(r => r.staff_id).filter(Boolean))];
+    let finalStaffMap = new Map();
+    if (finalStaffIds.length > 0) {
+      try {
+        const { data: profiles } = await supabase.from('staff_profiles').select('id, first_name, last_name, employee_number, role, department, position').in('id', finalStaffIds);
+        finalStaffMap = new Map((profiles || []).map(p => [p.id, p]));
+      } catch (_) { /* ignore */ }
+    }
+    const enrichedFinalRecords = (finalDraftRecords || []).map(r => ({ ...r, employee: finalStaffMap.get(r.staff_id) || null }));
 
     if (fetchError) logger.error(`Error fetching final draft records: ${fetchError.message}`);
     logger.info(`Final draft records count: ${finalDraftRecords?.length ?? 0} for run ${run.id}`);
@@ -198,7 +220,7 @@ export const getDraftPayroll = async (
 
     const updatedRun = { ...run, ...totals };
 
-    res.status(200).json({ success: true, data: { run: updatedRun, records: finalDraftRecords } });
+    res.status(200).json({ success: true, data: { run: updatedRun, records: enrichedFinalRecords } });
 
   } catch (error) {
     next(error);
@@ -505,15 +527,18 @@ export const generatePayslip = async (req: Request, res: Response, next: NextFun
       .from('payroll_records')
       .select(`
         *,
-        run:payroll_runs!run_id(pay_period_from, pay_period_to, status),
-        staff:staff_profiles!staff_id(
-          id, national_id, phone, department, role, position,
-          bank_name, account_number, employee_number,
-          first_name, last_name, email
-        )
+        run:payroll_runs!run_id(pay_period_from, pay_period_to, status)
       `)
       .eq('id', id)
       .single();
+
+    // Fetch staff profile separately to avoid schema-cache FK issues
+    if (record?.staff_id) {
+      try {
+        const { data: staff } = await supabase.from('staff_profiles').select('id, national_id, phone, department, role, position, bank_name, account_number, employee_number, first_name, last_name, email').eq('id', record.staff_id).single();
+        if (staff) (record as any).staff = staff;
+      } catch (_) { /* ignore */ }
+    }
 
     if (error || !record) {
       res.status(404).json({ success: false, message: 'Payroll record not found' });

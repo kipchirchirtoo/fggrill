@@ -790,7 +790,6 @@ export const getOrder = async (
       .from('restaurant_orders')
       .select(`
   *,
-  guest: users!guest_id(*),
     items: restaurant_order_items(
           *,
       menu_item: restaurant_menu_items(*)
@@ -798,6 +797,14 @@ export const getOrder = async (
       `)
       .eq('id', req.params.id)
       .single();
+
+    // Fetch guest separately to avoid schema-cache FK issues
+    if (order?.guest_id) {
+      try {
+        const { data: guest } = await supabase.from('users').select('*').eq('id', order.guest_id).single();
+        if (guest) (order as any).guest = guest;
+      } catch (_) { /* ignore guest fetch errors */ }
+    }
 
     if (error) {
       throw error;
@@ -837,7 +844,6 @@ export const getOrders = async (
       .from('restaurant_orders')
       .select(`
       *,
-      guest: users!guest_id(*),
         items: restaurant_order_items(
           *,
           menu_item: restaurant_menu_items(*)
@@ -895,12 +901,23 @@ export const getOrders = async (
       throw error;
     }
 
+    // Batch-fetch guests separately to avoid schema-cache FK issues
+    const guestIds = [...new Set((orders || []).map(o => o.guest_id).filter(Boolean))];
+    let guestMap = new Map();
+    if (guestIds.length > 0) {
+      try {
+        const { data: guests } = await supabase.from('users').select('*').in('id', guestIds);
+        guestMap = new Map((guests || []).map(g => [g.id, g]));
+      } catch (_) { /* ignore */ }
+    }
+
     // Transform data to match frontend expectations
-    const transformedOrders = orders?.map(order => ({
+    const transformedOrders = (orders || []).map(order => ({
       ...order,
+      guest: guestMap.get(order.guest_id) || null,
       total: order.total_amount, // Map total_amount to total for frontend
       items_count: order.items?.length || 0
-    })) || [];
+    }));
 
     res.status(200).json({
       success: true,

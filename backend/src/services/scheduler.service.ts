@@ -218,7 +218,7 @@ class SchedulerService {
         // Check if hall has any active bookings (ongoing right now)
         const { data: activeBookings, error: bookingsError } = await supabase
           .from('conference_hall_bookings')
-          .select('id, start_date, end_date, customer_name')
+          .select('id, start_date, end_date, client_name')
           .eq('conference_hall_id', hall.id)
           .eq('booking_status', 'confirmed')
           .lte('start_date', now.toISOString())

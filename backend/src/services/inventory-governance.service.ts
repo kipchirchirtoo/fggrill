@@ -26,7 +26,16 @@ const safeQuery = async <T = JsonRecord>(
     return [];
   }
 
-  return run();
+  try {
+    return await run();
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (msg.includes('does not exist') || msg.includes('42703')) {
+      warnings.push(`${tableName} query failed due to missing column/table: ${msg}`);
+      return [];
+    }
+    throw err;
+  }
 };
 
 const severityRank = (severity: string) => {

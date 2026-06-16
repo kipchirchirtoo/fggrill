@@ -825,20 +825,28 @@ export async function listAdjustmentRequests(filters: {
   }
   params.push(Math.min(Math.max(filters.limit || 100, 1), 300));
 
-  const result = await db.query(
-    `
-      SELECT r.*,
-             COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.item_name) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS items
-      FROM inventory_adjustment_requests r
-      LEFT JOIN inventory_adjustment_request_items i ON i.adjustment_request_id = r.id
-      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      GROUP BY r.id
-      ORDER BY r.created_at DESC
-      LIMIT $${params.length}
-    `,
-    params
-  );
-  return result.rows;
+  try {
+    const result = await db.query(
+      `
+        SELECT r.*,
+               COALESCE(jsonb_agg(to_jsonb(i) ORDER BY i.item_name) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS items
+        FROM inventory_adjustment_requests r
+        LEFT JOIN inventory_adjustment_request_items i ON i.adjustment_request_id = r.id
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        GROUP BY r.id
+        ORDER BY r.created_at DESC
+        LIMIT $${params.length}
+      `,
+      params
+    );
+    return result.rows;
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (msg.includes('inventory_adjustment_requests') && msg.includes('does not exist')) {
+      return [];
+    }
+    throw err;
+  }
 }
 
 export async function createAdjustmentRequest(input: JsonRecord, actorId: string) {
