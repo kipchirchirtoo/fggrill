@@ -402,7 +402,7 @@ export const approveCentralStockTake = async (req: Request, res: Response) => {
         const { data: journal, error: journalError } = await supabase
           .from('accounting_journal_entries')
           .insert({
-            journal_number: journalNumber,
+            entry_number: journalNumber,
             entry_date: new Date().toISOString().split('T')[0],
             description: `Central Stock Take Variance - ${session.session_number} (${session.store_type})`,
             reference: session.session_number,

@@ -2,6 +2,8 @@ import { supabase } from '../config/supabase';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import * as BranchInventoryService from './branch-inventory.service';
+import * as InventoryFoundationService from './inventory-foundation.service';
+import notificationService from './notification.service';
 
 type JsonRecord = Record<string, any>;
 type StockMovementResult = { previousStock: number; newStock: number };
@@ -9,6 +11,11 @@ type DepartmentIssueResult = {
   ledger: JsonRecord;
   stock: StockMovementResult;
   accountingJournal?: JsonRecord | null;
+  status?: 'completed' | 'partially_issued' | 'pending';
+  minNumber?: string;
+  requestedQuantity?: number;
+  issuedQuantity?: number;
+  pendingQuantity?: number;
 };
 type PosConsumptionRow = {
   itemSku: string;
@@ -64,23 +71,188 @@ const textValue = (value: unknown): string | null => {
   return text ? text : null;
 };
 
+const minDateKey = (): string => new Date().toISOString().slice(2, 10).replace(/-/g, '');
+
+async function generateMaterialIssueNumber(branchId: number): Promise<string> {
+  const prefix = `MIN${minDateKey()}-${branchId}-`;
+  const { count, error } = await supabase
+    .from('department_inventory_ledger')
+    .select('id', { count: 'exact', head: true })
+    .eq('branch_id', branchId)
+    .eq('source_type', 'material_issue_note')
+    .ilike('source_number', `${prefix}%`);
+
+  if (error) {
+    logger.warn(`MIN sequence lookup failed: ${error.message}`);
+  }
+
+  return `${prefix}${String((count || 0) + 1).padStart(4, '0')}`;
+}
+
+async function notifyBranchIssueShortfall(input: {
+  branchId: number;
+  itemSku: string;
+  itemName: string;
+  requestedQuantity: number;
+  issuedQuantity: number;
+  pendingQuantity: number;
+  departmentName: string;
+  minNumber: string;
+}) {
+  try {
+    const message = `${input.departmentName} requested ${input.requestedQuantity} of ${input.itemName}; issued ${input.issuedQuantity}, pending ${input.pendingQuantity}.`;
+    await Promise.all([
+      notificationService.notifyRole('procurement', 'Branch issue needs replenishment', message, {
+        type: 'warning',
+        category: 'stock',
+        priority: input.issuedQuantity > 0 ? 'medium' : 'high',
+        branchId: input.branchId,
+        actionUrl: '/dashboard/procurement',
+        metadata: {
+          branch_id: input.branchId,
+          item_sku: input.itemSku,
+          min_number: input.minNumber,
+          requested_quantity: input.requestedQuantity,
+          issued_quantity: input.issuedQuantity,
+          pending_quantity: input.pendingQuantity
+        }
+      }),
+      notificationService.notifyRole('branch_storekeeper', 'Pending department issue', message, {
+        type: 'warning',
+        category: 'stock',
+        priority: input.issuedQuantity > 0 ? 'medium' : 'high',
+        branchId: input.branchId,
+        actionUrl: '/dashboard/branch-store/stock-out',
+        metadata: {
+          branch_id: input.branchId,
+          item_sku: input.itemSku,
+          min_number: input.minNumber,
+          requested_quantity: input.requestedQuantity,
+          issued_quantity: input.issuedQuantity,
+          pending_quantity: input.pendingQuantity
+        }
+      })
+    ]);
+  } catch (error) {
+    logger.warn(`Branch issue shortfall notification failed: ${(error as Error).message}`);
+  }
+}
+
 const itemQuantity = (item: JsonRecord): number =>
   numberValue(item.qty ?? item.quantity ?? item.quantity_sold ?? item.count);
+
+async function recordDepartmentFoundationIssue(input: {
+  branchId: number;
+  itemSku: string;
+  itemName: string;
+  quantity: number;
+  departmentCode: string;
+  departmentName: string;
+  actorId: string;
+  documentReference: string;
+  unitCost?: number;
+  metadata?: JsonRecord;
+}): Promise<string | null> {
+  if (input.quantity <= 0) return null;
+  try {
+    const sourceLocation = {
+      branchId: input.branchId,
+      locationType: 'branch_store' as const,
+      locationCode: `BRANCH-${input.branchId}-STORE`,
+      locationName: `Branch Store ${input.branchId}`
+    };
+    const destinationLocation = {
+      branchId: input.branchId,
+      locationType: 'department' as const,
+      locationCode: `DEPT-${input.branchId}-${input.departmentCode.toUpperCase()}`,
+      locationName: input.departmentName,
+      departmentCode: input.departmentCode
+    };
+
+    const balances = await InventoryFoundationService.listBalances({
+      branchId: input.branchId,
+      search: input.itemSku,
+      limit: 100
+    });
+    const sourceBalance = balances.find((balance: any) =>
+      String(balance.sku) === input.itemSku && String(balance.location_code) === sourceLocation.locationCode
+    );
+    const current = Number(sourceBalance?.current_quantity || 0);
+    if (current < input.quantity) {
+      await InventoryFoundationService.recordMovement({
+        movementType: 'purchase_receipt',
+        item: {
+          sku: input.itemSku,
+          sourceTable: 'simple_items',
+          sourceItemKey: input.itemSku,
+          itemName: input.itemName,
+          defaultUnitCost: input.unitCost
+        },
+        sourceLocation: {
+          locationType: 'external',
+          locationCode: 'LEGACY-STOCK-BASELINE',
+          locationName: 'Legacy stock baseline'
+        },
+        destinationLocation: sourceLocation,
+        quantity: Math.max(input.quantity - current, input.quantity),
+        unitCost: input.unitCost,
+        reason: 'Legacy balance baseline before department issue',
+        documentType: 'stock_take_adjustment',
+        documentReference: input.documentReference,
+        documentNumber: input.documentReference,
+        metadata: { generated_by_controlled_movement_bridge: true }
+      }, input.actorId);
+    }
+
+    const movement = await InventoryFoundationService.recordMovement({
+      movementType: 'department_issue',
+      item: {
+        sku: input.itemSku,
+        sourceTable: 'simple_items',
+        sourceItemKey: input.itemSku,
+        itemName: input.itemName,
+        defaultUnitCost: input.unitCost
+      },
+      sourceLocation,
+      destinationLocation,
+      quantity: input.quantity,
+      unitCost: input.unitCost,
+      reason: `Material issue to ${input.departmentName}`,
+      documentType: 'material_issue_note',
+      documentReference: input.documentReference,
+      documentNumber: input.documentReference,
+      metadata: input.metadata || {}
+    }, input.actorId);
+
+    return movement?.movement?.id || null;
+  } catch (error) {
+    logger.warn(`Department issue foundation movement failed for ${input.itemSku}: ${(error as Error).message}`);
+    return null;
+  }
+}
 
 const outletItemIdFor = (item: JsonRecord): string | null =>
   textValue(item.outlet_item_id ?? item.product_id ?? item.id);
 
 const isMissingPosInventoryMappingTable = (error: any): boolean => {
+  return isMissingRelation(error, 'pos_inventory_mappings');
+};
+
+const isMissingRelation = (error: any, tableName?: string): boolean => {
   const message = String(error?.message || '');
+  const details = String(error?.details || '');
+  const haystack = `${message} ${details}`;
   return (
     error?.code === '42P01' ||
     error?.code === 'PGRST205' ||
     error?.code === 'PGRST200' ||
-    message.includes("Could not find the table 'public.pos_inventory_mappings'") ||
-    message.includes('relation "public.pos_inventory_mappings" does not exist') ||
-    message.includes('pos_inventory_mappings')
+    (tableName ? haystack.includes(tableName) : false) ||
+    haystack.includes('schema cache')
   );
 };
+
+const isMissingDepartmentLedgerTable = (error: any): boolean =>
+  isMissingRelation(error, 'department_inventory_ledger');
 
 const normalizeDepartmentCode = (code: unknown): string => {
   const normalized = String(code || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
@@ -110,16 +282,17 @@ export async function logInventoryAudit(input: {
   deviceInfo?: JsonRecord | null;
   metadata?: JsonRecord | null;
 }): Promise<void> {
-  const { error } = await supabase.from('inventory_audit_log').insert({
+  const { error } = await supabase.from('inventory_audit_logs').insert({
     branch_id: input.branchId ?? null,
     actor_id: input.actorId ?? null,
-    action: input.action,
+    action_type: input.action,
     entity_type: input.entityType,
     entity_id: input.entityId ?? null,
-    reference_type: input.referenceType ?? null,
-    reference_id: input.referenceId ?? null,
+    source_document_type: input.referenceType ?? null,
+    source_document_reference: input.referenceId ?? null,
     before_value: input.beforeValue ?? null,
     after_value: input.afterValue ?? null,
+    reason: input.action,
     device_info: input.deviceInfo ?? {},
     metadata: input.metadata ?? {}
   });
@@ -212,7 +385,7 @@ async function postDepartmentIssueJournal(input: {
   const { data: journal, error: journalError } = await supabase
     .from('accounting_journal_entries')
     .insert({
-      journal_number: journalNumber,
+      entry_number: journalNumber,
       entry_date: new Date().toISOString().split('T')[0],
       description,
       reference: input.sourceNumber || input.ledger.id,
@@ -285,22 +458,30 @@ export async function seedDepartmentAccounts(branchId: number): Promise<void> {
     .from('department_inventory_accounts')
     .upsert(rows, { onConflict: 'branch_id,department_code' });
 
-  if (error) throw error;
+  // Silently ignore if table doesn't exist yet
+  if (error && error.code !== 'PGRST205' && error.code !== '42P01') throw error;
 }
 
 export async function listDepartmentAccounts(branchId: number): Promise<JsonRecord[]> {
-  await seedDepartmentAccounts(branchId);
+  try {
+    await seedDepartmentAccounts(branchId);
 
-  const { data, error } = await supabase
-    .from('department_inventory_accounts')
-    .select('*')
-    .eq('branch_id', branchId)
-    .eq('is_active', true)
-    .order('department_type')
-    .order('department_name');
+    const { data, error } = await supabase
+      .from('department_inventory_accounts')
+      .select('*')
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .order('department_type')
+      .order('department_name');
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01') return [];
+      throw error;
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function getDepartmentAccount(branchId: number, departmentCode: string): Promise<JsonRecord> {
@@ -334,6 +515,7 @@ export async function recordDepartmentIssue(input: {
   sourceType?: string | null;
   sourceId?: string | null;
   sourceNumber?: string | null;
+  departmentRequestId?: string | null;
   notes?: string | null;
   metadata?: JsonRecord | null;
 }): Promise<DepartmentIssueResult> {
@@ -353,7 +535,7 @@ export async function recordDepartmentIssue(input: {
       .maybeSingle(),
     supabase
       .from('simple_items')
-      .select('sku, item_name, cost_price')
+      .select('sku, item_name, description, cost_price')
       .eq('sku', input.itemSku)
       .maybeSingle()
   ]);
@@ -361,23 +543,29 @@ export async function recordDepartmentIssue(input: {
   if (stockError) throw stockError;
   if (itemError) throw itemError;
   const previousStock = numberValue(stock?.quantity);
-  if (previousStock < input.quantity) {
-    throw new AppError(`Insufficient branch stock for ${item?.item_name || input.itemSku}`, 409);
-  }
-
+  const minNumber = input.sourceNumber || await generateMaterialIssueNumber(input.branchId);
+  const requestedQuantity = input.quantity;
+  const issuedQuantity = Math.min(previousStock, requestedQuantity);
+  const pendingQuantity = Math.max(0, requestedQuantity - issuedQuantity);
+  const issueStatus: DepartmentIssueResult['status'] =
+    issuedQuantity <= 0 ? 'pending' : pendingQuantity > 0 ? 'partially_issued' : 'completed';
+  const itemName = item?.item_name || item?.description || input.itemSku;
   const unitCost = numberValue(item?.cost_price);
+  let movement: StockMovementResult = { previousStock, newStock: previousStock };
 
-  const movement = await BranchInventoryService.updateBranchStock(
-    input.branchId,
-    input.itemSku,
-    -input.quantity,
-    'DEPARTMENT_ISSUE',
-    input.actorId,
-    input.sourceType || 'department_issue',
-    input.sourceId || undefined,
-    input.sourceNumber || undefined,
-    input.notes || `Issued to ${account.department_name}`
-  );
+  if (issuedQuantity > 0) {
+    movement = await BranchInventoryService.updateBranchStock(
+      input.branchId,
+      input.itemSku,
+      -issuedQuantity,
+      'DEPARTMENT_ISSUE',
+      input.actorId,
+      'material_issue_note',
+      input.sourceId || undefined,
+      minNumber,
+      input.notes || `Issued to ${account.department_name}`
+    );
+  }
 
   const { data: ledger, error: ledgerError } = await supabase
     .from('department_inventory_ledger')
@@ -386,7 +574,7 @@ export async function recordDepartmentIssue(input: {
       branch_id: input.branchId,
       item_sku: input.itemSku,
       movement_type: 'issue',
-      quantity: input.quantity,
+      quantity: issuedQuantity,
       unit_cost: unitCost,
       shift_code: input.shiftCode || null,
       destination_type: input.destinationType || account.department_type,
@@ -394,10 +582,23 @@ export async function recordDepartmentIssue(input: {
       event_date: input.eventDate || null,
       location: input.location || null,
       pax_count: input.paxCount ?? null,
-      source_type: input.sourceType || 'department_issue',
+      source_type: 'material_issue_note',
       source_id: input.sourceId || null,
-      source_number: input.sourceNumber || null,
-      metadata: input.metadata || {},
+      source_number: minNumber,
+      department_request_id: input.departmentRequestId || null,
+      document_number: minNumber,
+      metadata: {
+        ...(input.metadata || {}),
+        min_number: minNumber,
+        item_name: itemName,
+        issue_status: issueStatus,
+        requested_quantity: requestedQuantity,
+        issued_quantity: issuedQuantity,
+        pending_quantity: pendingQuantity,
+        low_stock_alerted: pendingQuantity > 0,
+        department_code: account.department_code,
+        department_name: account.department_name
+      },
       notes: input.notes || null,
       performed_by: input.actorId
     })
@@ -406,21 +607,45 @@ export async function recordDepartmentIssue(input: {
 
   if (ledgerError) throw ledgerError;
 
-  const accountingJournal = await postDepartmentIssueJournal({
-    branchId: input.branchId,
-    actorId: input.actorId,
-    account,
-    ledger,
-    itemSku: input.itemSku,
-    itemName: item?.item_name,
-    quantity: input.quantity,
-    unitCost,
-    sourceNumber: input.sourceNumber
-  });
+  const accountingJournal = issuedQuantity > 0
+    ? await postDepartmentIssueJournal({
+        branchId: input.branchId,
+        actorId: input.actorId,
+        account,
+        ledger,
+        itemSku: input.itemSku,
+        itemName,
+        quantity: issuedQuantity,
+        unitCost,
+        sourceNumber: minNumber
+      })
+    : null;
+
+  const inventoryMovementId = issuedQuantity > 0
+    ? await recordDepartmentFoundationIssue({
+        branchId: input.branchId,
+        itemSku: input.itemSku,
+        itemName,
+        quantity: issuedQuantity,
+        departmentCode: account.department_code,
+        departmentName: account.department_name,
+        actorId: input.actorId,
+        documentReference: minNumber,
+        unitCost,
+        metadata: {
+          department_request_id: input.departmentRequestId || null,
+          department_code: account.department_code,
+          requested_quantity: requestedQuantity,
+          issued_quantity: issuedQuantity,
+          pending_quantity: pendingQuantity
+        }
+      })
+    : null;
 
   const ledgerMetadata = {
     ...(ledger.metadata || {}),
     accounting_journal_id: accountingJournal?.id || null,
+    inventory_movement_id: inventoryMovementId,
     debit_account_code:
       account.accounting_treatment === 'inventory'
         ? account.inventory_account_code || DEPARTMENT_INVENTORY_ACCOUNT.account_code
@@ -431,7 +656,11 @@ export async function recordDepartmentIssue(input: {
   };
   const { error: ledgerMetadataError } = await supabase
     .from('department_inventory_ledger')
-    .update({ metadata: ledgerMetadata })
+    .update({
+      metadata: ledgerMetadata,
+      inventory_movement_id: inventoryMovementId,
+      document_number: minNumber
+    })
     .eq('id', ledger.id);
   if (ledgerMetadataError) {
     logger.warn(`Department issue ledger metadata update failed: ${ledgerMetadataError.message}`);
@@ -442,10 +671,10 @@ export async function recordDepartmentIssue(input: {
   await logInventoryAudit({
     branchId: input.branchId,
     actorId: input.actorId,
-    action: 'department_issue',
+    action: issueStatus === 'pending' ? 'department_issue_pending' : 'department_issue',
     entityType: 'department_inventory_ledger',
     entityId: ledger.id,
-    referenceType: input.sourceType || 'department_issue',
+    referenceType: 'material_issue_note',
     referenceId: input.sourceId || ledger.id,
     beforeValue: { item_sku: input.itemSku, quantity: previousStock },
     afterValue: { item_sku: input.itemSku, quantity: movement.newStock },
@@ -459,13 +688,293 @@ export async function recordDepartmentIssue(input: {
           : account.expense_account_code || DEPARTMENT_EXPENSE_ACCOUNT.account_code,
       credit_account_code: BRANCH_STORE_INVENTORY_ACCOUNT.account_code,
       accounting_journal_id: accountingJournal?.id || null,
-      quantity: input.quantity,
+      min_number: minNumber,
+      issue_status: issueStatus,
+      requested_quantity: requestedQuantity,
+      issued_quantity: issuedQuantity,
+      pending_quantity: pendingQuantity,
+      quantity: issuedQuantity,
       unit_cost: unitCost,
-      total_cost: input.quantity * unitCost
+      total_cost: issuedQuantity * unitCost
     }
   });
 
-  return { ledger, stock: movement, accountingJournal };
+  if (pendingQuantity > 0) {
+    await notifyBranchIssueShortfall({
+      branchId: input.branchId,
+      itemSku: input.itemSku,
+      itemName,
+      requestedQuantity,
+      issuedQuantity,
+      pendingQuantity,
+      departmentName: account.department_name || account.department_code,
+      minNumber
+    });
+  }
+
+  return {
+    ledger,
+    stock: movement,
+    accountingJournal,
+    status: issueStatus,
+    minNumber,
+    requestedQuantity,
+    issuedQuantity,
+    pendingQuantity
+  };
+}
+
+async function generateDepartmentRequestNumber(branchId: number): Promise<string> {
+  const prefix = `DRL${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${branchId}-`;
+  const { count, error } = await supabase
+    .from('department_request_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('branch_id', branchId)
+    .ilike('request_number', `${prefix}%`);
+
+  if (error) {
+    logger.warn(`Department request sequence lookup failed: ${error.message}`);
+  }
+
+  return `${prefix}${String((count || 0) + 1).padStart(4, '0')}`;
+}
+
+export async function createDepartmentRequestLog(input: {
+  branchId: number;
+  departmentCode: string;
+  requestorName: string;
+  requestorContact?: string | null;
+  shiftCode?: string | null;
+  eventName?: string | null;
+  eventDate?: string | null;
+  paxCount?: number | null;
+  purpose?: string | null;
+  remarks?: string | null;
+  attachments?: any[];
+  items: Array<{ item_sku?: string; itemSku?: string; item_name?: string; itemName?: string; quantity: number; unit?: string; purpose?: string | null }>;
+  actorId: string;
+  metadata?: JsonRecord | null;
+}) {
+  if (!input.items?.length) throw new AppError('At least one item is required', 400);
+  const account = await getDepartmentAccount(input.branchId, input.departmentCode);
+  const requestNumber = await generateDepartmentRequestNumber(input.branchId);
+
+  const { data: request, error } = await supabase
+    .from('department_request_logs')
+    .insert({
+      request_number: requestNumber,
+      branch_id: input.branchId,
+      department_account_id: account.id,
+      department_code: account.department_code,
+      department_name: account.department_name,
+      requestor_name: textValue(input.requestorName) || 'Department requestor',
+      requestor_contact: textValue(input.requestorContact),
+      shift_code: textValue(input.shiftCode),
+      event_name: textValue(input.eventName),
+      event_date: input.eventDate || null,
+      pax_count: input.paxCount ?? null,
+      purpose: textValue(input.purpose),
+      remarks: textValue(input.remarks),
+      attachments: input.attachments || [],
+      status: 'pending_audit',
+      audit_status: 'pending_audit',
+      logged_by: input.actorId,
+      metadata: input.metadata || {}
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  const skus = input.items.map(item => String(item.item_sku || item.itemSku || '').trim()).filter(Boolean);
+  const { data: catalog, error: catalogError } = skus.length
+    ? await supabase.from('simple_items').select('sku, item_name, description, unit_of_measure').in('sku', skus)
+    : { data: [] as any[], error: null };
+  if (catalogError) throw catalogError;
+  const catalogMap = new Map((catalog || []).map((item: any) => [String(item.sku), item]));
+
+  const rows = input.items.map(item => {
+    const sku = String(item.item_sku || item.itemSku || '').trim();
+    if (!sku) throw new AppError('Item SKU is required', 400);
+    const quantity = numberValue(item.quantity);
+    if (quantity <= 0) throw new AppError(`Quantity for ${sku} must be greater than zero`, 400);
+    const catalogItem = catalogMap.get(sku);
+    return {
+      request_id: request.id,
+      item_sku: sku,
+      item_name: cleanItemName(item.item_name || item.itemName || catalogItem?.item_name || catalogItem?.description || sku),
+      quantity,
+      unit: item.unit || catalogItem?.unit_of_measure || 'units',
+      purpose: textValue(item.purpose || input.purpose),
+      pending_quantity: quantity,
+      status: 'logged'
+    };
+  });
+
+  const { data: createdItems, error: itemError } = await supabase
+    .from('department_request_items')
+    .insert(rows)
+    .select('*');
+  if (itemError) throw itemError;
+
+  await logInventoryAudit({
+    branchId: input.branchId,
+    actorId: input.actorId,
+    action: 'department_request_logged',
+    entityType: 'department_request_logs',
+    entityId: request.id,
+    referenceType: 'department_request_log',
+    referenceId: request.id,
+    afterValue: { request_number: requestNumber, item_count: rows.length },
+    metadata: {
+      request_number: requestNumber,
+      department_code: account.department_code,
+      department_name: account.department_name
+    }
+  });
+
+  return { ...request, items: createdItems || [] };
+}
+
+function cleanItemName(value: unknown): string {
+  const text = String(value || '').trim();
+  return text || 'Unknown item';
+}
+
+export async function listDepartmentRequestLogs(input: {
+  branchId: number;
+  status?: string | null;
+  search?: string | null;
+  limit?: number;
+}) {
+  try {
+    let query = supabase
+      .from('department_request_logs')
+      .select('*, items:department_request_items(*)')
+      .eq('branch_id', input.branchId)
+      .order('created_at', { ascending: false })
+      .limit(Math.min(Math.max(input.limit || 100, 1), 300));
+
+    if (input.status) query = query.eq('status', input.status);
+    if (input.search) {
+      const term = `%${input.search}%`;
+      query = query.or(`request_number.ilike.${term},department_name.ilike.${term},requestor_name.ilike.${term},purpose.ilike.${term}`);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      if (error.code === 'PGRST205' || error.code === '42P01') return [];
+      throw error;
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getDepartmentRequestLog(branchId: number, id: string) {
+  const { data, error } = await supabase
+    .from('department_request_logs')
+    .select('*, items:department_request_items(*)')
+    .eq('branch_id', branchId)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) {
+    if (error.code === 'PGRST205' || error.code === '42P01') throw new AppError('Department request not found', 404);
+    throw error;
+  }
+  if (!data) throw new AppError('Department request not found', 404);
+  return data;
+}
+
+export async function issueDepartmentRequest(input: {
+  branchId: number;
+  requestId: string;
+  actorId: string;
+  notes?: string | null;
+}) {
+  const request = await getDepartmentRequestLog(input.branchId, input.requestId);
+  const items = request.items || [];
+  if (!items.length) throw new AppError('Department request has no items', 400);
+
+  const results: DepartmentIssueResult[] = [];
+  for (const item of items) {
+    const pending = numberValue(item.pending_quantity || item.quantity);
+    if (pending <= 0 || item.status === 'closed') continue;
+    const result = await recordDepartmentIssue({
+      branchId: input.branchId,
+      itemSku: item.item_sku,
+      quantity: pending,
+      departmentCode: request.department_code,
+      actorId: input.actorId,
+      shiftCode: request.shift_code,
+      destinationType: null,
+      eventName: request.event_name,
+      eventDate: request.event_date,
+      paxCount: request.pax_count,
+      sourceType: 'department_request_log',
+      sourceId: request.id,
+      sourceNumber: resultSafeSourceNumber(request.request_number),
+      departmentRequestId: request.id,
+      notes: input.notes || request.remarks || null,
+      metadata: {
+        department_request_number: request.request_number,
+        department_request_item_id: item.id
+      }
+    });
+    results.push(result);
+
+    await supabase
+      .from('department_request_items')
+      .update({
+        issued_quantity: numberValue(item.issued_quantity) + numberValue(result.issuedQuantity),
+        pending_quantity: numberValue(result.pendingQuantity),
+        status: result.status === 'completed' ? 'issued' : result.status === 'partially_issued' ? 'partially_issued' : 'pending_stock',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', item.id);
+  }
+
+  const anyPending = results.some(result => numberValue(result.pendingQuantity) > 0);
+  const anyIssued = results.some(result => numberValue(result.issuedQuantity) > 0);
+  const status = anyPending ? (anyIssued ? 'partially_issued' : 'approved') : 'issued';
+
+  const { data: updated, error } = await supabase
+    .from('department_request_logs')
+    .update({
+      status,
+      audit_status: 'audited',
+      audited_by: input.actorId,
+      audited_at: new Date().toISOString(),
+      approved_by: input.actorId,
+      approved_at: new Date().toISOString(),
+      issue_reference: results.map(result => result.minNumber).filter(Boolean).join(', ') || null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', request.id)
+    .select('*, items:department_request_items(*)')
+    .single();
+
+  if (error) throw error;
+
+  await logInventoryAudit({
+    branchId: input.branchId,
+    actorId: input.actorId,
+    action: 'department_request_issued',
+    entityType: 'department_request_logs',
+    entityId: request.id,
+    referenceType: 'department_request_log',
+    referenceId: request.id,
+    beforeValue: { status: request.status },
+    afterValue: { status, min_numbers: results.map(result => result.minNumber) },
+    metadata: { request_number: request.request_number }
+  });
+
+  return { request: updated, issues: results };
+}
+
+function resultSafeSourceNumber(requestNumber: string): string {
+  return `MIN-${requestNumber}`;
 }
 
 async function loadPosConsumptionRows(
@@ -532,14 +1041,10 @@ async function loadPosConsumptionRows(
       continue;
     }
 
-    if (outletItem?.track_stock !== false && outletItem?.sku) {
-      rows.push({
-        itemSku: String(outletItem.sku),
-        quantity: soldQty,
-        outletItemId,
-        outletItemName: String(outletItem.name || item.name || outletItemId)
-      });
-    }
+    // Direct POS outlet stock is validated and reduced on pos_outlet_items.
+    // This enterprise branch-stock bridge should only post configured raw
+    // inventory mappings, otherwise a produced menu item would incorrectly
+    // consume branch-store stock a second time.
   }
 
   const grouped = new Map<string, { itemSku: string; quantity: number; outletItemIds: string[]; names: string[] }>();
@@ -555,6 +1060,41 @@ async function loadPosConsumptionRows(
 }
 
 export async function assertPosStockAvailable(branchId: number, outletId: string, items: JsonRecord[]): Promise<void> {
+  const outletItemIds = Array.from(new Set(items.map(outletItemIdFor).filter(Boolean))) as string[];
+  if (outletItemIds.length) {
+    const { data: outletItems, error: outletItemsError } = await supabase
+      .from('pos_outlet_items')
+      .select('id, name, sku, current_stock, track_stock')
+      .eq('outlet_id', outletId)
+      .in('id', outletItemIds);
+
+    if (outletItemsError) throw outletItemsError;
+
+    const outletItemById = new Map<string, JsonRecord>();
+    for (const outletItem of outletItems || []) {
+      outletItemById.set(String(outletItem.id), outletItem);
+    }
+
+    const outletShortfalls: string[] = [];
+    for (const item of items) {
+      const outletItemId = outletItemIdFor(item);
+      const soldQty = itemQuantity(item);
+      if (!outletItemId || soldQty <= 0) continue;
+      const outletItem = outletItemById.get(outletItemId);
+      if (!outletItem || outletItem.track_stock === false) continue;
+      const currentStock = numberValue(outletItem.current_stock);
+      if (currentStock < soldQty) {
+        outletShortfalls.push(
+          `${outletItem.name || outletItem.sku || outletItemId} has ${currentStock}, needs ${soldQty}`
+        );
+      }
+    }
+
+    if (outletShortfalls.length > 0) {
+      throw new AppError(`POS outlet stock unavailable: ${outletShortfalls.join(', ')}`, 409);
+    }
+  }
+
   const consumptionRows = await loadPosConsumptionRows(branchId, outletId, items);
   if (!consumptionRows.length) return;
 
@@ -687,12 +1227,18 @@ export async function postPosInventorySale(input: {
 export async function listPosInventoryMappings(outletId: string): Promise<JsonRecord[]> {
   const { data, error } = await supabase
     .from('pos_inventory_mappings')
-    .select('*, item:simple_items(sku, item_name, unit_of_measure, cost_price), outlet_item:pos_outlet_items(id, name, sku)')
+    .select('*, outlet_item:pos_outlet_items(id, name, sku)')
     .eq('outlet_id', outletId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  const rows = data || [];
+  const skus = [...new Set(rows.map((r) => String(r.item_sku)).filter(Boolean))];
+  const { data: items } = skus.length
+    ? await supabase.from('simple_items').select('sku, item_name, unit_of_measure, cost_price').in('sku', skus)
+    : { data: [] as JsonRecord[] };
+  const bySku = new Map((items || []).map((i: any) => [String(i.sku), i]));
+  return rows.map((r) => ({ ...r, item: bySku.get(String(r.item_sku)) || null }));
 }
 
 export async function listDepartmentConsumption(input: {
@@ -717,6 +1263,10 @@ export async function listDepartmentConsumption(input: {
   }
 
   const { data, error } = await query;
+  if (isMissingDepartmentLedgerTable(error)) {
+    logger.warn('Department consumption ledger unavailable; returning empty list until enterprise inventory migration is applied.');
+    return [];
+  }
   if (error) throw error;
   return data || [];
 }
@@ -745,6 +1295,10 @@ export async function listDepartmentIssueJournals(input: {
   }
 
   const { data: ledgerRows, error } = await query;
+  if (isMissingDepartmentLedgerTable(error)) {
+    logger.warn('Department issue journal ledger unavailable; returning empty list until enterprise inventory migration is applied.');
+    return [];
+  }
   if (error) throw error;
   if (!ledgerRows?.length) return [];
 
@@ -752,10 +1306,10 @@ export async function listDepartmentIssueJournals(input: {
 
   const [{ data: auditRows }, { data: stockMoves }] = await Promise.all([
     supabase
-      .from('inventory_audit_log')
+      .from('inventory_audit_logs')
       .select('*')
       .eq('branch_id', input.branchId)
-      .eq('action', 'department_issue')
+      .eq('action_type', 'department_issue')
       .in('entity_id', ledgerIds),
     supabase
       .from('branch_stock_movements')
@@ -849,13 +1403,13 @@ export async function listInventoryAuditLog(input: {
   limit?: number;
 }): Promise<JsonRecord[]> {
   let query = supabase
-    .from('inventory_audit_log')
+    .from('inventory_audit_logs')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(Math.min(Math.max(input.limit || 100, 1), 500));
 
   if (input.branchId) query = query.eq('branch_id', input.branchId);
-  if (input.action) query = query.eq('action', input.action);
+  if (input.action) query = query.eq('action_type', input.action);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -908,7 +1462,10 @@ export async function getEnterpriseInventoryAnalytics(input: {
 
   if (stockError) throw stockError;
   if (movementError) throw movementError;
-  if (ledgerError) throw ledgerError;
+  if (ledgerError && !isMissingDepartmentLedgerTable(ledgerError)) throw ledgerError;
+  if (ledgerError && isMissingDepartmentLedgerTable(ledgerError)) {
+    logger.warn('Enterprise inventory analytics ledger unavailable; continuing without department consumption rows.');
+  }
   if (stockTakeError) throw stockTakeError;
 
   const skus = Array.from(new Set((stockRows || []).map((row) => String(row.item_sku)).filter(Boolean)));
@@ -962,7 +1519,8 @@ export async function getEnterpriseInventoryAnalytics(input: {
   }
 
   const consumptionByDepartment = new Map<string, JsonRecord>();
-  for (const ledger of ledgerRows || []) {
+  const safeLedgerRows = ledgerError ? [] : (ledgerRows || []);
+  for (const ledger of safeLedgerRows) {
     const account = ledger.account || {};
     const key = String(account.department_code || ledger.account_id || 'unknown');
     const current = consumptionByDepartment.get(key) || {

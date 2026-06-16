@@ -118,11 +118,20 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
   const startTimestamp = `${requestData.start_date}T00:00:00`;
   const endTimestamp = `${requestData.end_date}T23:59:59`;
 
+  // First fetch pos_outlets for this branch so we can filter pos_shift_orders
+  const { data: posOutletsData } = await supabase
+    .from('pos_outlets')
+    .select('id, name, outlet_type')
+    .eq('branch_id', requestData.branch_id);
+  const posOutletIds = (posOutletsData || []).map((o: any) => o.id);
+  const posOutletMap = new Map((posOutletsData || []).map((o: any) => [String(o.id), o]));
+
   const [
     bookingsResult,
     restaurantResult,
     barResult,
     shiftResult,
+    posOrdersResult,
     branchResult
   ] = await Promise.all([
     supabase
@@ -134,7 +143,7 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
       .not('status', 'eq', 'cancelled'),
     supabase
       .from('restaurant_orders')
-      .select('id, branch_id, total_amount, grand_total, payment_method, order_type, created_at, status, order_number, bill_number, department')
+      .select('id, branch_id, total_amount, grand_total, payment_status, order_type, created_at, status, order_number, bill_number, department')
       .eq('branch_id', requestData.branch_id)
       .gte('created_at', startTimestamp)
       .lte('created_at', endTimestamp)
@@ -152,6 +161,15 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
       .eq('branch_id', requestData.branch_id)
       .gte('created_at', startTimestamp)
       .lte('created_at', endTimestamp),
+    posOutletIds.length > 0
+      ? supabase
+          .from('pos_shift_orders')
+          .select('id, outlet_id, order_number, total_amount, payment_method, payment_status, order_type, status, created_at, customer_name')
+          .in('outlet_id', posOutletIds)
+          .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)')
+          .gte('created_at', startTimestamp)
+          .lte('created_at', endTimestamp)
+      : Promise.resolve({ data: [], error: null }),
     supabase
       .from('branches')
       .select('name')
@@ -181,7 +199,7 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
     branch_id: Number(order.branch_id || requestData.branch_id),
     transaction_date: order.created_at,
     category: ServiceCategory.RESTAURANT,
-    payment_method: normalizePaymentMethod(order.payment_method) as PaymentMethod,
+    payment_method: normalizePaymentMethod(null) as PaymentMethod,
     order_type: String(order.order_type || '').toLowerCase() as OrderType,
     total_amount: Number(order.grand_total || order.total_amount || 0),
     status: String(order.status || 'completed'),
@@ -221,7 +239,28 @@ const getFallbackBranchSalesResponse = async (requestData: BranchSalesRequest): 
       outlet: transaction.service_category || 'POS'
     }));
 
-  const transactions = [...bookingTransactions, ...restaurantTransactions, ...barTransactions, ...shiftTransactions]
+  const posOrderTransactions: TransactionRecord[] = (posOrdersResult.data || []).map((order: any) => {
+    const outlet = posOutletMap.get(String(order.outlet_id));
+    const oType = outlet?.outlet_type || 'pos';
+    const cat = oType === 'restaurant' ? ServiceCategory.RESTAURANT
+      : oType === 'bar' ? ServiceCategory.BAR
+      : ServiceCategory.RESTAURANT; // default POS outlet to restaurant category
+    return {
+      id: String(order.id),
+      branch_id: Number(requestData.branch_id),
+      transaction_date: order.created_at,
+      category: cat,
+      payment_method: normalizePaymentMethod(order.payment_method || order.payment_status) as PaymentMethod,
+      total_amount: Number(order.total_amount || 0),
+      status: order.payment_status === 'credit_bill' ? 'credit_bill' : 'completed',
+      source: 'pos',
+      code: order.order_number || null,
+      short_code: order.order_number ? String(order.order_number).slice(-6) : null,
+      outlet: outlet?.name || 'POS Outlet',
+    };
+  });
+
+  const transactions = [...bookingTransactions, ...restaurantTransactions, ...barTransactions, ...shiftTransactions, ...posOrderTransactions]
     .filter((transaction) => passesBranchSalesFilters(transaction, requestData.filters))
     .sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
 
@@ -999,7 +1038,7 @@ export const getBranchSaleTransaction = async (req: Request, res: Response): Pro
     if (source === 'restaurant') {
       const { data: order, error } = await supabase
         .from('restaurant_orders')
-        .select('id, branch_id, order_number, bill_number, table_number, room_number, guest_name, waiter_id, department, payment_method, payment_status, status, total_amount, grand_total, service_charge, tax_amount, discount_amount, created_at, paid_at')
+        .select('id, branch_id, order_number, bill_number, table_number, room_number, guest_name, waiter_name, department, payment_status, status, total_amount, grand_total, tax_amount, discount_amount, created_at, updated_at')
         .eq('id', id)
         .maybeSingle();
       if (error) throw error;
@@ -1021,32 +1060,22 @@ export const getBranchSaleTransaction = async (req: Request, res: Response): Pro
           .in('id', menuIds);
         for (const m of (menu || []) as any[]) nameById.set(String(m.id), m.name);
       }
-      let waiterName = '';
-      if (order.waiter_id) {
-        const { data: w } = await supabase
-          .from('users')
-          .select('first_name, last_name')
-          .eq('id', order.waiter_id)
-          .maybeSingle();
-        if (w) waiterName = `${w.first_name || ''} ${w.last_name || ''}`.trim();
-      }
-
       detail = {
         source,
         id: String(order.id),
         code: order.order_number || order.bill_number || String(order.id),
         short_code: order.bill_number || (order.order_number ? String(order.order_number).slice(-6) : null),
         outlet: order.department || 'Restaurant',
-        waiter_name: waiterName,
+        waiter_name: order.waiter_name || null,
         customer_name: order.guest_name || null,
         table_number: order.table_number || order.room_number || null,
-        payment_method: order.payment_method || null,
+        payment_method: null,
         payment_status: order.payment_status || null,
         status: order.status || null,
         date: order.created_at,
-        paid_at: order.paid_at,
+        paid_at: order.updated_at,
         subtotal: num(order.total_amount),
-        service_charge: num(order.service_charge),
+        service_charge: 0,
         tax_amount: num(order.tax_amount),
         discount_amount: num(order.discount_amount),
         total: num(order.grand_total) || num(order.total_amount),
@@ -1180,6 +1209,45 @@ export const getBranchSaleTransaction = async (req: Request, res: Response): Pro
         date: b.created_at,
         total: num(b.total_amount),
         items: [],
+      };
+    } else if (source === 'pos') {
+      const { data: order, error } = await supabase
+        .from('pos_shift_orders')
+        .select('id, branch_id, outlet_id, order_number, short_code, customer_name, waiter_name, table_number, payment_method, payment_status, status, total_amount, amount_paid, items, created_at')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!order || denyIfOtherBranch(order.branch_id)) {
+        res.status(404).json({ error: 'POS order not found in your branch' });
+        return;
+      }
+      const rawItems: any[] = Array.isArray(order.items) ? order.items : [];
+      detail = {
+        source,
+        id: String(order.id),
+        code: order.order_number || order.short_code || String(order.id),
+        short_code: order.short_code || (order.order_number ? String(order.order_number).slice(-6) : null),
+        outlet: rawItems[0]?.outlet_name || 'POS Outlet',
+        waiter_name: order.waiter_name || null,
+        customer_name: order.customer_name || null,
+        table_number: order.table_number || null,
+        payment_method: order.payment_method || null,
+        payment_status: order.payment_status || null,
+        status: order.status || null,
+        date: order.created_at,
+        paid_at: order.created_at,
+        subtotal: num(order.total_amount),
+        service_charge: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        total: num(order.total_amount),
+        items: rawItems.map((i: any) => ({
+          name: i.name || 'Item',
+          quantity: num(i.quantity),
+          unit_price: num(i.unit_price),
+          total_price: num(i.line_total ?? (i.unit_price * i.quantity)),
+          notes: null,
+        })),
       };
     } else {
       res.status(400).json({ error: 'Unknown transaction source' });

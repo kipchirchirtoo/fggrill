@@ -29,8 +29,7 @@ export const getReceivedItems = async (
       .from('kitchen_usage_records')
       .select(`
         *,
-        branches!inner(name),
-        recorded_by_user:users(first_name, last_name)
+        branches!inner(name)
       `)
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false });
@@ -51,7 +50,9 @@ export const getReceivedItems = async (
 
     // Fetch item names
     const skus = [...new Set(data?.map(r => r.item_sku) || [])];
+    const userIds = [...new Set((data || []).map((r: any) => r.recorded_by).filter(Boolean))];
     let itemsMap: Record<string, any> = {};
+    let usersMap: Record<string, any> = {};
 
     if (skus.length > 0) {
       const { data: items } = await supabase
@@ -65,10 +66,22 @@ export const getReceivedItems = async (
       }, {} as Record<string, any>);
     }
 
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+
+      usersMap = (users || []).reduce((acc, user) => {
+        acc[user.id] = user;
+        return acc;
+      }, {} as Record<string, any>);
+    }
+
     // Enrich with item details and map names
     const enrichedData = (data || []).map(record => {
       // Robust staff name resolution
-      const user = (record as any).recorded_by_user;
+      const user = usersMap[(record as any).recorded_by];
       let recorded_by_name = record.recorded_by || 'System';
 
       if (user) {
@@ -162,7 +175,7 @@ export const createUsageRecord = async (
         expected_revenue: expected_revenue || 0,
         usage_date: usage_date || new Date().toISOString().split('T')[0],
         recorded_by: userId,
-        status: 'APPROVED' // Auto-approve for direct kitchen operations
+        status: 'approved' // Auto-approve for direct kitchen operations
       })
       .select()
       .single();
@@ -390,10 +403,7 @@ export const getUsageEntries = async (
 
     const { data, error } = await supabase
       .from('kitchen_usage_entries')
-      .select(`
-        *,
-        recorded_by_user:users(first_name, last_name)
-      `)
+      .select('*')
       .eq('usage_record_id', usage_record_id)
       .order('created_at', { ascending: false });
 
@@ -403,6 +413,9 @@ export const getUsageEntries = async (
     const staffIds = [...new Set((data || [])
       .filter(e => e.responsible_staff_id)
       .map(e => e.responsible_staff_id))];
+    const recordedByIds = [...new Set((data || [])
+      .filter(e => e.recorded_by)
+      .map(e => e.recorded_by))];
 
     let staffMap: Record<string, any> = {};
     if (staffIds.length > 0) {
@@ -417,9 +430,22 @@ export const getUsageEntries = async (
       }, {} as Record<string, any>);
     }
 
+    let recordedByMap: Record<string, any> = {};
+    if (recordedByIds.length > 0) {
+      const { data: recordedByData } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', recordedByIds);
+
+      recordedByMap = (recordedByData || []).reduce((acc, u) => {
+        acc[u.id] = u;
+        return acc;
+      }, {} as Record<string, any>);
+    }
+
     const enrichedData = (data || []).map(entry => {
       // Robust staff name resolution
-      const user = (entry as any).recorded_by_user;
+      const user = recordedByMap[(entry as any).recorded_by];
       let recorded_by_name = entry.recorded_by || 'System';
 
       if (user) {
@@ -668,7 +694,7 @@ export const closeUsageRecord = async (
     const { data, error } = await supabase
       .from('kitchen_usage_records')
       .update({
-        status: 'CLOSED',
+        status: 'closed',
         actual_revenue: actual_revenue || 0,
         updated_at: new Date().toISOString()
       })

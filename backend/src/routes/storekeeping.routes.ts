@@ -95,6 +95,7 @@ import {
   createStockTake,
   getStockTakeItems,
   updateStockTakeItem,
+  updateStockTake,
   completeStockTake
 } from '../controllers/storekeeping/resources.controller';
 
@@ -135,10 +136,14 @@ import {
   finalizeStockTakeByAuditor,
   getDepartmentConsumption,
   getDepartmentAccounts,
+  createDepartmentRequestLog,
   getDepartmentIssueJournalDetail,
   getDepartmentIssueJournals,
+  getDepartmentRequestLog,
+  getDepartmentRequestLogs,
   getEnterpriseInventoryAnalytics,
   getInventoryAuditLog,
+  issueDepartmentRequestLog,
   listPosInventoryMappings,
   recordDepartmentIssue,
   reviewStockTakeByAccountant,
@@ -166,6 +171,13 @@ import {
 import {
   exportStockLedger
 } from '../controllers/auditor.controller';
+
+import {
+  printDepartmentRequestDocument,
+  printDispatchDocument,
+  printMaterialIssueDocument,
+  printStockRequestDocument
+} from '../controllers/inventory-workflow-documents.controller';
 
 const router = express.Router();
 
@@ -302,8 +314,14 @@ router.post('/stock-ledger/export', authorize(branchRoles), exportStockLedger);
 router.get('/department-accounts', authorize(branchRoles), getDepartmentAccounts);
 router.post('/department-accounts/seed', authorize(managerRoles), seedDepartmentAccounts);
 router.post('/department-issues', authorize(branchRoles), recordDepartmentIssue);
+router.post('/department-requests', authorize(branchRoles), createDepartmentRequestLog);
+router.get('/department-requests', authorize(branchRoles), getDepartmentRequestLogs);
+router.get('/department-requests/:id/request.pdf', authorize(branchRoles), printDepartmentRequestDocument);
+router.post('/department-requests/:id/issue', authorize(branchRoles), issueDepartmentRequestLog);
+router.get('/department-requests/:id', authorize(branchRoles), getDepartmentRequestLog);
 router.get('/department-consumption', authorize(branchRoles), getDepartmentConsumption);
 router.get('/department-issue-journals', authorize(branchRoles), getDepartmentIssueJournals);
+router.get('/department-issue-journals/:id/min.pdf', authorize(branchRoles), printMaterialIssueDocument);
 router.get('/department-issue-journals/:id', authorize(branchRoles), getDepartmentIssueJournalDetail);
 router.get('/enterprise-inventory/analytics', authorize(branchRoles), getEnterpriseInventoryAnalytics);
 router.get('/enterprise-inventory/audit-log', authorize(auditorRoles), getInventoryAuditLog);
@@ -317,6 +335,7 @@ router.get('/stock-requests/pending', authorize(managerRoles), getPendingRequest
 router.get('/stock-requests/branch-performance/:branchId', authorize(auditorRoles), getBranchPerformance);
 router.post('/stock-requests', authorize(branchRoles), createStockRequest);
 router.get('/stock-requests', authorize(branchRoles), getStockRequests);
+router.get('/stock-requests/:id/:document(request|approval).pdf', authorize(branchRoles), printStockRequestDocument);
 router.get('/stock-requests/:id', authorize(branchRoles), getStockRequest);
 router.put('/stock-requests/:id/review', authorize(auditorRoles), reviewStockRequest);
 router.put('/stock-requests/:id/approve', authorize(auditorRoles), approveStockRequest);
@@ -325,6 +344,7 @@ router.put('/stock-requests/:id/reject', authorize(auditorRoles), rejectStockReq
 // Dispatch notes (Central → Branch)
 router.post('/dispatch-notes', authorize(centralRoles), createDispatch);
 router.get('/dispatch-notes', authorize(centralRoles), getDispatchHistory);
+router.get('/dispatch-notes/:id/:document(packing|dispatch|receipt).pdf', authorize(branchRoles), printDispatchDocument);
 router.put('/dispatch-notes/:id/dispatch', authorize(centralRoles), dispatchItems);
 router.put('/dispatch-notes/:id/logistics', authorize(centralRoles), updateDispatchLogistics);
 
@@ -388,6 +408,7 @@ router.route('/stock-takes')
   .post(authorize(stockTakeOwnerRoles), createStockTake);
 
 router.get('/stock-takes/:id', authorize(staffRoles), getStockTake);
+router.put('/stock-takes/:id', authorize(stockTakeOwnerRoles), updateStockTake);
 router.get('/stock-takes/:id/items', authorize(staffRoles), getStockTakeItems);
 router.put('/stock-takes/:id/complete', authorize(stockTakeOwnerRoles), completeStockTake);
 router.post('/stock-takes/:id/submit-accountant', authorize(stockTakeOwnerRoles), submitStockTakeToAccountant);

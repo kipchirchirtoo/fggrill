@@ -302,7 +302,7 @@ export const createJournalEntry = async (req: Request, res: Response, next: Next
     const { data: journal, error: journalError } = await supabase
       .from('accounting_journal_entries')
       .insert([{
-        journal_number,
+        entry_number: journal_number,
         entry_date,
         description,
         reference,
