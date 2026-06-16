@@ -4115,24 +4115,16 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
         const { data, error } = await supabase
             .from('credit_bills')
             .insert({
-                credit_number,
+                bill_number: credit_number,
                 branch_id: effectiveBranchId,
-                staff_id: staffProfile.id,
-                staff_name: staff_name || staffProfile.name,
-                employee_id: employee_id || staffProfile.employeeId,
-                department: department || staffProfile.department,
-                bill_type,
-                reference_type,
-                reference_id: normalizedReferenceId,
+                customer_name: staff_name || staffProfile.name,
+                source_module: reference_type || bill_type || 'cashier_credit',
+                source_document_id: normalizedReferenceId,
+                source_document_number: employee_id || null,
                 total_amount: totalAmount,
-                balance_amount: totalAmount,
-                due_date,
-                payment_method,
-                deduction_months: deduction_months || 1,
-                monthly_deduction,
-                remarks,
-                status: 'active',
-                approval_status: 'pending',
+                amount_paid: 0,
+                balance_due: totalAmount,
+                status: 'open',
                 created_by: normalizedCreatedBy
             })
             .select()
@@ -4140,21 +4132,18 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
 
         if (error) throw error;
 
-        const payrollPayload: any = {
-            staff_id: staffProfile.id,
-            amount: totalAmount,
-            description: `Cashier Credit Bill - ${credit_number} - ${staff_name || staffProfile.name}`,
-            bill_date: new Date().toISOString().slice(0, 10),
-            status: 'pending',
-            branch_id: effectiveBranchId,
-            balance: totalAmount,
-            created_by: normalizedCreatedBy,
-            source_cashier_credit_bill_id: data.id
-        };
-
         const { data: staffCreditBill, error: staffCreditError } = await supabase
             .from('staff_credit_bills')
-            .insert(payrollPayload)
+            .insert({
+                staff_id: staffProfile.id,
+                branch_id: effectiveBranchId,
+                bill_number: credit_number,
+                description: `Cashier Credit Bill - ${credit_number} - ${staff_name || staffProfile.name}`,
+                amount: totalAmount,
+                amount_paid: 0,
+                balance: totalAmount,
+                status: 'open'
+            })
             .select('id')
             .single();
 
